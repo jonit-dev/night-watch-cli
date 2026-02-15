@@ -380,6 +380,14 @@ export function initCommand(program: Command): void {
         force
       );
 
+      // Copy prd-executor.md template
+      processTemplate(
+        'prd-executor.md',
+        path.join(commandsDir, 'prd-executor.md'),
+        replacements,
+        force
+      );
+
       // Copy night-watch-pr-reviewer.md template
       processTemplate(
         'night-watch-pr-reviewer.md',
@@ -436,6 +444,7 @@ export function initCommand(program: Command): void {
       console.log(`  - ${prdDir}/NIGHT-WATCH-SUMMARY.md`);
       console.log(`  - ${LOG_DIR}/`);
       console.log(`  - .claude/commands/night-watch.md`);
+      console.log(`  - .claude/commands/prd-executor.md`);
       console.log(`  - .claude/commands/night-watch-pr-reviewer.md`);
       console.log(`  - ${CONFIG_FILE_NAME}`);
       console.log('\nConfiguration:');

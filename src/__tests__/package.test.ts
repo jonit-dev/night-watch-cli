@@ -128,8 +128,47 @@ describe("Package Files", () => {
 
     // Check for required templates
     expect(fs.existsSync(path.join(templatesDir, "night-watch.md"))).toBe(true);
+    expect(fs.existsSync(path.join(templatesDir, "prd-executor.md"))).toBe(true);
     expect(fs.existsSync(path.join(templatesDir, "night-watch-pr-reviewer.md"))).toBe(true);
     expect(fs.existsSync(path.join(templatesDir, "night-watch.config.json"))).toBe(true);
+  });
+
+  it("should have prd-executor template with required sections", () => {
+    const templatePath = path.join(packageRoot, "templates", "prd-executor.md");
+    const content = fs.readFileSync(templatePath, "utf-8");
+
+    // Core execution pipeline steps
+    expect(content).toContain("Parse the PRD");
+    expect(content).toContain("Build the Dependency Graph");
+    expect(content).toContain("Create Task List");
+    expect(content).toContain("Execute with Agent Swarm");
+    expect(content).toContain("Wave Execution Loop");
+    expect(content).toContain("Integration Verification");
+
+    // Should be project-agnostic (no hardcoded project commands)
+    expect(content).not.toContain("yarn verify");
+    expect(content).not.toContain("npm run verify");
+
+    // Should reference generic verify/test
+    expect(content).toContain("verify/test command");
+  });
+
+  it("should have night-watch template referencing prd-executor", () => {
+    const templatePath = path.join(packageRoot, "templates", "night-watch.md");
+    const content = fs.readFileSync(templatePath, "utf-8");
+
+    expect(content).toContain("prd-executor.md");
+    expect(content).toContain("PRD Executor workflow");
+    expect(content).toContain("parallel waves");
+  });
+
+  it("should have cron script referencing prd-executor", () => {
+    const scriptPath = path.join(packageRoot, "scripts", "night-watch-cron.sh");
+    const content = fs.readFileSync(scriptPath, "utf-8");
+
+    expect(content).toContain("prd-executor.md");
+    expect(content).toContain("PRD Executor Workflow");
+    expect(content).toContain("parallel waves");
   });
 
   it("should have README.md", () => {
@@ -191,6 +230,7 @@ describe("npm pack verification", () => {
       // Check that templates are included
       expect(output).toMatch(/templates\//);
       expect(output).toMatch(/night-watch\.md/);
+      expect(output).toMatch(/prd-executor\.md/);
       expect(output).toMatch(/night-watch-pr-reviewer\.md/);
       expect(output).toMatch(/night-watch\.config\.json/);
     } catch (error) {

@@ -35,11 +35,16 @@ You are the Night Watch agent. Your job is to autonomously pick up PRD tickets a
 
    Then `cd` into the worktree and run package install (npm install, yarn install, or pnpm install as appropriate).
 
-   e. **Implement the PRD** phase by phase. Follow all project conventions from AI assistant documentation files (e.g., CLAUDE.md, AGENTS.md, or similar).
+   e. **Implement the PRD using the PRD Executor workflow**:
+      - Read `.claude/commands/prd-executor.md` and follow its full execution pipeline.
+      - This means: parse the PRD phases, build a dependency graph, create a task list, and execute phases in parallel waves using agent swarms.
+      - Maximize parallelism — launch all independent phases concurrently.
+      - Run the project's verify/test command between waves to catch issues early.
+      - Follow all project conventions from AI assistant documentation files (e.g., CLAUDE.md, AGENTS.md, or similar).
 
-   f. **Write tests** as specified in each PRD phase.
+   f. **Write tests** as specified in each PRD phase (the prd-executor agents handle this per-phase).
 
-   g. **Run verification**: Run the project's test/lint commands (e.g., `npm test`, `npm run lint`, `npm run verify` or equivalent). Fix issues until it passes.
+   g. **Final verification**: After all phases complete, run the project's test/lint commands (e.g., `npm test`, `npm run lint`, `npm run verify` or equivalent). Fix issues until it passes.
 
    h. **Commit** all changes:
 

@@ -108,9 +108,11 @@ describe('init command', () => {
 
       const commandsDir = path.join(tempDir, '.claude', 'commands');
       const nightWatchMd = path.join(commandsDir, 'night-watch.md');
+      const prdExecutorMd = path.join(commandsDir, 'prd-executor.md');
       const prReviewerMd = path.join(commandsDir, 'night-watch-pr-reviewer.md');
 
       expect(fs.existsSync(nightWatchMd)).toBe(true);
+      expect(fs.existsSync(prdExecutorMd)).toBe(true);
       expect(fs.existsSync(prReviewerMd)).toBe(true);
 
       // Verify placeholder replacement
@@ -118,6 +120,9 @@ describe('init command', () => {
       expect(content).not.toContain('${PROJECT_DIR}');
       expect(content).not.toContain('${PROJECT_NAME}');
       expect(content).not.toContain('${DEFAULT_BRANCH}');
+
+      // Verify night-watch.md references prd-executor
+      expect(content).toContain('prd-executor.md');
     });
   });
 
