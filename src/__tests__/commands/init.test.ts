@@ -29,8 +29,10 @@ describe('init command', () => {
         });
       } catch (error) {
         errorThrown = true;
-        const output = (error as { stderr?: string }).stderr || '';
-        expect(output).toContain('not a git repository');
+        const err = error as { stderr?: string; stdout?: string };
+        // Error output may be in stdout (colored) or stderr
+        const output = err.stderr || err.stdout || '';
+        expect(output.toLowerCase()).toContain('not a git repository');
       }
       expect(errorThrown).toBe(true);
     });
