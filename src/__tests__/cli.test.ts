@@ -122,12 +122,12 @@ describe('CLI', () => {
       });
 
       expect(output).toContain('Dry Run: PRD Executor');
-      expect(output).toContain('Configuration:');
-      expect(output).toContain('Provider:');
-      expect(output).toContain('Provider CLI:');
-      expect(output).toContain('PRD Directory:');
-      expect(output).toContain('PRD Status:');
-      expect(output).toContain('Provider Invocation:');
+      expect(output).toContain('Configuration');
+      expect(output).toContain('Provider');
+      expect(output).toContain('Provider CLI');
+      expect(output).toContain('PRD Directory');
+      expect(output).toContain('PRD Status');
+      expect(output).toContain('Provider Invocation');
       expect(output).toContain('night-watch-cron.sh');
     });
 
@@ -138,12 +138,12 @@ describe('CLI', () => {
       });
 
       expect(output).toContain('Dry Run: PR Reviewer');
-      expect(output).toContain('Configuration:');
-      expect(output).toContain('Provider:');
-      expect(output).toContain('Provider CLI:');
-      expect(output).toContain('Min Review Score:');
-      expect(output).toContain('Open PRs Needing Work:');
-      expect(output).toContain('Provider Invocation:');
+      expect(output).toContain('Configuration');
+      expect(output).toContain('Provider');
+      expect(output).toContain('Provider CLI');
+      expect(output).toContain('Min Review Score');
+      expect(output).toContain('Open PRs Needing Work');
+      expect(output).toContain('Provider Invocation');
       expect(output).toContain('night-watch-pr-reviewer-cron.sh');
     });
 

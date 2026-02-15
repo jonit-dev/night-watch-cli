@@ -7,6 +7,12 @@ import { Command } from "commander";
 import * as path from "path";
 import * as fs from "fs";
 import { removeEntries, generateMarker, getEntries } from "../utils/crontab.js";
+import {
+  success,
+  error as uiError,
+  warn,
+  dim,
+} from "../utils/ui.js";
 
 export interface UninstallOptions {
   keepLogs?: boolean;
@@ -53,14 +59,14 @@ export function uninstallCommand(program: Command): void {
         // Check if there are entries to remove
         const existingEntries = getEntries(marker);
         if (existingEntries.length === 0) {
-          console.log(`No Night Watch crontab entries found for ${projectName}.`);
-          console.log("Nothing to uninstall.");
+          warn(`No Night Watch crontab entries found for ${projectName}.`);
+          dim("Nothing to uninstall.");
           return;
         }
 
         // Show entries that will be removed
-        console.log(`Removing Night Watch crontab entries for ${projectName}:`);
-        existingEntries.forEach((entry) => console.log(`  ${entry}`));
+        dim(`Removing Night Watch crontab entries for ${projectName}:`);
+        existingEntries.forEach((entry) => dim(`  ${entry}`));
 
         // Remove entries
         const removedCount = removeEntries(marker);
@@ -91,17 +97,19 @@ export function uninstallCommand(program: Command): void {
             }
 
             if (logsRemoved > 0) {
-              console.log(`\nRemoved ${logsRemoved} log file(s).`);
+              console.log();
+              dim(`Removed ${logsRemoved} log file(s).`);
             }
           }
         } else {
-          console.log("\nLog files preserved.");
+          console.log();
+          dim("Log files preserved.");
         }
 
-        console.log(`\nSuccessfully removed ${removedCount} crontab entry/entries.`);
-      } catch (error) {
-        console.error(
-          `Error uninstalling Night Watch: ${error instanceof Error ? error.message : String(error)}`
+        success(`Successfully removed ${removedCount} crontab entry/entries.`);
+      } catch (err) {
+        uiError(
+          `Error uninstalling Night Watch: ${err instanceof Error ? err.message : String(err)}`
         );
         process.exit(1);
       }

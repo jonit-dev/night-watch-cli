@@ -10,6 +10,15 @@ import { PROVIDER_COMMANDS, DEFAULT_PRD_DIR } from "../constants.js";
 import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
+import {
+  header,
+  label,
+  dim,
+  info,
+  error as uiError,
+  createSpinner,
+  createTable,
+} from "../utils/ui.js";
 
 /**
  * Options for the run command
@@ -120,66 +129,78 @@ export function runCommand(program: Command): void {
       const scriptPath = getScriptPath("night-watch-cron.sh");
 
       if (options.dryRun) {
-        console.log("=== Dry Run: PRD Executor ===\n");
+        header("Dry Run: PRD Executor");
 
-        // Configuration section
-        console.log("Configuration:");
-        console.log(`  Provider:         ${config.provider}`);
-        console.log(`  Provider CLI:     ${PROVIDER_COMMANDS[config.provider]}`);
-        console.log(`  PRD Directory:    ${config.prdDir}`);
-        console.log(`  Max Runtime:      ${config.maxRuntime}s (${Math.floor(config.maxRuntime / 60)}min)`);
-        console.log(`  Branch Prefix:    ${config.branchPrefix}`);
+        // Configuration section with table
+        header("Configuration");
+        const configTable = createTable({ head: ["Setting", "Value"] });
+        configTable.push(["Provider", config.provider]);
+        configTable.push(["Provider CLI", PROVIDER_COMMANDS[config.provider]]);
+        configTable.push(["PRD Directory", config.prdDir]);
+        configTable.push(["Max Runtime", `${config.maxRuntime}s (${Math.floor(config.maxRuntime / 60)}min)`]);
+        configTable.push(["Branch Prefix", config.branchPrefix]);
+        console.log(configTable.toString());
 
         // Scan for PRDs
-        console.log("\nPRD Status:");
+        header("PRD Status");
         const prdStatus = scanPrdDirectory(projectDir, config.prdDir);
 
         if (prdStatus.pending.length === 0) {
-          console.log("  Pending:          (none)");
+          dim("  Pending: (none)");
         } else {
-          console.log(`  Pending (${prdStatus.pending.length}):`);
+          info(`Pending (${prdStatus.pending.length}):`);
           for (const prd of prdStatus.pending) {
-            console.log(`    - ${prd}`);
+            dim(`    - ${prd}`);
           }
         }
 
         if (prdStatus.completed.length === 0) {
-          console.log("  Completed:        (none)");
+          dim("  Completed: (none)");
         } else {
-          console.log(`  Completed (${prdStatus.completed.length}):`);
+          info(`Completed (${prdStatus.completed.length}):`);
           for (const prd of prdStatus.completed.slice(0, 5)) {
-            console.log(`    - ${prd}`);
+            dim(`    - ${prd}`);
           }
           if (prdStatus.completed.length > 5) {
-            console.log(`    ... and ${prdStatus.completed.length - 5} more`);
+            dim(`    ... and ${prdStatus.completed.length - 5} more`);
           }
         }
 
         // Provider invocation command
-        console.log("\nProvider Invocation:");
+        header("Provider Invocation");
         const providerCmd = PROVIDER_COMMANDS[config.provider];
         const autoFlag = config.provider === "claude" ? "--dangerously-skip-permissions" : "--yolo";
-        console.log(`  ${providerCmd} ${autoFlag} -p "/night-watch"`);
+        dim(`  ${providerCmd} ${autoFlag} -p "/night-watch"`);
 
         // Environment variables
-        console.log("\nEnvironment Variables:");
+        header("Environment Variables");
         for (const [key, value] of Object.entries(envVars)) {
-          console.log(`  ${key}=${value}`);
+          dim(`  ${key}=${value}`);
         }
 
         // Full command that would be executed
-        console.log("\nCommand that would be executed:");
-        console.log(`  bash ${scriptPath} ${projectDir}`);
+        header("Command");
+        dim(`  bash ${scriptPath} ${projectDir}`);
+        console.log();
 
         process.exit(0);
       }
 
-      // Execute the script
+      // Execute the script with spinner
+      const spinner = createSpinner("Running PRD executor...");
+      spinner.start();
+
       try {
         const exitCode = await executeScript(scriptPath, [projectDir], envVars);
+        if (exitCode === 0) {
+          spinner.succeed("PRD executor completed successfully");
+        } else {
+          spinner.fail(`PRD executor exited with code ${exitCode}`);
+        }
         process.exit(exitCode);
-      } catch (error) {
-        console.error("Failed to execute run command:", error);
+      } catch (err) {
+        spinner.fail("Failed to execute run command");
+        uiError(`${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
       }
     });

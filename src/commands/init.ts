@@ -14,6 +14,16 @@ import {
   VALID_PROVIDERS,
 } from '../constants.js';
 import { Provider } from '../types.js';
+import {
+  success,
+  error as uiError,
+  info,
+  header,
+  dim,
+  label,
+  step,
+  createTable,
+} from '../utils/ui.js';
 
 // Get templates directory path
 const __filename = fileURLToPath(import.meta.url);
@@ -267,59 +277,60 @@ export function initCommand(program: Command): void {
       const force = options.force || false;
       const prdDir = options.prdDir || DEFAULT_PRD_DIR;
 
-      console.log('\nNight Watch CLI - Initializing...\n');
+      console.log();
+      header('Night Watch CLI - Initializing');
 
       // Step 1: Verify git repository
-      console.log('[1/9] Checking git repository...');
+      step(1, 9, 'Checking git repository...');
       if (!isGitRepo(cwd)) {
-        console.error('Error: Current directory is not a git repository.');
-        console.error('Please run this command from the root of a git repository.');
+        uiError('Current directory is not a git repository.');
+        dim('Please run this command from the root of a git repository.');
         process.exit(1);
       }
-      console.log('  OK: Git repository found.');
+      success('Git repository found');
 
       // Step 2: Verify gh CLI
-      console.log('[2/9] Checking GitHub CLI (gh)...');
+      step(2, 9, 'Checking GitHub CLI (gh)...');
       if (!isGhAuthenticated()) {
-        console.error('Error: GitHub CLI (gh) is not authenticated.');
-        console.error('Please run: gh auth login');
+        uiError('GitHub CLI (gh) is not authenticated.');
+        dim('Please run: gh auth login');
         process.exit(1);
       }
-      console.log('  OK: GitHub CLI is authenticated.');
+      success('GitHub CLI is authenticated');
 
       // Step 3: Detect AI providers
-      console.log('[3/9] Detecting AI providers...');
+      step(3, 9, 'Detecting AI providers...');
       let selectedProvider: Provider;
 
       if (options.provider) {
         // Validate provider flag
         if (!VALID_PROVIDERS.includes(options.provider as Provider)) {
-          console.error(`Error: Invalid provider "${options.provider}".`);
-          console.error(`Valid providers: ${VALID_PROVIDERS.join(', ')}`);
+          uiError(`Invalid provider "${options.provider}".`);
+          dim(`Valid providers: ${VALID_PROVIDERS.join(', ')}`);
           process.exit(1);
         }
         selectedProvider = options.provider as Provider;
-        console.log(`  Using provider from flag: ${selectedProvider}`);
+        info(`Using provider from flag: ${selectedProvider}`);
       } else {
         // Auto-detect providers
         const detectedProviders = detectProviders();
 
         if (detectedProviders.length === 0) {
-          console.error('Error: No AI provider CLI found.');
-          console.error('\nPlease install one of the following:');
-          console.error('  - Claude CLI: https://docs.anthropic.com/en/docs/claude-cli');
-          console.error('  - Codex CLI: https://github.com/openai/codex');
+          uiError('No AI provider CLI found.');
+          dim('\nPlease install one of the following:');
+          dim('  - Claude CLI: https://docs.anthropic.com/en/docs/claude-cli');
+          dim('  - Codex CLI: https://github.com/openai/codex');
           process.exit(1);
         } else if (detectedProviders.length === 1) {
           selectedProvider = detectedProviders[0];
-          console.log(`  Auto-detected provider: ${selectedProvider}`);
+          info(`Auto-detected provider: ${selectedProvider}`);
         } else {
           // Multiple providers - prompt user
           try {
             selectedProvider = await promptProviderSelection(detectedProviders);
-            console.log(`  Selected provider: ${selectedProvider}`);
-          } catch (error) {
-            console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+            info(`Selected provider: ${selectedProvider}`);
+          } catch (err) {
+            uiError(`${err instanceof Error ? err.message : String(err)}`);
             process.exit(1);
           }
         }
@@ -332,10 +343,13 @@ export function initCommand(program: Command): void {
       const projectName = getProjectName(cwd);
       const defaultBranch = getDefaultBranch(cwd);
 
-      console.log(`\nProject: ${projectName}`);
-      console.log(`Default branch: ${defaultBranch}`);
-      console.log(`Provider: ${selectedProvider}`);
-      console.log(`Reviewer: ${reviewerEnabled ? 'Enabled' : 'Disabled'}\n`);
+      // Display project configuration
+      header('Project Configuration');
+      label('Project', projectName);
+      label('Default branch', defaultBranch);
+      label('Provider', selectedProvider);
+      label('Reviewer', reviewerEnabled ? 'Enabled' : 'Disabled');
+      console.log();
 
       // Define replacements for templates
       const replacements: Record<string, string> = {
@@ -345,32 +359,32 @@ export function initCommand(program: Command): void {
       };
 
       // Step 4: Create PRD directory structure
-      console.log('[4/9] Creating PRD directory structure...');
+      step(4, 9, 'Creating PRD directory structure...');
       const prdDirPath = path.join(cwd, prdDir);
       const doneDirPath = path.join(prdDirPath, 'done');
       ensureDir(doneDirPath);
-      console.log(`  Created: ${prdDirPath}/`);
-      console.log(`  Created: ${doneDirPath}/`);
+      success(`Created ${prdDirPath}/`);
+      success(`Created ${doneDirPath}/`);
 
       // Step 5: Create NIGHT-WATCH-SUMMARY.md
-      console.log('[5/9] Creating NIGHT-WATCH-SUMMARY.md...');
+      step(5, 9, 'Creating NIGHT-WATCH-SUMMARY.md...');
       const summaryPath = path.join(prdDirPath, 'NIGHT-WATCH-SUMMARY.md');
       createSummaryFile(summaryPath, force);
 
       // Step 6: Create logs directory
-      console.log('[6/9] Creating logs directory...');
+      step(6, 9, 'Creating logs directory...');
       const logsPath = path.join(cwd, LOG_DIR);
       ensureDir(logsPath);
-      console.log(`  Created: ${logsPath}/`);
+      success(`Created ${logsPath}/`);
 
       // Add /logs/ to .gitignore
       addToGitignore(cwd);
 
       // Step 7: Create .claude/commands directory and copy templates
-      console.log('[7/9] Creating Claude slash commands...');
+      step(7, 9, 'Creating Claude slash commands...');
       const commandsDir = path.join(cwd, '.claude', 'commands');
       ensureDir(commandsDir);
-      console.log(`  Created: ${commandsDir}/`);
+      success(`Created ${commandsDir}/`);
 
       // Copy night-watch.md template
       processTemplate(
@@ -397,11 +411,11 @@ export function initCommand(program: Command): void {
       );
 
       // Step 8: Create config file
-      console.log('[8/9] Creating configuration file...');
+      step(8, 9, 'Creating configuration file...');
       const configPath = path.join(cwd, CONFIG_FILE_NAME);
 
       if (fs.existsSync(configPath) && !force) {
-        console.log(`  Skipped (exists): ${configPath}`);
+        dim(`  Skipped (exists): ${configPath}`);
       } else {
         // Read and process config template
         let configContent = fs.readFileSync(
@@ -432,30 +446,36 @@ export function initCommand(program: Command): void {
         );
 
         fs.writeFileSync(configPath, configContent);
-        console.log(`  Created: ${configPath}`);
+        success(`Created ${configPath}`);
       }
 
       // Step 9: Print summary
-      console.log('[9/9] Initialization complete!\n');
-      console.log('='.repeat(60));
-      console.log('Night Watch has been initialized!\n');
-      console.log('Created files and directories:');
-      console.log(`  - ${prdDir}/done/`);
-      console.log(`  - ${prdDir}/NIGHT-WATCH-SUMMARY.md`);
-      console.log(`  - ${LOG_DIR}/`);
-      console.log(`  - .claude/commands/night-watch.md`);
-      console.log(`  - .claude/commands/prd-executor.md`);
-      console.log(`  - .claude/commands/night-watch-pr-reviewer.md`);
-      console.log(`  - ${CONFIG_FILE_NAME}`);
-      console.log('\nConfiguration:');
-      console.log(`  Provider:  ${selectedProvider}`);
-      console.log(`  Reviewer:  ${reviewerEnabled ? 'Enabled' : 'Disabled'}`);
-      console.log('\nNext steps:');
-      console.log('  1. Add your PRD files to docs/PRDs/night-watch/');
-      console.log('  2. Run `night-watch install` to set up cron jobs');
-      console.log('  3. Or run `night-watch run` to execute PRDs manually');
-      console.log('='.repeat(60));
-      console.log('');
+      step(9, 9, 'Initialization complete!');
+
+      // Summary with table
+      header('Initialization Complete');
+      const filesTable = createTable({ head: ['Created Files', ''] });
+      filesTable.push(['PRD Directory', `${prdDir}/done/`]);
+      filesTable.push(['Summary File', `${prdDir}/NIGHT-WATCH-SUMMARY.md`]);
+      filesTable.push(['Logs Directory', `${LOG_DIR}/`]);
+      filesTable.push(['Slash Commands', '.claude/commands/night-watch.md']);
+      filesTable.push(['', '.claude/commands/prd-executor.md']);
+      filesTable.push(['', '.claude/commands/night-watch-pr-reviewer.md']);
+      filesTable.push(['Config File', CONFIG_FILE_NAME]);
+      console.log(filesTable.toString());
+
+      // Configuration summary
+      header('Configuration');
+      label('Provider', selectedProvider);
+      label('Reviewer', reviewerEnabled ? 'Enabled' : 'Disabled');
+      console.log();
+
+      // Next steps
+      header('Next Steps');
+      info('1. Add your PRD files to docs/PRDs/night-watch/');
+      info('2. Run `night-watch install` to set up cron jobs');
+      info('3. Or run `night-watch run` to execute PRDs manually');
+      console.log();
     });
 }
 

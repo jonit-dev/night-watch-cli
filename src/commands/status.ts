@@ -7,9 +7,18 @@ import { Command } from "commander";
 import { execSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
+import chalk from "chalk";
 import { loadConfig } from "../config.js";
 import { LOCK_FILE_PREFIX, LOG_DIR, DEFAULT_PRD_DIR } from "../constants.js";
 import { getEntries, generateMarker } from "../utils/crontab.js";
+import {
+  header,
+  label,
+  dim,
+  createTable,
+  formatRunningStatus,
+  formatInstalledStatus,
+} from "../utils/ui.js";
 
 export interface StatusOptions {
   verbose?: boolean;
@@ -285,81 +294,86 @@ export function statusCommand(program: Command): void {
         }
 
         // Print formatted status dashboard
-        console.log("\n========================================");
-        console.log(`  Night Watch Status: ${status.projectName}`);
-        console.log("========================================\n");
-
-        // Project directory
-        console.log(`Project Directory: ${status.projectDir}\n`);
-
-        // Configuration
-        console.log("--- Configuration ---");
-        console.log(`  Provider:  ${status.provider}`);
-        console.log(`  Reviewer:  ${status.reviewerEnabled ? "Enabled" : "Disabled"}`);
         console.log();
-
-        // Process status
-        console.log("--- Process Status ---");
-        console.log(
-          `  Executor: ${status.executor.running ? `Running (PID: ${status.executor.pid})` : status.executor.pid ? `Stale lock file (PID: ${status.executor.pid})` : "Not running"}`
-        );
-        console.log(
-          `  Reviewer: ${status.reviewer.running ? `Running (PID: ${status.reviewer.pid})` : status.reviewer.pid ? `Stale lock file (PID: ${status.reviewer.pid})` : "Not running"}`
-        );
+        console.log(chalk.bold.cyan(`Night Watch Status: ${status.projectName}`));
+        console.log(chalk.dim("─".repeat(40)));
         console.log();
+        dim(`Project Directory: ${status.projectDir}`);
 
-        // PRD status
-        console.log("--- PRD Status ---");
-        console.log(`  Pending PRDs: ${status.prds.pending}`);
-        console.log(`  Completed PRDs: ${status.prds.done}`);
-        console.log();
+        // Configuration section with table
+        header("Configuration");
+        const configTable = createTable({ head: ["Setting", "Value"] });
+        configTable.push(["Provider", status.provider]);
+        configTable.push(["Reviewer", status.reviewerEnabled ? "Enabled" : "Disabled"]);
+        console.log(configTable.toString());
 
-        // PR status
-        console.log("--- PR Status ---");
-        console.log(`  Open PRs (night-watch/feat branches): ${status.prs.open}`);
-        console.log();
+        // Process status section with colored indicators
+        header("Process Status");
+        const processTable = createTable({ head: ["Process", "Status"] });
+        processTable.push(["Executor", formatRunningStatus(status.executor.running, status.executor.pid)]);
+        processTable.push(["Reviewer", formatRunningStatus(status.reviewer.running, status.reviewer.pid)]);
+        console.log(processTable.toString());
 
-        // Crontab status
-        console.log("--- Crontab Status ---");
-        console.log(`  Installed: ${status.crontab.installed ? "Yes" : "No"}`);
+        // PRD status section with table
+        header("PRD Status");
+        const prdTable = createTable({ head: ["Status", "Count"] });
+        prdTable.push(["Pending", String(status.prds.pending)]);
+        prdTable.push(["Completed", String(status.prds.done)]);
+        console.log(prdTable.toString());
+
+        // PR status section with table
+        header("PR Status");
+        const prTable = createTable({ head: ["Type", "Count"] });
+        prTable.push(["Open PRs (night-watch/feat branches)", String(status.prs.open)]);
+        console.log(prTable.toString());
+
+        // Crontab status section with colored output
+        header("Crontab Status");
+        console.log(`  ${formatInstalledStatus(status.crontab.installed)}`);
         if (status.crontab.installed && options.verbose) {
-          console.log("  Entries:");
-          status.crontab.entries.forEach((entry) => console.log(`    ${entry}`));
+          console.log();
+          dim("  Entries:");
+          status.crontab.entries.forEach((entry) => dim(`    ${entry}`));
         }
         console.log();
 
-        // Log status
-        console.log("--- Log Files ---");
+        // Log status section with table
+        header("Log Files");
+        const logTable = createTable({ head: ["Log", "Size", "Status"] });
         if (status.logs.executor) {
-          console.log(
-            `  Executor: ${status.logs.executor.exists ? `Exists (${formatBytes(status.logs.executor.size)})` : "Not found"}`
-          );
-          if (options.verbose && status.logs.executor.lastLines.length > 0) {
-            console.log("    Last 5 lines:");
-            status.logs.executor.lastLines.forEach((line) =>
-              console.log(`      ${line}`)
-            );
-          }
+          logTable.push([
+            "Executor",
+            status.logs.executor.exists ? formatBytes(status.logs.executor.size) : "-",
+            status.logs.executor.exists ? "Exists" : "Not found",
+          ]);
         }
         if (status.logs.reviewer) {
-          console.log(
-            `  Reviewer: ${status.logs.reviewer.exists ? `Exists (${formatBytes(status.logs.reviewer.size)})` : "Not found"}`
-          );
-          if (options.verbose && status.logs.reviewer.lastLines.length > 0) {
-            console.log("    Last 5 lines:");
-            status.logs.reviewer.lastLines.forEach((line) =>
-              console.log(`      ${line}`)
-            );
+          logTable.push([
+            "Reviewer",
+            status.logs.reviewer.exists ? formatBytes(status.logs.reviewer.size) : "-",
+            status.logs.reviewer.exists ? "Exists" : "Not found",
+          ]);
+        }
+        console.log(logTable.toString());
+
+        // Show last lines in verbose mode
+        if (options.verbose) {
+          if (status.logs.executor?.exists && status.logs.executor.lastLines.length > 0) {
+            dim("  Executor last 5 lines:");
+            status.logs.executor.lastLines.forEach((line) => dim(`    ${line}`));
+          }
+          if (status.logs.reviewer?.exists && status.logs.reviewer.lastLines.length > 0) {
+            dim("  Reviewer last 5 lines:");
+            status.logs.reviewer.lastLines.forEach((line) => dim(`    ${line}`));
           }
         }
-        console.log();
 
-        // Tips
-        console.log("--- Commands ---");
-        console.log("  'night-watch install'  - Install crontab entries");
-        console.log("  'night-watch logs'     - View logs");
-        console.log("  'night-watch run'      - Run executor now");
-        console.log("  'night-watch review'   - Run reviewer now");
+        // Tips section with dim styling
+        header("Commands");
+        dim("  night-watch install  - Install crontab entries");
+        dim("  night-watch logs     - View logs");
+        dim("  night-watch run      - Run executor now");
+        dim("  night-watch review   - Run reviewer now");
         console.log();
       } catch (error) {
         console.error(

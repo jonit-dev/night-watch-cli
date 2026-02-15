@@ -8,6 +8,7 @@ import { spawn } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import { LOG_DIR } from "../constants.js";
+import { header, dim } from "../utils/ui.js";
 
 export interface LogsOptions {
   lines?: string;
@@ -84,8 +85,8 @@ export function logsCommand(program: Command): void {
         // Handle --follow mode
         if (options.follow) {
           if (logType === "all") {
-            console.log("Note: Following all logs is not supported. Showing executor log.");
-            console.log("Use --type review to follow reviewer log.\n");
+            dim("Note: Following all logs is not supported. Showing executor log.");
+            dim("Use --type review to follow reviewer log.\n");
           }
 
           const targetLog = showReviewer ? reviewerLog : executorLog;
@@ -94,31 +95,30 @@ export function logsCommand(program: Command): void {
         }
 
         // Show static log output
-        let output = "";
+        console.log();
 
         if (showExecutor) {
-          output += "=== Executor Log ===\n";
-          output += `File: ${executorLog}\n\n`;
-          output += getLastLines(executorLog, lineCount);
-          output += "\n\n";
+          header("Executor Log");
+          dim(`File: ${executorLog}`);
+          console.log();
+          console.log(getLastLines(executorLog, lineCount));
         }
 
         if (showReviewer) {
-          output += "=== Reviewer Log ===\n";
-          output += `File: ${reviewerLog}\n\n`;
-          output += getLastLines(reviewerLog, lineCount);
-          output += "\n";
+          header("Reviewer Log");
+          dim(`File: ${reviewerLog}`);
+          console.log();
+          console.log(getLastLines(reviewerLog, lineCount));
         }
 
-        console.log(output.trim());
-
         // Add tip
-        console.log("\n---");
-        console.log("Tip: Use -f to follow logs in real-time");
-        console.log("     Use --type run or --type review to view specific logs");
-      } catch (error) {
+        console.log();
+        dim("---");
+        dim("Tip: Use -f to follow logs in real-time");
+        dim("     Use --type run or --type review to view specific logs");
+      } catch (err) {
         console.error(
-          `Error reading logs: ${error instanceof Error ? error.message : String(error)}`
+          `Error reading logs: ${err instanceof Error ? err.message : String(err)}`
         );
         process.exit(1);
       }

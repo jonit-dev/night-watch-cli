@@ -17,6 +17,13 @@ import {
   readCrontab,
   writeCrontab,
 } from "../utils/crontab.js";
+import {
+  success,
+  error as uiError,
+  warn,
+  header,
+  dim,
+} from "../utils/ui.js";
 
 export interface InstallOptions {
   schedule?: string;
@@ -108,10 +115,12 @@ export function installCommand(program: Command): void {
         // Check if already installed
         const existingEntries = getEntries(marker);
         if (existingEntries.length > 0) {
-          console.log(`Night Watch is already installed for ${projectName}.`);
-          console.log("\nExisting crontab entries:");
-          existingEntries.forEach((entry) => console.log(`  ${entry}`));
-          console.log("\nRun 'night-watch uninstall' first to reinstall.");
+          warn(`Night Watch is already installed for ${projectName}.`);
+          console.log();
+          dim("Existing crontab entries:");
+          existingEntries.forEach((entry) => dim(`  ${entry}`));
+          console.log();
+          dim("Run 'night-watch uninstall' first to reinstall.");
           return;
         }
 
@@ -138,19 +147,22 @@ export function installCommand(program: Command): void {
         writeCrontab(newCrontab);
 
         // Success message
-        console.log(`\nNight Watch installed successfully for ${projectName}!`);
-        console.log("\nCrontab entries added:");
-        entries.forEach((entry) => console.log(`  ${entry}`));
-        console.log("\nLog files:");
-        console.log(`  Executor: ${executorLog}`);
+        success(`Night Watch installed successfully for ${projectName}!`);
+        console.log();
+        header("Crontab Entries Added");
+        entries.forEach((entry) => dim(`  ${entry}`));
+        console.log();
+        header("Log Files");
+        dim(`  Executor: ${executorLog}`);
         if (installReviewer) {
-          console.log(`  Reviewer: ${reviewerLog}`);
+          dim(`  Reviewer: ${reviewerLog}`);
         }
-        console.log("\nTo uninstall, run: night-watch uninstall");
-        console.log("To check status, run: night-watch status");
-      } catch (error) {
-        console.error(
-          `Error installing Night Watch: ${error instanceof Error ? error.message : String(error)}`
+        console.log();
+        dim("To uninstall, run: night-watch uninstall");
+        dim("To check status, run: night-watch status");
+      } catch (err) {
+        uiError(
+          `Error installing Night Watch: ${err instanceof Error ? err.message : String(err)}`
         );
         process.exit(1);
       }

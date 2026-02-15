@@ -8,6 +8,14 @@ import { INightWatchConfig } from "../types.js";
 import { executeScript } from "../utils/shell.js";
 import { PROVIDER_COMMANDS } from "../constants.js";
 import { execSync } from "child_process";
+import {
+  header,
+  dim,
+  info,
+  error as uiError,
+  createSpinner,
+  createTable,
+} from "../utils/ui.js";
 
 /**
  * Options for the review command
@@ -114,54 +122,66 @@ export function reviewCommand(program: Command): void {
       const scriptPath = getScriptPath("night-watch-pr-reviewer-cron.sh");
 
       if (options.dryRun) {
-        console.log("=== Dry Run: PR Reviewer ===\n");
+        header("Dry Run: PR Reviewer");
 
-        // Configuration section
-        console.log("Configuration:");
-        console.log(`  Provider:         ${config.provider}`);
-        console.log(`  Provider CLI:     ${PROVIDER_COMMANDS[config.provider]}`);
-        console.log(`  Max Runtime:      ${config.reviewerMaxRuntime}s (${Math.floor(config.reviewerMaxRuntime / 60)}min)`);
-        console.log(`  Min Review Score: ${config.minReviewScore}/100`);
-        console.log(`  Branch Patterns:  ${config.branchPatterns.join(", ")}`);
+        // Configuration section with table
+        header("Configuration");
+        const configTable = createTable({ head: ["Setting", "Value"] });
+        configTable.push(["Provider", config.provider]);
+        configTable.push(["Provider CLI", PROVIDER_COMMANDS[config.provider]]);
+        configTable.push(["Max Runtime", `${config.reviewerMaxRuntime}s (${Math.floor(config.reviewerMaxRuntime / 60)}min)`]);
+        configTable.push(["Min Review Score", `${config.minReviewScore}/100`]);
+        configTable.push(["Branch Patterns", config.branchPatterns.join(", ")]);
+        console.log(configTable.toString());
 
         // Check for open PRs needing work
-        console.log("\nOpen PRs Needing Work:");
+        header("Open PRs Needing Work");
         const openPrs = getOpenPrsNeedingWork(config.branchPatterns);
 
         if (openPrs.length === 0) {
-          console.log("  (no open PRs matching branch patterns)");
+          dim("  (no open PRs matching branch patterns)");
         } else {
           for (const pr of openPrs) {
-            console.log(`  #${pr.number}: ${pr.title}`);
-            console.log(`           Branch: ${pr.branch}`);
+            info(`#${pr.number}: ${pr.title}`);
+            dim(`         Branch: ${pr.branch}`);
           }
         }
 
         // Provider invocation command
-        console.log("\nProvider Invocation:");
+        header("Provider Invocation");
         const providerCmd = PROVIDER_COMMANDS[config.provider];
         const autoFlag = config.provider === "claude" ? "--dangerously-skip-permissions" : "--yolo";
-        console.log(`  ${providerCmd} ${autoFlag} -p "/night-watch-pr-reviewer"`);
+        dim(`  ${providerCmd} ${autoFlag} -p "/night-watch-pr-reviewer"`);
 
         // Environment variables
-        console.log("\nEnvironment Variables:");
+        header("Environment Variables");
         for (const [key, value] of Object.entries(envVars)) {
-          console.log(`  ${key}=${value}`);
+          dim(`  ${key}=${value}`);
         }
 
         // Full command that would be executed
-        console.log("\nCommand that would be executed:");
-        console.log(`  bash ${scriptPath} ${projectDir}`);
+        header("Command");
+        dim(`  bash ${scriptPath} ${projectDir}`);
+        console.log();
 
         process.exit(0);
       }
 
-      // Execute the script
+      // Execute the script with spinner
+      const spinner = createSpinner("Running PR reviewer...");
+      spinner.start();
+
       try {
         const exitCode = await executeScript(scriptPath, [projectDir], envVars);
+        if (exitCode === 0) {
+          spinner.succeed("PR reviewer completed successfully");
+        } else {
+          spinner.fail(`PR reviewer exited with code ${exitCode}`);
+        }
         process.exit(exitCode);
-      } catch (error) {
-        console.error("Failed to execute review command:", error);
+      } catch (err) {
+        spinner.fail("Failed to execute review command");
+        uiError(`${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
       }
     });
