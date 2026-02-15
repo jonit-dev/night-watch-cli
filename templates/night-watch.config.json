@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/schema",
+  "projectName": "",
+  "defaultBranch": "",
+  "prdDirectory": "docs/PRDs/night-watch",
+  "claude": {
+    "model": "claude-sonnet-4-20250514",
+    "maxBudget": 5.00,
+    "maxRuntime": 7200,
+    "reviewerMaxBudget": 3.00,
+    "reviewerMaxRuntime": 3600
+  },
+  "cron": {
+    "executorSchedule": "0 0-15 * * *",
+    "reviewerSchedule": "0 0,3,6,9,12,15 * * *"
+  },
+  "review": {
+    "minScore": 80,
+    "branchPatterns": ["feat/", "night-watch/"]
+  },
+  "logging": {
+    "maxLogSize": 524288
+  }
+}

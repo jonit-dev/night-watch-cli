@@ -1,0 +1,195 @@
+/**
+ * Tests for status command
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from "vitest";
+import * as fs from "fs";
+import * as path from "path";
+import * as os from "os";
+
+// Mock process.cwd to return our temp directory
+let mockProjectDir: string;
+
+vi.mock("child_process", () => ({
+  execSync: vi.fn(),
+  spawn: vi.fn(),
+}));
+
+vi.mock("../../utils/crontab.js", () => ({
+  getEntries: vi.fn(() => []),
+  generateMarker: vi.fn((name: string) => `# night-watch-cli: ${name}`),
+}));
+
+import { execSync } from "child_process";
+import { getEntries } from "../../utils/crontab.js";
+
+// Mock process.cwd before importing status module
+const originalCwd = process.cwd;
+process.cwd = () => mockProjectDir;
+
+// Import after mocking
+import { statusCommand } from "../../commands/status.js";
+import { Command } from "commander";
+
+describe("status command", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "night-watch-status-test-"));
+    mockProjectDir = tempDir;
+
+    // Create basic package.json
+    fs.writeFileSync(
+      path.join(tempDir, "package.json"),
+      JSON.stringify({ name: "test-project" })
+    );
+
+    // Mock getEntries
+    vi.mocked(getEntries).mockReturnValue([]);
+
+    // Mock execSync for most operations
+    vi.mocked(execSync).mockImplementation((cmd: string) => {
+      if (cmd.includes("git rev-parse")) {
+        throw new Error("not a git repo");
+      }
+      return "";
+    });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  afterAll(() => {
+    process.cwd = originalCwd;
+  });
+
+  describe("lock file status", () => {
+    it("should show lock file status - not running", async () => {
+      const program = new Command();
+      statusCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "status", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.executor.running).toBe(false);
+      expect(jsonOutput.executor.pid).toBeNull();
+      expect(jsonOutput.reviewer.running).toBe(false);
+      expect(jsonOutput.reviewer.pid).toBeNull();
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should show lock file status - running", async () => {
+      // Create lock file with PID
+      const lockFile = "/tmp/night-watch-executor.lock";
+      fs.writeFileSync(lockFile, "12345");
+
+      // Mock process.kill to return true (process exists)
+      const originalKill = process.kill;
+      (process as any).kill = vi.fn().mockReturnValue(true);
+
+      try {
+        const program = new Command();
+        statusCommand(program);
+
+        const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+        await program.parseAsync(["node", "test", "status", "--json"]);
+
+        const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+        expect(jsonOutput.executor.running).toBe(true);
+        expect(jsonOutput.executor.pid).toBe(12345);
+
+        consoleSpy.mockRestore();
+      } finally {
+        (process as any).kill = originalKill;
+        if (fs.existsSync(lockFile)) {
+          fs.unlinkSync(lockFile);
+        }
+      }
+    });
+  });
+
+  describe("PRD counting", () => {
+    it("should count pending and done PRDs", async () => {
+      // Create PRD directory structure
+      const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
+      fs.mkdirSync(prdDir, { recursive: true });
+      fs.mkdirSync(path.join(prdDir, "done"), { recursive: true });
+
+      // Create pending PRDs
+      fs.writeFileSync(path.join(prdDir, "phase1.md"), "# Phase 1");
+      fs.writeFileSync(path.join(prdDir, "phase2.md"), "# Phase 2");
+
+      // Create done PRDs
+      fs.writeFileSync(path.join(prdDir, "done", "phase0.md"), "# Phase 0");
+
+      const program = new Command();
+      statusCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "status", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.prds.pending).toBe(2);
+      expect(jsonOutput.prds.done).toBe(1);
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe("crontab status", () => {
+    it("should show installed crontab entries", async () => {
+      // Mock crontab entries
+      vi.mocked(getEntries).mockReturnValue([
+        "0 * * * * night-watch run  # night-watch-cli: test-project",
+        "0 0 * * * night-watch review  # night-watch-cli: test-project",
+      ]);
+
+      const program = new Command();
+      statusCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "status", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.crontab.installed).toBe(true);
+      expect(jsonOutput.crontab.entries).toHaveLength(2);
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe("log files", () => {
+    it("should show log file info", async () => {
+      // Create log directory and file
+      const logDir = path.join(tempDir, "logs");
+      fs.mkdirSync(logDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logDir, "executor.log"),
+        "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6"
+      );
+
+      const program = new Command();
+      statusCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "status", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.logs.executor.exists).toBe(true);
+      expect(jsonOutput.logs.executor.size).toBeGreaterThan(0);
+      expect(jsonOutput.logs.executor.lastLines).toHaveLength(5);
+
+      consoleSpy.mockRestore();
+    });
+  });
+});

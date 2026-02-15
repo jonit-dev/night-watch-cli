@@ -1,0 +1,39 @@
+# Source files
+src/
+
+# Test files (source and compiled)
+__tests__/
+*.test.ts
+*.spec.ts
+dist/__tests__/
+dist/**/*.test.*
+dist/**/*.spec.*
+
+# Development config
+tsconfig.json
+vitest.config.ts
+
+# Documentation (except README)
+*.md
+!README.md
+
+# Git
+.gitignore
+.git/
+
+# Project-specific files
+night-watch-cli.md
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
