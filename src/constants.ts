@@ -12,8 +12,8 @@ export const DEFAULT_MAX_RUNTIME = 7200;
 export const DEFAULT_REVIEWER_MAX_RUNTIME = 3600;
 
 // Cron Schedule Configuration
-export const DEFAULT_CRON_SCHEDULE = "0 0-15 * * *";
-export const DEFAULT_REVIEWER_SCHEDULE = "0 0,3,6,9,12,15 * * *";
+export const DEFAULT_CRON_SCHEDULE = "0 0-21 * * *";
+export const DEFAULT_REVIEWER_SCHEDULE = "0 0,3,6,9,12,15,18,21 * * *";
 
 // Branch Configuration
 export const DEFAULT_BRANCH_PREFIX = "night-watch";

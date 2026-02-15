@@ -57,8 +57,8 @@ describe("status command", () => {
         maxRuntime: 7200,
         reviewerMaxRuntime: 3600,
         cron: {
-          executorSchedule: "0 0-15 * * *",
-          reviewerSchedule: "0 0,3,6,9,12,15 * * *"
+          executorSchedule: "0 0-21 * * *",
+          reviewerSchedule: "0 0,3,6,9,12,15,18,21 * * *"
         },
         review: {
           minScore: 80,
@@ -260,8 +260,8 @@ describe("status command", () => {
           maxRuntime: 7200,
           reviewerMaxRuntime: 3600,
           cron: {
-            executorSchedule: "0 0-15 * * *",
-            reviewerSchedule: "0 0,3,6,9,12,15 * * *"
+            executorSchedule: "0 0-21 * * *",
+            reviewerSchedule: "0 0,3,6,9,12,15,18,21 * * *"
           },
           review: {
             minScore: 80,
@@ -299,8 +299,8 @@ describe("status command", () => {
           maxRuntime: 7200,
           reviewerMaxRuntime: 3600,
           cron: {
-            executorSchedule: "0 0-15 * * *",
-            reviewerSchedule: "0 0,3,6,9,12,15 * * *"
+            executorSchedule: "0 0-21 * * *",
+            reviewerSchedule: "0 0,3,6,9,12,15,18,21 * * *"
           },
           review: {
             minScore: 80,

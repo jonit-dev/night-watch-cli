@@ -40,9 +40,52 @@ interface InitOptions {
 /**
  * Get the default branch name for the repository
  */
-function getDefaultBranch(cwd: string): string {
+export function getDefaultBranch(cwd: string): string {
+  const getRefTimestamp = (ref: string): number | null => {
+    try {
+      const timestamp = execSync(`git log -1 --format=%ct ${ref}`, {
+        encoding: 'utf-8',
+        cwd,
+        stdio: ['pipe', 'pipe', 'pipe']
+      }).trim();
+
+      const parsed = parseInt(timestamp, 10);
+      return Number.isNaN(parsed) ? null : parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  const getBranchLatestTimestamp = (branch: 'main' | 'master'): number | null => {
+    const refs = [`refs/remotes/origin/${branch}`, `refs/heads/${branch}`];
+    let latest: number | null = null;
+
+    for (const ref of refs) {
+      const timestamp = getRefTimestamp(ref);
+      if (timestamp !== null && (latest === null || timestamp > latest)) {
+        latest = timestamp;
+      }
+    }
+
+    return latest;
+  };
+
   try {
-    // Try to get the default branch from origin
+    // If both main and master exist, use whichever has the newest tip commit
+    const mainTimestamp = getBranchLatestTimestamp('main');
+    const masterTimestamp = getBranchLatestTimestamp('master');
+
+    if (mainTimestamp !== null && masterTimestamp !== null) {
+      return mainTimestamp >= masterTimestamp ? 'main' : 'master';
+    }
+    if (mainTimestamp !== null) {
+      return 'main';
+    }
+    if (masterTimestamp !== null) {
+      return 'master';
+    }
+
+    // Fallback to origin/HEAD when neither main nor master exists
     const remoteRef = execSync('git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || echo ""', {
       encoding: 'utf-8',
       cwd,
@@ -55,20 +98,6 @@ function getDefaultBranch(cwd: string): string {
       if (match) {
         return match[1];
       }
-    }
-
-    // Fallback: check if main or master exists
-    const branches = execSync('git branch --list main master', {
-      encoding: 'utf-8',
-      cwd,
-      stdio: ['pipe', 'pipe', 'pipe']
-    }).trim();
-
-    if (branches.includes('main')) {
-      return 'main';
-    }
-    if (branches.includes('master')) {
-      return 'master';
     }
 
     // Default to main
