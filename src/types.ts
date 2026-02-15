@@ -3,25 +3,9 @@
  */
 
 /**
- * Claude provider configuration options
- * These map to environment variables used by Claude CLI
+ * Supported AI providers
  */
-export interface IClaudeConfig {
-  /** API key for Claude - maps to ANTHROPIC_AUTH_TOKEN */
-  apiKey?: string;
-
-  /** Base URL for Claude API - maps to ANTHROPIC_BASE_URL */
-  baseUrl?: string;
-
-  /** API timeout in milliseconds - maps to API_TIMEOUT_MS */
-  timeout?: number;
-
-  /** Default Opus model - maps to ANTHROPIC_DEFAULT_OPUS_MODEL */
-  opusModel?: string;
-
-  /** Default Sonnet model - maps to ANTHROPIC_DEFAULT_SONNET_MODEL */
-  sonnetModel?: string;
-}
+export type Provider = "claude" | "codex";
 
 /**
  * Complete Night Watch configuration
@@ -31,12 +15,6 @@ export interface INightWatchConfig {
 
   /** Directory containing PRD files (relative to project root) */
   prdDir: string;
-
-  /** Maximum budget in USD for PRD execution */
-  maxBudget: number;
-
-  /** Maximum budget in USD for PR reviewer */
-  reviewerMaxBudget: number;
 
   /** Maximum runtime in seconds for PRD execution */
   maxRuntime: number;
@@ -64,6 +42,11 @@ export interface INightWatchConfig {
   /** Cron schedule for PR reviewer */
   reviewerSchedule: string;
 
-  // Claude provider configuration
-  claude: IClaudeConfig;
+  // Provider configuration
+
+  /** AI provider to use for execution */
+  provider: Provider;
+
+  /** Whether the reviewer is enabled */
+  reviewerEnabled: boolean;
 }

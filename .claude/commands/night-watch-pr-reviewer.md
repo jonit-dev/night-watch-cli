@@ -76,7 +76,7 @@ A PR needs attention if **either** the review score is below 80 **or** any CI jo
 
    b. **Create a worktree** for the fixes:
       ```
-      git worktree add ../${PROJECT_NAME}-nw-review-<branch-name> <branch-name>
+      git worktree add ../night-watch-cli-nw-review-<branch-name> <branch-name>
       ```
       `cd` into worktree, run package install (npm install, yarn install, or pnpm install as appropriate).
 
@@ -94,7 +94,7 @@ A PR needs attention if **either** the review score is below 80 **or** any CI jo
       - Improve error handling if flagged.
       - Add missing tests if coverage was noted.
       - Refactor code if structure was criticized.
-      - Follow all project conventions from AI assistant documentation files (e.g., CLAUDE.md, AGENTS.md, or similar).
+      - Follow all project conventions from CLAUDE.md or similar documentation files.
 
    e. **Run verification**: Run the project's test/lint commands (e.g., `npm test`, `npm run lint`, `npm run verify` or equivalent). Fix until it passes.
 
@@ -135,10 +135,10 @@ A PR needs attention if **either** the review score is below 80 **or** any CI jo
       Night Watch PR Reviewer"
       ```
 
-   h. **Clean up worktree**: `git worktree remove ../${PROJECT_NAME}-nw-review-<branch-name>`
+   h. **Clean up worktree**: `git worktree remove ../night-watch-cli-nw-review-<branch-name>`
 
 5. **Repeat** for all open PRs that need work.
 
-6. When done, return to ${DEFAULT_BRANCH}: `git checkout ${DEFAULT_BRANCH}`
+6. When done, return to main: `git checkout main`
 
 Start now. Check for open PRs that need review feedback addressed or CI failures fixed.

@@ -6,17 +6,18 @@ import { Command } from "commander";
 import { loadConfig, getScriptPath } from "../config.js";
 import { INightWatchConfig } from "../types.js";
 import { executeScript } from "../utils/shell.js";
+import { PROVIDER_COMMANDS, DEFAULT_PRD_DIR } from "../constants.js";
+import * as fs from "fs";
+import * as path from "path";
+import { execSync } from "child_process";
 
 /**
  * Options for the run command
  */
 export interface RunOptions {
   dryRun: boolean;
-  budget?: string;
   timeout?: string;
-  apiKey?: string;
-  apiUrl?: string;
-  model?: string;
+  provider?: string;
 }
 
 /**
@@ -25,36 +26,15 @@ export interface RunOptions {
 export function buildEnvVars(config: INightWatchConfig, options: RunOptions): Record<string, string> {
   const env: Record<string, string> = {};
 
-  // Budget and runtime
-  if (config.maxBudget !== undefined) {
-    env.NW_MAX_BUDGET = String(config.maxBudget);
-  }
-  if (config.maxRuntime !== undefined) {
-    env.NW_MAX_RUNTIME = String(config.maxRuntime);
-  }
+  // Provider command - the actual CLI binary to call
+  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[config.provider];
 
-  // Claude provider configuration
-  if (config.claude.apiKey) {
-    env.ANTHROPIC_AUTH_TOKEN = config.claude.apiKey;
-  }
-  if (config.claude.baseUrl) {
-    env.ANTHROPIC_BASE_URL = config.claude.baseUrl;
-  }
-  if (config.claude.timeout !== undefined) {
-    env.API_TIMEOUT_MS = String(config.claude.timeout);
-  }
+  // Runtime
+  env.NW_MAX_RUNTIME = String(config.maxRuntime);
 
-  // Model configuration - --model flag sets both opus and sonnet
-  if (options.model) {
-    env.ANTHROPIC_DEFAULT_OPUS_MODEL = options.model;
-    env.ANTHROPIC_DEFAULT_SONNET_MODEL = options.model;
-  } else {
-    if (config.claude.opusModel) {
-      env.ANTHROPIC_DEFAULT_OPUS_MODEL = config.claude.opusModel;
-    }
-    if (config.claude.sonnetModel) {
-      env.ANTHROPIC_DEFAULT_SONNET_MODEL = config.claude.sonnetModel;
-    }
+  // Dry run flag
+  if (options.dryRun) {
+    env.NW_DRY_RUN = "1";
   }
 
   return env;
@@ -66,13 +46,6 @@ export function buildEnvVars(config: INightWatchConfig, options: RunOptions): Re
 export function applyCliOverrides(config: INightWatchConfig, options: RunOptions): INightWatchConfig {
   const overridden = { ...config };
 
-  if (options.budget) {
-    const budget = parseFloat(options.budget);
-    if (!isNaN(budget)) {
-      overridden.maxBudget = budget;
-    }
-  }
-
   if (options.timeout) {
     const timeout = parseInt(options.timeout, 10);
     if (!isNaN(timeout)) {
@@ -80,15 +53,44 @@ export function applyCliOverrides(config: INightWatchConfig, options: RunOptions
     }
   }
 
-  if (options.apiKey) {
-    overridden.claude = { ...overridden.claude, apiKey: options.apiKey };
-  }
-
-  if (options.apiUrl) {
-    overridden.claude = { ...overridden.claude, baseUrl: options.apiUrl };
+  if (options.provider) {
+    overridden.provider = options.provider as INightWatchConfig["provider"];
   }
 
   return overridden;
+}
+
+/**
+ * Scan the PRD directory for eligible PRD files
+ */
+function scanPrdDirectory(projectDir: string, prdDir: string): { pending: string[]; completed: string[] } {
+  const absolutePrdDir = path.join(projectDir, prdDir);
+  const doneDir = path.join(absolutePrdDir, "done");
+
+  const pending: string[] = [];
+  const completed: string[] = [];
+
+  // Scan main PRD directory for pending PRDs
+  if (fs.existsSync(absolutePrdDir)) {
+    const entries = fs.readdirSync(absolutePrdDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "NIGHT-WATCH-SUMMARY.md") {
+        pending.push(entry.name);
+      }
+    }
+  }
+
+  // Scan done directory for completed PRDs
+  if (fs.existsSync(doneDir)) {
+    const entries = fs.readdirSync(doneDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.endsWith(".md")) {
+        completed.push(entry.name);
+      }
+    }
+  }
+
+  return { pending, completed };
 }
 
 /**
@@ -99,11 +101,8 @@ export function runCommand(program: Command): void {
     .command("run")
     .description("Run PRD executor now")
     .option("--dry-run", "Show what would be executed without running")
-    .option("--budget <number>", "Override max budget in USD")
     .option("--timeout <seconds>", "Override max runtime in seconds")
-    .option("--api-key <string>", "Claude API key")
-    .option("--api-url <string>", "Claude API base URL")
-    .option("--model <string>", "Model name (sets both opus and sonnet models)")
+    .option("--provider <string>", "AI provider to use (claude or codex)")
     .action(async (options: RunOptions) => {
       // Get the project directory (current working directory)
       const projectDir = process.cwd();
@@ -121,20 +120,57 @@ export function runCommand(program: Command): void {
       const scriptPath = getScriptPath("night-watch-cron.sh");
 
       if (options.dryRun) {
-        console.log("=== Dry Run ===");
-        console.log(`Script: ${scriptPath}`);
-        console.log(`Project directory: ${projectDir}`);
-        console.log("\nEnvironment variables:");
-        for (const [key, value] of Object.entries(envVars)) {
-          // Mask sensitive values
-          const displayValue =
-            key === "ANTHROPIC_AUTH_TOKEN" || key === "apiKey"
-              ? "***"
-              : value;
-          console.log(`  ${key}=${displayValue}`);
+        console.log("=== Dry Run: PRD Executor ===\n");
+
+        // Configuration section
+        console.log("Configuration:");
+        console.log(`  Provider:         ${config.provider}`);
+        console.log(`  Provider CLI:     ${PROVIDER_COMMANDS[config.provider]}`);
+        console.log(`  PRD Directory:    ${config.prdDir}`);
+        console.log(`  Max Runtime:      ${config.maxRuntime}s (${Math.floor(config.maxRuntime / 60)}min)`);
+        console.log(`  Branch Prefix:    ${config.branchPrefix}`);
+
+        // Scan for PRDs
+        console.log("\nPRD Status:");
+        const prdStatus = scanPrdDirectory(projectDir, config.prdDir);
+
+        if (prdStatus.pending.length === 0) {
+          console.log("  Pending:          (none)");
+        } else {
+          console.log(`  Pending (${prdStatus.pending.length}):`);
+          for (const prd of prdStatus.pending) {
+            console.log(`    - ${prd}`);
+          }
         }
+
+        if (prdStatus.completed.length === 0) {
+          console.log("  Completed:        (none)");
+        } else {
+          console.log(`  Completed (${prdStatus.completed.length}):`);
+          for (const prd of prdStatus.completed.slice(0, 5)) {
+            console.log(`    - ${prd}`);
+          }
+          if (prdStatus.completed.length > 5) {
+            console.log(`    ... and ${prdStatus.completed.length - 5} more`);
+          }
+        }
+
+        // Provider invocation command
+        console.log("\nProvider Invocation:");
+        const providerCmd = PROVIDER_COMMANDS[config.provider];
+        const autoFlag = config.provider === "claude" ? "--dangerously-skip-permissions" : "--yolo";
+        console.log(`  ${providerCmd} ${autoFlag} -p "/night-watch"`);
+
+        // Environment variables
+        console.log("\nEnvironment Variables:");
+        for (const [key, value] of Object.entries(envVars)) {
+          console.log(`  ${key}=${value}`);
+        }
+
+        // Full command that would be executed
         console.log("\nCommand that would be executed:");
         console.log(`  bash ${scriptPath} ${projectDir}`);
+
         process.exit(0);
       }
 

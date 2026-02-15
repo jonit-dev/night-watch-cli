@@ -7,18 +7,18 @@ set -euo pipefail
 # NOTE: This script expects environment variables to be set by the caller.
 # The Node.js CLI will inject config values via environment variables.
 # Required env vars (with defaults shown):
-#   NW_REVIEWER_MAX_BUDGET=3.00  - Maximum budget in USD
 #   NW_REVIEWER_MAX_RUNTIME=3600 - Maximum runtime in seconds (1 hour)
-#   ANTHROPIC_AUTH_TOKEN         - Claude API key (or via config file)
+#   NW_PROVIDER_CMD=claude       - AI provider CLI to use (claude, codex, etc.)
+#   NW_DRY_RUN=0                 - Set to 1 for dry-run mode (prints diagnostics only)
 
 PROJECT_DIR="${1:?Usage: $0 /path/to/project}"
 PROJECT_NAME=$(basename "${PROJECT_DIR}")
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/night-watch-pr-reviewer.log"
 LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_NAME}.lock"
-MAX_BUDGET="${NW_REVIEWER_MAX_BUDGET:-3.00}"
 MAX_RUNTIME="${NW_REVIEWER_MAX_RUNTIME:-3600}"  # 1 hour
 MAX_LOG_SIZE="524288"  # 512 KB
+PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 
 # Ensure NVM / Node / Claude are on PATH
 export NVM_DIR="${HOME}/.nvm"
@@ -32,6 +32,12 @@ mkdir -p "${LOG_DIR}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
+
+# Validate provider
+if ! validate_provider "${PROVIDER_CMD}"; then
+  echo "ERROR: Unknown provider: ${PROVIDER_CMD}" >&2
+  exit 1
+fi
 
 rotate_log
 
@@ -87,11 +93,34 @@ log "START: Found PR(s) needing work:${PRS_NEEDING_WORK}"
 
 cleanup_worktrees "${PROJECT_DIR}"
 
-timeout "${MAX_RUNTIME}" \
-  claude -p "/night-watch-pr-reviewer" \
-    --dangerously-skip-permissions \
-    --max-budget-usd "${MAX_BUDGET}" \
-    >> "${LOG_FILE}" 2>&1
+# Dry-run mode: print diagnostics and exit
+if [ "${NW_DRY_RUN:-0}" = "1" ]; then
+  echo "=== Dry Run: PR Reviewer ==="
+  echo "Provider: ${PROVIDER_CMD}"
+  echo "Open PRs needing work:${PRS_NEEDING_WORK}"
+  echo "Timeout: ${MAX_RUNTIME}s"
+  exit 0
+fi
+
+case "${PROVIDER_CMD}" in
+  claude)
+    timeout "${MAX_RUNTIME}" \
+      claude -p "/night-watch-pr-reviewer" \
+        --dangerously-skip-permissions \
+        >> "${LOG_FILE}" 2>&1
+    ;;
+  codex)
+    timeout "${MAX_RUNTIME}" \
+      codex --quiet \
+        --yolo \
+        --prompt "$(cat "${PROJECT_DIR}/.claude/commands/night-watch-pr-reviewer.md")" \
+        >> "${LOG_FILE}" 2>&1
+    ;;
+  *)
+    log "ERROR: Unknown provider: ${PROVIDER_CMD}"
+    exit 1
+    ;;
+esac
 
 EXIT_CODE=$?
 

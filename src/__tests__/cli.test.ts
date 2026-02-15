@@ -41,12 +41,9 @@ describe('CLI', () => {
       });
 
       expect(output).toContain('Run PRD executor');
-      expect(output).toContain('--budget');
       expect(output).toContain('--timeout');
       expect(output).toContain('--dry-run');
-      expect(output).toContain('--api-key');
-      expect(output).toContain('--api-url');
-      expect(output).toContain('--model');
+      expect(output).toContain('--provider');
     });
 
     it('should show review command help', () => {
@@ -56,12 +53,9 @@ describe('CLI', () => {
       });
 
       expect(output).toContain('Run PR reviewer');
-      expect(output).toContain('--budget');
       expect(output).toContain('--timeout');
       expect(output).toContain('--dry-run');
-      expect(output).toContain('--api-key');
-      expect(output).toContain('--api-url');
-      expect(output).toContain('--model');
+      expect(output).toContain('--provider');
     });
 
     it('should show install command help', () => {
@@ -121,33 +115,19 @@ describe('CLI', () => {
   });
 
   describe('command execution', () => {
-    it('should execute init command and fail when not a git repo', () => {
-      // Init command requires a git repository, so we test it fails appropriately
-      let errorThrown = false;
-      let stderr = '';
-      try {
-        execSync('npx tsx src/cli.ts init', {
-          encoding: 'utf-8',
-          cwd: process.cwd(),
-          stdio: 'pipe'
-        });
-      } catch (error) {
-        errorThrown = true;
-        stderr = (error as { stderr?: string }).stderr || '';
-      }
-      // Should fail because not a git repo
-      expect(errorThrown).toBe(true);
-      expect(stderr).toContain('not a git repository');
-    });
-
     it('should show dry-run output for run command', () => {
       const output = execSync('npx tsx src/cli.ts run --dry-run', {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
 
-      expect(output).toContain('Dry Run');
-      expect(output).toContain('Script:');
+      expect(output).toContain('Dry Run: PRD Executor');
+      expect(output).toContain('Configuration:');
+      expect(output).toContain('Provider:');
+      expect(output).toContain('Provider CLI:');
+      expect(output).toContain('PRD Directory:');
+      expect(output).toContain('PRD Status:');
+      expect(output).toContain('Provider Invocation:');
       expect(output).toContain('night-watch-cron.sh');
     });
 
@@ -157,8 +137,13 @@ describe('CLI', () => {
         cwd: process.cwd(),
       });
 
-      expect(output).toContain('Dry Run');
-      expect(output).toContain('Script:');
+      expect(output).toContain('Dry Run: PR Reviewer');
+      expect(output).toContain('Configuration:');
+      expect(output).toContain('Provider:');
+      expect(output).toContain('Provider CLI:');
+      expect(output).toContain('Min Review Score:');
+      expect(output).toContain('Open PRs Needing Work:');
+      expect(output).toContain('Provider Invocation:');
       expect(output).toContain('night-watch-pr-reviewer-cron.sh');
     });
 

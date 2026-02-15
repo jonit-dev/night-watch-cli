@@ -100,7 +100,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init', {
+      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -153,7 +153,7 @@ describe('init command', () => {
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
       // First run
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init', {
+      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -163,7 +163,7 @@ describe('init command', () => {
       const configContent1 = fs.readFileSync(configPath, 'utf-8');
 
       // Second run (without --force)
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init', {
+      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -207,7 +207,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init', {
+      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -254,7 +254,7 @@ describe('init command', () => {
       const gitignorePath = path.join(tempDir, '.gitignore');
       fs.writeFileSync(gitignorePath, 'node_modules\n/logs/\n');
 
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init', {
+      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -297,7 +297,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init', {
+      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -339,7 +339,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init', {
+      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -351,6 +351,9 @@ describe('init command', () => {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       expect(config.projectName).toBe(path.basename(tempDir));
       expect(config.defaultBranch).toBeDefined();
+      // Verify no budget fields in config
+      expect(config.maxBudget).toBeUndefined();
+      expect(config.reviewerMaxBudget).toBeUndefined();
     });
   });
 
@@ -385,7 +388,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init', {
+      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -431,7 +434,7 @@ describe('init command', () => {
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
       // First run
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init', {
+      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -446,7 +449,7 @@ describe('init command', () => {
       fs.writeFileSync(configPath, JSON.stringify(modifiedConfig, null, 2));
 
       // Run with --force
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --force', {
+      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --force --provider claude', {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -455,6 +458,92 @@ describe('init command', () => {
       // Config should be reset (not contain MODIFIED)
       const newContent = fs.readFileSync(configPath, 'utf-8');
       expect(newContent).not.toContain('MODIFIED');
+    });
+  });
+
+  describe('--provider flag', () => {
+    it('should set provider in config with --provider codex', () => {
+      // This test requires gh and claude to be available (using --provider codex)
+      let ghAvailable = false;
+      let claudeAvailable = false;
+
+      try {
+        execSync('gh auth status', { stdio: 'pipe' });
+        ghAvailable = true;
+      } catch {
+        // gh not available
+      }
+
+      try {
+        execSync('which claude', { stdio: 'pipe' });
+        claudeAvailable = true;
+      } catch {
+        // claude not available
+      }
+
+      if (!ghAvailable || !claudeAvailable) {
+        // Skip test
+        expect(true).toBe(true);
+        return;
+      }
+
+      // Initialize git repo
+      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
+
+      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider codex', {
+        encoding: 'utf-8',
+        cwd: tempDir,
+        stdio: 'pipe'
+      });
+
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      expect(config.provider).toBe('codex');
+    });
+  });
+
+  describe('--no-reviewer flag', () => {
+    it('should set reviewerEnabled to false in config', () => {
+      // This test requires gh and claude to be available
+      let ghAvailable = false;
+      let claudeAvailable = false;
+
+      try {
+        execSync('gh auth status', { stdio: 'pipe' });
+        ghAvailable = true;
+      } catch {
+        // gh not available
+      }
+
+      try {
+        execSync('which claude', { stdio: 'pipe' });
+        claudeAvailable = true;
+      } catch {
+        // claude not available
+      }
+
+      if (!ghAvailable || !claudeAvailable) {
+        // Skip test
+        expect(true).toBe(true);
+        return;
+      }
+
+      // Initialize git repo
+      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
+
+      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --no-reviewer --provider claude', {
+        encoding: 'utf-8',
+        cwd: tempDir,
+        stdio: 'pipe'
+      });
+
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      expect(config.reviewerEnabled).toBe(false);
     });
   });
 });
