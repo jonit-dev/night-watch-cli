@@ -45,6 +45,31 @@ describe("status command", () => {
       JSON.stringify({ name: "test-project" })
     );
 
+    // Create config file with no budget fields
+    fs.writeFileSync(
+      path.join(tempDir, "night-watch.config.json"),
+      JSON.stringify({
+        projectName: "test-project",
+        defaultBranch: "main",
+        provider: "claude",
+        reviewerEnabled: true,
+        prdDirectory: "docs/PRDs/night-watch",
+        maxRuntime: 7200,
+        reviewerMaxRuntime: 3600,
+        cron: {
+          executorSchedule: "0 0-15 * * *",
+          reviewerSchedule: "0 0,3,6,9,12,15 * * *"
+        },
+        review: {
+          minScore: 80,
+          branchPatterns: ["feat/", "night-watch/"]
+        },
+        logging: {
+          maxLogSize: 524288
+        }
+      }, null, 2)
+    );
+
     // Mock getEntries
     vi.mocked(getEntries).mockReturnValue([]);
 
@@ -188,6 +213,114 @@ describe("status command", () => {
       expect(jsonOutput.logs.executor.exists).toBe(true);
       expect(jsonOutput.logs.executor.size).toBeGreaterThan(0);
       expect(jsonOutput.logs.executor.lastLines).toHaveLength(5);
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe("configuration output", () => {
+    it("should include provider field in JSON output", async () => {
+      const program = new Command();
+      statusCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "status", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.provider).toBe("claude");
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should include reviewerEnabled field in JSON output", async () => {
+      const program = new Command();
+      statusCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "status", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.reviewerEnabled).toBe(true);
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should show reviewer as Disabled when reviewerEnabled is false", async () => {
+      // Update config to have reviewerEnabled: false
+      fs.writeFileSync(
+        path.join(tempDir, "night-watch.config.json"),
+        JSON.stringify({
+          projectName: "test-project",
+          defaultBranch: "main",
+          provider: "claude",
+          reviewerEnabled: false,
+          prdDirectory: "docs/PRDs/night-watch",
+          maxRuntime: 7200,
+          reviewerMaxRuntime: 3600,
+          cron: {
+            executorSchedule: "0 0-15 * * *",
+            reviewerSchedule: "0 0,3,6,9,12,15 * * *"
+          },
+          review: {
+            minScore: 80,
+            branchPatterns: ["feat/", "night-watch/"]
+          },
+          logging: {
+            maxLogSize: 524288
+          }
+        }, null, 2)
+      );
+
+      const program = new Command();
+      statusCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "status", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.reviewerEnabled).toBe(false);
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should show codex provider when configured", async () => {
+      // Update config to use codex provider
+      fs.writeFileSync(
+        path.join(tempDir, "night-watch.config.json"),
+        JSON.stringify({
+          projectName: "test-project",
+          defaultBranch: "main",
+          provider: "codex",
+          reviewerEnabled: true,
+          prdDirectory: "docs/PRDs/night-watch",
+          maxRuntime: 7200,
+          reviewerMaxRuntime: 3600,
+          cron: {
+            executorSchedule: "0 0-15 * * *",
+            reviewerSchedule: "0 0,3,6,9,12,15 * * *"
+          },
+          review: {
+            minScore: 80,
+            branchPatterns: ["feat/", "night-watch/"]
+          },
+          logging: {
+            maxLogSize: 524288
+          }
+        }, null, 2)
+      );
+
+      const program = new Command();
+      statusCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "status", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.provider).toBe("codex");
 
       consoleSpy.mockRestore();
     });

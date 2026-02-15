@@ -1,11 +1,13 @@
 {
   "$schema": "https://json-schema.org/schema",
-  "projectName": "",
-  "defaultBranch": "",
+  "projectName": "night-watch-cli",
+  "defaultBranch": "main",
   "provider": "claude",
   "reviewerEnabled": true,
   "prdDirectory": "docs/PRDs/night-watch",
+  "maxBudget": 5.00,
   "maxRuntime": 7200,
+  "reviewerMaxBudget": 3.00,
   "reviewerMaxRuntime": 3600,
   "cron": {
     "executorSchedule": "0 0-15 * * *",

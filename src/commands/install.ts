@@ -122,8 +122,12 @@ export function installCommand(program: Command): void {
         const executorEntry = `${executorSchedule} cd ${projectDir} && ${nightWatchBin} run >> ${executorLog} 2>&1  ${marker}`;
         entries.push(executorEntry);
 
-        // Reviewer entry (unless --no-reviewer)
-        if (!options.noReviewer) {
+        // Determine if reviewer should be installed
+        // Priority: --no-reviewer flag > config.reviewerEnabled
+        const installReviewer = options.noReviewer === true ? false : config.reviewerEnabled;
+
+        // Reviewer entry (if enabled)
+        if (installReviewer) {
           const reviewerEntry = `${reviewerSchedule} cd ${projectDir} && ${nightWatchBin} review >> ${reviewerLog} 2>&1  ${marker}`;
           entries.push(reviewerEntry);
         }
@@ -139,7 +143,7 @@ export function installCommand(program: Command): void {
         entries.forEach((entry) => console.log(`  ${entry}`));
         console.log("\nLog files:");
         console.log(`  Executor: ${executorLog}`);
-        if (!options.noReviewer) {
+        if (installReviewer) {
           console.log(`  Reviewer: ${reviewerLog}`);
         }
         console.log("\nTo uninstall, run: night-watch uninstall");

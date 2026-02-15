@@ -4,9 +4,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
-**Autonomous PRD execution using Claude CLI + cron**
+**Autonomous PRD execution using AI Provider CLIs + cron**
 
-Night Watch is a battle-tested autonomous PRD executor that uses Claude CLI + cron to implement PRD tickets, open PRs, and fix CI failures — all while you sleep.
+Night Watch is a battle-tested autonomous PRD executor that uses AI provider CLIs (Claude CLI or Codex) + cron to implement PRD tickets, open PRs, and fix CI failures — all while you sleep.
 
 ---
 
@@ -20,13 +20,32 @@ npm install -g night-watch-cli
 cd your-project
 night-watch init
 
-# 3. Add your PRD files
+# 3. Check provider detection
+night-watch run --dry-run    # Shows which provider CLI will be used
+
+# 4. Add your PRD files
 echo "# My First PRD\n\nImplement feature X..." > docs/PRDs/night-watch/my-feature.md
 
-# 4. Run or install cron
+# 5. Run or install cron
 night-watch run           # Run once
 night-watch install       # Setup automated cron
 ```
+
+---
+
+## Supported Providers
+
+Night Watch acts as a wrapper/orchestrator that calls CLI-based AI coding tools. The following providers are supported:
+
+| Provider | CLI Command | Auto-Mode Flag | Slash Commands |
+|----------|-------------|----------------|----------------|
+| `claude` | `claude` | `--dangerously-skip-permissions` | `-p "/command-name"` |
+| `codex` | `codex` | `--yolo` | `--prompt "text"` |
+
+**Provider Detection:**
+- Night Watch auto-detects your provider based on the `provider` field in `night-watch.config.json`
+- Default provider is `claude`
+- Change provider with `--provider codex` flag or set `provider: "codex"` in config
 
 ---
 
@@ -60,12 +79,13 @@ npm link
 
 ### `night-watch init`
 
-Initialize Night Watch in your project. Creates all necessary directories, configuration files, and Claude slash commands.
+Initialize Night Watch in your project. Creates all necessary directories, configuration files, and provider slash commands.
 
 ```bash
 night-watch init            # Initialize with defaults
 night-watch init --force    # Overwrite existing configuration
 night-watch init --prd-dir docs/prds  # Custom PRD directory
+night-watch init --provider codex     # Use codex provider
 ```
 
 **What it creates:**
@@ -79,27 +99,19 @@ night-watch init --prd-dir docs/prds  # Custom PRD directory
 **Prerequisites:**
 - Git repository
 - GitHub CLI (`gh`) authenticated
-- Claude CLI installed
+- Provider CLI installed (Claude CLI or Codex)
 
 ---
 
 ### `night-watch run`
 
-Execute the PRD executor. Scans for eligible PRDs and implements them using Claude CLI.
+Execute the PRD executor. Scans for eligible PRDs and implements them using the configured provider CLI.
 
 ```bash
 night-watch run                    # Execute PRD executor
-night-watch run --dry-run          # Show what would be executed
-night-watch run --budget 3.00      # Override max budget ($3)
+night-watch run --dry-run          # Show what would be executed (with diagnostics)
+night-watch run --provider codex   # Override provider
 night-watch run --timeout 3600     # Override max runtime (1 hour)
-```
-
-**Claude Provider Options:**
-
-```bash
-night-watch run --api-key "key"           # Custom API key
-night-watch run --api-url "https://..."   # Custom API endpoint
-night-watch run --model "glm-5"           # Custom model name
 ```
 
 ---
@@ -110,12 +122,10 @@ Execute the PR reviewer. Finds open PRs on night-watch/ or feat/ branches, check
 
 ```bash
 night-watch review                 # Execute PR reviewer
-night-watch review --dry-run       # Show PRs needing work
-night-watch review --budget 2.00   # Override max budget ($2)
+night-watch review --dry-run       # Show PRs needing work (with diagnostics)
+night-watch review --provider codex # Override provider
 night-watch review --timeout 1800  # Override max runtime (30 min)
 ```
-
-Supports the same Claude provider options as `run`.
 
 ---
 
@@ -193,9 +203,11 @@ Create `night-watch.config.json` in your project root:
 
 ```json
 {
+  "projectName": "my-project",
+  "defaultBranch": "main",
+  "provider": "claude",
+  "reviewerEnabled": true,
   "prdDir": "docs/PRDs/night-watch",
-  "maxBudget": 5.00,
-  "reviewerMaxBudget": 3.00,
   "maxRuntime": 7200,
   "reviewerMaxRuntime": 3600,
   "branchPrefix": "night-watch",
@@ -203,14 +215,7 @@ Create `night-watch.config.json` in your project root:
   "minReviewScore": 80,
   "maxLogSize": 524288,
   "cronSchedule": "0 0-15 * * *",
-  "reviewerSchedule": "0 0,3,6,9,12,15 * * *",
-  "claude": {
-    "apiKey": "your-api-key-here",
-    "baseUrl": "https://api.anthropic.com",
-    "timeout": 3000000,
-    "opusModel": "claude-opus-4-5-20250219",
-    "sonnetModel": "claude-sonnet-4-20250514"
-  }
+  "reviewerSchedule": "0 0,3,6,9,12,15 * * *"
 }
 ```
 
@@ -221,8 +226,6 @@ Create `night-watch.config.json` in your project root:
 | Variable | Config Key |
 |----------|------------|
 | `NW_PRD_DIR` | `prdDir` |
-| `NW_MAX_BUDGET` | `maxBudget` |
-| `NW_REVIEWER_MAX_BUDGET` | `reviewerMaxBudget` |
 | `NW_MAX_RUNTIME` | `maxRuntime` |
 | `NW_REVIEWER_MAX_RUNTIME` | `reviewerMaxRuntime` |
 | `NW_BRANCH_PREFIX` | `branchPrefix` |
@@ -231,23 +234,15 @@ Create `night-watch.config.json` in your project root:
 | `NW_MAX_LOG_SIZE` | `maxLogSize` |
 | `NW_CRON_SCHEDULE` | `cronSchedule` |
 | `NW_REVIEWER_SCHEDULE` | `reviewerSchedule` |
-
-**Claude Provider Config (direct env vars):**
-
-| Variable | Config Key |
-|----------|------------|
-| `ANTHROPIC_AUTH_TOKEN` | `claude.apiKey` |
-| `ANTHROPIC_BASE_URL` | `claude.baseUrl` |
-| `API_TIMEOUT_MS` | `claude.timeout` |
-| `ANTHROPIC_DEFAULT_OPUS_MODEL` | `claude.opusModel` |
-| `ANTHROPIC_DEFAULT_SONNET_MODEL` | `claude.sonnetModel` |
+| `NW_PROVIDER` | `provider` |
 
 ### CLI Flags
 
 Flags override all other configuration:
 
 ```bash
-night-watch run --budget 3.00 --timeout 3600 --api-key "key" --api-url "url" --model "model-name"
+night-watch run --provider codex --timeout 3600
+night-watch review --provider claude --timeout 1800
 ```
 
 ---
@@ -292,7 +287,7 @@ Add user profile management.
 - [ ] Avatar upload
 ```
 
-When a PRD specifies `Depends on:`, Night Wait will only process it after the dependency's PRD file is moved to `done/`.
+When a PRD specifies `Depends on:`, Night Watch will only process it after the dependency's PRD file is moved to `done/`.
 
 ---
 
@@ -301,38 +296,38 @@ When a PRD specifies `Depends on:`, Night Wait will only process it after the de
 ### Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Night Watch CLI                          │
-│  (Node.js wrapper for discoverability, config, distribution) │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     Bash Scripts                             │
-│  (Battle-tested core logic for PRD execution and review)     │
-│                                                              │
-│  ┌─────────────────────┐  ┌────────────────────────────────┐ │
-│  │ night-watch-cron.sh │  │ night-watch-pr-reviewer-cron.sh │ │
-│  │   (PRD Executor)    │  │        (PR Reviewer)            │ │
-│  └─────────────────────┘  └────────────────────────────────┘ │
-│              │                          │                     │
-│              └──────────┬───────────────┘                     │
-│                         ▼                                    │
-│            ┌────────────────────────┐                        │
-│            │ night-watch-helpers.sh │                        │
-│            │   (Shared utilities)   │                        │
-│            └────────────────────────┘                        │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    External Tools                            │
-│                                                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐  │
-│  │  Claude CLI  │  │   GitHub CLI │  │  Git Worktrees     │  │
-│  │ (AI Agent)   │  │  (PR mgmt)   │  │  (Isolation)       │  │
-│  └──────────────┘  └──────────────┘  └────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
++-------------------------------------------------------------+
+|                     Night Watch CLI                          |
+|  (Node.js wrapper for discoverability, config, distribution) |
++-------------------------------------------------------------+
+                              |
+                              v
++-------------------------------------------------------------+
+|                     Bash Scripts                             |
+|  (Battle-tested core logic for PRD execution and review)     |
+|                                                              |
+|  +---------------------+  +--------------------------------+ |
+|  | night-watch-cron.sh |  | night-watch-pr-reviewer-cron.sh | |
+|  |   (PRD Executor)    |  |        (PR Reviewer)            | |
+|  +---------------------+  +--------------------------------+ |
+|              |                          |                     |
+|              +-----------+--------------+                     |
+|                          v                                    |
+|            +-----------------------------+                    |
+|            | night-watch-helpers.sh      |                    |
+|            |   (Shared utilities)        |                    |
+|            +-----------------------------+                    |
++-------------------------------------------------------------+
+                              |
+                              v
++-------------------------------------------------------------+
+|                    External Tools                            |
+|                                                              |
+|  +----------------+  +------------+  +------------------+    |
+|  |  Provider CLI  |  | GitHub CLI |  |  Git Worktrees   |    |
+|  | (Claude/Codex) |  |  (PR mgmt) |  |  (Isolation)     |    |
+|  +----------------+  +------------+  +------------------+    |
++-------------------------------------------------------------+
 ```
 
 ### PRD Execution Flow
@@ -342,7 +337,7 @@ When a PRD specifies `Depends on:`, Night Wait will only process it after the de
 3. **Check for open PRs** — Skip PRDs that already have an open PR
 4. **Acquire lock** — Prevent concurrent executions
 5. **Create worktree** — Isolate changes in a git worktree
-6. **Launch Claude** — Execute PRD using Claude CLI with slash command
+6. **Launch Provider CLI** — Execute PRD using provider CLI with slash command
 7. **Verify PR created** — Check that a PR was opened
 8. **Mark done** — Move PRD to `done/` directory
 9. **Cleanup** — Remove lock files and worktrees
@@ -353,7 +348,7 @@ When a PRD specifies `Depends on:`, Night Wait will only process it after the de
 2. **Check CI status** — Identify failed checks
 3. **Check review scores** — Find PRs with score < 80/100
 4. **Acquire lock** — Prevent concurrent executions
-5. **Launch Claude** — Execute PR fix using Claude CLI with slash command
+5. **Launch Provider CLI** — Execute PR fix using provider CLI with slash command
 6. **Cleanup** — Remove lock files
 
 ---
@@ -378,12 +373,16 @@ Authenticate with GitHub:
 gh auth login
 ```
 
-### "Claude CLI is not available"
+### "Provider CLI is not available"
 
-Install Claude CLI:
+Install the appropriate provider CLI:
 
 ```bash
+# Claude CLI
 # Follow instructions at https://docs.anthropic.com/en/docs/claude-cli
+
+# Codex CLI
+# Follow instructions at https://github.com/openai/codex
 ```
 
 ### "Night Watch is already installed"
@@ -456,34 +455,52 @@ npm run dev -- init
 
 ```
 night-watch-cli/
-├── bin/
-│   └── night-watch.mjs      # ESM entry point
-├── src/
-│   ├── cli.ts               # CLI entry
-│   ├── config.ts            # Config loader
-│   ├── types.ts             # TypeScript types
-│   ├── constants.ts         # Default values
-│   ├── commands/            # Command implementations
-│   │   ├── init.ts
-│   │   ├── run.ts
-│   │   ├── review.ts
-│   │   ├── install.ts
-│   │   ├── uninstall.ts
-│   │   ├── status.ts
-│   │   └── logs.ts
-│   └── utils/
-│       ├── shell.ts         # Shell execution
-│       └── crontab.ts       # Crontab management
-├── scripts/                 # Bundled bash scripts
-│   ├── night-watch-cron.sh
-│   ├── night-watch-pr-reviewer-cron.sh
-│   └── night-watch-helpers.sh
-├── templates/               # Template files
-│   ├── night-watch.md
-│   ├── night-watch-pr-reviewer.md
-│   └── night-watch.config.json
-└── dist/                    # Compiled output
++-- bin/
+|   +-- night-watch.mjs      # ESM entry point
++-- src/
+|   +-- cli.ts               # CLI entry
+|   +-- config.ts            # Config loader
+|   +-- types.ts             # TypeScript types
+|   +-- constants.ts         # Default values
+|   +-- commands/            # Command implementations
+|   |   +-- init.ts
+|   |   +-- run.ts
+|   |   +-- review.ts
+|   |   +-- install.ts
+|   |   +-- uninstall.ts
+|   |   +-- status.ts
+|   |   +-- logs.ts
+|   +-- utils/
+|       +-- shell.ts         # Shell execution
+|       +-- crontab.ts       # Crontab management
++-- scripts/                 # Bundled bash scripts
+|   +-- night-watch-cron.sh
+|   +-- night-watch-pr-reviewer-cron.sh
+|   +-- night-watch-helpers.sh
++-- templates/               # Template files
+|   +-- night-watch.md
+|   +-- night-watch-pr-reviewer.md
+|   +-- night-watch.config.json
++-- dist/                    # Compiled output
 ```
+
+---
+
+## Publishing (For Maintainers)
+
+To publish a new version to npm:
+
+```bash
+# 1. Update version in package.json
+# 2. Build and test
+npm run build
+npm test
+
+# 3. Publish to npm (public access)
+npm run publish:npm
+```
+
+The `publish:npm` script runs `npm publish --access public`.
 
 ---
 

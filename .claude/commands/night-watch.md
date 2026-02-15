@@ -20,22 +20,22 @@ You are the Night Watch agent. Your job is to autonomously pick up PRD tickets a
 
    b. **Branch naming**: The branch MUST be named exactly `night-watch/<prd-filename-without-.md>`. Do NOT use `feat/`, `feature/`, or any other prefix. Example: for `health-check-endpoints.md` the branch is `night-watch/health-check-endpoints`.
 
-   c. **Create a feature branch** from ${DEFAULT_BRANCH}:
+   c. **Create a feature branch** from main:
 
    ```
-   git checkout ${DEFAULT_BRANCH} && git pull origin ${DEFAULT_BRANCH}
+   git checkout main && git pull origin main
    git checkout -b night-watch/<prd-filename-without-.md>
    ```
 
    d. **Create a git worktree** for isolated work:
 
    ```
-   git worktree add ../${PROJECT_NAME}-nw-<prd-name> night-watch/<prd-name>
+   git worktree add ../night-watch-cli-nw-<prd-name> night-watch/<prd-name>
    ```
 
    Then `cd` into the worktree and run package install (npm install, yarn install, or pnpm install as appropriate).
 
-   e. **Implement the PRD** phase by phase. Follow all project conventions from AI assistant documentation files (e.g., CLAUDE.md, AGENTS.md, or similar).
+   e. **Implement the PRD** phase by phase. Follow all project conventions from CLAUDE.md or similar documentation files.
 
    f. **Write tests** as specified in each PRD phase.
 
@@ -59,11 +59,11 @@ You are the Night Watch agent. Your job is to autonomously pick up PRD tickets a
    gh pr create --title "feat: <short title>" --body "<summary with PRD reference>"
    ```
 
-   j. **Move PRD to done** (back in main repo on ${DEFAULT_BRANCH}):
+   j. **Move PRD to done** (back in main repo on main):
 
    ```
-   cd ${PROJECT_DIR}
-   git checkout ${DEFAULT_BRANCH}
+   cd /home/joao/projects/night-watch-cli
+   git checkout main
    mkdir -p docs/PRDs/night-watch/done
    mv docs/PRDs/night-watch/<file>.md docs/PRDs/night-watch/done/
    ```
@@ -84,9 +84,9 @@ You are the Night Watch agent. Your job is to autonomously pick up PRD tickets a
    ---
    ```
 
-   l. **Commit** the move + summary update, push ${DEFAULT_BRANCH}.
+   l. **Commit** the move + summary update, push main.
 
-   m. **Clean up worktree**: `git worktree remove ../${PROJECT_NAME}-nw-<prd-name>`
+   m. **Clean up worktree**: `git worktree remove ../night-watch-cli-nw-<prd-name>`
 
    n. **STOP after this PRD**. Do NOT continue to the next PRD. One PRD per run prevents timeouts and reduces risk. The next cron trigger will pick up the next PRD.
 

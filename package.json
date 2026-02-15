@@ -1,7 +1,7 @@
 {
   "name": "night-watch-cli",
   "version": "1.0.0",
-  "description": "Autonomous PRD execution using Claude CLI + cron",
+  "description": "Autonomous PRD execution using AI Provider CLIs + cron",
   "type": "module",
   "bin": {
     "night-watch": "./bin/night-watch.mjs"
@@ -17,7 +17,8 @@
     "build": "tsc",
     "test": "vitest run",
     "dev": "tsx src/cli.ts",
-    "prepublishOnly": "npm run build && npm test"
+    "prepublishOnly": "npm run build && npm test",
+    "publish:npm": "npm publish --access public"
   },
   "files": [
     "dist/",
@@ -27,6 +28,7 @@
   ],
   "keywords": [
     "claude",
+    "codex",
     "ai",
     "prd",
     "automation",

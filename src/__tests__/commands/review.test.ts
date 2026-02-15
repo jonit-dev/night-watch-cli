@@ -30,6 +30,24 @@ import {
 } from "../../commands/review.js";
 import { INightWatchConfig } from "../../types.js";
 
+// Helper to create a valid config without budget fields
+function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConfig {
+  return {
+    prdDir: "docs/PRDs/night-watch",
+    maxRuntime: 7200,
+    reviewerMaxRuntime: 3600,
+    branchPrefix: "night-watch",
+    branchPatterns: ["feat/", "night-watch/"],
+    minReviewScore: 80,
+    maxLogSize: 524288,
+    cronSchedule: "0 0-15 * * *",
+    reviewerSchedule: "0 0,3,6,9,12,15 * * *",
+    provider: "claude",
+    reviewerEnabled: true,
+    ...overrides,
+  };
+}
+
 describe("review command", () => {
   let tempDir: string;
   let originalEnv: NodeJS.ProcessEnv;
@@ -41,13 +59,9 @@ describe("review command", () => {
     // Save original environment
     originalEnv = { ...process.env };
 
-    // Clear NW_* and ANTHROPIC_* environment variables
+    // Clear NW_* environment variables
     for (const key of Object.keys(process.env)) {
-      if (
-        key.startsWith("NW_") ||
-        key.startsWith("ANTHROPIC_") ||
-        key === "API_TIMEOUT_MS"
-      ) {
+      if (key.startsWith("NW_")) {
         delete process.env[key];
       }
     }
@@ -60,20 +74,12 @@ describe("review command", () => {
 
     // Restore original environment
     for (const key of Object.keys(process.env)) {
-      if (
-        key.startsWith("NW_") ||
-        key.startsWith("ANTHROPIC_") ||
-        key === "API_TIMEOUT_MS"
-      ) {
+      if (key.startsWith("NW_")) {
         delete process.env[key];
       }
     }
     for (const [key, value] of Object.entries(originalEnv)) {
-      if (
-        key.startsWith("NW_") ||
-        key.startsWith("ANTHROPIC_") ||
-        key === "API_TIMEOUT_MS"
-      ) {
+      if (key.startsWith("NW_")) {
         process.env[key] = value;
       }
     }
@@ -83,131 +89,96 @@ describe("review command", () => {
 
   describe("buildEnvVars", () => {
     it("should use reviewer-specific env vars", () => {
-      const config: INightWatchConfig = {
-        prdDir: "docs/PRDs/night-watch",
-        maxBudget: 5.0,
-        reviewerMaxBudget: 3.0,
-        maxRuntime: 7200,
-        reviewerMaxRuntime: 3600,
-        branchPrefix: "night-watch",
-        branchPatterns: ["feat/", "night-watch/"],
-        minReviewScore: 80,
-        maxLogSize: 524288,
-        cronSchedule: "0 0-15 * * *",
-        reviewerSchedule: "0 0,3,6,9,12,15 * * *",
-        claude: {},
-      };
+      const config = createTestConfig();
       const options: ReviewOptions = { dryRun: false };
 
       const env = buildEnvVars(config, options);
 
       // Should use NW_REVIEWER_* env vars
-      expect(env.NW_REVIEWER_MAX_BUDGET).toBe("3");
       expect(env.NW_REVIEWER_MAX_RUNTIME).toBe("3600");
 
-      // Should NOT set NW_MAX_BUDGET or NW_MAX_RUNTIME
-      expect(env.NW_MAX_BUDGET).toBeUndefined();
+      // Should NOT set NW_MAX_RUNTIME
       expect(env.NW_MAX_RUNTIME).toBeUndefined();
     });
 
-    it("should inject claude provider env vars", () => {
-      const config: INightWatchConfig = {
-        prdDir: "docs/PRDs/night-watch",
-        maxBudget: 5.0,
-        reviewerMaxBudget: 3.0,
-        maxRuntime: 7200,
-        reviewerMaxRuntime: 3600,
-        branchPrefix: "night-watch",
-        branchPatterns: ["feat/", "night-watch/"],
-        minReviewScore: 80,
-        maxLogSize: 524288,
-        cronSchedule: "0 0-15 * * *",
-        reviewerSchedule: "0 0,3,6,9,12,15 * * *",
-        claude: {
-          apiKey: "review-api-key",
-          baseUrl: "https://review.api.url",
-          timeout: 45000,
-        },
-      };
+    it("should set NW_PROVIDER_CMD for claude provider", () => {
+      const config = createTestConfig();
       const options: ReviewOptions = { dryRun: false };
 
       const env = buildEnvVars(config, options);
 
-      expect(env.ANTHROPIC_AUTH_TOKEN).toBe("review-api-key");
-      expect(env.ANTHROPIC_BASE_URL).toBe("https://review.api.url");
-      expect(env.API_TIMEOUT_MS).toBe("45000");
+      expect(env.NW_PROVIDER_CMD).toBe("claude");
     });
 
-    it("should respect --model flag for reviewer", () => {
-      const config: INightWatchConfig = {
-        prdDir: "docs/PRDs/night-watch",
-        maxBudget: 5.0,
-        reviewerMaxBudget: 3.0,
-        maxRuntime: 7200,
-        reviewerMaxRuntime: 3600,
-        branchPrefix: "night-watch",
-        branchPatterns: ["feat/", "night-watch/"],
-        minReviewScore: 80,
-        maxLogSize: 524288,
-        cronSchedule: "0 0-15 * * *",
-        reviewerSchedule: "0 0,3,6,9,12,15 * * *",
-        claude: {},
-      };
-      const options: ReviewOptions = { dryRun: false, model: "claude-3-sonnet" };
+    it("should set NW_PROVIDER_CMD for codex provider", () => {
+      const config = createTestConfig({ provider: "codex" });
+      const options: ReviewOptions = { dryRun: false };
 
       const env = buildEnvVars(config, options);
 
-      // Both opus and sonnet model should be set
-      expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe("claude-3-sonnet");
-      expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBe("claude-3-sonnet");
+      expect(env.NW_PROVIDER_CMD).toBe("codex");
+    });
+
+    it("should set NW_DRY_RUN when dryRun is true", () => {
+      const config = createTestConfig();
+      const options: ReviewOptions = { dryRun: true };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_DRY_RUN).toBe("1");
+    });
+
+    it("should not set NW_DRY_RUN when dryRun is false", () => {
+      const config = createTestConfig();
+      const options: ReviewOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_DRY_RUN).toBeUndefined();
+    });
+
+    it("should not set any ANTHROPIC_* environment variables", () => {
+      const config = createTestConfig();
+      const options: ReviewOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      // Ensure no ANTHROPIC_* vars are present
+      for (const key of Object.keys(env)) {
+        expect(key.startsWith("ANTHROPIC_")).toBe(false);
+      }
+    });
+
+    it("should not set any budget-related environment variables", () => {
+      const config = createTestConfig();
+      const options: ReviewOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      // Ensure no budget vars are present
+      expect(env.NW_MAX_BUDGET).toBeUndefined();
+      expect(env.NW_REVIEWER_MAX_BUDGET).toBeUndefined();
     });
   });
 
   describe("applyCliOverrides", () => {
-    it("should override reviewer budget with --budget flag", () => {
-      const config: INightWatchConfig = {
-        prdDir: "docs/PRDs/night-watch",
-        maxBudget: 5.0,
-        reviewerMaxBudget: 3.0,
-        maxRuntime: 7200,
-        reviewerMaxRuntime: 3600,
-        branchPrefix: "night-watch",
-        branchPatterns: ["feat/", "night-watch/"],
-        minReviewScore: 80,
-        maxLogSize: 524288,
-        cronSchedule: "0 0-15 * * *",
-        reviewerSchedule: "0 0,3,6,9,12,15 * * *",
-        claude: {},
-      };
-      const options: ReviewOptions = { dryRun: false, budget: "10.00" };
-
-      const overridden = applyCliOverrides(config, options);
-
-      // Should override reviewer budget
-      expect(overridden.reviewerMaxBudget).toBe(10);
-    });
-
     it("should override reviewer timeout with --timeout flag", () => {
-      const config: INightWatchConfig = {
-        prdDir: "docs/PRDs/night-watch",
-        maxBudget: 5.0,
-        reviewerMaxBudget: 3.0,
-        maxRuntime: 7200,
-        reviewerMaxRuntime: 3600,
-        branchPrefix: "night-watch",
-        branchPatterns: ["feat/", "night-watch/"],
-        minReviewScore: 80,
-        maxLogSize: 524288,
-        cronSchedule: "0 0-15 * * *",
-        reviewerSchedule: "0 0,3,6,9,12,15 * * *",
-        claude: {},
-      };
+      const config = createTestConfig();
       const options: ReviewOptions = { dryRun: false, timeout: "2700" };
 
       const overridden = applyCliOverrides(config, options);
 
       // Should override reviewer timeout
       expect(overridden.reviewerMaxRuntime).toBe(2700);
+    });
+
+    it("should override provider with --provider flag", () => {
+      const config = createTestConfig();
+      const options: ReviewOptions = { dryRun: false, provider: "codex" };
+
+      const overridden = applyCliOverrides(config, options);
+
+      expect(overridden.provider).toBe("codex");
     });
   });
 });

@@ -2,6 +2,23 @@
 # Night Watch helper functions — shared by cron scripts.
 # Source this file, don't execute it directly.
 
+# ── Provider validation ───────────────────────────────────────────────────────
+
+# Validates that the provider command is supported.
+# Returns 0 if valid, 1 if unknown.
+# Supported providers: claude, codex
+validate_provider() {
+  local provider="${1:?provider required}"
+  case "${provider}" in
+    claude|codex)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 # ── Logging ──────────────────────────────────────────────────────────────────
 
 log() {

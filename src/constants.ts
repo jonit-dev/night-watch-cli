@@ -2,12 +2,10 @@
  * Default configuration values for Night Watch CLI
  */
 
+import { Provider } from "./types.js";
+
 // PRD Configuration
 export const DEFAULT_PRD_DIR = "docs/PRDs/night-watch";
-
-// Budget Configuration (in USD)
-export const DEFAULT_MAX_BUDGET = 5.00;
-export const DEFAULT_REVIEWER_MAX_BUDGET = 3.00;
 
 // Runtime Configuration (in seconds)
 export const DEFAULT_MAX_RUNTIME = 7200;
@@ -26,6 +24,19 @@ export const DEFAULT_MIN_REVIEW_SCORE = 80;
 
 // Log Configuration
 export const DEFAULT_MAX_LOG_SIZE = 524288; // 512 KB
+
+// Provider Configuration
+export const DEFAULT_PROVIDER: Provider = "claude";
+export const DEFAULT_REVIEWER_ENABLED = true;
+
+// Valid providers
+export const VALID_PROVIDERS: Provider[] = ["claude", "codex"];
+
+// Provider commands configuration
+export const PROVIDER_COMMANDS: Record<Provider, string> = {
+  claude: "claude",
+  codex: "codex",
+};
 
 // File Names and Paths
 export const CONFIG_FILE_NAME = "night-watch.config.json";

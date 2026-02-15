@@ -5,11 +5,9 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { INightWatchConfig, IClaudeConfig } from "./types.js";
+import { INightWatchConfig, Provider } from "./types.js";
 import {
   DEFAULT_PRD_DIR,
-  DEFAULT_MAX_BUDGET,
-  DEFAULT_REVIEWER_MAX_BUDGET,
   DEFAULT_MAX_RUNTIME,
   DEFAULT_REVIEWER_MAX_RUNTIME,
   DEFAULT_CRON_SCHEDULE,
@@ -18,6 +16,9 @@ import {
   DEFAULT_BRANCH_PATTERNS,
   DEFAULT_MIN_REVIEW_SCORE,
   DEFAULT_MAX_LOG_SIZE,
+  DEFAULT_PROVIDER,
+  DEFAULT_REVIEWER_ENABLED,
+  VALID_PROVIDERS,
   CONFIG_FILE_NAME,
 } from "./constants.js";
 
@@ -28,8 +29,6 @@ export function getDefaultConfig(): INightWatchConfig {
   return {
     // PRD execution
     prdDir: DEFAULT_PRD_DIR,
-    maxBudget: DEFAULT_MAX_BUDGET,
-    reviewerMaxBudget: DEFAULT_REVIEWER_MAX_BUDGET,
     maxRuntime: DEFAULT_MAX_RUNTIME,
     reviewerMaxRuntime: DEFAULT_REVIEWER_MAX_RUNTIME,
     branchPrefix: DEFAULT_BRANCH_PREFIX,
@@ -41,41 +40,10 @@ export function getDefaultConfig(): INightWatchConfig {
     cronSchedule: DEFAULT_CRON_SCHEDULE,
     reviewerSchedule: DEFAULT_REVIEWER_SCHEDULE,
 
-    // Claude provider configuration
-    claude: {},
+    // Provider configuration
+    provider: DEFAULT_PROVIDER,
+    reviewerEnabled: DEFAULT_REVIEWER_ENABLED,
   };
-}
-
-/**
- * Load Claude configuration from environment variables
- */
-function loadClaudeConfigFromEnv(): IClaudeConfig {
-  const claudeConfig: IClaudeConfig = {};
-
-  if (process.env.ANTHROPIC_AUTH_TOKEN) {
-    claudeConfig.apiKey = process.env.ANTHROPIC_AUTH_TOKEN;
-  }
-
-  if (process.env.ANTHROPIC_BASE_URL) {
-    claudeConfig.baseUrl = process.env.ANTHROPIC_BASE_URL;
-  }
-
-  if (process.env.API_TIMEOUT_MS) {
-    const timeout = parseInt(process.env.API_TIMEOUT_MS, 10);
-    if (!isNaN(timeout)) {
-      claudeConfig.timeout = timeout;
-    }
-  }
-
-  if (process.env.ANTHROPIC_DEFAULT_OPUS_MODEL) {
-    claudeConfig.opusModel = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL;
-  }
-
-  if (process.env.ANTHROPIC_DEFAULT_SONNET_MODEL) {
-    claudeConfig.sonnetModel = process.env.ANTHROPIC_DEFAULT_SONNET_MODEL;
-  }
-
-  return claudeConfig;
 }
 
 /**
@@ -103,6 +71,30 @@ function loadConfigFile(configPath: string): Partial<INightWatchConfig> | null {
 }
 
 /**
+ * Parse a boolean string value
+ */
+function parseBoolean(value: string): boolean | null {
+  const normalized = value.toLowerCase().trim();
+  if (normalized === "true" || normalized === "1") {
+    return true;
+  }
+  if (normalized === "false" || normalized === "0") {
+    return false;
+  }
+  return null;
+}
+
+/**
+ * Validate and return a provider value
+ */
+function validateProvider(value: string): Provider | null {
+  if (VALID_PROVIDERS.includes(value as Provider)) {
+    return value as Provider;
+  }
+  return null;
+}
+
+/**
  * Deep merge configuration objects
  * Environment values take precedence over file values
  */
@@ -116,9 +108,6 @@ function mergeConfigs(
   // Merge file config
   if (fileConfig) {
     if (fileConfig.prdDir !== undefined) merged.prdDir = fileConfig.prdDir;
-    if (fileConfig.maxBudget !== undefined) merged.maxBudget = fileConfig.maxBudget;
-    if (fileConfig.reviewerMaxBudget !== undefined)
-      merged.reviewerMaxBudget = fileConfig.reviewerMaxBudget;
     if (fileConfig.maxRuntime !== undefined) merged.maxRuntime = fileConfig.maxRuntime;
     if (fileConfig.reviewerMaxRuntime !== undefined)
       merged.reviewerMaxRuntime = fileConfig.reviewerMaxRuntime;
@@ -130,18 +119,13 @@ function mergeConfigs(
     if (fileConfig.cronSchedule !== undefined) merged.cronSchedule = fileConfig.cronSchedule;
     if (fileConfig.reviewerSchedule !== undefined)
       merged.reviewerSchedule = fileConfig.reviewerSchedule;
-
-    // Merge Claude config from file
-    if (fileConfig.claude) {
-      merged.claude = { ...merged.claude, ...fileConfig.claude };
-    }
+    if (fileConfig.provider !== undefined) merged.provider = fileConfig.provider;
+    if (fileConfig.reviewerEnabled !== undefined)
+      merged.reviewerEnabled = fileConfig.reviewerEnabled;
   }
 
   // Merge env config (takes precedence)
   if (envConfig.prdDir !== undefined) merged.prdDir = envConfig.prdDir;
-  if (envConfig.maxBudget !== undefined) merged.maxBudget = envConfig.maxBudget;
-  if (envConfig.reviewerMaxBudget !== undefined)
-    merged.reviewerMaxBudget = envConfig.reviewerMaxBudget;
   if (envConfig.maxRuntime !== undefined) merged.maxRuntime = envConfig.maxRuntime;
   if (envConfig.reviewerMaxRuntime !== undefined)
     merged.reviewerMaxRuntime = envConfig.reviewerMaxRuntime;
@@ -152,11 +136,9 @@ function mergeConfigs(
   if (envConfig.cronSchedule !== undefined) merged.cronSchedule = envConfig.cronSchedule;
   if (envConfig.reviewerSchedule !== undefined)
     merged.reviewerSchedule = envConfig.reviewerSchedule;
-
-  // Merge Claude config from env (takes precedence over file)
-  if (envConfig.claude) {
-    merged.claude = { ...merged.claude, ...envConfig.claude };
-  }
+  if (envConfig.provider !== undefined) merged.provider = envConfig.provider;
+  if (envConfig.reviewerEnabled !== undefined)
+    merged.reviewerEnabled = envConfig.reviewerEnabled;
 
   return merged;
 }
@@ -182,20 +164,6 @@ export function loadConfig(projectDir: string): INightWatchConfig {
   // NW_* environment variables
   if (process.env.NW_PRD_DIR) {
     envConfig.prdDir = process.env.NW_PRD_DIR;
-  }
-
-  if (process.env.NW_MAX_BUDGET) {
-    const budget = parseFloat(process.env.NW_MAX_BUDGET);
-    if (!isNaN(budget)) {
-      envConfig.maxBudget = budget;
-    }
-  }
-
-  if (process.env.NW_REVIEWER_MAX_BUDGET) {
-    const budget = parseFloat(process.env.NW_REVIEWER_MAX_BUDGET);
-    if (!isNaN(budget)) {
-      envConfig.reviewerMaxBudget = budget;
-    }
   }
 
   if (process.env.NW_MAX_RUNTIME) {
@@ -247,10 +215,21 @@ export function loadConfig(projectDir: string): INightWatchConfig {
     envConfig.reviewerSchedule = process.env.NW_REVIEWER_SCHEDULE;
   }
 
-  // Load Claude config from environment
-  const claudeEnvConfig = loadClaudeConfigFromEnv();
-  if (Object.keys(claudeEnvConfig).length > 0) {
-    envConfig.claude = claudeEnvConfig;
+  // NW_PROVIDER environment variable
+  if (process.env.NW_PROVIDER) {
+    const provider = validateProvider(process.env.NW_PROVIDER);
+    if (provider !== null) {
+      envConfig.provider = provider;
+    }
+    // If invalid, fallback to default (don't set envConfig.provider)
+  }
+
+  // NW_REVIEWER_ENABLED environment variable
+  if (process.env.NW_REVIEWER_ENABLED) {
+    const reviewerEnabled = parseBoolean(process.env.NW_REVIEWER_ENABLED);
+    if (reviewerEnabled !== null) {
+      envConfig.reviewerEnabled = reviewerEnabled;
+    }
   }
 
   // Merge all configs

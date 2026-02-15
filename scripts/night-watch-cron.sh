@@ -3,14 +3,14 @@ set -euo pipefail
 
 # Night Watch Cron Runner (project-agnostic)
 # Usage: night-watch-cron.sh /path/to/project
-# Finds the next eligible PRD and passes it to Claude for implementation.
+# Finds the next eligible PRD and passes it to the configured AI provider for implementation.
 #
 # NOTE: This script expects environment variables to be set by the caller.
 # The Node.js CLI will inject config values via environment variables.
 # Required env vars (with defaults shown):
-#   NW_MAX_BUDGET=5.00           - Maximum budget in USD
 #   NW_MAX_RUNTIME=7200          - Maximum runtime in seconds (2 hours)
-#   ANTHROPIC_AUTH_TOKEN         - Claude API key (or via config file)
+#   NW_PROVIDER_CMD=claude       - AI provider CLI to use (claude, codex, etc.)
+#   NW_DRY_RUN=0                 - Set to 1 for dry-run mode (prints diagnostics only)
 
 PROJECT_DIR="${1:?Usage: $0 /path/to/project}"
 PROJECT_NAME=$(basename "${PROJECT_DIR}")
@@ -18,9 +18,9 @@ PRD_DIR="${PROJECT_DIR}/docs/PRDs/night-watch"
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/night-watch.log"
 LOCK_FILE="/tmp/night-watch-${PROJECT_NAME}.lock"
-MAX_BUDGET="${NW_MAX_BUDGET:-5.00}"
 MAX_RUNTIME="${NW_MAX_RUNTIME:-7200}"  # 2 hours
 MAX_LOG_SIZE="524288"  # 512 KB
+PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 
 # Ensure NVM / Node / Claude are on PATH
 export NVM_DIR="${HOME}/.nvm"
@@ -35,6 +35,12 @@ mkdir -p "${LOG_DIR}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
+
+# Validate provider
+if ! validate_provider "${PROVIDER_CMD}"; then
+  echo "ERROR: Unknown provider: ${PROVIDER_CMD}" >&2
+  exit 1
+fi
 
 rotate_log
 
@@ -76,11 +82,38 @@ PROMPT="Implement the PRD at docs/PRDs/night-watch/${ELIGIBLE_PRD}
 - Do NOT move the PRD to done/ — the cron script handles that
 - Do NOT process any other PRDs — only ${ELIGIBLE_PRD}"
 
-timeout "${MAX_RUNTIME}" \
-  claude -p "${PROMPT}" \
-    --dangerously-skip-permissions \
-    --max-budget-usd "${MAX_BUDGET}" \
-    >> "${LOG_FILE}" 2>&1
+# Dry-run mode: print diagnostics and exit
+if [ "${NW_DRY_RUN:-0}" = "1" ]; then
+  log "DRY-RUN: Would process ${ELIGIBLE_PRD}"
+  log "DRY-RUN: Provider: ${PROVIDER_CMD}"
+  log "DRY-RUN: Runtime: ${MAX_RUNTIME}s"
+  echo "=== Dry Run: PRD Executor ==="
+  echo "Provider:    ${PROVIDER_CMD}"
+  echo "Eligible PRD: ${ELIGIBLE_PRD}"
+  echo "Branch:      ${BRANCH_NAME}"
+  echo "Timeout:     ${MAX_RUNTIME}s"
+  exit 0
+fi
+
+case "${PROVIDER_CMD}" in
+  claude)
+    timeout "${MAX_RUNTIME}" \
+      claude -p "${PROMPT}" \
+        --dangerously-skip-permissions \
+        >> "${LOG_FILE}" 2>&1
+    ;;
+  codex)
+    timeout "${MAX_RUNTIME}" \
+      codex --quiet \
+        --yolo \
+        --prompt "${PROMPT}" \
+        >> "${LOG_FILE}" 2>&1
+    ;;
+  *)
+    log "ERROR: Unknown provider: ${PROVIDER_CMD}"
+    exit 1
+    ;;
+esac
 
 EXIT_CODE=$?
 
@@ -95,7 +128,7 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" || true
     git -C "${PROJECT_DIR}" push origin "${DEFAULT_BRANCH}" || true
     log "DONE: ${ELIGIBLE_PRD} implemented, PR opened, PRD moved to done/"
   else
-    log "WARN: Claude exited 0 but no PR found on ${BRANCH_NAME} — PRD NOT moved to done"
+    log "WARN: ${PROVIDER_CMD} exited 0 but no PR found on ${BRANCH_NAME} — PRD NOT moved to done"
   fi
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: Night watch killed after ${MAX_RUNTIME}s while processing ${ELIGIBLE_PRD}"

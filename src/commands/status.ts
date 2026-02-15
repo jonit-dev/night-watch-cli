@@ -19,6 +19,8 @@ export interface StatusOptions {
 interface StatusInfo {
   projectName: string;
   projectDir: string;
+  provider: string;
+  reviewerEnabled: boolean;
   executor: {
     running: boolean;
     pid: number | null;
@@ -260,6 +262,8 @@ export function statusCommand(program: Command): void {
         const status: StatusInfo = {
           projectName,
           projectDir,
+          provider: config.provider,
+          reviewerEnabled: config.reviewerEnabled,
           executor: checkLockFile(`${LOCK_FILE_PREFIX}executor.lock`),
           reviewer: checkLockFile(`${LOCK_FILE_PREFIX}reviewer.lock`),
           prds: countPRDs(projectDir, config.prdDir),
@@ -287,6 +291,12 @@ export function statusCommand(program: Command): void {
 
         // Project directory
         console.log(`Project Directory: ${status.projectDir}\n`);
+
+        // Configuration
+        console.log("--- Configuration ---");
+        console.log(`  Provider:  ${status.provider}`);
+        console.log(`  Reviewer:  ${status.reviewerEnabled ? "Enabled" : "Disabled"}`);
+        console.log();
 
         // Process status
         console.log("--- Process Status ---");
