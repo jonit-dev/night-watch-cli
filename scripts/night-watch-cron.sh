@@ -67,15 +67,24 @@ cd "${PROJECT_DIR}"
 
 PROMPT="Implement the PRD at docs/PRDs/night-watch/${ELIGIBLE_PRD}
 
-## Rules
+## Setup
 - Branch name MUST be exactly: ${BRANCH_NAME}
 - Create the branch from ${DEFAULT_BRANCH}: git checkout ${DEFAULT_BRANCH} && git pull origin ${DEFAULT_BRANCH} && git checkout -b ${BRANCH_NAME}
 - Use a git worktree: git worktree add ../${PROJECT_NAME}-nw-${PRD_NAME} ${BRANCH_NAME}
-- cd into the worktree, install dependencies, then implement
-- Follow all CLAUDE.md conventions (if present)
-- Write tests as specified in the PRD
-- Run the project's verify/test command — fix until it passes
-- Commit, push, and open a PR:
+- cd into the worktree, install dependencies
+
+## Implementation — PRD Executor Workflow
+Read .claude/commands/prd-executor.md and follow its FULL execution pipeline:
+1. Parse the PRD into phases and extract dependencies
+2. Build a dependency graph to identify parallelism
+3. Create a task list with one task per phase
+4. Execute phases in parallel waves using agent swarms — launch ALL independent phases concurrently
+5. Run the project's verify/test command between waves to catch issues early
+6. After all phases complete, run final verification and fix any issues
+Follow all CLAUDE.md conventions (if present).
+
+## Finalize
+- Commit all changes, push, and open a PR:
   git push -u origin ${BRANCH_NAME}
   gh pr create --title \"feat: <short title>\" --body \"<summary referencing PRD>\"
 - After PR is created, clean up: git worktree remove ../${PROJECT_NAME}-nw-${PRD_NAME}
