@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+
+const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', '..', 'package.json'), 'utf-8'));
 
 describe('CLI', () => {
   describe('help output', () => {
@@ -110,7 +114,7 @@ describe('CLI', () => {
         cwd: process.cwd(),
       });
 
-      expect(output.trim()).toBe('1.0.0');
+      expect(output.trim()).toBe(packageJson.version);
     });
   });
 

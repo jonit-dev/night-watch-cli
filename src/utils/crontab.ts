@@ -4,6 +4,9 @@
  */
 
 import { execSync } from "child_process";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 
 /**
  * Marker prefix used to identify Night Watch entries
@@ -48,15 +51,17 @@ export function writeCrontab(lines: string[]): void {
     // Ignore backup errors
   }
 
-  // Write new crontab using echo and pipe
+  // Write new crontab via temp file to avoid shell line length limits
+  const tmpFile = path.join(os.tmpdir(), `night-watch-crontab-${Date.now()}.txt`);
   try {
-    execSync(`echo "${content.replace(/"/g, '\\"')}" | crontab -`, {
-      encoding: "utf-8",
-    });
+    fs.writeFileSync(tmpFile, content + "\n");
+    execSync(`crontab ${tmpFile}`, { encoding: "utf-8" });
   } catch (error) {
     throw new Error(
       `Failed to write crontab: ${error instanceof Error ? error.message : String(error)}`
     );
+  } finally {
+    try { fs.unlinkSync(tmpFile); } catch { /* ignore cleanup errors */ }
   }
 }
 

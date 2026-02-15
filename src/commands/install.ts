@@ -56,6 +56,20 @@ function getNightWatchBinPath(): string {
 }
 
 /**
+ * Get the directory containing the node binary.
+ * Cron runs with a minimal PATH that typically doesn't include nvm/fnm/volta paths,
+ * so we need to explicitly add the node bin directory to each cron entry.
+ */
+function getNodeBinDir(): string {
+  try {
+    const nodePath = execSync("which node", { encoding: "utf-8" }).trim();
+    return path.dirname(nodePath);
+  } catch {
+    return "";
+  }
+}
+
+/**
  * Get the project name from directory or package.json
  */
 function getProjectName(projectDir: string): string {
@@ -127,8 +141,12 @@ export function installCommand(program: Command): void {
         // Create crontab entries
         const entries: string[] = [];
 
+        // Detect node bin directory for cron PATH
+        const nodeBinDir = getNodeBinDir();
+        const pathPrefix = nodeBinDir ? `export PATH=${nodeBinDir}:$PATH && ` : "";
+
         // Executor entry
-        const executorEntry = `${executorSchedule} cd ${projectDir} && ${nightWatchBin} run >> ${executorLog} 2>&1  ${marker}`;
+        const executorEntry = `${executorSchedule} ${pathPrefix}cd ${projectDir} && ${nightWatchBin} run >> ${executorLog} 2>&1  ${marker}`;
         entries.push(executorEntry);
 
         // Determine if reviewer should be installed
@@ -137,7 +155,7 @@ export function installCommand(program: Command): void {
 
         // Reviewer entry (if enabled)
         if (installReviewer) {
-          const reviewerEntry = `${reviewerSchedule} cd ${projectDir} && ${nightWatchBin} review >> ${reviewerLog} 2>&1  ${marker}`;
+          const reviewerEntry = `${reviewerSchedule} ${pathPrefix}cd ${projectDir} && ${nightWatchBin} review >> ${reviewerLog} 2>&1  ${marker}`;
           entries.push(reviewerEntry);
         }
 

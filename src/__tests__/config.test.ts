@@ -56,8 +56,8 @@ describe("config", () => {
       expect(config.branchPatterns).toEqual(["feat/", "night-watch/"]);
       expect(config.minReviewScore).toBe(80);
       expect(config.maxLogSize).toBe(524288);
-      expect(config.cronSchedule).toBe("0 0-15 * * *");
-      expect(config.reviewerSchedule).toBe("0 0,3,6,9,12,15 * * *");
+      expect(config.cronSchedule).toBe("0 0-21 * * *");
+      expect(config.reviewerSchedule).toBe("0 0,3,6,9,12,15,18,21 * * *");
     });
 
     it("should return defaults with provider and reviewerEnabled", () => {
@@ -112,8 +112,8 @@ describe("config", () => {
       expect(config.branchPrefix).toBe("night-watch");
       expect(config.minReviewScore).toBe(80);
       expect(config.maxLogSize).toBe(524288);
-      expect(config.cronSchedule).toBe("0 0-15 * * *");
-      expect(config.reviewerSchedule).toBe("0 0,3,6,9,12,15 * * *");
+      expect(config.cronSchedule).toBe("0 0-21 * * *");
+      expect(config.reviewerSchedule).toBe("0 0,3,6,9,12,15,18,21 * * *");
     });
 
     it("should let env vars override config file", () => {

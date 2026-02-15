@@ -1,6 +1,6 @@
 {
-  "name": "night-watch-cli",
-  "version": "1.0.0",
+  "name": "@jonit-dev/night-watch-cli",
+  "version": "1.1.1",
   "description": "Autonomous PRD execution using AI Provider CLIs + cron",
   "type": "module",
   "bin": {

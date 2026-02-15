@@ -60,10 +60,62 @@ acquire_lock() {
 
 # ── Detect default branch ───────────────────────────────────────────────────
 
+get_branch_tip_timestamp() {
+  local project_dir="${1:?project_dir required}"
+  local branch="${2:?branch required}"
+  local remote_ts=""
+  local local_ts=""
+  local latest_ts=""
+
+  remote_ts=$(git -C "${project_dir}" log -1 --format=%ct "refs/remotes/origin/${branch}" 2>/dev/null || true)
+  local_ts=$(git -C "${project_dir}" log -1 --format=%ct "refs/heads/${branch}" 2>/dev/null || true)
+
+  if [ -n "${remote_ts}" ]; then
+    latest_ts="${remote_ts}"
+  fi
+  if [ -n "${local_ts}" ] && { [ -z "${latest_ts}" ] || [ "${local_ts}" -gt "${latest_ts}" ]; }; then
+    latest_ts="${local_ts}"
+  fi
+
+  printf "%s" "${latest_ts}"
+}
+
 detect_default_branch() {
   local project_dir="${1:?project_dir required}"
-  git -C "${project_dir}" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null \
-    | sed 's@^refs/remotes/origin/@@' || echo "master"
+  local main_ts=""
+  local master_ts=""
+  local remote_head=""
+
+  main_ts=$(get_branch_tip_timestamp "${project_dir}" "main")
+  master_ts=$(get_branch_tip_timestamp "${project_dir}" "master")
+
+  if [ -n "${main_ts}" ] && [ -n "${master_ts}" ]; then
+    if [ "${main_ts}" -ge "${master_ts}" ]; then
+      echo "main"
+    else
+      echo "master"
+    fi
+    return 0
+  fi
+
+  if [ -n "${main_ts}" ]; then
+    echo "main"
+    return 0
+  fi
+
+  if [ -n "${master_ts}" ]; then
+    echo "master"
+    return 0
+  fi
+
+  remote_head=$(git -C "${project_dir}" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null \
+    | sed 's@^refs/remotes/origin/@@' || true)
+  if [ -n "${remote_head}" ]; then
+    echo "${remote_head}"
+    return 0
+  fi
+
+  echo "main"
 }
 
 # ── Find next eligible PRD ───────────────────────────────────────────────────
