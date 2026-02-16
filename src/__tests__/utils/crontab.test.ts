@@ -15,8 +15,10 @@ import {
   writeCrontab,
   addEntry,
   removeEntries,
+  removeEntriesForProject,
   hasEntry,
   getEntries,
+  getProjectEntries,
   generateMarker,
   CRONTAB_MARKER_PREFIX,
 } from "../../utils/crontab.js";
@@ -218,6 +220,44 @@ describe("crontab utilities", () => {
       const result = getEntries(marker);
 
       expect(result).toEqual([]);
+    });
+  });
+
+  describe("getProjectEntries", () => {
+    it("should get entries by project path regardless of marker text", () => {
+      const projectDir = "/home/joao/projects/autopilotrank.com";
+
+      vi.mocked(execSync).mockReturnValueOnce(
+        `0 * * * * cd /home/joao/projects/other && night-watch run  # night-watch-cli: other
+0 * * * * cd /home/joao/projects/autopilotrank.com && night-watch run  # night-watch-cli: old-marker
+0 0 * * * cd '/home/joao/projects/autopilotrank.com' && '/usr/bin/night-watch' review  # night-watch-cli: new-marker`
+      );
+
+      const result = getProjectEntries(projectDir);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toContain("old-marker");
+      expect(result[1]).toContain("new-marker");
+    });
+  });
+
+  describe("removeEntriesForProject", () => {
+    it("should remove entries by project path and marker", () => {
+      const projectDir = "/home/joao/projects/autopilotrank.com";
+      const marker = "# night-watch-cli: autopilotrank";
+
+      vi.mocked(execSync)
+        .mockReturnValueOnce(
+          `0 * * * * cd /home/joao/projects/autopilotrank.com && night-watch run  # night-watch-cli: autopilotrank
+0 0 * * * cd '/home/joao/projects/autopilotrank.com' && '/usr/bin/night-watch' review  # night-watch-cli: vite-react-typescript-starter
+0 * * * * cd /home/joao/projects/other && night-watch run  # night-watch-cli: other`
+        )
+        .mockReturnValueOnce("") // backup
+        .mockReturnValueOnce(""); // write
+
+      const removed = removeEntriesForProject(projectDir, marker);
+
+      expect(removed).toBe(2);
     });
   });
 });

@@ -10,10 +10,9 @@ import * as fs from "fs";
 import { loadConfig } from "../config.js";
 import { LOG_DIR } from "../constants.js";
 import {
-  addEntry,
   generateMarker,
-  hasEntry,
   getEntries,
+  getProjectEntries,
   readCrontab,
   writeCrontab,
 } from "../utils/crontab.js";
@@ -29,6 +28,13 @@ export interface InstallOptions {
   schedule?: string;
   reviewerSchedule?: string;
   noReviewer?: boolean;
+}
+
+/**
+ * Safely quote a value for POSIX shell commands.
+ */
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
 /**
@@ -127,7 +133,9 @@ export function installCommand(program: Command): void {
         const reviewerLog = path.join(logDir, "reviewer.log");
 
         // Check if already installed
-        const existingEntries = getEntries(marker);
+        const existingEntries = Array.from(
+          new Set([...getEntries(marker), ...getProjectEntries(projectDir)])
+        );
         if (existingEntries.length > 0) {
           warn(`Night Watch is already installed for ${projectName}.`);
           console.log();
@@ -143,10 +151,10 @@ export function installCommand(program: Command): void {
 
         // Detect node bin directory for cron PATH
         const nodeBinDir = getNodeBinDir();
-        const pathPrefix = nodeBinDir ? `export PATH=${nodeBinDir}:$PATH && ` : "";
+        const pathPrefix = nodeBinDir ? `export PATH="${nodeBinDir}:$PATH" && ` : "";
 
         // Executor entry
-        const executorEntry = `${executorSchedule} ${pathPrefix}cd ${projectDir} && ${nightWatchBin} run >> ${executorLog} 2>&1  ${marker}`;
+        const executorEntry = `${executorSchedule} ${pathPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
         entries.push(executorEntry);
 
         // Determine if reviewer should be installed
@@ -155,7 +163,7 @@ export function installCommand(program: Command): void {
 
         // Reviewer entry (if enabled)
         if (installReviewer) {
-          const reviewerEntry = `${reviewerSchedule} ${pathPrefix}cd ${projectDir} && ${nightWatchBin} review >> ${reviewerLog} 2>&1  ${marker}`;
+          const reviewerEntry = `${reviewerSchedule} ${pathPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} review >> ${shellQuote(reviewerLog)} 2>&1  ${marker}`;
           entries.push(reviewerEntry);
         }
 

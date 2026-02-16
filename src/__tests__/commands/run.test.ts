@@ -97,6 +97,7 @@ describe("run command", () => {
 
       expect(env.NW_MAX_RUNTIME).toBe("7200");
       expect(env.NW_PROVIDER_CMD).toBe("claude");
+      expect(env.NW_PRD_DIR).toBe("docs/PRDs/night-watch");
     });
 
     it("should set NW_PROVIDER_CMD for codex provider", () => {

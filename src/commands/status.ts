@@ -10,7 +10,7 @@ import * as fs from "fs";
 import chalk from "chalk";
 import { loadConfig } from "../config.js";
 import { LOCK_FILE_PREFIX, LOG_DIR, DEFAULT_PRD_DIR } from "../constants.js";
-import { getEntries, generateMarker } from "../utils/crontab.js";
+import { getEntries, generateMarker, getProjectEntries } from "../utils/crontab.js";
 import {
   header,
   label,
@@ -265,7 +265,11 @@ export function statusCommand(program: Command): void {
         const projectDir = process.cwd();
         const config = loadConfig(projectDir);
         const projectName = getProjectName(projectDir);
+        const lockProjectName = path.basename(projectDir);
         const marker = generateMarker(projectName);
+        const crontabEntries = Array.from(
+          new Set([...getEntries(marker), ...getProjectEntries(projectDir)])
+        );
 
         // Gather status info
         const status: StatusInfo = {
@@ -273,13 +277,13 @@ export function statusCommand(program: Command): void {
           projectDir,
           provider: config.provider,
           reviewerEnabled: config.reviewerEnabled,
-          executor: checkLockFile(`${LOCK_FILE_PREFIX}executor.lock`),
-          reviewer: checkLockFile(`${LOCK_FILE_PREFIX}reviewer.lock`),
+          executor: checkLockFile(`${LOCK_FILE_PREFIX}${lockProjectName}.lock`),
+          reviewer: checkLockFile(`${LOCK_FILE_PREFIX}pr-reviewer-${lockProjectName}.lock`),
           prds: countPRDs(projectDir, config.prdDir),
           prs: { open: countOpenPRs(projectDir, config.branchPatterns) },
           crontab: {
-            installed: getEntries(marker).length > 0,
-            entries: getEntries(marker),
+            installed: crontabEntries.length > 0,
+            entries: crontabEntries,
           },
           logs: {
             executor: getLogInfo(path.join(projectDir, LOG_DIR, "executor.log")),

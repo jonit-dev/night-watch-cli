@@ -4,18 +4,13 @@
   "defaultBranch": "",
   "provider": "claude",
   "reviewerEnabled": true,
-  "prdDirectory": "docs/PRDs/night-watch",
+  "prdDir": "docs/PRDs/night-watch",
   "maxRuntime": 7200,
   "reviewerMaxRuntime": 3600,
-  "cron": {
-    "executorSchedule": "0 0-21 * * *",
-    "reviewerSchedule": "0 0,3,6,9,12,15,18,21 * * *"
-  },
-  "review": {
-    "minScore": 80,
-    "branchPatterns": ["feat/", "night-watch/"]
-  },
-  "logging": {
-    "maxLogSize": 524288
-  }
+  "branchPrefix": "night-watch",
+  "branchPatterns": ["feat/", "night-watch/"],
+  "minReviewScore": 80,
+  "maxLogSize": 524288,
+  "cronSchedule": "0 0-21 * * *",
+  "reviewerSchedule": "0 0,3,6,9,12,15,18,21 * * *"
 }

@@ -13,6 +13,9 @@ export type Provider = "claude" | "codex";
 export interface INightWatchConfig {
   // PRD execution configuration
 
+  /** Default branch name (e.g. "main" or "master"). Empty string means auto-detect. */
+  defaultBranch: string;
+
   /** Directory containing PRD files (relative to project root) */
   prdDir: string;
 

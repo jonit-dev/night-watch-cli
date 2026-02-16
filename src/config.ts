@@ -5,8 +5,10 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import { fileURLToPath } from "url";
 import { INightWatchConfig, Provider } from "./types.js";
 import {
+  DEFAULT_DEFAULT_BRANCH,
   DEFAULT_PRD_DIR,
   DEFAULT_MAX_RUNTIME,
   DEFAULT_REVIEWER_MAX_RUNTIME,
@@ -28,6 +30,7 @@ import {
 export function getDefaultConfig(): INightWatchConfig {
   return {
     // PRD execution
+    defaultBranch: DEFAULT_DEFAULT_BRANCH,
     prdDir: DEFAULT_PRD_DIR,
     maxRuntime: DEFAULT_MAX_RUNTIME,
     reviewerMaxRuntime: DEFAULT_REVIEWER_MAX_RUNTIME,
@@ -56,9 +59,9 @@ function loadConfigFile(configPath: string): Partial<INightWatchConfig> | null {
     }
 
     const content = fs.readFileSync(configPath, "utf-8");
-    const config = JSON.parse(content);
+    const rawConfig = JSON.parse(content) as Record<string, unknown>;
 
-    return config;
+    return normalizeConfig(rawConfig);
   } catch (error) {
     // If file exists but can't be parsed, warn but don't fail
     console.warn(
@@ -68,6 +71,58 @@ function loadConfigFile(configPath: string): Partial<INightWatchConfig> | null {
     );
     return null;
   }
+}
+
+/**
+ * Convert legacy/nested config formats to the flat INightWatchConfig shape.
+ * Flat keys take precedence over nested aliases when both are present.
+ */
+function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatchConfig> {
+  const normalized: Partial<INightWatchConfig> = {};
+
+  const readString = (value: unknown): string | undefined =>
+    typeof value === "string" ? value : undefined;
+  const readNumber = (value: unknown): number | undefined =>
+    typeof value === "number" && !Number.isNaN(value) ? value : undefined;
+  const readBoolean = (value: unknown): boolean | undefined =>
+    typeof value === "boolean" ? value : undefined;
+  const readStringArray = (value: unknown): string[] | undefined =>
+    Array.isArray(value) && value.every((v) => typeof v === "string")
+      ? (value as string[])
+      : undefined;
+  const readObject = (value: unknown): Record<string, unknown> | undefined =>
+    value !== null && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
+
+  const cron = readObject(rawConfig.cron);
+  const review = readObject(rawConfig.review);
+  const logging = readObject(rawConfig.logging);
+
+  normalized.defaultBranch = readString(rawConfig.defaultBranch);
+  normalized.prdDir =
+    readString(rawConfig.prdDir) ??
+    readString(rawConfig.prdDirectory);
+  normalized.maxRuntime = readNumber(rawConfig.maxRuntime);
+  normalized.reviewerMaxRuntime = readNumber(rawConfig.reviewerMaxRuntime);
+  normalized.branchPrefix = readString(rawConfig.branchPrefix);
+  normalized.branchPatterns =
+    readStringArray(rawConfig.branchPatterns) ??
+    readStringArray(review?.branchPatterns);
+  normalized.minReviewScore =
+    readNumber(rawConfig.minReviewScore) ??
+    readNumber(review?.minScore);
+  normalized.maxLogSize =
+    readNumber(rawConfig.maxLogSize) ??
+    readNumber(logging?.maxLogSize);
+  normalized.cronSchedule =
+    readString(rawConfig.cronSchedule) ??
+    readString(cron?.executorSchedule);
+  normalized.reviewerSchedule =
+    readString(rawConfig.reviewerSchedule) ??
+    readString(cron?.reviewerSchedule);
+  normalized.provider = validateProvider(String(rawConfig.provider ?? "")) ?? undefined;
+  normalized.reviewerEnabled = readBoolean(rawConfig.reviewerEnabled);
+
+  return normalized;
 }
 
 /**
@@ -107,6 +162,7 @@ function mergeConfigs(
 
   // Merge file config
   if (fileConfig) {
+    if (fileConfig.defaultBranch !== undefined) merged.defaultBranch = fileConfig.defaultBranch;
     if (fileConfig.prdDir !== undefined) merged.prdDir = fileConfig.prdDir;
     if (fileConfig.maxRuntime !== undefined) merged.maxRuntime = fileConfig.maxRuntime;
     if (fileConfig.reviewerMaxRuntime !== undefined)
@@ -125,6 +181,7 @@ function mergeConfigs(
   }
 
   // Merge env config (takes precedence)
+  if (envConfig.defaultBranch !== undefined) merged.defaultBranch = envConfig.defaultBranch;
   if (envConfig.prdDir !== undefined) merged.prdDir = envConfig.prdDir;
   if (envConfig.maxRuntime !== undefined) merged.maxRuntime = envConfig.maxRuntime;
   if (envConfig.reviewerMaxRuntime !== undefined)
@@ -162,6 +219,10 @@ export function loadConfig(projectDir: string): INightWatchConfig {
   const envConfig: Partial<INightWatchConfig> = {};
 
   // NW_* environment variables
+  if (process.env.NW_DEFAULT_BRANCH) {
+    envConfig.defaultBranch = process.env.NW_DEFAULT_BRANCH;
+  }
+
   if (process.env.NW_PRD_DIR) {
     envConfig.prdDir = process.env.NW_PRD_DIR;
   }
@@ -241,7 +302,8 @@ export function loadConfig(projectDir: string): INightWatchConfig {
  * This returns the path to a script in the package's scripts/ directory
  */
 export function getScriptPath(scriptName: string): string {
+  const configFilePath = fileURLToPath(import.meta.url);
   // In development, scripts are in scripts/ relative to package root
   // In production (after npm pack), they're still in scripts/
-  return path.join(path.dirname(new URL(import.meta.url).pathname), "..", "scripts", scriptName);
+  return path.join(path.dirname(configFilePath), "..", "scripts", scriptName);
 }
