@@ -52,4 +52,7 @@ export interface INightWatchConfig {
 
   /** Whether the reviewer is enabled */
   reviewerEnabled: boolean;
+
+  /** Extra environment variables to pass to the provider CLI (e.g. API keys, base URLs) */
+  providerEnv: Record<string, string>;
 }

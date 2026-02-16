@@ -31,6 +31,7 @@ export const DEFAULT_MAX_LOG_SIZE = 524288; // 512 KB
 // Provider Configuration
 export const DEFAULT_PROVIDER: Provider = "claude";
 export const DEFAULT_REVIEWER_ENABLED = true;
+export const DEFAULT_PROVIDER_ENV: Record<string, string> = {};
 
 // Valid providers
 export const VALID_PROVIDERS: Provider[] = ["claude", "codex"];

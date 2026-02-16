@@ -153,8 +153,17 @@ export function installCommand(program: Command): void {
         const nodeBinDir = getNodeBinDir();
         const pathPrefix = nodeBinDir ? `export PATH="${nodeBinDir}:$PATH" && ` : "";
 
+        // Build providerEnv export prefix for cron entries
+        let providerEnvPrefix = "";
+        if (config.providerEnv && Object.keys(config.providerEnv).length > 0) {
+          const exports = Object.entries(config.providerEnv)
+            .map(([key, value]) => `export ${key}=${shellQuote(value)}`)
+            .join(" && ");
+          providerEnvPrefix = exports + " && ";
+        }
+
         // Executor entry
-        const executorEntry = `${executorSchedule} ${pathPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
+        const executorEntry = `${executorSchedule} ${pathPrefix}${providerEnvPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
         entries.push(executorEntry);
 
         // Determine if reviewer should be installed
@@ -163,7 +172,7 @@ export function installCommand(program: Command): void {
 
         // Reviewer entry (if enabled)
         if (installReviewer) {
-          const reviewerEntry = `${reviewerSchedule} ${pathPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} review >> ${shellQuote(reviewerLog)} 2>&1  ${marker}`;
+          const reviewerEntry = `${reviewerSchedule} ${pathPrefix}${providerEnvPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} review >> ${shellQuote(reviewerLog)} 2>&1  ${marker}`;
           entries.push(reviewerEntry);
         }
 

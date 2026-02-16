@@ -47,6 +47,11 @@ export function buildEnvVars(config: INightWatchConfig, options: RunOptions): Re
   env.NW_MAX_RUNTIME = String(config.maxRuntime);
   env.NW_PRD_DIR = config.prdDir;
 
+  // Provider environment variables (API keys, base URLs, etc.)
+  if (config.providerEnv) {
+    Object.assign(env, config.providerEnv);
+  }
+
   // Dry run flag
   if (options.dryRun) {
     env.NW_DRY_RUN = "1";

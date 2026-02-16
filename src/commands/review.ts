@@ -40,6 +40,11 @@ export function buildEnvVars(config: INightWatchConfig, options: ReviewOptions):
   env.NW_MIN_REVIEW_SCORE = String(config.minReviewScore);
   env.NW_BRANCH_PATTERNS = config.branchPatterns.join(",");
 
+  // Provider environment variables (API keys, base URLs, etc.)
+  if (config.providerEnv) {
+    Object.assign(env, config.providerEnv);
+  }
+
   // Dry run flag
   if (options.dryRun) {
     env.NW_DRY_RUN = "1";

@@ -20,6 +20,7 @@ import {
   DEFAULT_MAX_LOG_SIZE,
   DEFAULT_PROVIDER,
   DEFAULT_REVIEWER_ENABLED,
+  DEFAULT_PROVIDER_ENV,
   VALID_PROVIDERS,
   CONFIG_FILE_NAME,
 } from "./constants.js";
@@ -46,6 +47,7 @@ export function getDefaultConfig(): INightWatchConfig {
     // Provider configuration
     provider: DEFAULT_PROVIDER,
     reviewerEnabled: DEFAULT_REVIEWER_ENABLED,
+    providerEnv: { ...DEFAULT_PROVIDER_ENV },
   };
 }
 
@@ -122,6 +124,20 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   normalized.provider = validateProvider(String(rawConfig.provider ?? "")) ?? undefined;
   normalized.reviewerEnabled = readBoolean(rawConfig.reviewerEnabled);
 
+  // providerEnv: Record<string, string> of extra env vars for the provider CLI
+  const rawProviderEnv = readObject(rawConfig.providerEnv);
+  if (rawProviderEnv) {
+    const env: Record<string, string> = {};
+    for (const [key, value] of Object.entries(rawProviderEnv)) {
+      if (typeof value === "string") {
+        env[key] = value;
+      }
+    }
+    if (Object.keys(env).length > 0) {
+      normalized.providerEnv = env;
+    }
+  }
+
   return normalized;
 }
 
@@ -178,6 +194,8 @@ function mergeConfigs(
     if (fileConfig.provider !== undefined) merged.provider = fileConfig.provider;
     if (fileConfig.reviewerEnabled !== undefined)
       merged.reviewerEnabled = fileConfig.reviewerEnabled;
+    if (fileConfig.providerEnv !== undefined)
+      merged.providerEnv = { ...merged.providerEnv, ...fileConfig.providerEnv };
   }
 
   // Merge env config (takes precedence)
@@ -196,6 +214,8 @@ function mergeConfigs(
   if (envConfig.provider !== undefined) merged.provider = envConfig.provider;
   if (envConfig.reviewerEnabled !== undefined)
     merged.reviewerEnabled = envConfig.reviewerEnabled;
+  if (envConfig.providerEnv !== undefined)
+    merged.providerEnv = { ...merged.providerEnv, ...envConfig.providerEnv };
 
   return merged;
 }
