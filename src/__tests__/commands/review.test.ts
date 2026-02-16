@@ -96,6 +96,8 @@ describe("review command", () => {
 
       // Should use NW_REVIEWER_* env vars
       expect(env.NW_REVIEWER_MAX_RUNTIME).toBe("3600");
+      expect(env.NW_MIN_REVIEW_SCORE).toBe("80");
+      expect(env.NW_BRANCH_PATTERNS).toBe("feat/,night-watch/");
 
       // Should NOT set NW_MAX_RUNTIME
       expect(env.NW_MAX_RUNTIME).toBeUndefined();

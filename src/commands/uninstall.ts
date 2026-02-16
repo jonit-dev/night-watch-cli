@@ -6,7 +6,12 @@
 import { Command } from "commander";
 import * as path from "path";
 import * as fs from "fs";
-import { removeEntries, generateMarker, getEntries } from "../utils/crontab.js";
+import {
+  removeEntriesForProject,
+  generateMarker,
+  getEntries,
+  getProjectEntries,
+} from "../utils/crontab.js";
 import {
   success,
   error as uiError,
@@ -57,7 +62,9 @@ export function uninstallCommand(program: Command): void {
         const marker = generateMarker(projectName);
 
         // Check if there are entries to remove
-        const existingEntries = getEntries(marker);
+        const existingEntries = Array.from(
+          new Set([...getEntries(marker), ...getProjectEntries(projectDir)])
+        );
         if (existingEntries.length === 0) {
           warn(`No Night Watch crontab entries found for ${projectName}.`);
           dim("Nothing to uninstall.");
@@ -69,7 +76,7 @@ export function uninstallCommand(program: Command): void {
         existingEntries.forEach((entry) => dim(`  ${entry}`));
 
         // Remove entries
-        const removedCount = removeEntries(marker);
+        const removedCount = removeEntriesForProject(projectDir, marker);
 
         // Handle log files
         if (!options.keepLogs) {

@@ -14,7 +14,12 @@ set -euo pipefail
 
 PROJECT_DIR="${1:?Usage: $0 /path/to/project}"
 PROJECT_NAME=$(basename "${PROJECT_DIR}")
-PRD_DIR="${PROJECT_DIR}/docs/PRDs/night-watch"
+PRD_DIR_REL="${NW_PRD_DIR:-docs/PRDs/night-watch}"
+if [[ "${PRD_DIR_REL}" = /* ]]; then
+  PRD_DIR="${PRD_DIR_REL}"
+else
+  PRD_DIR="${PROJECT_DIR}/${PRD_DIR_REL}"
+fi
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/night-watch.log"
 LOCK_FILE="/tmp/night-watch-${PROJECT_NAME}.lock"
@@ -59,7 +64,11 @@ fi
 
 PRD_NAME="${ELIGIBLE_PRD%.md}"
 BRANCH_NAME="night-watch/${PRD_NAME}"
-DEFAULT_BRANCH=$(detect_default_branch "${PROJECT_DIR}")
+if [ -n "${NW_DEFAULT_BRANCH:-}" ]; then
+  DEFAULT_BRANCH="${NW_DEFAULT_BRANCH}"
+else
+  DEFAULT_BRANCH=$(detect_default_branch "${PROJECT_DIR}")
+fi
 
 log "START: Processing ${ELIGIBLE_PRD} on branch ${BRANCH_NAME}"
 
@@ -104,27 +113,35 @@ if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   exit 0
 fi
 
+EXIT_CODE=0
+
 case "${PROVIDER_CMD}" in
   claude)
-    timeout "${MAX_RUNTIME}" \
+    if timeout "${MAX_RUNTIME}" \
       claude -p "${PROMPT}" \
         --dangerously-skip-permissions \
-        >> "${LOG_FILE}" 2>&1
+        >> "${LOG_FILE}" 2>&1; then
+      EXIT_CODE=0
+    else
+      EXIT_CODE=$?
+    fi
     ;;
   codex)
-    timeout "${MAX_RUNTIME}" \
+    if timeout "${MAX_RUNTIME}" \
       codex --quiet \
         --yolo \
         --prompt "${PROMPT}" \
-        >> "${LOG_FILE}" 2>&1
+        >> "${LOG_FILE}" 2>&1; then
+      EXIT_CODE=0
+    else
+      EXIT_CODE=$?
+    fi
     ;;
   *)
     log "ERROR: Unknown provider: ${PROVIDER_CMD}"
     exit 1
     ;;
 esac
-
-EXIT_CODE=$?
 
 if [ ${EXIT_CODE} -eq 0 ]; then
   PR_EXISTS=$(gh pr list --state open --json headRefName --jq '.[].headRefName' 2>/dev/null | grep -cF "${BRANCH_NAME}" || echo "0")

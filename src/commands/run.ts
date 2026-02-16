@@ -38,8 +38,14 @@ export function buildEnvVars(config: INightWatchConfig, options: RunOptions): Re
   // Provider command - the actual CLI binary to call
   env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[config.provider];
 
+  // Default branch (empty = auto-detect in bash script)
+  if (config.defaultBranch) {
+    env.NW_DEFAULT_BRANCH = config.defaultBranch;
+  }
+
   // Runtime
   env.NW_MAX_RUNTIME = String(config.maxRuntime);
+  env.NW_PRD_DIR = config.prdDir;
 
   // Dry run flag
   if (options.dryRun) {
@@ -136,6 +142,7 @@ export function runCommand(program: Command): void {
         const configTable = createTable({ head: ["Setting", "Value"] });
         configTable.push(["Provider", config.provider]);
         configTable.push(["Provider CLI", PROVIDER_COMMANDS[config.provider]]);
+        configTable.push(["Default Branch", config.defaultBranch || "(auto-detect)"]);
         configTable.push(["PRD Directory", config.prdDir]);
         configTable.push(["Max Runtime", `${config.maxRuntime}s (${Math.floor(config.maxRuntime / 60)}min)`]);
         configTable.push(["Branch Prefix", config.branchPrefix]);

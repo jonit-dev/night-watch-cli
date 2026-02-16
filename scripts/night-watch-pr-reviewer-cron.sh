@@ -19,6 +19,8 @@ LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_NAME}.lock"
 MAX_RUNTIME="${NW_REVIEWER_MAX_RUNTIME:-3600}"  # 1 hour
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
+MIN_REVIEW_SCORE="${NW_MIN_REVIEW_SCORE:-80}"
+BRANCH_PATTERNS_RAW="${NW_BRANCH_PATTERNS:-feat/,night-watch/}"
 
 # Ensure NVM / Node / Claude are on PATH
 export NVM_DIR="${HOME}/.nvm"
@@ -47,18 +49,45 @@ fi
 
 cd "${PROJECT_DIR}"
 
-OPEN_PRS=$(gh pr list --state open --json headRefName --jq '.[].headRefName' 2>/dev/null | grep -E '^(feat/|night-watch/)' | wc -l)
+# Convert comma-separated branch prefixes into a regex that matches branch starts.
+BRANCH_REGEX=""
+IFS=',' read -r -a BRANCH_PATTERNS <<< "${BRANCH_PATTERNS_RAW}"
+for pattern in "${BRANCH_PATTERNS[@]}"; do
+  trimmed_pattern=$(printf '%s' "${pattern}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+  if [ -n "${trimmed_pattern}" ]; then
+    BRANCH_REGEX="${BRANCH_REGEX}${BRANCH_REGEX:+|}^${trimmed_pattern}"
+  fi
+done
+
+if [ -z "${BRANCH_REGEX}" ]; then
+  BRANCH_REGEX='^(feat/|night-watch/)'
+fi
+
+OPEN_PRS=$(
+  { gh pr list --state open --json headRefName --jq '.[].headRefName' 2>/dev/null || true; } \
+    | { grep -E "${BRANCH_REGEX}" || true; } \
+    | wc -l \
+    | tr -d '[:space:]'
+)
 
 if [ "${OPEN_PRS}" -eq 0 ]; then
-  log "SKIP: No open night-watch/ or feat/ PRs to review"
+  log "SKIP: No open PRs matching branch patterns (${BRANCH_PATTERNS_RAW})"
   exit 0
 fi
 
 NEEDS_WORK=0
-REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null)
+REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || echo "")
 PRS_NEEDING_WORK=""
 
 while IFS=$'\t' read -r pr_number pr_branch; do
+  if [ -z "${pr_number}" ] || [ -z "${pr_branch}" ]; then
+    continue
+  fi
+
+  if ! printf '%s\n' "${pr_branch}" | grep -Eq "${BRANCH_REGEX}"; then
+    continue
+  fi
+
   FAILED_CHECKS=$(gh pr checks "${pr_number}" 2>/dev/null | grep -ci 'fail' || true)
   if [ "${FAILED_CHECKS}" -gt 0 ]; then
     log "INFO: PR #${pr_number} (${pr_branch}) has ${FAILED_CHECKS} failed CI check(s)"
@@ -69,23 +98,25 @@ while IFS=$'\t' read -r pr_number pr_branch; do
 
   ALL_COMMENTS=$(
     {
-      gh pr view "${pr_number}" --json comments --jq '.comments[].body' 2>/dev/null
-      gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null
+      gh pr view "${pr_number}" --json comments --jq '.comments[].body' 2>/dev/null || true
+      if [ -n "${REPO}" ]; then
+        gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
+      fi
     } | sort -u
   )
   LATEST_SCORE=$(echo "${ALL_COMMENTS}" \
     | grep -oP 'Overall Score:\*?\*?\s*(\d+)/100' \
     | tail -1 \
     | grep -oP '\d+(?=/100)' || echo "")
-  if [ -n "${LATEST_SCORE}" ] && [ "${LATEST_SCORE}" -lt 80 ]; then
-    log "INFO: PR #${pr_number} (${pr_branch}) has review score ${LATEST_SCORE}/100"
+  if [ -n "${LATEST_SCORE}" ] && [ "${LATEST_SCORE}" -lt "${MIN_REVIEW_SCORE}" ]; then
+    log "INFO: PR #${pr_number} (${pr_branch}) has review score ${LATEST_SCORE}/100 (threshold: ${MIN_REVIEW_SCORE})"
     NEEDS_WORK=1
     PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
   fi
-done < <(gh pr list --state open --json number,headRefName --jq '.[] | select(.headRefName | test("^(feat/|night-watch/)")) | [.number, .headRefName] | @tsv' 2>/dev/null)
+done < <(gh pr list --state open --json number,headRefName --jq '.[] | [.number, .headRefName] | @tsv' 2>/dev/null || true)
 
 if [ "${NEEDS_WORK}" -eq 0 ]; then
-  log "SKIP: All ${OPEN_PRS} open PR(s) have passing CI and review score >= 80 (or no score yet)"
+  log "SKIP: All ${OPEN_PRS} open PR(s) have passing CI and review score >= ${MIN_REVIEW_SCORE} (or no score yet)"
   exit 0
 fi
 
@@ -97,32 +128,42 @@ cleanup_worktrees "${PROJECT_DIR}"
 if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   echo "=== Dry Run: PR Reviewer ==="
   echo "Provider: ${PROVIDER_CMD}"
+  echo "Branch Patterns: ${BRANCH_PATTERNS_RAW}"
+  echo "Min Review Score: ${MIN_REVIEW_SCORE}"
   echo "Open PRs needing work:${PRS_NEEDING_WORK}"
   echo "Timeout: ${MAX_RUNTIME}s"
   exit 0
 fi
 
+EXIT_CODE=0
+
 case "${PROVIDER_CMD}" in
   claude)
-    timeout "${MAX_RUNTIME}" \
+    if timeout "${MAX_RUNTIME}" \
       claude -p "/night-watch-pr-reviewer" \
         --dangerously-skip-permissions \
-        >> "${LOG_FILE}" 2>&1
+        >> "${LOG_FILE}" 2>&1; then
+      EXIT_CODE=0
+    else
+      EXIT_CODE=$?
+    fi
     ;;
   codex)
-    timeout "${MAX_RUNTIME}" \
+    if timeout "${MAX_RUNTIME}" \
       codex --quiet \
         --yolo \
         --prompt "$(cat "${PROJECT_DIR}/.claude/commands/night-watch-pr-reviewer.md")" \
-        >> "${LOG_FILE}" 2>&1
+        >> "${LOG_FILE}" 2>&1; then
+      EXIT_CODE=0
+    else
+      EXIT_CODE=$?
+    fi
     ;;
   *)
     log "ERROR: Unknown provider: ${PROVIDER_CMD}"
     exit 1
     ;;
 esac
-
-EXIT_CODE=$?
 
 cleanup_worktrees "${PROJECT_DIR}"
 

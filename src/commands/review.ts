@@ -37,6 +37,8 @@ export function buildEnvVars(config: INightWatchConfig, options: ReviewOptions):
 
   // Runtime for reviewer (uses NW_REVIEWER_* variables)
   env.NW_REVIEWER_MAX_RUNTIME = String(config.reviewerMaxRuntime);
+  env.NW_MIN_REVIEW_SCORE = String(config.minReviewScore);
+  env.NW_BRANCH_PATTERNS = config.branchPatterns.join(",");
 
   // Dry run flag
   if (options.dryRun) {

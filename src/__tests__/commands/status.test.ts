@@ -17,11 +17,12 @@ vi.mock("child_process", () => ({
 
 vi.mock("../../utils/crontab.js", () => ({
   getEntries: vi.fn(() => []),
+  getProjectEntries: vi.fn(() => []),
   generateMarker: vi.fn((name: string) => `# night-watch-cli: ${name}`),
 }));
 
 import { execSync } from "child_process";
-import { getEntries } from "../../utils/crontab.js";
+import { getEntries, getProjectEntries } from "../../utils/crontab.js";
 
 // Mock process.cwd before importing status module
 const originalCwd = process.cwd;
@@ -72,6 +73,7 @@ describe("status command", () => {
 
     // Mock getEntries
     vi.mocked(getEntries).mockReturnValue([]);
+    vi.mocked(getProjectEntries).mockReturnValue([]);
 
     // Mock execSync for most operations
     vi.mocked(execSync).mockImplementation((cmd: string) => {
@@ -111,7 +113,8 @@ describe("status command", () => {
 
     it("should show lock file status - running", async () => {
       // Create lock file with PID
-      const lockFile = "/tmp/night-watch-executor.lock";
+      const projectName = path.basename(tempDir);
+      const lockFile = `/tmp/night-watch-${projectName}.lock`;
       fs.writeFileSync(lockFile, "12345");
 
       // Mock process.kill to return true (process exists)
@@ -176,6 +179,7 @@ describe("status command", () => {
         "0 * * * * night-watch run  # night-watch-cli: test-project",
         "0 0 * * * night-watch review  # night-watch-cli: test-project",
       ]);
+      vi.mocked(getProjectEntries).mockReturnValue([]);
 
       const program = new Command();
       statusCommand(program);

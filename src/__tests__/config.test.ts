@@ -49,6 +49,7 @@ describe("config", () => {
     it("should return all default values", () => {
       const config = getDefaultConfig();
 
+      expect(config.defaultBranch).toBe("");
       expect(config.prdDir).toBe("docs/PRDs/night-watch");
       expect(config.maxRuntime).toBe(7200);
       expect(config.reviewerMaxRuntime).toBe(3600);
@@ -73,6 +74,7 @@ describe("config", () => {
       const config = loadConfig(tempDir);
       const defaults = getDefaultConfig();
 
+      expect(config.defaultBranch).toBe(defaults.defaultBranch);
       expect(config.prdDir).toBe(defaults.prdDir);
       expect(config.maxRuntime).toBe(defaults.maxRuntime);
       expect(config.reviewerMaxRuntime).toBe(defaults.reviewerMaxRuntime);
@@ -114,6 +116,44 @@ describe("config", () => {
       expect(config.maxLogSize).toBe(524288);
       expect(config.cronSchedule).toBe("0 0-21 * * *");
       expect(config.reviewerSchedule).toBe("0 0,3,6,9,12,15,18,21 * * *");
+    });
+
+    it("should support nested init/template config format", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          provider: "codex",
+          reviewerEnabled: false,
+          prdDirectory: "docs/custom-prds",
+          maxRuntime: 1800,
+          reviewerMaxRuntime: 900,
+          cron: {
+            executorSchedule: "*/10 * * * *",
+            reviewerSchedule: "*/30 * * * *",
+          },
+          review: {
+            minScore: 72,
+            branchPatterns: ["bot/", "auto/"],
+          },
+          logging: {
+            maxLogSize: 123456,
+          },
+        })
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.provider).toBe("codex");
+      expect(config.reviewerEnabled).toBe(false);
+      expect(config.prdDir).toBe("docs/custom-prds");
+      expect(config.maxRuntime).toBe(1800);
+      expect(config.reviewerMaxRuntime).toBe(900);
+      expect(config.cronSchedule).toBe("*/10 * * * *");
+      expect(config.reviewerSchedule).toBe("*/30 * * * *");
+      expect(config.minReviewScore).toBe(72);
+      expect(config.branchPatterns).toEqual(["bot/", "auto/"]);
+      expect(config.maxLogSize).toBe(123456);
     });
 
     it("should let env vars override config file", () => {
@@ -271,6 +311,44 @@ describe("config", () => {
       expect(config.prdDir).toBe("docs/prd");
     });
 
+    it("should load defaultBranch from config file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          defaultBranch: "master",
+        })
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.defaultBranch).toBe("master");
+    });
+
+    it("should handle NW_DEFAULT_BRANCH env var", () => {
+      process.env.NW_DEFAULT_BRANCH = "develop";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.defaultBranch).toBe("develop");
+    });
+
+    it("should let NW_DEFAULT_BRANCH env var override config file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          defaultBranch: "master",
+        })
+      );
+
+      process.env.NW_DEFAULT_BRANCH = "develop";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.defaultBranch).toBe("develop");
+    });
+
     it("should ignore invalid JSON config file", () => {
       const configPath = path.join(tempDir, "night-watch.config.json");
       fs.writeFileSync(configPath, "{ invalid json }");
@@ -293,6 +371,7 @@ describe("config", () => {
     });
 
     it("should handle all NW_* env vars together", () => {
+      process.env.NW_DEFAULT_BRANCH = "master";
       process.env.NW_PRD_DIR = "custom/prds";
       process.env.NW_MAX_RUNTIME = "14400";
       process.env.NW_REVIEWER_MAX_RUNTIME = "7200";
@@ -307,6 +386,7 @@ describe("config", () => {
 
       const config = loadConfig(tempDir);
 
+      expect(config.defaultBranch).toBe("master");
       expect(config.prdDir).toBe("custom/prds");
       expect(config.maxRuntime).toBe(14400);
       expect(config.reviewerMaxRuntime).toBe(7200);

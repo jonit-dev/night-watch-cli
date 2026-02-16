@@ -14,6 +14,25 @@ import * as path from "path";
 export const CRONTAB_MARKER_PREFIX = "# night-watch-cli:";
 
 /**
+ * Check whether a crontab line belongs to the given project directory.
+ * Supports unquoted, single-quoted, and double-quoted cd paths.
+ */
+function isEntryForProject(line: string, projectDir: string): boolean {
+  if (!line.includes(CRONTAB_MARKER_PREFIX)) {
+    return false;
+  }
+
+  const normalized = projectDir.replace(/\/+$/, "");
+  const candidates = [
+    `cd ${normalized}`,
+    `cd '${normalized}'`,
+    `cd "${normalized}"`,
+  ];
+
+  return candidates.some((candidate) => line.includes(candidate));
+}
+
+/**
  * Read current crontab entries
  * Returns empty array if user has no crontab
  */
@@ -133,4 +152,33 @@ export function hasEntry(marker: string): boolean {
 export function getEntries(marker: string): string[] {
   const lines = readCrontab();
   return lines.filter((line) => line.includes(marker));
+}
+
+/**
+ * Get all Night Watch entries for a project directory (independent of marker text)
+ * @param projectDir - Absolute project directory
+ */
+export function getProjectEntries(projectDir: string): string[] {
+  const lines = readCrontab();
+  return lines.filter((line) => isEntryForProject(line, projectDir));
+}
+
+/**
+ * Remove Night Watch entries for a project directory and/or marker
+ * @param projectDir - Absolute project directory
+ * @param marker - Optional marker for backward compatibility
+ * @returns Number of entries removed
+ */
+export function removeEntriesForProject(projectDir: string, marker?: string): number {
+  const lines = readCrontab();
+  const filtered = lines.filter(
+    (line) => !isEntryForProject(line, projectDir) && !(marker && line.includes(marker))
+  );
+  const removedCount = lines.length - filtered.length;
+
+  if (removedCount > 0) {
+    writeCrontab(filtered);
+  }
+
+  return removedCount;
 }

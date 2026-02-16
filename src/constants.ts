@@ -4,6 +4,9 @@
 
 import { Provider } from "./types.js";
 
+// Branch Configuration (default branch)
+export const DEFAULT_DEFAULT_BRANCH = ""; // empty = auto-detect
+
 // PRD Configuration
 export const DEFAULT_PRD_DIR = "docs/PRDs/night-watch";
 
