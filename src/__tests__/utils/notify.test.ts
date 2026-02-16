@@ -98,6 +98,74 @@ describe("notification utilities", () => {
       const payload = formatTelegramPayload(baseCtx);
       expect(payload.parse_mode).toBe("MarkdownV2");
     });
+
+    it("should use structured template when prUrl is present", () => {
+      const enrichedCtx: NotificationContext = {
+        ...baseCtx,
+        prUrl: "https://github.com/user/repo/pull/42",
+        prTitle: "feat: add auth",
+        prNumber: 42,
+        prBody: "Added JWT authentication with login and register endpoints.",
+        filesChanged: 12,
+        additions: 340,
+        deletions: 28,
+      };
+
+      const payload = formatTelegramPayload(enrichedCtx);
+      expect(payload.parse_mode).toBe("MarkdownV2");
+      // Should contain PR title, URL, summary, and stats
+      expect(payload.text).toContain("feat: add auth");
+      expect(payload.text).toContain("github\\.com");
+      expect(payload.text).toContain("JWT authentication");
+      expect(payload.text).toContain("340");
+      expect(payload.text).toContain("28");
+      expect(payload.text).toContain("12");
+    });
+
+    it("should fall back to basic format when no PR details", () => {
+      const payload = formatTelegramPayload(baseCtx);
+      // Should contain basic info but not structured PR sections
+      expect(payload.text).toContain("my\\-project");
+      expect(payload.text).not.toContain("Stats");
+      expect(payload.text).not.toContain("Summary");
+    });
+
+    it("should truncate long PR body", () => {
+      const longBody = "A".repeat(1000);
+      const enrichedCtx: NotificationContext = {
+        ...baseCtx,
+        prUrl: "https://github.com/user/repo/pull/42",
+        prTitle: "feat: long PR",
+        prNumber: 42,
+        prBody: longBody,
+        filesChanged: 5,
+        additions: 100,
+        deletions: 10,
+      };
+
+      const payload = formatTelegramPayload(enrichedCtx);
+      // The summary should be truncated (extractSummary limits to 500 chars)
+      expect(payload.text.length).toBeLessThan(longBody.length + 500);
+    });
+
+    it("should handle empty PR body", () => {
+      const enrichedCtx: NotificationContext = {
+        ...baseCtx,
+        prUrl: "https://github.com/user/repo/pull/42",
+        prTitle: "feat: no body",
+        prNumber: 42,
+        prBody: "",
+        filesChanged: 3,
+        additions: 50,
+        deletions: 5,
+      };
+
+      const payload = formatTelegramPayload(enrichedCtx);
+      expect(payload.parse_mode).toBe("MarkdownV2");
+      // Should not crash, should not have Summary section
+      expect(payload.text).toContain("feat: no body");
+      expect(payload.text).not.toContain("Summary");
+    });
   });
 
   describe("sendWebhook", () => {

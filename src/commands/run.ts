@@ -7,6 +7,7 @@ import { loadConfig, getScriptPath } from "../config.js";
 import { INightWatchConfig, NotificationEvent } from "../types.js";
 import { executeScript } from "../utils/shell.js";
 import { sendNotifications } from "../utils/notify.js";
+import { fetchPrDetails, PrDetails } from "../utils/github.js";
 import { PROVIDER_COMMANDS, DEFAULT_PRD_DIR, CLAIM_FILE_EXTENSION } from "../constants.js";
 import * as fs from "fs";
 import * as path from "path";
@@ -250,11 +251,24 @@ export function runCommand(program: Command): void {
             exitCode === 0 ? "run_succeeded" :
             exitCode === 124 ? "run_timeout" : "run_failed";
 
+          // Enrich with PR details on success (graceful — null if gh fails)
+          let prDetails: PrDetails | null = null;
+          if (exitCode === 0) {
+            prDetails = fetchPrDetails(config.branchPrefix, projectDir);
+          }
+
           await sendNotifications(config, {
             event,
             projectName: path.basename(projectDir),
             exitCode,
             provider: config.provider,
+            prUrl: prDetails?.url,
+            prTitle: prDetails?.title,
+            prBody: prDetails?.body,
+            prNumber: prDetails?.number,
+            filesChanged: prDetails?.changedFiles,
+            additions: prDetails?.additions,
+            deletions: prDetails?.deletions,
           });
         }
 
