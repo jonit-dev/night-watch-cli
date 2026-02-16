@@ -104,3 +104,75 @@ How it works:
 - **Dry run** — Variables are displayed under "Environment Variables" when using `--dry-run`
 
 See the [GLM-5 setup guide](../README.md#using-glm-5-or-custom-endpoints) in the README for a concrete example.
+
+---
+
+## Notifications
+
+Night Watch can send notifications to Slack, Discord, or Telegram when runs complete. Configure webhooks in the `notifications` field:
+
+```json
+{
+  "notifications": {
+    "webhooks": [
+      {
+        "type": "telegram",
+        "botToken": "YOUR_BOT_TOKEN",
+        "chatId": "YOUR_CHAT_ID",
+        "events": ["run_succeeded", "run_failed", "run_timeout", "review_completed"]
+      }
+    ]
+  }
+}
+```
+
+### Webhook Types
+
+| Type | Required Fields | Description |
+|------|----------------|-------------|
+| `slack` | `url`, `events` | Slack incoming webhook URL |
+| `discord` | `url`, `events` | Discord webhook URL |
+| `telegram` | `botToken`, `chatId`, `events` | Telegram Bot API |
+
+### Events
+
+| Event | Fires When |
+|-------|-----------|
+| `run_succeeded` | PRD execution completed successfully and PR was opened |
+| `run_failed` | PRD execution failed |
+| `run_timeout` | PRD execution exceeded `maxRuntime` |
+| `review_completed` | PR review cycle completed |
+
+### Telegram Setup
+
+1. Create a bot via [@BotFather](https://t.me/BotFather) on Telegram
+2. Copy the bot token (e.g. `123456:ABC-DEF...`)
+3. Get your chat ID by messaging the bot and checking `https://api.telegram.org/bot<TOKEN>/getUpdates`
+4. Add the webhook config to `night-watch.config.json`
+
+### Structured Notifications
+
+On successful runs, Telegram notifications include a structured summary with:
+
+- PR title and link
+- Summary extracted from the PR body (what was implemented, approach taken)
+- File change stats (files changed, additions, deletions)
+- Project and provider info
+
+If `gh` CLI is not available or the PR can't be found, notifications gracefully fall back to a basic format.
+
+### Environment Override
+
+Notifications can also be configured via the `NW_NOTIFICATIONS` environment variable (JSON string):
+
+```bash
+export NW_NOTIFICATIONS='{"webhooks":[{"type":"telegram","botToken":"...","chatId":"...","events":["run_failed"]}]}'
+```
+
+### Validation
+
+Run `night-watch doctor` to validate your webhook configuration. It checks:
+- Slack URLs start with `https://hooks.slack.com/`
+- Discord URLs start with `https://discord.com/api/webhooks/`
+- Telegram webhooks have both `botToken` and `chatId`
+- All events are valid event names
