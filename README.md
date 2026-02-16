@@ -118,7 +118,7 @@ npm install && npm run build && npm link
 | Document | Description |
 |----------|-------------|
 | [Commands Reference](docs/commands.md) | All CLI commands and their options |
-| [Configuration](docs/configuration.md) | Config file, environment variables, CLI flags, `providerEnv` |
+| [Configuration](docs/configuration.md) | Config file, environment variables, CLI flags, `providerEnv`, notifications |
 | [PRD Format](docs/prd-format.md) | How to write PRDs, dependencies, lifecycle |
 | [Architecture](docs/architecture.md) | System design, execution flows, project structure |
 | [Troubleshooting](docs/troubleshooting.md) | Common errors and how to fix them |
