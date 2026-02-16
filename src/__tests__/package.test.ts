@@ -52,7 +52,7 @@ describe("Package Configuration", () => {
     expect(packageJson).toHaveProperty("repository");
     const repo = packageJson.repository as Record<string, string>;
     expect(repo.type).toBe("git");
-    expect(repo.url).toContain("github.com/joaopio/night-watch-cli");
+    expect(repo.url).toContain("github.com/jonit-dev/night-watch-cli");
   });
 
   it("should have homepage and bugs fields", () => {
@@ -60,7 +60,7 @@ describe("Package Configuration", () => {
     expect(packageJson).toHaveProperty("bugs");
 
     const bugs = packageJson.bugs as Record<string, string>;
-    expect(bugs.url).toContain("github.com/joaopio/night-watch-cli/issues");
+    expect(bugs.url).toContain("github.com/jonit-dev/night-watch-cli/issues");
   });
 
   it("should have engines field with node version", () => {

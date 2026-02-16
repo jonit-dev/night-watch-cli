@@ -105,6 +105,38 @@ describe('CLI', () => {
       expect(output).toContain('--follow');
       expect(output).toContain('--type');
     });
+
+    it('should show prd command in help', () => {
+      const output = execSync('npx tsx src/cli.ts --help', {
+        encoding: 'utf-8',
+        cwd: process.cwd(),
+      });
+
+      expect(output).toContain('prd');
+    });
+
+    it('should show prd create help', () => {
+      const output = execSync('npx tsx src/cli.ts prd create --help', {
+        encoding: 'utf-8',
+        cwd: process.cwd(),
+      });
+
+      expect(output).toContain('Generate a new PRD');
+      expect(output).toContain('--template');
+      expect(output).toContain('--deps');
+      expect(output).toContain('--phases');
+      expect(output).toContain('--no-number');
+    });
+
+    it('should show prd list help', () => {
+      const output = execSync('npx tsx src/cli.ts prd list --help', {
+        encoding: 'utf-8',
+        cwd: process.cwd(),
+      });
+
+      expect(output).toContain('List all PRDs');
+      expect(output).toContain('--json');
+    });
   });
 
   describe('version output', () => {

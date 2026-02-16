@@ -11,6 +11,7 @@ import { installCommand } from './commands/install.js';
 import { uninstallCommand } from './commands/uninstall.js';
 import { statusCommand } from './commands/status.js';
 import { logsCommand } from './commands/logs.js';
+import { prdCommand } from './commands/prd.js';
 
 // Get package.json version
 const __filename = fileURLToPath(import.meta.url);
@@ -39,5 +40,8 @@ installCommand(program);
 uninstallCommand(program);
 statusCommand(program);
 logsCommand(program);
+
+// Register prd command
+prdCommand(program);
 
 program.parse();
