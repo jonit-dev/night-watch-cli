@@ -9,7 +9,7 @@ import * as path from "path";
 import * as fs from "fs";
 import chalk from "chalk";
 import { loadConfig } from "../config.js";
-import { LOCK_FILE_PREFIX, LOG_DIR, DEFAULT_PRD_DIR } from "../constants.js";
+import { LOCK_FILE_PREFIX, LOG_DIR, DEFAULT_PRD_DIR, CLAIM_FILE_EXTENSION } from "../constants.js";
 import { getEntries, generateMarker, getProjectEntries } from "../utils/crontab.js";
 import {
   header,
@@ -40,6 +40,7 @@ interface StatusInfo {
   };
   prds: {
     pending: number;
+    claimed: number;
     done: number;
   };
   prs: {
@@ -127,14 +128,15 @@ function checkLockFile(lockPath: string): { running: boolean; pid: number | null
 /**
  * Count PRDs in the PRD directory
  */
-function countPRDs(projectDir: string, prdDir: string): { pending: number; done: number } {
+function countPRDs(projectDir: string, prdDir: string, maxRuntime: number): { pending: number; claimed: number; done: number } {
   const fullPrdPath = path.join(projectDir, prdDir);
 
   if (!fs.existsSync(fullPrdPath)) {
-    return { pending: 0, done: 0 };
+    return { pending: 0, claimed: 0, done: 0 };
   }
 
   let pending = 0;
+  let claimed = 0;
   let done = 0;
 
   const countInDir = (dir: string) => {
@@ -157,7 +159,23 @@ function countPRDs(projectDir: string, prdDir: string): { pending: number; done:
           countInDir(fullPath);
         }
       } else if (entry.name.endsWith(".md")) {
-        pending++;
+        const claimPath = path.join(dir, entry.name + CLAIM_FILE_EXTENSION);
+        if (fs.existsSync(claimPath)) {
+          try {
+            const content = fs.readFileSync(claimPath, "utf-8");
+            const claimData = JSON.parse(content);
+            const age = Math.floor(Date.now() / 1000) - claimData.timestamp;
+            if (age < maxRuntime) {
+              claimed++;
+            } else {
+              pending++;
+            }
+          } catch {
+            pending++;
+          }
+        } else {
+          pending++;
+        }
       }
     }
   };
@@ -168,7 +186,7 @@ function countPRDs(projectDir: string, prdDir: string): { pending: number; done:
     // Ignore errors
   }
 
-  return { pending, done };
+  return { pending, claimed, done };
 }
 
 /**
@@ -279,7 +297,7 @@ export function statusCommand(program: Command): void {
           reviewerEnabled: config.reviewerEnabled,
           executor: checkLockFile(`${LOCK_FILE_PREFIX}${lockProjectName}.lock`),
           reviewer: checkLockFile(`${LOCK_FILE_PREFIX}pr-reviewer-${lockProjectName}.lock`),
-          prds: countPRDs(projectDir, config.prdDir),
+          prds: countPRDs(projectDir, config.prdDir, config.maxRuntime),
           prs: { open: countOpenPRs(projectDir, config.branchPatterns) },
           crontab: {
             installed: crontabEntries.length > 0,
@@ -322,6 +340,7 @@ export function statusCommand(program: Command): void {
         header("PRD Status");
         const prdTable = createTable({ head: ["Status", "Count"] });
         prdTable.push(["Pending", String(status.prds.pending)]);
+        prdTable.push(["Claimed", String(status.prds.claimed)]);
         prdTable.push(["Completed", String(status.prds.done)]);
         console.log(prdTable.toString());
 

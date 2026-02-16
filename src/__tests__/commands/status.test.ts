@@ -170,6 +170,40 @@ describe("status command", () => {
 
       consoleSpy.mockRestore();
     });
+
+    it("should count claimed PRDs separately", async () => {
+      // Create PRD directory structure
+      const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
+      fs.mkdirSync(prdDir, { recursive: true });
+      fs.mkdirSync(path.join(prdDir, "done"), { recursive: true });
+
+      // Create pending PRDs
+      fs.writeFileSync(path.join(prdDir, "phase1.md"), "# Phase 1");
+      fs.writeFileSync(path.join(prdDir, "phase2.md"), "# Phase 2");
+
+      // Create an active claim for phase1
+      fs.writeFileSync(
+        path.join(prdDir, "phase1.md.claim"),
+        JSON.stringify({ timestamp: Math.floor(Date.now() / 1000), hostname: "test", pid: 1234 })
+      );
+
+      // Create done PRDs
+      fs.writeFileSync(path.join(prdDir, "done", "phase0.md"), "# Phase 0");
+
+      const program = new Command();
+      statusCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "status", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.prds.pending).toBe(1);
+      expect(jsonOutput.prds.claimed).toBe(1);
+      expect(jsonOutput.prds.done).toBe(1);
+
+      consoleSpy.mockRestore();
+    });
   });
 
   describe("crontab status", () => {

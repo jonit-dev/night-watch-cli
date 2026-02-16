@@ -118,10 +118,55 @@ detect_default_branch() {
   echo "main"
 }
 
+# ── Claim management ─────────────────────────────────────────────────────────
+
+claim_prd() {
+  local prd_dir="${1:?prd_dir required}"
+  local prd_file="${2:?prd_file required}"
+  local claim_file="${prd_dir}/${prd_file}.claim"
+
+  printf '{"timestamp":%d,"hostname":"%s","pid":%d}\n' \
+    "$(date +%s)" "$(hostname)" "$$" > "${claim_file}"
+}
+
+release_claim() {
+  local prd_dir="${1:?prd_dir required}"
+  local prd_file="${2:?prd_file required}"
+  local claim_file="${prd_dir}/${prd_file}.claim"
+
+  rm -f "${claim_file}"
+}
+
+is_claimed() {
+  local prd_dir="${1:?prd_dir required}"
+  local prd_file="${2:?prd_file required}"
+  local max_runtime="${3:-7200}"
+  local claim_file="${prd_dir}/${prd_file}.claim"
+
+  if [ ! -f "${claim_file}" ]; then
+    return 1
+  fi
+
+  local claim_ts
+  claim_ts=$(grep -o '"timestamp":[0-9]*' "${claim_file}" 2>/dev/null | grep -o '[0-9]*' || echo "0")
+  local now
+  now=$(date +%s)
+  local age=$(( now - claim_ts ))
+
+  if [ "${age}" -lt "${max_runtime}" ]; then
+    return 0  # actively claimed
+  else
+    # Stale claim — remove it
+    rm -f "${claim_file}"
+    return 1
+  fi
+}
+
 # ── Find next eligible PRD ───────────────────────────────────────────────────
 
 find_eligible_prd() {
   local prd_dir="${1:?prd_dir required}"
+  local max_runtime="${2:-7200}"
   local done_dir="${prd_dir}/done"
 
   local prd_files
@@ -138,6 +183,12 @@ find_eligible_prd() {
     local prd_file
     prd_file=$(basename "${prd_path}")
     local prd_name="${prd_file%.md}"
+
+    # Skip if claimed by another process
+    if is_claimed "${prd_dir}" "${prd_file}" "${max_runtime}"; then
+      log "SKIP-PRD: ${prd_file} — claimed by another process"
+      continue
+    fi
 
     # Skip if a PR already exists for this PRD
     if echo "${open_branches}" | grep -qF "${prd_name}"; then

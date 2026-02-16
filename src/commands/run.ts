@@ -7,7 +7,7 @@ import { loadConfig, getScriptPath } from "../config.js";
 import { INightWatchConfig, NotificationEvent } from "../types.js";
 import { executeScript } from "../utils/shell.js";
 import { sendNotifications } from "../utils/notify.js";
-import { PROVIDER_COMMANDS, DEFAULT_PRD_DIR } from "../constants.js";
+import { PROVIDER_COMMANDS, DEFAULT_PRD_DIR, CLAIM_FILE_EXTENSION } from "../constants.js";
 import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
@@ -82,13 +82,22 @@ export function applyCliOverrides(config: INightWatchConfig, options: RunOptions
 }
 
 /**
+ * Information about a scanned PRD file, including claim status
+ */
+export interface PrdScanItem {
+  name: string;
+  claimed: boolean;
+  claimInfo: { hostname: string; pid: number; timestamp: number } | null;
+}
+
+/**
  * Scan the PRD directory for eligible PRD files
  */
-function scanPrdDirectory(projectDir: string, prdDir: string): { pending: string[]; completed: string[] } {
+export function scanPrdDirectory(projectDir: string, prdDir: string, maxRuntime: number): { pending: PrdScanItem[]; completed: string[] } {
   const absolutePrdDir = path.join(projectDir, prdDir);
   const doneDir = path.join(absolutePrdDir, "done");
 
-  const pending: string[] = [];
+  const pending: PrdScanItem[] = [];
   const completed: string[] = [];
 
   // Scan main PRD directory for pending PRDs
@@ -96,7 +105,25 @@ function scanPrdDirectory(projectDir: string, prdDir: string): { pending: string
     const entries = fs.readdirSync(absolutePrdDir, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "NIGHT-WATCH-SUMMARY.md") {
-        pending.push(entry.name);
+        const claimPath = path.join(absolutePrdDir, entry.name + CLAIM_FILE_EXTENSION);
+        let claimed = false;
+        let claimInfo: PrdScanItem["claimInfo"] = null;
+
+        if (fs.existsSync(claimPath)) {
+          try {
+            const content = fs.readFileSync(claimPath, "utf-8");
+            const data = JSON.parse(content);
+            const age = Math.floor(Date.now() / 1000) - data.timestamp;
+            if (age < maxRuntime) {
+              claimed = true;
+              claimInfo = { hostname: data.hostname, pid: data.pid, timestamp: data.timestamp };
+            }
+          } catch {
+            // Invalid claim file, treat as unclaimed
+          }
+        }
+
+        pending.push({ name: entry.name, claimed, claimInfo });
       }
     }
   }
@@ -156,14 +183,20 @@ export function runCommand(program: Command): void {
 
         // Scan for PRDs
         header("PRD Status");
-        const prdStatus = scanPrdDirectory(projectDir, config.prdDir);
+        const prdStatus = scanPrdDirectory(projectDir, config.prdDir, config.maxRuntime);
 
         if (prdStatus.pending.length === 0) {
           dim("  Pending: (none)");
         } else {
-          info(`Pending (${prdStatus.pending.length}):`);
+          const claimedItems = prdStatus.pending.filter(p => p.claimed);
+          const unclaimed = prdStatus.pending.filter(p => !p.claimed);
+          info(`Pending (${unclaimed.length} pending, ${claimedItems.length} claimed):`);
           for (const prd of prdStatus.pending) {
-            dim(`    - ${prd}`);
+            if (prd.claimed && prd.claimInfo) {
+              dim(`    - ${prd.name} [claimed by ${prd.claimInfo.hostname}:${prd.claimInfo.pid}]`);
+            } else {
+              dim(`    - ${prd.name}`);
+            }
           }
         }
 

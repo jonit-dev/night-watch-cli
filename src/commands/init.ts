@@ -245,29 +245,36 @@ function processTemplate(
 }
 
 /**
- * Add /logs/ to .gitignore if not already there
+ * Ensure Night Watch entries are in .gitignore
  */
 function addToGitignore(cwd: string): void {
   const gitignorePath = path.join(cwd, '.gitignore');
 
+  const entries = [
+    { pattern: '/logs/', label: '/logs/', check: (c: string) => c.includes('/logs/') || /^logs\//m.test(c) },
+    { pattern: CONFIG_FILE_NAME, label: CONFIG_FILE_NAME, check: (c: string) => c.includes(CONFIG_FILE_NAME) },
+    { pattern: '*.claim', label: '*.claim', check: (c: string) => c.includes('*.claim') },
+  ];
+
   if (!fs.existsSync(gitignorePath)) {
-    fs.writeFileSync(gitignorePath, '# Night Watch logs\n/logs/\n');
-    console.log(`  Created: ${gitignorePath} (with /logs/ entry)`);
+    const lines = ['# Night Watch', ...entries.map(e => e.pattern), ''];
+    fs.writeFileSync(gitignorePath, lines.join('\n'));
+    console.log(`  Created: ${gitignorePath} (with Night Watch entries)`);
     return;
   }
 
   const content = fs.readFileSync(gitignorePath, 'utf-8');
+  const missing = entries.filter(e => !e.check(content));
 
-  // Check if /logs/ or logs/ already exists
-  if (content.includes('/logs/') || /^logs\//m.test(content)) {
-    console.log(`  Skipped (exists): /logs/ in .gitignore`);
+  if (missing.length === 0) {
+    console.log(`  Skipped (exists): Night Watch entries in .gitignore`);
     return;
   }
 
-  // Append /logs/ to .gitignore
-  const newContent = content.trimEnd() + '\n\n# Night Watch logs\n/logs/\n';
+  const additions = missing.map(e => e.pattern).join('\n');
+  const newContent = content.trimEnd() + '\n\n# Night Watch\n' + additions + '\n';
   fs.writeFileSync(gitignorePath, newContent);
-  console.log(`  Updated: ${gitignorePath} (added /logs/ entry)`);
+  console.log(`  Updated: ${gitignorePath} (added ${missing.map(e => e.label).join(', ')})`);
 }
 
 /**
