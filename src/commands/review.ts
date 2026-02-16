@@ -3,27 +3,27 @@
  */
 
 import { Command } from "commander";
-import { loadConfig, getScriptPath } from "../config.js";
+import { getScriptPath, loadConfig } from "../config.js";
 import { INightWatchConfig } from "../types.js";
 import { executeScript } from "../utils/shell.js";
 import { sendNotifications } from "../utils/notify.js";
-import { fetchReviewedPrDetails, PrDetails } from "../utils/github.js";
+import { type IPrDetails, fetchReviewedPrDetails } from "../utils/github.js";
 import { PROVIDER_COMMANDS } from "../constants.js";
 import { execSync } from "child_process";
 import * as path from "path";
 import {
-  header,
-  dim,
-  info,
-  error as uiError,
   createSpinner,
   createTable,
+  dim,
+  header,
+  info,
+  error as uiError,
 } from "../utils/ui.js";
 
 /**
  * Options for the review command
  */
-export interface ReviewOptions {
+export interface IReviewOptions {
   dryRun: boolean;
   timeout?: string;
   provider?: string;
@@ -32,7 +32,7 @@ export interface ReviewOptions {
 /**
  * Build environment variables map from config and CLI options for reviewer
  */
-export function buildEnvVars(config: INightWatchConfig, options: ReviewOptions): Record<string, string> {
+export function buildEnvVars(config: INightWatchConfig, options: IReviewOptions): Record<string, string> {
   const env: Record<string, string> = {};
 
   // Provider command - the actual CLI binary to call
@@ -59,7 +59,7 @@ export function buildEnvVars(config: INightWatchConfig, options: ReviewOptions):
 /**
  * Apply CLI flag overrides to the config for reviewer
  */
-export function applyCliOverrides(config: INightWatchConfig, options: ReviewOptions): INightWatchConfig {
+export function applyCliOverrides(config: INightWatchConfig, options: IReviewOptions): INightWatchConfig {
   const overridden = { ...config };
 
   if (options.timeout) {
@@ -115,7 +115,7 @@ export function reviewCommand(program: Command): void {
     .option("--dry-run", "Show what would be executed without running")
     .option("--timeout <seconds>", "Override max runtime in seconds for reviewer")
     .option("--provider <string>", "AI provider to use (claude or codex)")
-    .action(async (options: ReviewOptions) => {
+    .action(async (options: IReviewOptions) => {
       // Get the project directory (current working directory)
       const projectDir = process.cwd();
 
@@ -192,7 +192,7 @@ export function reviewCommand(program: Command): void {
         // Send notifications (fire-and-forget, failures do not affect exit code)
         if (!options.dryRun) {
           // Enrich with PR details (graceful — null if gh fails)
-          let prDetails: PrDetails | null = null;
+          let prDetails: IPrDetails | null = null;
           if (exitCode === 0) {
             prDetails = fetchReviewedPrDetails(config.branchPatterns, projectDir);
           }

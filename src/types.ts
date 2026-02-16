@@ -57,13 +57,13 @@ export interface INightWatchConfig {
   providerEnv: Record<string, string>;
 
   /** Notification webhook configuration */
-  notifications: NotificationConfig;
+  notifications: INotificationConfig;
 }
 
 export type WebhookType = "slack" | "discord" | "telegram";
 export type NotificationEvent = "run_succeeded" | "run_failed" | "run_timeout" | "review_completed";
 
-export interface WebhookConfig {
+export interface IWebhookConfig {
   type: WebhookType;
   url?: string;
   botToken?: string;
@@ -71,6 +71,6 @@ export interface WebhookConfig {
   events: NotificationEvent[];
 }
 
-export interface NotificationConfig {
-  webhooks: WebhookConfig[];
+export interface INotificationConfig {
+  webhooks: IWebhookConfig[];
 }

@@ -8,22 +8,21 @@ import * as fs from "fs";
 import * as path from "path";
 import { execSync } from "child_process";
 import { loadConfig } from "../config.js";
-import { WebhookConfig } from "../types.js";
+import { IWebhookConfig } from "../types.js";
 import {
+  header,
+  info,
+  step,
   success,
   error as uiError,
   warn,
-  info,
-  header,
-  dim,
-  step,
 } from "../utils/ui.js";
 
 /**
  * Validate a single webhook configuration and return a list of issues.
  * Returns an empty array if the webhook is valid.
  */
-export function validateWebhook(webhook: WebhookConfig): string[] {
+export function validateWebhook(webhook: IWebhookConfig): string[] {
   const issues: string[] = [];
 
   // Validate events

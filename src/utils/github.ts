@@ -5,7 +5,7 @@
 
 import { execSync } from "child_process";
 
-export interface PrDetails {
+export interface IPrDetails {
   number: number;
   title: string;
   url: string;
@@ -19,7 +19,7 @@ export interface PrDetails {
  * Fetch PR details for the most recently created PR matching a branch prefix.
  * Returns null if gh is unavailable, not authenticated, or no PR found.
  */
-export function fetchPrDetails(branchPrefix: string, cwd: string): PrDetails | null {
+export function fetchPrDetails(branchPrefix: string, cwd: string): IPrDetails | null {
   try {
     // Find the most recently created open PR on a matching branch
     const listOutput = execSync(
@@ -67,7 +67,7 @@ export function fetchPrDetails(branchPrefix: string, cwd: string): PrDetails | n
  * Used by the review command to find the PR that was just reviewed.
  * Returns null on any failure.
  */
-export function fetchReviewedPrDetails(branchPatterns: string[], cwd: string): PrDetails | null {
+export function fetchReviewedPrDetails(branchPatterns: string[], cwd: string): IPrDetails | null {
   try {
     const listOutput = execSync(
       `gh pr list --state open --json number,headRefName --limit 20`,

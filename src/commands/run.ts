@@ -3,29 +3,27 @@
  */
 
 import { Command } from "commander";
-import { loadConfig, getScriptPath } from "../config.js";
+import { getScriptPath, loadConfig } from "../config.js";
 import { INightWatchConfig, NotificationEvent } from "../types.js";
 import { executeScript } from "../utils/shell.js";
 import { sendNotifications } from "../utils/notify.js";
-import { fetchPrDetails, PrDetails } from "../utils/github.js";
-import { PROVIDER_COMMANDS, DEFAULT_PRD_DIR, CLAIM_FILE_EXTENSION } from "../constants.js";
+import { type IPrDetails, fetchPrDetails } from "../utils/github.js";
+import { CLAIM_FILE_EXTENSION, PROVIDER_COMMANDS } from "../constants.js";
 import * as fs from "fs";
 import * as path from "path";
-import { execSync } from "child_process";
 import {
-  header,
-  label,
-  dim,
-  info,
-  error as uiError,
   createSpinner,
   createTable,
+  dim,
+  header,
+  info,
+  error as uiError,
 } from "../utils/ui.js";
 
 /**
  * Options for the run command
  */
-export interface RunOptions {
+export interface IRunOptions {
   dryRun: boolean;
   timeout?: string;
   provider?: string;
@@ -34,7 +32,7 @@ export interface RunOptions {
 /**
  * Build environment variables map from config and CLI options
  */
-export function buildEnvVars(config: INightWatchConfig, options: RunOptions): Record<string, string> {
+export function buildEnvVars(config: INightWatchConfig, options: IRunOptions): Record<string, string> {
   const env: Record<string, string> = {};
 
   // Provider command - the actual CLI binary to call
@@ -65,7 +63,7 @@ export function buildEnvVars(config: INightWatchConfig, options: RunOptions): Re
 /**
  * Apply CLI flag overrides to the config
  */
-export function applyCliOverrides(config: INightWatchConfig, options: RunOptions): INightWatchConfig {
+export function applyCliOverrides(config: INightWatchConfig, options: IRunOptions): INightWatchConfig {
   const overridden = { ...config };
 
   if (options.timeout) {
@@ -85,7 +83,7 @@ export function applyCliOverrides(config: INightWatchConfig, options: RunOptions
 /**
  * Information about a scanned PRD file, including claim status
  */
-export interface PrdScanItem {
+export interface IPrdScanItem {
   name: string;
   claimed: boolean;
   claimInfo: { hostname: string; pid: number; timestamp: number } | null;
@@ -94,11 +92,11 @@ export interface PrdScanItem {
 /**
  * Scan the PRD directory for eligible PRD files
  */
-export function scanPrdDirectory(projectDir: string, prdDir: string, maxRuntime: number): { pending: PrdScanItem[]; completed: string[] } {
+export function scanPrdDirectory(projectDir: string, prdDir: string, maxRuntime: number): { pending: IPrdScanItem[]; completed: string[] } {
   const absolutePrdDir = path.join(projectDir, prdDir);
   const doneDir = path.join(absolutePrdDir, "done");
 
-  const pending: PrdScanItem[] = [];
+  const pending: IPrdScanItem[] = [];
   const completed: string[] = [];
 
   // Scan main PRD directory for pending PRDs
@@ -108,7 +106,7 @@ export function scanPrdDirectory(projectDir: string, prdDir: string, maxRuntime:
       if (entry.isFile() && entry.name.endsWith(".md") && entry.name !== "NIGHT-WATCH-SUMMARY.md") {
         const claimPath = path.join(absolutePrdDir, entry.name + CLAIM_FILE_EXTENSION);
         let claimed = false;
-        let claimInfo: PrdScanItem["claimInfo"] = null;
+        let claimInfo: IPrdScanItem["claimInfo"] = null;
 
         if (fs.existsSync(claimPath)) {
           try {
@@ -152,7 +150,7 @@ export function runCommand(program: Command): void {
     .option("--dry-run", "Show what would be executed without running")
     .option("--timeout <seconds>", "Override max runtime in seconds")
     .option("--provider <string>", "AI provider to use (claude or codex)")
-    .action(async (options: RunOptions) => {
+    .action(async (options: IRunOptions) => {
       // Get the project directory (current working directory)
       const projectDir = process.cwd();
 
@@ -252,7 +250,7 @@ export function runCommand(program: Command): void {
             exitCode === 124 ? "run_timeout" : "run_failed";
 
           // Enrich with PR details on success (graceful — null if gh fails)
-          let prDetails: PrDetails | null = null;
+          let prDetails: IPrDetails | null = null;
           if (exitCode === 0) {
             prDetails = fetchPrDetails(config.branchPrefix, projectDir);
           }

@@ -112,7 +112,7 @@ sequenceDiagram
 - [ ] <!-- additional criterion -->
 `;
 
-export interface PrdTemplateVars {
+export interface IPrdTemplateVars {
   title: string;
   dependsOn: string[];
   complexityScore: number;
@@ -166,7 +166,7 @@ function renderPhases(count: number): string {
 }
 
 export function renderPrdTemplate(
-  vars: PrdTemplateVars,
+  vars: IPrdTemplateVars,
   customTemplate?: string,
 ): string {
   const template = customTemplate ?? PRD_TEMPLATE;

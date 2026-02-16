@@ -3,11 +3,11 @@
  * Sends webhook notifications to Slack, Discord, and Telegram
  */
 
-import { INightWatchConfig, WebhookConfig, NotificationEvent } from "../types.js";
-import { warn, info } from "./ui.js";
+import { INightWatchConfig, IWebhookConfig, NotificationEvent } from "../types.js";
+import { info, warn } from "./ui.js";
 import { extractSummary } from "./github.js";
 
-export interface NotificationContext {
+export interface INotificationContext {
   event: NotificationEvent;
   projectName: string;
   prdName?: string;
@@ -76,7 +76,7 @@ export function getEventColor(event: NotificationEvent): number {
 /**
  * Build a description string from notification context
  */
-export function buildDescription(ctx: NotificationContext): string {
+export function buildDescription(ctx: INotificationContext): string {
   const lines: string[] = [];
   lines.push(`Project: ${ctx.projectName}`);
   lines.push(`Provider: ${ctx.provider}`);
@@ -106,7 +106,7 @@ function escapeMarkdownV2(text: string): string {
 /**
  * Format a notification payload for Slack incoming webhooks
  */
-export function formatSlackPayload(ctx: NotificationContext): object {
+export function formatSlackPayload(ctx: INotificationContext): object {
   const emoji = getEventEmoji(ctx.event);
   const title = getEventTitle(ctx.event);
   const description = buildDescription(ctx);
@@ -141,7 +141,7 @@ export function formatSlackPayload(ctx: NotificationContext): object {
 /**
  * Format a notification payload for Discord webhooks
  */
-export function formatDiscordPayload(ctx: NotificationContext): object {
+export function formatDiscordPayload(ctx: INotificationContext): object {
   const emoji = getEventEmoji(ctx.event);
   const title = getEventTitle(ctx.event);
   const description = buildDescription(ctx);
@@ -162,7 +162,7 @@ export function formatDiscordPayload(ctx: NotificationContext): object {
  * Build a structured Telegram message when PR details are available.
  * Falls back to the basic format when they are not.
  */
-export function formatTelegramPayload(ctx: NotificationContext): {
+export function formatTelegramPayload(ctx: INotificationContext): {
   text: string;
   parse_mode: string;
 } {
@@ -224,7 +224,7 @@ export function formatTelegramPayload(ctx: NotificationContext): {
  * Send a notification to a single webhook endpoint
  * Silently catches errors — never throws
  */
-export async function sendWebhook(webhook: WebhookConfig, ctx: NotificationContext): Promise<void> {
+export async function sendWebhook(webhook: IWebhookConfig, ctx: INotificationContext): Promise<void> {
   // Skip if this event is not in the webhook's configured events
   if (!webhook.events.includes(ctx.event)) {
     return;
@@ -269,16 +269,16 @@ export async function sendWebhook(webhook: WebhookConfig, ctx: NotificationConte
  */
 export async function sendNotifications(
   config: INightWatchConfig,
-  ctx: NotificationContext
+  ctx: INotificationContext
 ): Promise<void> {
   if (!config.notifications || config.notifications.webhooks.length === 0) {
     return;
   }
 
   const webhooks = config.notifications.webhooks;
-  const results = await Promise.allSettled(webhooks.map((wh) => sendWebhook(wh, ctx)));
+  const results = await Promise.allSettled(webhooks.map((wh: IWebhookConfig) => sendWebhook(wh, ctx)));
 
-  const sent = results.filter((r) => r.status === "fulfilled").length;
+  const sent = results.filter((r: PromiseSettledResult<unknown>) => r.status === "fulfilled").length;
   const total = webhooks.length;
   info(`Sent ${sent}/${total} notifications`);
 }

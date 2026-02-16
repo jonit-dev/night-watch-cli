@@ -17,14 +17,14 @@ import {
   writeCrontab,
 } from "../utils/crontab.js";
 import {
+  dim,
+  header,
   success,
   error as uiError,
   warn,
-  header,
-  dim,
 } from "../utils/ui.js";
 
-export interface InstallOptions {
+export interface IInstallOptions {
   schedule?: string;
   reviewerSchedule?: string;
   noReviewer?: boolean;
@@ -34,7 +34,7 @@ export interface InstallOptions {
  * Safely quote a value for POSIX shell commands.
  */
 function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+  return `'${value.replace(/'/g, "'\"'\"'")}'`;
 }
 
 /**
@@ -106,7 +106,7 @@ export function installCommand(program: Command): void {
     .option("-s, --schedule <cron>", "Cron schedule for PRD executor")
     .option("--reviewer-schedule <cron>", "Cron schedule for reviewer")
     .option("--no-reviewer", "Skip installing reviewer cron")
-    .action(async (options: InstallOptions) => {
+    .action(async (options: IInstallOptions) => {
       try {
         // Get project directory
         const projectDir = process.cwd();

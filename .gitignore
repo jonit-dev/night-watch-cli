@@ -36,3 +36,5 @@ coverage/
 
 # Claim files (ephemeral local state)
 *.claim
+
+.npmrc
