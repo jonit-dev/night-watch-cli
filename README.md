@@ -47,6 +47,35 @@ Night Watch acts as a wrapper/orchestrator that calls CLI-based AI coding tools.
 - Default provider is `claude`
 - Change provider with `--provider codex` flag or set `provider: "codex"` in config
 
+### Custom Provider Environments (GLM-5, proxies, etc.)
+
+Night Watch supports passing custom environment variables to the provider CLI via the `providerEnv` config field. This is essential for using alternative models or API endpoints that require custom keys or base URLs — for example, **GLM-5** through a custom Anthropic-compatible endpoint.
+
+Add `providerEnv` to your `night-watch.config.json`:
+
+```json
+{
+  "provider": "claude",
+  "providerEnv": {
+    "ANTHROPIC_API_KEY": "your-glm5-api-key",
+    "ANTHROPIC_BASE_URL": "https://your-glm5-endpoint.example.com"
+  }
+}
+```
+
+These variables are:
+- **Injected into the provider CLI process** at runtime (`night-watch run`, `night-watch review`)
+- **Exported in cron entries** when you run `night-watch install`, so automated runs also pick them up
+- **Visible in `--dry-run` output** under "Environment Variables" for easy debugging
+
+This works with any environment variable the provider CLI supports. Common use cases:
+
+| Use Case | Environment Variables |
+|----------|----------------------|
+| GLM-5 via custom endpoint | `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` |
+| Proxy / VPN routing | `HTTPS_PROXY`, `HTTP_PROXY` |
+| Custom model selection | Any provider-specific env var |
+
 ---
 
 ## Installation
@@ -66,7 +95,7 @@ npx night-watch-cli init
 ### From Source
 
 ```bash
-git clone https://github.com/joaopio/night-watch-cli.git
+git clone https://github.com/jonit-dev/night-watch-cli.git
 cd night-watch-cli
 npm install
 npm run build
@@ -215,7 +244,11 @@ Create `night-watch.config.json` in your project root:
   "minReviewScore": 80,
   "maxLogSize": 524288,
   "cronSchedule": "0 0-15 * * *",
-  "reviewerSchedule": "0 0,3,6,9,12,15 * * *"
+  "reviewerSchedule": "0 0,3,6,9,12,15 * * *",
+  "providerEnv": {
+    "ANTHROPIC_API_KEY": "sk-...",
+    "ANTHROPIC_BASE_URL": "https://custom-endpoint.example.com"
+  }
 }
 ```
 
@@ -428,7 +461,7 @@ Check:
 ### Development Setup
 
 ```bash
-git clone https://github.com/joaopio/night-watch-cli.git
+git clone https://github.com/jonit-dev/night-watch-cli.git
 cd night-watch-cli
 npm install
 ```
