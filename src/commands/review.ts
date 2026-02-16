@@ -7,6 +7,7 @@ import { loadConfig, getScriptPath } from "../config.js";
 import { INightWatchConfig } from "../types.js";
 import { executeScript } from "../utils/shell.js";
 import { sendNotifications } from "../utils/notify.js";
+import { fetchReviewedPrDetails, PrDetails } from "../utils/github.js";
 import { PROVIDER_COMMANDS } from "../constants.js";
 import { execSync } from "child_process";
 import * as path from "path";
@@ -190,11 +191,24 @@ export function reviewCommand(program: Command): void {
 
         // Send notifications (fire-and-forget, failures do not affect exit code)
         if (!options.dryRun) {
+          // Enrich with PR details (graceful — null if gh fails)
+          let prDetails: PrDetails | null = null;
+          if (exitCode === 0) {
+            prDetails = fetchReviewedPrDetails(config.branchPatterns, projectDir);
+          }
+
           await sendNotifications(config, {
             event: "review_completed",
             projectName: path.basename(projectDir),
             exitCode,
             provider: config.provider,
+            prUrl: prDetails?.url,
+            prTitle: prDetails?.title,
+            prBody: prDetails?.body,
+            prNumber: prDetails?.number,
+            filesChanged: prDetails?.changedFiles,
+            additions: prDetails?.additions,
+            deletions: prDetails?.deletions,
           });
         }
 

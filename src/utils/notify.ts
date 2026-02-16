@@ -5,6 +5,7 @@
 
 import { INightWatchConfig, WebhookConfig, NotificationEvent } from "../types.js";
 import { warn, info } from "./ui.js";
+import { extractSummary } from "./github.js";
 
 export interface NotificationContext {
   event: NotificationEvent;
@@ -15,6 +16,13 @@ export interface NotificationContext {
   exitCode: number;
   duration?: number;
   provider: string;
+  // Enriched PR details (optional — populated when gh CLI is available)
+  prUrl?: string;
+  prTitle?: string;
+  prBody?: string;
+  filesChanged?: number;
+  additions?: number;
+  deletions?: number;
 }
 
 /**
@@ -151,7 +159,8 @@ export function formatDiscordPayload(ctx: NotificationContext): object {
 }
 
 /**
- * Format a notification payload for Telegram Bot API
+ * Build a structured Telegram message when PR details are available.
+ * Falls back to the basic format when they are not.
  */
 export function formatTelegramPayload(ctx: NotificationContext): {
   text: string;
@@ -159,8 +168,52 @@ export function formatTelegramPayload(ctx: NotificationContext): {
 } {
   const emoji = getEventEmoji(ctx.event);
   const title = getEventTitle(ctx.event);
-  const description = buildDescription(ctx);
 
+  // If PR details are present, use the rich structured template
+  if (ctx.prUrl && ctx.prTitle) {
+    const lines: string[] = [];
+
+    lines.push(`*${escapeMarkdownV2(emoji + " " + title)}*`);
+    lines.push("");
+    lines.push(`${escapeMarkdownV2("📋")} *${escapeMarkdownV2("PR #" + (ctx.prNumber ?? "") + ": " + ctx.prTitle)}*`);
+    lines.push(`${escapeMarkdownV2("🔗")} ${escapeMarkdownV2(ctx.prUrl)}`);
+
+    // Summary from PR body
+    if (ctx.prBody && ctx.prBody.trim().length > 0) {
+      const summary = extractSummary(ctx.prBody);
+      if (summary) {
+        lines.push("");
+        lines.push(`${escapeMarkdownV2("📝 Summary")}`);
+        lines.push(escapeMarkdownV2(summary));
+      }
+    }
+
+    // Stats
+    if (ctx.filesChanged !== undefined || ctx.additions !== undefined) {
+      lines.push("");
+      lines.push(`${escapeMarkdownV2("📊 Stats")}`);
+      const stats: string[] = [];
+      if (ctx.filesChanged !== undefined) {
+        stats.push(`Files changed: ${ctx.filesChanged}`);
+      }
+      if (ctx.additions !== undefined && ctx.deletions !== undefined) {
+        stats.push(`+${ctx.additions} / -${ctx.deletions}`);
+      }
+      lines.push(escapeMarkdownV2(stats.join(" | ")));
+    }
+
+    // Footer
+    lines.push("");
+    lines.push(escapeMarkdownV2(`⚙️ Project: ${ctx.projectName} | Provider: ${ctx.provider}`));
+
+    return {
+      text: lines.join("\n"),
+      parse_mode: "MarkdownV2",
+    };
+  }
+
+  // Fallback: basic format (no PR details)
+  const description = buildDescription(ctx);
   return {
     text: `*${escapeMarkdownV2(emoji + " " + title)}*\n\n${escapeMarkdownV2(description)}`,
     parse_mode: "MarkdownV2",
