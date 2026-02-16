@@ -25,6 +25,7 @@ describe('CLI', () => {
       expect(output).toContain('uninstall');
       expect(output).toContain('status');
       expect(output).toContain('logs');
+      expect(output).toContain('doctor');
     });
 
     it('should show init command help', () => {
@@ -104,6 +105,15 @@ describe('CLI', () => {
       expect(output).toContain('--lines');
       expect(output).toContain('--follow');
       expect(output).toContain('--type');
+    });
+
+    it('should show doctor command help', () => {
+      const output = execSync('npx tsx src/cli.ts doctor --help', {
+        encoding: 'utf-8',
+        cwd: process.cwd(),
+      });
+
+      expect(output).toContain('Check Night Watch configuration');
     });
 
     it('should show prd command in help', () => {

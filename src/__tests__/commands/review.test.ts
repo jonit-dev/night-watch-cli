@@ -29,6 +29,7 @@ import {
   ReviewOptions,
 } from "../../commands/review.js";
 import { INightWatchConfig } from "../../types.js";
+import { sendNotifications } from "../../utils/notify.js";
 
 // Helper to create a valid config without budget fields
 function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConfig {
@@ -181,6 +182,12 @@ describe("review command", () => {
       const overridden = applyCliOverrides(config, options);
 
       expect(overridden.provider).toBe("codex");
+    });
+  });
+
+  describe("notification integration", () => {
+    it("sendNotifications should be importable", () => {
+      expect(typeof sendNotifications).toBe("function");
     });
   });
 });

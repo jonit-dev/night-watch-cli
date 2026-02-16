@@ -2,7 +2,7 @@
  * Default configuration values for Night Watch CLI
  */
 
-import { Provider } from "./types.js";
+import { NotificationConfig, Provider } from "./types.js";
 
 // Branch Configuration (default branch)
 export const DEFAULT_DEFAULT_BRANCH = ""; // empty = auto-detect
@@ -32,6 +32,9 @@ export const DEFAULT_MAX_LOG_SIZE = 524288; // 512 KB
 export const DEFAULT_PROVIDER: Provider = "claude";
 export const DEFAULT_REVIEWER_ENABLED = true;
 export const DEFAULT_PROVIDER_ENV: Record<string, string> = {};
+
+// Notification Configuration
+export const DEFAULT_NOTIFICATIONS: NotificationConfig = { webhooks: [] };
 
 // Valid providers
 export const VALID_PROVIDERS: Provider[] = ["claude", "codex"];

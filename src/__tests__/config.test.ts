@@ -400,4 +400,75 @@ describe("config", () => {
       expect(config.reviewerEnabled).toBe(false);
     });
   });
+
+  describe("notifications config", () => {
+    it("should load notifications from config file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          notifications: {
+            webhooks: [
+              {
+                type: "slack",
+                url: "https://hooks.slack.com/services/test",
+                events: ["run_succeeded", "run_failed"],
+              },
+              {
+                type: "telegram",
+                botToken: "123456:ABC",
+                chatId: "-100123",
+                events: ["review_completed"],
+              },
+            ],
+          },
+        })
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.notifications.webhooks).toHaveLength(2);
+      expect(config.notifications.webhooks[0]).toEqual({
+        type: "slack",
+        url: "https://hooks.slack.com/services/test",
+        botToken: undefined,
+        chatId: undefined,
+        events: ["run_succeeded", "run_failed"],
+      });
+      expect(config.notifications.webhooks[1]).toEqual({
+        type: "telegram",
+        url: undefined,
+        botToken: "123456:ABC",
+        chatId: "-100123",
+        events: ["review_completed"],
+      });
+    });
+
+    it("should default to empty webhooks", () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.notifications).toBeDefined();
+      expect(config.notifications.webhooks).toEqual([]);
+    });
+
+    it("should parse NW_NOTIFICATIONS env var", () => {
+      const notifications = {
+        webhooks: [
+          {
+            type: "discord",
+            url: "https://discord.com/api/webhooks/test",
+            events: ["run_timeout"],
+          },
+        ],
+      };
+      process.env.NW_NOTIFICATIONS = JSON.stringify(notifications);
+
+      const config = loadConfig(tempDir);
+
+      expect(config.notifications.webhooks).toHaveLength(1);
+      expect(config.notifications.webhooks[0].type).toBe("discord");
+      expect(config.notifications.webhooks[0].url).toBe("https://discord.com/api/webhooks/test");
+      expect(config.notifications.webhooks[0].events).toEqual(["run_timeout"]);
+    });
+  });
 });
