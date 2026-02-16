@@ -8,9 +8,9 @@ import { spawn } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import { LOG_DIR } from "../constants.js";
-import { header, dim } from "../utils/ui.js";
+import { dim, header } from "../utils/ui.js";
 
-export interface LogsOptions {
+export interface ILogsOptions {
   lines?: string;
   follow?: boolean;
   type?: string;
@@ -68,7 +68,7 @@ export function logsCommand(program: Command): void {
     .option("-n, --lines <count>", "Number of lines to show", "50")
     .option("-f, --follow", "Follow log output (tail -f)")
     .option("-t, --type <type>", "Log type to view (run|review|all)", "all")
-    .action(async (options: LogsOptions) => {
+    .action(async (options: ILogsOptions) => {
       try {
         const projectDir = process.cwd();
         const logDir = path.join(projectDir, LOG_DIR);

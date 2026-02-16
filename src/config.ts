@@ -6,24 +6,24 @@
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { INightWatchConfig, NotificationConfig, Provider, WebhookConfig } from "./types.js";
+import { INightWatchConfig, INotificationConfig, IWebhookConfig, NotificationEvent, Provider, WebhookType } from "./types.js";
 import {
-  DEFAULT_DEFAULT_BRANCH,
-  DEFAULT_PRD_DIR,
-  DEFAULT_MAX_RUNTIME,
-  DEFAULT_REVIEWER_MAX_RUNTIME,
-  DEFAULT_CRON_SCHEDULE,
-  DEFAULT_REVIEWER_SCHEDULE,
-  DEFAULT_BRANCH_PREFIX,
-  DEFAULT_BRANCH_PATTERNS,
-  DEFAULT_MIN_REVIEW_SCORE,
-  DEFAULT_MAX_LOG_SIZE,
-  DEFAULT_PROVIDER,
-  DEFAULT_REVIEWER_ENABLED,
-  DEFAULT_PROVIDER_ENV,
-  DEFAULT_NOTIFICATIONS,
-  VALID_PROVIDERS,
   CONFIG_FILE_NAME,
+  DEFAULT_BRANCH_PATTERNS,
+  DEFAULT_BRANCH_PREFIX,
+  DEFAULT_CRON_SCHEDULE,
+  DEFAULT_DEFAULT_BRANCH,
+  DEFAULT_MAX_LOG_SIZE,
+  DEFAULT_MAX_RUNTIME,
+  DEFAULT_MIN_REVIEW_SCORE,
+  DEFAULT_NOTIFICATIONS,
+  DEFAULT_PRD_DIR,
+  DEFAULT_PROVIDER,
+  DEFAULT_PROVIDER_ENV,
+  DEFAULT_REVIEWER_ENABLED,
+  DEFAULT_REVIEWER_MAX_RUNTIME,
+  DEFAULT_REVIEWER_SCHEDULE,
+  VALID_PROVIDERS,
 } from "./constants.js";
 
 /**
@@ -146,17 +146,17 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   const rawNotifications = readObject(rawConfig.notifications);
   if (rawNotifications) {
     const rawWebhooks = Array.isArray(rawNotifications.webhooks) ? rawNotifications.webhooks : [];
-    const webhooks: WebhookConfig[] = [];
+    const webhooks: IWebhookConfig[] = [];
     for (const wh of rawWebhooks) {
       if (wh && typeof wh === "object" && "type" in wh && "events" in wh) {
         const whObj = wh as Record<string, unknown>;
         webhooks.push({
-          type: String(whObj.type) as WebhookConfig["type"],
+          type: String(whObj.type) as WebhookType,
           url: typeof whObj.url === "string" ? whObj.url : undefined,
           botToken: typeof whObj.botToken === "string" ? whObj.botToken : undefined,
           chatId: typeof whObj.chatId === "string" ? whObj.chatId : undefined,
           events: Array.isArray(whObj.events)
-            ? (whObj.events.filter((e: unknown) => typeof e === "string") as WebhookConfig["events"])
+            ? (whObj.events.filter((e: unknown) => typeof e === "string") as NotificationEvent[])
             : [],
         });
       }
@@ -348,7 +348,7 @@ export function loadConfig(projectDir: string): INightWatchConfig {
     try {
       const parsed = JSON.parse(process.env.NW_NOTIFICATIONS);
       if (parsed && typeof parsed === "object") {
-        envConfig.notifications = parsed as NotificationConfig;
+        envConfig.notifications = parsed as INotificationConfig;
       }
     } catch {
       // Invalid JSON, ignore

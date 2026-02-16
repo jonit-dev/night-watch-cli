@@ -9,19 +9,19 @@ import * as readline from "readline";
 import { loadConfig } from "../config.js";
 import { CLAIM_FILE_EXTENSION } from "../constants.js";
 import {
+  IPrdTemplateVars,
   renderPrdTemplate,
-  PrdTemplateVars,
 } from "../templates/prd-template.js";
 import {
-  success,
-  error as uiError,
-  info,
+  createTable,
   dim,
   header,
-  createTable,
+  info,
+  success,
+  error as uiError,
 } from "../utils/ui.js";
 
-export interface PrdCreateOptions {
+export interface IPrdCreateOptions {
   interactive: boolean;
   template?: string;
   deps?: string;
@@ -116,7 +116,7 @@ export function prdCommand(program: Command): void {
     .option("--deps <files>", "Comma-separated dependency filenames")
     .option("--phases <count>", "Number of execution phases", "3")
     .option("--no-number", "Skip auto-numbering prefix")
-    .action(async (name: string, options: PrdCreateOptions) => {
+    .action(async (name: string, options: IPrdCreateOptions) => {
       const projectDir = process.cwd();
 
       // Load config to get prdDir
@@ -130,7 +130,6 @@ export function prdCommand(program: Command): void {
 
       // Prepare template variables with defaults
       let complexityScore = 5;
-      let complexityLevel: PrdTemplateVars["complexityLevel"] = "MEDIUM";
       let dependsOn: string[] = [];
       let phaseCount = parseInt(options.phases ?? "3", 10);
       if (isNaN(phaseCount) || phaseCount < 1) {
@@ -194,6 +193,7 @@ export function prdCommand(program: Command): void {
       }
 
       // Determine complexity level from score
+      let complexityLevel: IPrdTemplateVars["complexityLevel"];
       if (complexityScore <= 3) {
         complexityLevel = "LOW";
       } else if (complexityScore <= 7) {
@@ -235,7 +235,7 @@ export function prdCommand(program: Command): void {
       }
 
       // Render template
-      const vars: PrdTemplateVars = {
+      const vars: IPrdTemplateVars = {
         title: name,
         dependsOn,
         complexityScore,

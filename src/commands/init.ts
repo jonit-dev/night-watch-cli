@@ -15,14 +15,13 @@ import {
 } from '../constants.js';
 import { Provider } from '../types.js';
 import {
-  success,
-  error as uiError,
-  info,
+  createTable,
   header,
-  dim,
+  info,
   label,
   step,
-  createTable,
+  success,
+  error as uiError,
 } from '../utils/ui.js';
 
 // Get templates directory path
@@ -30,7 +29,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const TEMPLATES_DIR = join(__dirname, '..', '..', 'templates');
 
-interface InitOptions {
+interface IInitOptions {
   force: boolean;
   prdDir?: string;
   provider?: string;
@@ -308,7 +307,7 @@ export function initCommand(program: Command): void {
     .option('-d, --prd-dir <path>', 'Path to PRD directory')
     .option('-p, --provider <name>', 'AI provider to use (claude or codex)')
     .option('--no-reviewer', 'Disable reviewer cron job')
-    .action(async (options: InitOptions) => {
+    .action(async (options: IInitOptions) => {
       const cwd = process.cwd();
       const force = options.force || false;
       const prdDir = options.prdDir || DEFAULT_PRD_DIR;
@@ -320,7 +319,7 @@ export function initCommand(program: Command): void {
       step(1, 9, 'Checking git repository...');
       if (!isGitRepo(cwd)) {
         uiError('Current directory is not a git repository.');
-        dim('Please run this command from the root of a git repository.');
+        console.log('Please run this command from the root of a git repository.');
         process.exit(1);
       }
       success('Git repository found');
@@ -329,7 +328,7 @@ export function initCommand(program: Command): void {
       step(2, 9, 'Checking GitHub CLI (gh)...');
       if (!isGhAuthenticated()) {
         uiError('GitHub CLI (gh) is not authenticated.');
-        dim('Please run: gh auth login');
+        console.log('Please run: gh auth login');
         process.exit(1);
       }
       success('GitHub CLI is authenticated');
@@ -342,7 +341,7 @@ export function initCommand(program: Command): void {
         // Validate provider flag
         if (!VALID_PROVIDERS.includes(options.provider as Provider)) {
           uiError(`Invalid provider "${options.provider}".`);
-          dim(`Valid providers: ${VALID_PROVIDERS.join(', ')}`);
+          console.log(`Valid providers: ${VALID_PROVIDERS.join(', ')}`);
           process.exit(1);
         }
         selectedProvider = options.provider as Provider;
@@ -353,9 +352,9 @@ export function initCommand(program: Command): void {
 
         if (detectedProviders.length === 0) {
           uiError('No AI provider CLI found.');
-          dim('\nPlease install one of the following:');
-          dim('  - Claude CLI: https://docs.anthropic.com/en/docs/claude-cli');
-          dim('  - Codex CLI: https://github.com/openai/codex');
+          console.log('\nPlease install one of the following:');
+          console.log('  - Claude CLI: https://docs.anthropic.com/en/docs/claude-cli');
+          console.log('  - Codex CLI: https://github.com/openai/codex');
           process.exit(1);
         } else if (detectedProviders.length === 1) {
           selectedProvider = detectedProviders[0];
@@ -451,7 +450,7 @@ export function initCommand(program: Command): void {
       const configPath = path.join(cwd, CONFIG_FILE_NAME);
 
       if (fs.existsSync(configPath) && !force) {
-        dim(`  Skipped (exists): ${configPath}`);
+        console.log(`  Skipped (exists): ${configPath}`);
       } else {
         // Read and process config template
         let configContent = fs.readFileSync(

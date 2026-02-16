@@ -1,0 +1,2 @@
+- Use yarn as package manager
+- Always yarn verify and run related tests after code changes

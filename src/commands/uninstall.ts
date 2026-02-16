@@ -7,19 +7,19 @@ import { Command } from "commander";
 import * as path from "path";
 import * as fs from "fs";
 import {
-  removeEntriesForProject,
   generateMarker,
   getEntries,
   getProjectEntries,
+  removeEntriesForProject,
 } from "../utils/crontab.js";
 import {
+  dim,
   success,
   error as uiError,
   warn,
-  dim,
 } from "../utils/ui.js";
 
-export interface UninstallOptions {
+export interface IUninstallOptions {
   keepLogs?: boolean;
 }
 
@@ -52,7 +52,7 @@ export function uninstallCommand(program: Command): void {
     .command("uninstall")
     .description("Remove crontab entries")
     .option("--keep-logs", "Preserve log files")
-    .action(async (options: UninstallOptions) => {
+    .action(async (options: IUninstallOptions) => {
       try {
         // Get project directory
         const projectDir = process.cwd();

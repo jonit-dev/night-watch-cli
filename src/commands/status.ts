@@ -9,23 +9,22 @@ import * as path from "path";
 import * as fs from "fs";
 import chalk from "chalk";
 import { loadConfig } from "../config.js";
-import { LOCK_FILE_PREFIX, LOG_DIR, DEFAULT_PRD_DIR, CLAIM_FILE_EXTENSION } from "../constants.js";
-import { getEntries, generateMarker, getProjectEntries } from "../utils/crontab.js";
+import { CLAIM_FILE_EXTENSION, LOCK_FILE_PREFIX, LOG_DIR } from "../constants.js";
+import { generateMarker, getEntries, getProjectEntries } from "../utils/crontab.js";
 import {
-  header,
-  label,
-  dim,
   createTable,
-  formatRunningStatus,
+  dim,
   formatInstalledStatus,
+  formatRunningStatus,
+  header,
 } from "../utils/ui.js";
 
-export interface StatusOptions {
+export interface IStatusOptions {
   verbose?: boolean;
   json?: boolean;
 }
 
-interface StatusInfo {
+interface IStatusInfo {
   projectName: string;
   projectDir: string;
   provider: string;
@@ -278,7 +277,7 @@ export function statusCommand(program: Command): void {
     .description("Show current night-watch status")
     .option("-v, --verbose", "Show detailed status information")
     .option("--json", "Output status as JSON")
-    .action(async (options: StatusOptions) => {
+    .action(async (options: IStatusOptions) => {
       try {
         const projectDir = process.cwd();
         const config = loadConfig(projectDir);
@@ -290,7 +289,7 @@ export function statusCommand(program: Command): void {
         );
 
         // Gather status info
-        const status: StatusInfo = {
+        const status: IStatusInfo = {
           projectName,
           projectDir,
           provider: config.provider,

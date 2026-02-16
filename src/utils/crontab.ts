@@ -43,7 +43,7 @@ export function readCrontab(): string[] {
       stdio: ["pipe", "pipe", "pipe"],
     });
     return output.trim().split("\n").filter((line) => line.length > 0);
-  } catch (error) {
+  } catch {
     // crontab -l returns error if no crontab exists
     // This is expected and should return empty array
     return [];
