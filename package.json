@@ -40,11 +40,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/joaopio/night-watch-cli.git"
+    "url": "https://github.com/jonit-dev/night-watch-cli.git"
   },
-  "homepage": "https://github.com/joaopio/night-watch-cli#readme",
+  "homepage": "https://github.com/jonit-dev/night-watch-cli#readme",
   "bugs": {
-    "url": "https://github.com/joaopio/night-watch-cli/issues"
+    "url": "https://github.com/jonit-dev/night-watch-cli/issues"
   },
   "dependencies": {
     "chalk": "^5.6.2",
