@@ -6,7 +6,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { INightWatchConfig, Provider } from "./types.js";
+import { INightWatchConfig, NotificationConfig, Provider, WebhookConfig } from "./types.js";
 import {
   DEFAULT_DEFAULT_BRANCH,
   DEFAULT_PRD_DIR,
@@ -21,6 +21,7 @@ import {
   DEFAULT_PROVIDER,
   DEFAULT_REVIEWER_ENABLED,
   DEFAULT_PROVIDER_ENV,
+  DEFAULT_NOTIFICATIONS,
   VALID_PROVIDERS,
   CONFIG_FILE_NAME,
 } from "./constants.js";
@@ -48,6 +49,9 @@ export function getDefaultConfig(): INightWatchConfig {
     provider: DEFAULT_PROVIDER,
     reviewerEnabled: DEFAULT_REVIEWER_ENABLED,
     providerEnv: { ...DEFAULT_PROVIDER_ENV },
+
+    // Notification configuration
+    notifications: { ...DEFAULT_NOTIFICATIONS, webhooks: [] },
   };
 }
 
@@ -138,6 +142,28 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     }
   }
 
+  // Notifications
+  const rawNotifications = readObject(rawConfig.notifications);
+  if (rawNotifications) {
+    const rawWebhooks = Array.isArray(rawNotifications.webhooks) ? rawNotifications.webhooks : [];
+    const webhooks: WebhookConfig[] = [];
+    for (const wh of rawWebhooks) {
+      if (wh && typeof wh === "object" && "type" in wh && "events" in wh) {
+        const whObj = wh as Record<string, unknown>;
+        webhooks.push({
+          type: String(whObj.type) as WebhookConfig["type"],
+          url: typeof whObj.url === "string" ? whObj.url : undefined,
+          botToken: typeof whObj.botToken === "string" ? whObj.botToken : undefined,
+          chatId: typeof whObj.chatId === "string" ? whObj.chatId : undefined,
+          events: Array.isArray(whObj.events)
+            ? (whObj.events.filter((e: unknown) => typeof e === "string") as WebhookConfig["events"])
+            : [],
+        });
+      }
+    }
+    normalized.notifications = { webhooks };
+  }
+
   return normalized;
 }
 
@@ -196,6 +222,8 @@ function mergeConfigs(
       merged.reviewerEnabled = fileConfig.reviewerEnabled;
     if (fileConfig.providerEnv !== undefined)
       merged.providerEnv = { ...merged.providerEnv, ...fileConfig.providerEnv };
+    if (fileConfig.notifications !== undefined)
+      merged.notifications = fileConfig.notifications;
   }
 
   // Merge env config (takes precedence)
@@ -216,6 +244,8 @@ function mergeConfigs(
     merged.reviewerEnabled = envConfig.reviewerEnabled;
   if (envConfig.providerEnv !== undefined)
     merged.providerEnv = { ...merged.providerEnv, ...envConfig.providerEnv };
+  if (envConfig.notifications !== undefined)
+    merged.notifications = envConfig.notifications;
 
   return merged;
 }
@@ -310,6 +340,18 @@ export function loadConfig(projectDir: string): INightWatchConfig {
     const reviewerEnabled = parseBoolean(process.env.NW_REVIEWER_ENABLED);
     if (reviewerEnabled !== null) {
       envConfig.reviewerEnabled = reviewerEnabled;
+    }
+  }
+
+  // NW_NOTIFICATIONS environment variable (JSON)
+  if (process.env.NW_NOTIFICATIONS) {
+    try {
+      const parsed = JSON.parse(process.env.NW_NOTIFICATIONS);
+      if (parsed && typeof parsed === "object") {
+        envConfig.notifications = parsed as NotificationConfig;
+      }
+    } catch {
+      // Invalid JSON, ignore
     }
   }
 

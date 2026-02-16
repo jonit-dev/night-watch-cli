@@ -4,8 +4,9 @@
 
 import { Command } from "commander";
 import { loadConfig, getScriptPath } from "../config.js";
-import { INightWatchConfig } from "../types.js";
+import { INightWatchConfig, NotificationEvent } from "../types.js";
 import { executeScript } from "../utils/shell.js";
+import { sendNotifications } from "../utils/notify.js";
 import { PROVIDER_COMMANDS, DEFAULT_PRD_DIR } from "../constants.js";
 import * as fs from "fs";
 import * as path from "path";
@@ -209,6 +210,21 @@ export function runCommand(program: Command): void {
         } else {
           spinner.fail(`PRD executor exited with code ${exitCode}`);
         }
+
+        // Send notifications (fire-and-forget, failures do not affect exit code)
+        if (!options.dryRun) {
+          const event: NotificationEvent =
+            exitCode === 0 ? "run_succeeded" :
+            exitCode === 124 ? "run_timeout" : "run_failed";
+
+          await sendNotifications(config, {
+            event,
+            projectName: path.basename(projectDir),
+            exitCode,
+            provider: config.provider,
+          });
+        }
+
         process.exit(exitCode);
       } catch (err) {
         spinner.fail("Failed to execute run command");

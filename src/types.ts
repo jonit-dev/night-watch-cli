@@ -55,4 +55,22 @@ export interface INightWatchConfig {
 
   /** Extra environment variables to pass to the provider CLI (e.g. API keys, base URLs) */
   providerEnv: Record<string, string>;
+
+  /** Notification webhook configuration */
+  notifications: NotificationConfig;
+}
+
+export type WebhookType = "slack" | "discord" | "telegram";
+export type NotificationEvent = "run_succeeded" | "run_failed" | "run_timeout" | "review_completed";
+
+export interface WebhookConfig {
+  type: WebhookType;
+  url?: string;
+  botToken?: string;
+  chatId?: string;
+  events: NotificationEvent[];
+}
+
+export interface NotificationConfig {
+  webhooks: WebhookConfig[];
 }

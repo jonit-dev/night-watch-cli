@@ -6,8 +6,10 @@ import { Command } from "commander";
 import { loadConfig, getScriptPath } from "../config.js";
 import { INightWatchConfig } from "../types.js";
 import { executeScript } from "../utils/shell.js";
+import { sendNotifications } from "../utils/notify.js";
 import { PROVIDER_COMMANDS } from "../constants.js";
 import { execSync } from "child_process";
+import * as path from "path";
 import {
   header,
   dim,
@@ -185,6 +187,17 @@ export function reviewCommand(program: Command): void {
         } else {
           spinner.fail(`PR reviewer exited with code ${exitCode}`);
         }
+
+        // Send notifications (fire-and-forget, failures do not affect exit code)
+        if (!options.dryRun) {
+          await sendNotifications(config, {
+            event: "review_completed",
+            projectName: path.basename(projectDir),
+            exitCode,
+            provider: config.provider,
+          });
+        }
+
         process.exit(exitCode);
       } catch (err) {
         spinner.fail("Failed to execute review command");
