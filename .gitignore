@@ -25,6 +25,7 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+.npmrc
 
 # Test coverage
 coverage/
