@@ -122,6 +122,7 @@ npm install && npm run build && npm link
 | [PRD Format](docs/prd-format.md) | How to write PRDs, dependencies, lifecycle |
 | [Architecture](docs/architecture.md) | System design, execution flows, project structure |
 | [Troubleshooting](docs/troubleshooting.md) | Common errors and how to fix them |
+| [Local Testing](docs/local-testing.md) | Test the CLI locally without publishing |
 | [Contributing](docs/contributing.md) | Development setup, building, testing, publishing |
 
 ---
