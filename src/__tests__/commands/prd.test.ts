@@ -303,5 +303,49 @@ describe("prd command", () => {
 
       expect(output).toContain("No PRDs found");
     });
+
+    it("should show claimed status when .claim file exists", () => {
+      fs.writeFileSync(
+        path.join(prdDir, "01-feature.md"),
+        "# PRD: Feature\n"
+      );
+      // Create an active claim file
+      const claimData = JSON.stringify({
+        timestamp: Math.floor(Date.now() / 1000),
+        hostname: "test-host",
+        pid: 12345,
+      });
+      fs.writeFileSync(
+        path.join(prdDir, "01-feature.md.claim"),
+        claimData
+      );
+
+      const output = runPrdList();
+
+      expect(output).toContain("claimed");
+      expect(output).toContain("01-feature.md");
+    });
+
+    it("should show pending for stale .claim file", () => {
+      fs.writeFileSync(
+        path.join(prdDir, "01-feature.md"),
+        "# PRD: Feature\n"
+      );
+      // Create a stale claim file (timestamp from year 2001)
+      const claimData = JSON.stringify({
+        timestamp: 1000000000,
+        hostname: "old-host",
+        pid: 99999,
+      });
+      fs.writeFileSync(
+        path.join(prdDir, "01-feature.md.claim"),
+        claimData
+      );
+
+      const output = runPrdList();
+
+      expect(output).toContain("pending");
+      expect(output).toContain("01-feature.md");
+    });
   });
 });

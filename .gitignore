@@ -33,3 +33,6 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+
+# Claim files (ephemeral local state)
+*.claim

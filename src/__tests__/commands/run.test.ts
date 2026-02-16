@@ -28,6 +28,7 @@ import {
   buildEnvVars,
   applyCliOverrides,
   RunOptions,
+  scanPrdDirectory,
 } from "../../commands/run.js";
 import { INightWatchConfig } from "../../types.js";
 import { sendNotifications } from "../../utils/notify.js";
@@ -175,6 +176,56 @@ describe("run command", () => {
   describe("notification integration", () => {
     it("sendNotifications should be importable", () => {
       expect(typeof sendNotifications).toBe("function");
+    });
+  });
+
+  describe("scanPrdDirectory", () => {
+    it("should detect claimed PRDs", () => {
+      // Create PRD directory
+      const prdDir = "docs/PRDs/night-watch";
+      const absolutePrdDir = path.join(tempDir, prdDir);
+      fs.mkdirSync(absolutePrdDir, { recursive: true });
+
+      // Create a PRD file
+      fs.writeFileSync(path.join(absolutePrdDir, "01-feature.md"), "# Feature");
+
+      // Create an active claim
+      fs.writeFileSync(
+        path.join(absolutePrdDir, "01-feature.md.claim"),
+        JSON.stringify({ timestamp: Math.floor(Date.now() / 1000), hostname: "test-host", pid: 9999 })
+      );
+
+      const result = scanPrdDirectory(tempDir, prdDir, 7200);
+
+      expect(result.pending).toHaveLength(1);
+      expect(result.pending[0].name).toBe("01-feature.md");
+      expect(result.pending[0].claimed).toBe(true);
+      expect(result.pending[0].claimInfo).toEqual({
+        hostname: "test-host",
+        pid: 9999,
+        timestamp: expect.any(Number),
+      });
+    });
+
+    it("should treat stale claims as unclaimed", () => {
+      const prdDir = "docs/PRDs/night-watch";
+      const absolutePrdDir = path.join(tempDir, prdDir);
+      fs.mkdirSync(absolutePrdDir, { recursive: true });
+
+      fs.writeFileSync(path.join(absolutePrdDir, "01-feature.md"), "# Feature");
+
+      // Create a stale claim (old timestamp)
+      fs.writeFileSync(
+        path.join(absolutePrdDir, "01-feature.md.claim"),
+        JSON.stringify({ timestamp: 1000000000, hostname: "old-host", pid: 1111 })
+      );
+
+      const result = scanPrdDirectory(tempDir, prdDir, 7200);
+
+      expect(result.pending).toHaveLength(1);
+      expect(result.pending[0].name).toBe("01-feature.md");
+      expect(result.pending[0].claimed).toBe(false);
+      expect(result.pending[0].claimInfo).toBeNull();
     });
   });
 });

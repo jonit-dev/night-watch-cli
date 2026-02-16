@@ -55,12 +55,18 @@ fi
 
 cleanup_worktrees "${PROJECT_DIR}"
 
-ELIGIBLE_PRD=$(find_eligible_prd "${PRD_DIR}")
+ELIGIBLE_PRD=$(find_eligible_prd "${PRD_DIR}" "${MAX_RUNTIME}")
 
 if [ -z "${ELIGIBLE_PRD}" ]; then
   log "SKIP: No eligible PRDs (all done, in-progress, or blocked)"
   exit 0
 fi
+
+# Claim the PRD to prevent other runs from selecting it
+claim_prd "${PRD_DIR}" "${ELIGIBLE_PRD}"
+
+# Update EXIT trap to also release claim
+trap "rm -f '${LOCK_FILE}'; release_claim '${PRD_DIR}' '${ELIGIBLE_PRD}'" EXIT
 
 PRD_NAME="${ELIGIBLE_PRD%.md}"
 BRANCH_NAME="night-watch/${PRD_NAME}"
@@ -146,6 +152,7 @@ esac
 if [ ${EXIT_CODE} -eq 0 ]; then
   PR_EXISTS=$(gh pr list --state open --json headRefName --jq '.[].headRefName' 2>/dev/null | grep -cF "${BRANCH_NAME}" || echo "0")
   if [ "${PR_EXISTS}" -gt 0 ]; then
+    release_claim "${PRD_DIR}" "${ELIGIBLE_PRD}"
     mark_prd_done "${PRD_DIR}" "${ELIGIBLE_PRD}"
     git -C "${PROJECT_DIR}" add -A docs/PRDs/night-watch/
     git -C "${PROJECT_DIR}" commit -m "chore: mark ${ELIGIBLE_PRD} as done (PR opened on ${BRANCH_NAME})

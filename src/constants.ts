@@ -49,3 +49,4 @@ export const PROVIDER_COMMANDS: Record<Provider, string> = {
 export const CONFIG_FILE_NAME = "night-watch.config.json";
 export const LOCK_FILE_PREFIX = "/tmp/night-watch-";
 export const LOG_DIR = "logs";
+export const CLAIM_FILE_EXTENSION = ".claim";

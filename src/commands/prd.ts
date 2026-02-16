@@ -7,6 +7,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
 import { loadConfig } from "../config.js";
+import { CLAIM_FILE_EXTENSION } from "../constants.js";
 import {
   renderPrdTemplate,
   PrdTemplateVars,
@@ -76,6 +77,26 @@ function parseDependencies(content: string): string[] {
     .split(",")
     .map((d) => d.replace(/`/g, "").trim())
     .filter(Boolean);
+}
+
+/**
+ * Check if a claim file is active (not stale)
+ */
+function isClaimActive(claimPath: string, maxRuntime: number): { active: boolean; hostname?: string; pid?: number } {
+  try {
+    if (!fs.existsSync(claimPath)) {
+      return { active: false };
+    }
+    const content = fs.readFileSync(claimPath, "utf-8");
+    const claim = JSON.parse(content);
+    const age = Math.floor(Date.now() / 1000) - claim.timestamp;
+    if (age < maxRuntime) {
+      return { active: true, hostname: claim.hostname, pid: claim.pid };
+    }
+    return { active: false };
+  } catch {
+    return { active: false };
+  }
 }
 
 /**
@@ -248,7 +269,7 @@ export function prdCommand(program: Command): void {
       const doneDir = path.join(absolutePrdDir, "done");
 
       // Scan pending PRDs
-      const pending: Array<{ name: string; dependencies: string[] }> = [];
+      const pending: Array<{ name: string; dependencies: string[]; claimed: boolean; claimInfo?: { hostname: string; pid: number } }> = [];
       if (fs.existsSync(absolutePrdDir)) {
         const files = fs
           .readdirSync(absolutePrdDir)
@@ -261,7 +282,9 @@ export function prdCommand(program: Command): void {
             "utf-8"
           );
           const deps = parseDependencies(content);
-          pending.push({ name: file, dependencies: deps });
+          const claimPath = path.join(absolutePrdDir, file + CLAIM_FILE_EXTENSION);
+          const claimStatus = isClaimActive(claimPath, config.maxRuntime);
+          pending.push({ name: file, dependencies: deps, claimed: claimStatus.active, claimInfo: claimStatus.active ? { hostname: claimStatus.hostname!, pid: claimStatus.pid! } : undefined });
         }
       }
 
@@ -297,9 +320,13 @@ export function prdCommand(program: Command): void {
         head: ["Name", "Status", "Dependencies"],
       });
       for (const prd of pending) {
+        const status = prd.claimed ? "claimed" : "pending";
+        const statusDisplay = prd.claimed && prd.claimInfo
+          ? `claimed (${prd.claimInfo.hostname}:${prd.claimInfo.pid})`
+          : status;
         table.push([
           prd.name,
-          "pending",
+          statusDisplay,
           prd.dependencies.join(", ") || "-",
         ]);
       }
@@ -311,6 +338,8 @@ export function prdCommand(program: Command): void {
         ]);
       }
       console.log(table.toString());
-      info(`${pending.length} pending, ${done.length} done`);
+      const claimedCount = pending.filter(p => p.claimed).length;
+      const pendingCount = pending.length - claimedCount;
+      info(`${pendingCount} pending, ${claimedCount} claimed, ${done.length} done`);
     });
 }
