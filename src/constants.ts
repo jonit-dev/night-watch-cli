@@ -71,6 +71,7 @@ export const CLAIM_FILE_EXTENSION = ".claim";
 export const GLOBAL_CONFIG_DIR = ".night-watch";
 export const REGISTRY_FILE_NAME = "projects.json";
 export const HISTORY_FILE_NAME = "history.json";
+export const PRD_STATES_FILE_NAME = "prd-states.json";
 
 // Execution History
 export const MAX_HISTORY_RECORDS_PER_PRD = 10;

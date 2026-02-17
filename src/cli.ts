@@ -17,6 +17,7 @@ import { doctorCommand } from './commands/doctor.js';
 import { serveCommand } from './commands/serve.js';
 import { historyCommand } from './commands/history.js';
 import { updateCommand } from './commands/update.js';
+import { prdStateCommand } from './commands/prd-state.js';
 
 // Get package.json version
 const __filename = fileURLToPath(import.meta.url);
@@ -63,5 +64,8 @@ historyCommand(program);
 
 // Register update command
 updateCommand(program);
+
+// Register prd-state command (used by bash scripts for pending-review state)
+prdStateCommand(program);
 
 program.parse();

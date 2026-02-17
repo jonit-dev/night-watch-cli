@@ -459,48 +459,55 @@ mark_prd_done() {
 mark_prd_pending_review() {
   local prd_dir="${1:?prd_dir required}"
   local prd_file="${2:?prd_file required}"
-  local pending_dir="${prd_dir}/pending-review"
+  local project_dir="${3:?project_dir required}"
+  local branch_name="${4:-}"
+  local prd_name="${prd_file%.md}"
 
-  mkdir -p "${pending_dir}"
-
-  if [ -f "${prd_dir}/${prd_file}" ]; then
-    mv "${prd_dir}/${prd_file}" "${pending_dir}/${prd_file}"
-    log "PENDING-REVIEW: Moved ${prd_file} to pending-review/"
-    return 0
-  else
-    log "WARN: PRD file not found for pending-review: ${prd_dir}/${prd_file}"
+  local cli_bin
+  cli_bin=$(resolve_night_watch_cli) || {
+    log "WARN: Could not resolve night-watch CLI — skipping prd-state set"
     return 1
-  fi
+  }
+
+  "${cli_bin}" prd-state set "${project_dir}" "${prd_name}" --branch "${branch_name}" 2>/dev/null
+  log "PENDING-REVIEW: ${prd_file} marked as pending-review in prd-states.json"
 }
 
-# Check pending-review/ PRDs and promote any whose PR has been merged to done/
+# Check prd-states.json for pending-review PRDs and promote any whose PR has been merged to done/
 promote_merged_prds() {
-  local prd_dir="${1:?prd_dir required}"
+  local original_prd_dir="${1:?original_prd_dir required}"
   local project_dir="${2:?project_dir required}"
-  local pending_dir="${prd_dir}/pending-review"
-  local done_dir="${prd_dir}/done"
+  local done_dir="${original_prd_dir}/done"
 
-  [ -d "${pending_dir}" ] || return 0
+  local cli_bin
+  cli_bin=$(resolve_night_watch_cli) || return 0
+
+  local pending_prds
+  pending_prds=$("${cli_bin}" prd-state list "${project_dir}" --status pending-review 2>/dev/null || echo "")
+  [ -z "${pending_prds}" ] && return 0
 
   local merged_branches
   merged_branches=$(cd "${project_dir}" && gh pr list --state merged --json headRefName --jq '.[].headRefName' 2>/dev/null || true)
   [ -z "${merged_branches}" ] && return 0
 
-  local promoted=0
-  for prd_path in "${pending_dir}"/*.md; do
-    [ -f "${prd_path}" ] || continue
-    local prd_file
-    prd_file=$(basename "${prd_path}")
-    local prd_name="${prd_file%.md}"
+  while IFS= read -r prd_name; do
+    [ -z "${prd_name}" ] && continue
+    local prd_file="${prd_name}.md"
     local branch_name="night-watch/${prd_name}"
 
     if echo "${merged_branches}" | grep -qF "${branch_name}"; then
       mkdir -p "${done_dir}"
-      mv "${prd_path}" "${done_dir}/${prd_file}"
-      log "MERGED: ${prd_name} PR was merged — promoted from pending-review/ to done/"
-      promoted=$(( promoted + 1 ))
+      if [ -f "${original_prd_dir}/${prd_file}" ]; then
+        mv "${original_prd_dir}/${prd_file}" "${done_dir}/${prd_file}"
+        "${cli_bin}" prd-state clear "${project_dir}" "${prd_name}" 2>/dev/null || true
+        log "MERGED: ${prd_name} PR was merged — moved to done/ and cleared from prd-states.json"
+      else
+        # File already gone (e.g. moved manually) — just clear the state
+        "${cli_bin}" prd-state clear "${project_dir}" "${prd_name}" 2>/dev/null || true
+        log "MERGED: ${prd_name} PR was merged — cleared from prd-states.json (file not found)"
+      fi
     fi
-  done
+  done <<< "${pending_prds}"
 
   return 0
 }

@@ -8,6 +8,7 @@ import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import { CLAIM_FILE_EXTENSION, LOCK_FILE_PREFIX, LOG_DIR } from "../constants.js";
+import { getPrdStatesForProject } from "./prd-states.js";
 import { INightWatchConfig } from "../types.js";
 import { generateMarker, getEntries, getProjectEntries } from "./crontab.js";
 
@@ -180,14 +181,6 @@ export function countPRDs(
           } catch {
             // Ignore errors
           }
-        } else if (entry.name === "pending-review") {
-          // pending-review PRDs count toward done for display purposes (work is complete, PR open)
-          try {
-            const pendingEntries = fs.readdirSync(fullPath);
-            done += pendingEntries.filter((e) => e.endsWith(".md")).length;
-          } catch {
-            // Ignore errors
-          }
         } else {
           countInDir(fullPath);
         }
@@ -284,22 +277,6 @@ export function collectPrdInfo(
           } catch {
             // Ignore errors
           }
-        } else if (entry.name === "pending-review") {
-          try {
-            const pendingEntries = fs.readdirSync(fullPath);
-            for (const pendingEntry of pendingEntries) {
-              if (pendingEntry.endsWith(".md")) {
-                prds.push({
-                  name: pendingEntry.replace(/\.md$/, ""),
-                  status: "pending-review",
-                  dependencies: [],
-                  unmetDependencies: [],
-                });
-              }
-            }
-          } catch {
-            // Ignore errors
-          }
         } else {
           collectInDir(fullPath);
         }
@@ -331,6 +308,15 @@ export function collectPrdInfo(
   };
 
   collectInDir(fullPrdPath);
+
+  // Overlay pending-review state from ~/.night-watch/prd-states.json
+  // PRD files stay in place; state is tracked separately
+  const prdStates = getPrdStatesForProject(projectDir);
+  for (const prd of prds) {
+    if (prdStates[prd.name]?.status === "pending-review" && prd.status !== "done" && prd.status !== "in-progress") {
+      prd.status = "pending-review";
+    }
+  }
 
   // Compute unmet dependencies: a dependency is unmet if there's no "done" PRD with that name
   const doneNames = new Set(prds.filter((p) => p.status === "done").map((p) => p.name));
