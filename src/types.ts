@@ -73,7 +73,7 @@ export interface INightWatchConfig {
 }
 
 export type WebhookType = "slack" | "discord" | "telegram";
-export type NotificationEvent = "run_succeeded" | "run_failed" | "run_timeout" | "review_completed";
+export type NotificationEvent = "run_started" | "run_succeeded" | "run_failed" | "run_timeout" | "review_completed";
 
 export interface IWebhookConfig {
   type: WebhookType;

@@ -135,7 +135,7 @@ export interface WebhookConfig {
   url?: string;
   botToken?: string;
   chatId?: string;
-  events: ('run_succeeded' | 'run_failed' | 'run_timeout' | 'review_completed')[];
+  events: ('run_started' | 'run_succeeded' | 'run_failed' | 'run_timeout' | 'review_completed')[];
 }
 
 export interface PrdInfo {

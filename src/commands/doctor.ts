@@ -39,6 +39,7 @@ export function validateWebhook(webhook: IWebhookConfig): string[] {
     issues.push("No events configured");
   } else {
     const validEvents = [
+      "run_started",
       "run_succeeded",
       "run_failed",
       "run_timeout",

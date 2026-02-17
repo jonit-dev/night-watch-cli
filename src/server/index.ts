@@ -16,11 +16,12 @@ import { CONFIG_FILE_NAME, LOG_DIR } from "../constants.js";
 import { INightWatchConfig } from "../types.js";
 import { loadConfig } from "../config.js";
 import { validateWebhook } from "../commands/doctor.js";
-import { collectPrInfo, collectPrdInfo, fetchStatusSnapshot, getLastLogLines } from "../utils/status-data.js";
+import { checkLockFile, collectPrInfo, collectPrdInfo, executorLockPath, fetchStatusSnapshot, getLastLogLines, reviewerLockPath } from "../utils/status-data.js";
 import { saveConfig } from "../utils/config-writer.js";
 import { loadRegistry, validateRegistry } from "../utils/registry.js";
 import { generateMarker, getEntries, getProjectEntries } from "../utils/crontab.js";
 import { CronExpressionParser } from "cron-parser";
+import { sendNotifications } from "../utils/notify.js";
 import { getRoadmapStatus, scanRoadmap } from "../utils/roadmap-scanner.js";
 import { loadRoadmapState } from "../utils/roadmap-state.js";
 
@@ -353,6 +354,25 @@ function handleGetDoctor(projectDir: string, config: INightWatchConfig, _req: Re
 
 function handleSpawnAction(projectDir: string, command: string[], _req: Request, res: Response): void {
   try {
+    // Prevent duplicate execution: check the lock file before spawning
+    const lockPath = command[0] === "run"
+      ? executorLockPath(projectDir)
+      : command[0] === "review"
+        ? reviewerLockPath(projectDir)
+        : null;
+
+    if (lockPath) {
+      const lock = checkLockFile(lockPath);
+      if (lock.running) {
+        const processType = command[0] === "run" ? "Executor" : "Reviewer";
+        res.status(409).json({
+          error: `${processType} is already running (PID ${lock.pid})`,
+          pid: lock.pid,
+        });
+        return;
+      }
+    }
+
     const child = spawn("night-watch", command, {
       detached: true,
       stdio: "ignore",
@@ -363,6 +383,18 @@ function handleSpawnAction(projectDir: string, command: string[], _req: Request,
 
     if (child.pid !== undefined) {
       spawnedProcesses.set(child.pid, child);
+
+      // Fire notification for executor start (non-blocking)
+      if (command[0] === "run") {
+        const config = loadConfig(projectDir);
+        sendNotifications(config, {
+          event: "run_started",
+          projectName: path.basename(projectDir),
+          exitCode: 0,
+          provider: config.provider,
+        }).catch(() => { /* silently ignore notification errors */ });
+      }
+
       res.json({ started: true, pid: child.pid });
     } else {
       res.status(500).json({ error: "Failed to spawn process: no PID assigned" });

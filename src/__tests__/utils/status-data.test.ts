@@ -27,6 +27,7 @@ import {
   collectPrInfo,
   countOpenPRs,
   countPRDs,
+  executorLockPath,
   fetchStatusSnapshot,
   getCrontabInfo,
   getLastLogLines,
@@ -34,6 +35,8 @@ import {
   getProjectName,
   isProcessRunning,
   parsePrdDependencies,
+  projectRuntimeKey,
+  reviewerLockPath,
 } from "../../utils/status-data.js";
 import { INightWatchConfig } from "../../types.js";
 
@@ -176,6 +179,39 @@ describe("status-data utilities", () => {
 
       const result = checkLockFile(lockPath);
       expect(result).toEqual({ running: false, pid: null });
+    });
+  });
+
+  describe("projectRuntimeKey", () => {
+    it("should return basename-hash format", () => {
+      const key = projectRuntimeKey("/home/user/projects/my-project");
+      expect(key).toMatch(/^my-project-[a-f0-9]{12}$/);
+    });
+
+    it("should produce different keys for different paths with same basename", () => {
+      const key1 = projectRuntimeKey("/home/user1/my-project");
+      const key2 = projectRuntimeKey("/home/user2/my-project");
+      expect(key1).not.toBe(key2);
+      expect(key1.startsWith("my-project-")).toBe(true);
+      expect(key2.startsWith("my-project-")).toBe(true);
+    });
+
+    it("should produce stable keys for the same path", () => {
+      const key1 = projectRuntimeKey("/home/user/projects/my-project");
+      const key2 = projectRuntimeKey("/home/user/projects/my-project");
+      expect(key1).toBe(key2);
+    });
+  });
+
+  describe("executorLockPath / reviewerLockPath", () => {
+    it("should use runtime key in executor lock path", () => {
+      const lockPath = executorLockPath("/home/user/my-project");
+      expect(lockPath).toMatch(/^\/tmp\/night-watch-my-project-[a-f0-9]{12}\.lock$/);
+    });
+
+    it("should use runtime key in reviewer lock path", () => {
+      const lockPath = reviewerLockPath("/home/user/my-project");
+      expect(lockPath).toMatch(/^\/tmp\/night-watch-pr-reviewer-my-project-[a-f0-9]{12}\.lock$/);
     });
   });
 
