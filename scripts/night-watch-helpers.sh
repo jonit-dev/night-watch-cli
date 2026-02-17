@@ -238,6 +238,9 @@ find_eligible_prd() {
   local open_branches
   open_branches=$(gh pr list --state open --json headRefName --jq '.[].headRefName' 2>/dev/null || echo "")
 
+  local cli_bin
+  cli_bin=$(resolve_night_watch_cli 2>/dev/null) || true
+
   for prd_path in ${prd_files}; do
     local prd_file
     prd_file=$(basename "${prd_path}")
@@ -258,6 +261,12 @@ find_eligible_prd() {
     # Skip if a PR already exists for this PRD
     if echo "${open_branches}" | grep -qF "${prd_name}"; then
       log "SKIP-PRD: ${prd_file} — open PR already exists"
+      continue
+    fi
+
+    # Skip if marked pending-review in prd-states.json
+    if [ -n "${project_dir}" ] && [ -n "${cli_bin}" ] && "${cli_bin}" prd-state list "${project_dir}" --status pending-review 2>/dev/null | grep -qF "${prd_name}"; then
+      log "SKIP-PRD: ${prd_file} — pending-review in prd-states.json"
       continue
     fi
 
