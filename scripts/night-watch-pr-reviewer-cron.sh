@@ -15,14 +15,12 @@ PROJECT_DIR="${1:?Usage: $0 /path/to/project}"
 PROJECT_NAME=$(basename "${PROJECT_DIR}")
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/night-watch-pr-reviewer.log"
-LOCK_FILE=""
+LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_NAME}.lock"
 MAX_RUNTIME="${NW_REVIEWER_MAX_RUNTIME:-3600}"  # 1 hour
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 MIN_REVIEW_SCORE="${NW_MIN_REVIEW_SCORE:-80}"
 BRANCH_PATTERNS_RAW="${NW_BRANCH_PATTERNS:-feat/,night-watch/}"
-RUNTIME_MIRROR_DIR=""
-RUNTIME_PROJECT_DIR=""
 
 # Ensure NVM / Node / Claude are on PATH
 export NVM_DIR="${HOME}/.nvm"
@@ -36,8 +34,6 @@ mkdir -p "${LOG_DIR}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
-PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
-LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_RUNTIME_KEY}.lock"
 
 # Validate provider
 if ! validate_provider "${PROVIDER_CMD}"; then
@@ -51,37 +47,7 @@ if ! acquire_lock "${LOCK_FILE}"; then
   exit 0
 fi
 
-cleanup_on_exit() {
-  rm -f "${LOCK_FILE}"
-
-  if [ -n "${RUNTIME_MIRROR_DIR}" ] && [ -n "${RUNTIME_PROJECT_DIR}" ]; then
-    cleanup_runtime_workspace "${RUNTIME_MIRROR_DIR}" "${RUNTIME_PROJECT_DIR}" || true
-  fi
-}
-
-trap cleanup_on_exit EXIT
-
-if [ -n "${NW_DEFAULT_BRANCH:-}" ]; then
-  DEFAULT_BRANCH="${NW_DEFAULT_BRANCH}"
-else
-  DEFAULT_BRANCH=$(detect_default_branch "${PROJECT_DIR}")
-fi
-
-runtime_info=()
-if mapfile -t runtime_info < <(prepare_runtime_workspace "${PROJECT_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"); then
-  RUNTIME_MIRROR_DIR="${runtime_info[0]:-}"
-  RUNTIME_PROJECT_DIR="${runtime_info[1]:-}"
-else
-  log "FAIL: Could not prepare runtime workspace for reviewer"
-  exit 1
-fi
-
-if [ -z "${RUNTIME_MIRROR_DIR}" ] || [ -z "${RUNTIME_PROJECT_DIR}" ]; then
-  log "FAIL: Runtime workspace paths are missing for reviewer"
-  exit 1
-fi
-
-cd "${RUNTIME_PROJECT_DIR}"
+cd "${PROJECT_DIR}"
 
 # Convert comma-separated branch prefixes into a regex that matches branch starts.
 BRANCH_REGEX=""
@@ -154,7 +120,16 @@ if [ "${NEEDS_WORK}" -eq 0 ]; then
   exit 0
 fi
 
+if [ -n "${NW_DEFAULT_BRANCH:-}" ]; then
+  DEFAULT_BRANCH="${NW_DEFAULT_BRANCH}"
+else
+  DEFAULT_BRANCH=$(detect_default_branch "${PROJECT_DIR}")
+fi
+REVIEW_WORKTREE_DIR="$(dirname "${PROJECT_DIR}")/${PROJECT_NAME}-nw-review-runner"
+
 log "START: Found PR(s) needing work:${PRS_NEEDING_WORK}"
+
+cleanup_worktrees "${PROJECT_DIR}"
 
 # Dry-run mode: print diagnostics and exit
 if [ "${NW_DRY_RUN:-0}" = "1" ]; then
@@ -162,33 +137,25 @@ if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   echo "Provider: ${PROVIDER_CMD}"
   echo "Branch Patterns: ${BRANCH_PATTERNS_RAW}"
   echo "Min Review Score: ${MIN_REVIEW_SCORE}"
-  echo "Default Branch: ${DEFAULT_BRANCH}"
-  echo "Runtime Dir: ${RUNTIME_PROJECT_DIR}"
   echo "Open PRs needing work:${PRS_NEEDING_WORK}"
+  echo "Default Branch: ${DEFAULT_BRANCH}"
+  echo "Review Worktree: ${REVIEW_WORKTREE_DIR}"
   echo "Timeout: ${MAX_RUNTIME}s"
   exit 0
 fi
 
-if [ -f "${RUNTIME_PROJECT_DIR}/.claude/commands/night-watch-pr-reviewer.md" ]; then
-  REVIEW_WORKFLOW=$(cat "${RUNTIME_PROJECT_DIR}/.claude/commands/night-watch-pr-reviewer.md")
-else
-  REVIEW_WORKFLOW=$(cat "${SCRIPT_DIR}/../templates/night-watch-pr-reviewer.md")
+if ! prepare_detached_worktree "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
+  log "FAIL: Unable to create isolated reviewer worktree ${REVIEW_WORKTREE_DIR}"
+  exit 1
 fi
-
-REVIEW_PROMPT="You are running in an isolated runtime workspace at ${RUNTIME_PROJECT_DIR}.
-Do not run git checkout/switch in ${PROJECT_DIR}.
-Do not create or remove worktrees; the runtime controller handles that.
-Apply all fixes only inside the current runtime workspace.
-
-${REVIEW_WORKFLOW}"
 
 EXIT_CODE=0
 
 case "${PROVIDER_CMD}" in
   claude)
     if (
-      cd "${RUNTIME_PROJECT_DIR}" && timeout "${MAX_RUNTIME}" \
-        claude -p "${REVIEW_PROMPT}" \
+      cd "${REVIEW_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
+        claude -p "/night-watch-pr-reviewer" \
           --dangerously-skip-permissions \
           >> "${LOG_FILE}" 2>&1
     ); then
@@ -199,10 +166,10 @@ case "${PROVIDER_CMD}" in
     ;;
   codex)
     if (
-      cd "${RUNTIME_PROJECT_DIR}" && timeout "${MAX_RUNTIME}" \
+      cd "${REVIEW_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
         codex --quiet \
           --yolo \
-          --prompt "${REVIEW_PROMPT}" \
+          --prompt "$(cat "${REVIEW_WORKTREE_DIR}/.claude/commands/night-watch-pr-reviewer.md")" \
           >> "${LOG_FILE}" 2>&1
     ); then
       EXIT_CODE=0
@@ -215,6 +182,8 @@ case "${PROVIDER_CMD}" in
     exit 1
     ;;
 esac
+
+cleanup_worktrees "${PROJECT_DIR}"
 
 if [ ${EXIT_CODE} -eq 0 ]; then
   log "DONE: PR reviewer completed successfully"
