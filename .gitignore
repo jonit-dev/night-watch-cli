@@ -38,3 +38,5 @@ coverage/
 *.claim
 
 .npmrc
+
+night-watch.config.json
