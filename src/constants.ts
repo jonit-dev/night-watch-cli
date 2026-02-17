@@ -52,6 +52,9 @@ export const DEFAULT_ROADMAP_SCANNER: IRoadmapScannerConfig = {
   autoScanInterval: 300,
 };
 
+// Templates Configuration
+export const DEFAULT_TEMPLATES_DIR = ".night-watch/templates";
+
 // Valid providers
 export const VALID_PROVIDERS: Provider[] = ["claude", "codex"];
 

@@ -423,6 +423,50 @@ describe("config", () => {
       expect(config.provider).toBe("codex");
       expect(config.reviewerEnabled).toBe(false);
     });
+
+    it("should return default templatesDir", () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.templatesDir).toBe(".night-watch/templates");
+    });
+
+    it("should load templatesDir from config file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          templatesDir: "custom/templates",
+        })
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.templatesDir).toBe("custom/templates");
+    });
+
+    it("should handle NW_TEMPLATES_DIR env var", () => {
+      process.env.NW_TEMPLATES_DIR = "env/templates";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.templatesDir).toBe("env/templates");
+    });
+
+    it("should let NW_TEMPLATES_DIR env var override config file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          templatesDir: "file/templates",
+        })
+      );
+
+      process.env.NW_TEMPLATES_DIR = "env/templates";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.templatesDir).toBe("env/templates");
+    });
   });
 
   describe("notifications config", () => {

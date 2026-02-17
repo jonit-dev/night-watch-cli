@@ -27,6 +27,7 @@ import {
   DEFAULT_REVIEWER_MAX_RUNTIME,
   DEFAULT_REVIEWER_SCHEDULE,
   DEFAULT_ROADMAP_SCANNER,
+  DEFAULT_TEMPLATES_DIR,
   VALID_PROVIDERS,
 } from "./constants.js";
 
@@ -64,6 +65,9 @@ export function getDefaultConfig(): INightWatchConfig {
 
     // Roadmap scanner
     roadmapScanner: { ...DEFAULT_ROADMAP_SCANNER },
+
+    // Templates
+    templatesDir: DEFAULT_TEMPLATES_DIR,
   };
 }
 
@@ -196,6 +200,9 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     normalized.roadmapScanner = roadmapScanner;
   }
 
+  // Templates Directory
+  normalized.templatesDir = readString(rawConfig.templatesDir);
+
   return normalized;
 }
 
@@ -274,6 +281,7 @@ function mergeConfigs(
       merged.prdPriority = [...fileConfig.prdPriority];
     if (fileConfig.roadmapScanner !== undefined)
       merged.roadmapScanner = { ...fileConfig.roadmapScanner };
+    if (fileConfig.templatesDir !== undefined) merged.templatesDir = fileConfig.templatesDir;
   }
 
   // Merge env config (takes precedence)
@@ -303,6 +311,7 @@ function mergeConfigs(
     merged.prdPriority = [...envConfig.prdPriority];
   if (envConfig.roadmapScanner !== undefined)
     merged.roadmapScanner = { ...envConfig.roadmapScanner };
+  if (envConfig.templatesDir !== undefined) merged.templatesDir = envConfig.templatesDir;
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
 
@@ -437,6 +446,11 @@ export function loadConfig(projectDir: string): INightWatchConfig {
         enabled: roadmapScannerEnabled,
       };
     }
+  }
+
+  // NW_TEMPLATES_DIR environment variable
+  if (process.env.NW_TEMPLATES_DIR) {
+    envConfig.templatesDir = process.env.NW_TEMPLATES_DIR;
   }
 
   // Merge all configs
