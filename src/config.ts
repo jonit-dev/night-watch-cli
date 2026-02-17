@@ -224,6 +224,17 @@ function validateProvider(value: string): Provider | null {
 }
 
 /**
+ * Normalize retry count to a safe positive integer.
+ */
+function sanitizeMaxRetries(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+  const normalized = Math.floor(value);
+  return normalized >= 1 ? normalized : fallback;
+}
+
+/**
  * Deep merge configuration objects
  * Environment values take precedence over file values
  */
@@ -292,6 +303,8 @@ function mergeConfigs(
     merged.prdPriority = [...envConfig.prdPriority];
   if (envConfig.roadmapScanner !== undefined)
     merged.roadmapScanner = { ...envConfig.roadmapScanner };
+
+  merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
 
   return merged;
 }
@@ -381,7 +394,7 @@ export function loadConfig(projectDir: string): INightWatchConfig {
 
   if (process.env.NW_MAX_RETRIES) {
     const retries = parseInt(process.env.NW_MAX_RETRIES, 10);
-    if (!isNaN(retries) && retries >= 0) {
+    if (!isNaN(retries) && retries >= 1) {
       envConfig.maxRetries = retries;
     }
   }

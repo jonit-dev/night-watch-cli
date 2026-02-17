@@ -32,6 +32,13 @@ interface IPrdHistory {
  */
 export type IExecutionHistory = Record<string, Record<string, IPrdHistory>>;
 
+const HISTORY_LOCK_SUFFIX = ".lock";
+const HISTORY_LOCK_TIMEOUT_MS = 5000;
+const HISTORY_LOCK_STALE_MS = 30000;
+const HISTORY_LOCK_POLL_MS = 25;
+
+const sleepState = new Int32Array(new SharedArrayBuffer(4));
+
 /**
  * Get the path to the history file
  */
@@ -41,11 +48,58 @@ export function getHistoryPath(): string {
   return path.join(base, HISTORY_FILE_NAME);
 }
 
-/**
- * Load execution history from disk. Returns empty object if missing or invalid.
- */
-export function loadHistory(): IExecutionHistory {
-  const historyPath = getHistoryPath();
+function sleepMs(ms: number): void {
+  Atomics.wait(sleepState, 0, 0, ms);
+}
+
+function acquireHistoryLock(historyPath: string): number {
+  const lockPath = `${historyPath}${HISTORY_LOCK_SUFFIX}`;
+  fs.mkdirSync(path.dirname(lockPath), { recursive: true });
+  const deadline = Date.now() + HISTORY_LOCK_TIMEOUT_MS;
+
+  while (true) {
+    try {
+      return fs.openSync(lockPath, "wx");
+    } catch (error: unknown) {
+      const err = error as NodeJS.ErrnoException;
+      if (err.code !== "EEXIST") {
+        throw err;
+      }
+
+      try {
+        const lockStats = fs.statSync(lockPath);
+        if (Date.now() - lockStats.mtimeMs > HISTORY_LOCK_STALE_MS) {
+          fs.unlinkSync(lockPath);
+          continue;
+        }
+      } catch {
+        // Lock may have disappeared between checks; retry.
+      }
+
+      if (Date.now() >= deadline) {
+        throw new Error(`Timed out acquiring execution history lock: ${lockPath}`);
+      }
+
+      sleepMs(HISTORY_LOCK_POLL_MS);
+    }
+  }
+}
+
+function releaseHistoryLock(lockFd: number, historyPath: string): void {
+  const lockPath = `${historyPath}${HISTORY_LOCK_SUFFIX}`;
+  try {
+    fs.closeSync(lockFd);
+  } catch {
+    // Ignore close errors; lock cleanup still attempted.
+  }
+  try {
+    fs.unlinkSync(lockPath);
+  } catch {
+    // Ignore lock cleanup errors.
+  }
+}
+
+function loadHistoryFromPath(historyPath: string): IExecutionHistory {
   if (!fs.existsSync(historyPath)) {
     return {};
   }
@@ -61,14 +115,43 @@ export function loadHistory(): IExecutionHistory {
   }
 }
 
+function saveHistoryAtomic(historyPath: string, history: IExecutionHistory): void {
+  const dir = path.dirname(historyPath);
+  fs.mkdirSync(dir, { recursive: true });
+
+  const tmpPath = path.join(
+    dir,
+    `${HISTORY_FILE_NAME}.${process.pid}.${Date.now()}.tmp`
+  );
+
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(history, null, 2) + "\n");
+    fs.renameSync(tmpPath, historyPath);
+  } finally {
+    if (fs.existsSync(tmpPath)) {
+      fs.rmSync(tmpPath, { force: true });
+    }
+  }
+}
+
+/**
+ * Load execution history from disk. Returns empty object if missing or invalid.
+ */
+export function loadHistory(): IExecutionHistory {
+  return loadHistoryFromPath(getHistoryPath());
+}
+
 /**
  * Save execution history to disk.
  */
 export function saveHistory(history: IExecutionHistory): void {
   const historyPath = getHistoryPath();
-  const dir = path.dirname(historyPath);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(historyPath, JSON.stringify(history, null, 2) + "\n");
+  const lockFd = acquireHistoryLock(historyPath);
+  try {
+    saveHistoryAtomic(historyPath, history);
+  } finally {
+    releaseHistoryLock(lockFd, historyPath);
+  }
 }
 
 /**
@@ -82,34 +165,40 @@ export function recordExecution(
   exitCode: number,
   attempt: number = 1
 ): void {
+  const historyPath = getHistoryPath();
+  const lockFd = acquireHistoryLock(historyPath);
   const resolved = path.resolve(projectDir);
-  const history = loadHistory();
+  try {
+    const history = loadHistoryFromPath(historyPath);
 
-  if (!history[resolved]) {
-    history[resolved] = {};
+    if (!history[resolved]) {
+      history[resolved] = {};
+    }
+    if (!history[resolved][prdFile]) {
+      history[resolved][prdFile] = { records: [] };
+    }
+
+    const record: IExecutionRecord = {
+      timestamp: Math.floor(Date.now() / 1000),
+      outcome,
+      exitCode,
+      attempt,
+    };
+
+    history[resolved][prdFile].records.push(record);
+
+    // Trim to max records (keep most recent)
+    const records = history[resolved][prdFile].records;
+    if (records.length > MAX_HISTORY_RECORDS_PER_PRD) {
+      history[resolved][prdFile].records = records.slice(
+        records.length - MAX_HISTORY_RECORDS_PER_PRD
+      );
+    }
+
+    saveHistoryAtomic(historyPath, history);
+  } finally {
+    releaseHistoryLock(lockFd, historyPath);
   }
-  if (!history[resolved][prdFile]) {
-    history[resolved][prdFile] = { records: [] };
-  }
-
-  const record: IExecutionRecord = {
-    timestamp: Math.floor(Date.now() / 1000),
-    outcome,
-    exitCode,
-    attempt,
-  };
-
-  history[resolved][prdFile].records.push(record);
-
-  // Trim to max records (keep most recent)
-  const records = history[resolved][prdFile].records;
-  if (records.length > MAX_HISTORY_RECORDS_PER_PRD) {
-    history[resolved][prdFile].records = records.slice(
-      records.length - MAX_HISTORY_RECORDS_PER_PRD
-    );
-  }
-
-  saveHistory(history);
 }
 
 /**

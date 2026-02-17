@@ -65,8 +65,16 @@ export function buildEnvVars(config: INightWatchConfig, options: IRunOptions): R
   // Sandbox flag — prevents the agent from modifying crontab during execution
   env.NW_EXECUTION_CONTEXT = "agent";
 
-  // Max retries for rate-limited API calls
-  env.NW_MAX_RETRIES = String(config.maxRetries ?? 3);
+  // Max retries for rate-limited API calls (minimum 1 attempt)
+  const maxRetries = Number.isFinite(config.maxRetries)
+    ? Math.max(1, Math.floor(config.maxRetries))
+    : 3;
+  env.NW_MAX_RETRIES = String(maxRetries);
+
+  // Current CLI executable path for nested CLI calls inside bash scripts.
+  if (process.argv[1]) {
+    env.NW_CLI_BIN = process.argv[1];
+  }
 
   return env;
 }

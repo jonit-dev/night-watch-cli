@@ -95,6 +95,11 @@ describe("execution-history", () => {
       saveHistory({});
       expect(fs.existsSync(path.join(nested, "history.json"))).toBe(true);
     });
+
+    it("should clean up lock files after saving", () => {
+      saveHistory({});
+      expect(fs.existsSync(path.join(tmpDir, "history.json.lock"))).toBe(false);
+    });
   });
 
   describe("recordExecution", () => {
@@ -147,6 +152,21 @@ describe("execution-history", () => {
       const resolved = path.resolve("/projects/app");
       expect(history[resolved]["prd-a.md"].records[0].outcome).toBe("failure");
       expect(history[resolved]["prd-b.md"].records[0].outcome).toBe("success");
+    });
+
+    it("should recover from stale lock files", () => {
+      const historyPath = path.join(tmpDir, "history.json");
+      const lockPath = `${historyPath}.lock`;
+      fs.writeFileSync(lockPath, "stale");
+      const staleDate = new Date(Date.now() - 60000);
+      fs.utimesSync(lockPath, staleDate, staleDate);
+
+      recordExecution("/projects/app", "feature.md", "failure", 1);
+
+      const history = loadHistory();
+      const resolved = path.resolve("/projects/app");
+      expect(history[resolved]["feature.md"].records).toHaveLength(1);
+      expect(fs.existsSync(lockPath)).toBe(false);
     });
   });
 

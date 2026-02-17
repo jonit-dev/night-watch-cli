@@ -77,6 +77,22 @@ function getNodeBinDir(): string {
 }
 
 /**
+ * Build PATH export for cron entries using relevant binary directories.
+ */
+export function buildCronPathPrefix(nodeBinDir: string, nightWatchBin: string): string {
+  const nightWatchBinDir = (nightWatchBin.includes("/") || nightWatchBin.includes("\\"))
+    ? path.dirname(nightWatchBin)
+    : "";
+  const pathParts = Array.from(
+    new Set([nodeBinDir, nightWatchBinDir].filter((part) => part.length > 0))
+  );
+  if (pathParts.length === 0) {
+    return "";
+  }
+  return `export PATH="${pathParts.join(":")}:$PATH" && `;
+}
+
+/**
  * Get the project name from directory or package.json
  */
 function getProjectName(projectDir: string): string {
@@ -158,7 +174,8 @@ export function performInstall(
 
     const entries: string[] = [];
     const nodeBinDir = getNodeBinDir();
-    const pathPrefix = nodeBinDir ? `export PATH="${nodeBinDir}:$PATH" && ` : "";
+    const pathPrefix = buildCronPathPrefix(nodeBinDir, nightWatchBin);
+    const cliBinPrefix = `export NW_CLI_BIN=${shellQuote(nightWatchBin)} && `;
 
     let providerEnvPrefix = "";
     if (config.providerEnv && Object.keys(config.providerEnv).length > 0) {
@@ -168,12 +185,12 @@ export function performInstall(
       providerEnvPrefix = exports + " && ";
     }
 
-    const executorEntry = `${executorSchedule} ${pathPrefix}${providerEnvPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
+    const executorEntry = `${executorSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
     entries.push(executorEntry);
 
     const installReviewer = options?.noReviewer === true ? false : config.reviewerEnabled;
     if (installReviewer) {
-      const reviewerEntry = `${reviewerSchedule} ${pathPrefix}${providerEnvPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} review >> ${shellQuote(reviewerLog)} 2>&1  ${marker}`;
+      const reviewerEntry = `${reviewerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} review >> ${shellQuote(reviewerLog)} 2>&1  ${marker}`;
       entries.push(reviewerEntry);
     }
 
@@ -247,7 +264,8 @@ export function installCommand(program: Command): void {
 
         // Detect node bin directory for cron PATH
         const nodeBinDir = getNodeBinDir();
-        const pathPrefix = nodeBinDir ? `export PATH="${nodeBinDir}:$PATH" && ` : "";
+        const pathPrefix = buildCronPathPrefix(nodeBinDir, nightWatchBin);
+        const cliBinPrefix = `export NW_CLI_BIN=${shellQuote(nightWatchBin)} && `;
 
         // Build providerEnv export prefix for cron entries
         let providerEnvPrefix = "";
@@ -259,7 +277,7 @@ export function installCommand(program: Command): void {
         }
 
         // Executor entry
-        const executorEntry = `${executorSchedule} ${pathPrefix}${providerEnvPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
+        const executorEntry = `${executorSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
         entries.push(executorEntry);
 
         // Determine if reviewer should be installed
@@ -268,7 +286,7 @@ export function installCommand(program: Command): void {
 
         // Reviewer entry (if enabled)
         if (installReviewer) {
-          const reviewerEntry = `${reviewerSchedule} ${pathPrefix}${providerEnvPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} review >> ${shellQuote(reviewerLog)} 2>&1  ${marker}`;
+          const reviewerEntry = `${reviewerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} review >> ${shellQuote(reviewerLog)} 2>&1  ${marker}`;
           entries.push(reviewerEntry);
         }
 

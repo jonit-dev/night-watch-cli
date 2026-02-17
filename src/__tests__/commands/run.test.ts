@@ -30,7 +30,7 @@ import {
   IRunOptions,
   scanPrdDirectory,
 } from "../../commands/run.js";
-import { applyScheduleOffset } from "../../commands/install.js";
+import { applyScheduleOffset, buildCronPathPrefix } from "../../commands/install.js";
 import { INightWatchConfig } from "../../types.js";
 import { sendNotifications } from "../../utils/notify.js";
 
@@ -48,6 +48,7 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
     reviewerSchedule: "0 0,3,6,9,12,15,18,21 * * *",
     provider: "claude",
     reviewerEnabled: true,
+    maxRetries: 3,
     prdPriority: [],
     ...overrides,
   };
@@ -198,6 +199,24 @@ describe("run command", () => {
 
       expect(env.NW_MAX_RETRIES).toBe("3");
     });
+
+    it("should clamp NW_MAX_RETRIES to a minimum of 1", () => {
+      const config = createTestConfig({ maxRetries: 0 });
+      const options: IRunOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_MAX_RETRIES).toBe("1");
+    });
+
+    it("should include NW_CLI_BIN for nested CLI calls", () => {
+      const config = createTestConfig();
+      const options: IRunOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_CLI_BIN).toBe(process.argv[1]);
+    });
   });
 
   describe("applyCliOverrides", () => {
@@ -245,6 +264,26 @@ describe("run command", () => {
 
     it("should not change comma-separated minutes", () => {
       expect(applyScheduleOffset("0,30 * * * *", 15)).toBe("0,30 * * * *");
+    });
+  });
+
+  describe("buildCronPathPrefix", () => {
+    it("should include both node and night-watch bin directories", () => {
+      expect(buildCronPathPrefix("/usr/local/bin", "/opt/night-watch/bin/night-watch")).toBe(
+        'export PATH="/usr/local/bin:/opt/night-watch/bin:$PATH" && '
+      );
+    });
+
+    it("should not duplicate path entries", () => {
+      expect(buildCronPathPrefix("/usr/local/bin", "/usr/local/bin/night-watch")).toBe(
+        'export PATH="/usr/local/bin:$PATH" && '
+      );
+    });
+
+    it("should ignore non-path night-watch command names", () => {
+      expect(buildCronPathPrefix("/usr/local/bin", "night-watch")).toBe(
+        'export PATH="/usr/local/bin:$PATH" && '
+      );
     });
   });
 

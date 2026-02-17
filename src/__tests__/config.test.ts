@@ -263,6 +263,30 @@ describe("config", () => {
       expect(config.reviewerSchedule).toBe("0 */2 * * *");
     });
 
+    it("should ignore NW_MAX_RETRIES values below 1", () => {
+      process.env.NW_MAX_RETRIES = "0";
+
+      const config = loadConfig(tempDir);
+      const defaults = getDefaultConfig();
+
+      expect(config.maxRetries).toBe(defaults.maxRetries);
+    });
+
+    it("should sanitize maxRetries from config file when invalid", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          maxRetries: 0,
+        })
+      );
+
+      const config = loadConfig(tempDir);
+      const defaults = getDefaultConfig();
+
+      expect(config.maxRetries).toBe(defaults.maxRetries);
+    });
+
     it("should handle NW_BRANCH_PREFIX env var", () => {
       process.env.NW_BRANCH_PREFIX = "auto";
 
