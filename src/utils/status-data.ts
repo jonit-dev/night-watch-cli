@@ -371,18 +371,37 @@ export function countOpenPRs(projectDir: string, branchPatterns: string[]): numb
 
 /**
  * Derive CI status from gh statusCheckRollup data
+ * Supports both CheckRun (status: "COMPLETED", "IN_PROGRESS", etc.)
+ * and StatusContext (state: "SUCCESS", "FAILURE", "PENDING", etc.) types
  */
 function deriveCiStatus(
-  checks?: Array<{ conclusion: string; state: string }>
+  checks?: Array<{ conclusion?: string; status?: string; state?: string }> | null
 ): IPrInfo["ciStatus"] {
   if (!checks || checks.length === 0) return "unknown";
 
-  const hasFailure = checks.some(
-    (c) => c.conclusion === "FAILURE" || c.conclusion === "ERROR" || c.conclusion === "CANCELLED"
-  );
+  // Check for failures in CheckRun conclusion or StatusContext state
+  const hasFailure = checks.some((c) => {
+    const conclusion = c.conclusion?.toUpperCase();
+    const state = c.state?.toUpperCase();
+    return (
+      conclusion === "FAILURE" ||
+      conclusion === "ERROR" ||
+      conclusion === "CANCELLED" ||
+      conclusion === "TIMED_OUT" ||
+      state === "FAILURE" ||
+      state === "ERROR"
+    );
+  });
   if (hasFailure) return "fail";
 
-  const allComplete = checks.every((c) => c.state === "COMPLETED");
+  // Check if all checks are complete (CheckRun uses status, StatusContext uses state)
+  const allComplete = checks.every((c) => {
+    const status = c.status?.toUpperCase();
+    const state = c.state?.toUpperCase();
+    // CheckRun: status === "COMPLETED"
+    // StatusContext: state === "SUCCESS" or "FAILURE" (not PENDING)
+    return status === "COMPLETED" || state === "SUCCESS" || state === "FAILURE";
+  });
   if (allComplete) return "pass";
 
   return "pending";
@@ -391,10 +410,13 @@ function deriveCiStatus(
 /**
  * Derive review score from gh reviewDecision field
  * Maps GitHub review decisions to a numeric score (0-100)
+ * Returns null if no review has been submitted or review is required
  */
-function deriveReviewScore(reviewDecision?: string): number | null {
-  if (!reviewDecision) return null;
-  switch (reviewDecision) {
+function deriveReviewScore(reviewDecision?: string | null): number | null {
+  // reviewDecision can be null, undefined, or empty string (meaning no review yet)
+  if (!reviewDecision || reviewDecision === "") return null;
+
+  switch (reviewDecision.toUpperCase()) {
     case "APPROVED":
       return 100;
     case "CHANGES_REQUESTED":
@@ -437,8 +459,12 @@ export function collectPrInfo(projectDir: string, branchPatterns: string[]): IPr
       title: string;
       headRefName: string;
       url: string;
-      statusCheckRollup?: Array<{ conclusion: string; state: string }>;
-      reviewDecision?: string;
+      statusCheckRollup?: Array<{
+        conclusion?: string;
+        status?: string;
+        state?: string;
+      }> | null;
+      reviewDecision?: string | null;
     }
 
     const prs: IGhPr[] = JSON.parse(output);

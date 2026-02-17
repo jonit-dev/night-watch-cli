@@ -1,13 +1,20 @@
-import React, { useState } from 'react';
-import { ExternalLink, CheckCircle, XCircle, Loader2, AlertCircle, Search } from 'lucide-react';
-import { useApi, fetchPrs, triggerReview } from '../api';
+import React, { useState, useMemo } from 'react';
+import { ExternalLink, CheckCircle, XCircle, Loader2, AlertCircle, Search, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { useApi, fetchPrs, triggerReview, PrInfo } from '../api';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import { useStore } from '../store/useStore';
 
+type FilterType = 'all' | 'needs-work' | 'pending' | 'passed';
+type SortField = 'number' | 'title' | 'branch' | 'ciStatus' | 'reviewScore';
+type SortDirection = 'asc' | 'desc';
+
 const PRs: React.FC = () => {
   const [selectedPR, setSelectedPR] = useState<number | null>(null);
   const [runningReview, setRunningReview] = useState(false);
+  const [filter, setFilter] = useState<FilterType>('all');
+  const [sortField, setSortField] = useState<SortField>('number');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const { addToast, selectedProjectId, globalModeLoading } = useStore();
   const { data: prs = [], loading, error, refetch } = useApi(fetchPrs, [selectedProjectId], { enabled: !globalModeLoading });
 
@@ -18,6 +25,80 @@ const PRs: React.FC = () => {
       case 'pending': return <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />;
       default: return <AlertCircle className="h-4 w-4 text-slate-500" />;
     }
+  };
+
+  // Filter PRs based on selected filter
+  const filteredPrs = useMemo(() => {
+    return prs.filter((pr) => {
+      switch (filter) {
+        case 'needs-work':
+          // CI failed or changes requested (reviewScore === 0)
+          return pr.ciStatus === 'fail' || pr.reviewScore === 0;
+        case 'pending':
+          // CI pending or review not yet done
+          return pr.ciStatus === 'pending' || pr.ciStatus === 'unknown' || pr.reviewScore === null;
+        case 'passed':
+          // CI passed and approved (reviewScore === 100)
+          return pr.ciStatus === 'pass' && pr.reviewScore === 100;
+        case 'all':
+        default:
+          return true;
+      }
+    });
+  }, [prs, filter]);
+
+  // Sort filtered PRs
+  const sortedPrs = useMemo(() => {
+    const sorted = [...filteredPrs].sort((a, b) => {
+      let comparison = 0;
+
+      switch (sortField) {
+        case 'number':
+          comparison = a.number - b.number;
+          break;
+        case 'title':
+          comparison = a.title.localeCompare(b.title);
+          break;
+        case 'branch':
+          comparison = a.branch.localeCompare(b.branch);
+          break;
+        case 'ciStatus': {
+          // Order: fail < pending < unknown < pass
+          const statusOrder = { fail: 0, pending: 1, unknown: 2, pass: 3 };
+          comparison = (statusOrder[a.ciStatus] ?? 2) - (statusOrder[b.ciStatus] ?? 2);
+          break;
+        }
+        case 'reviewScore': {
+          // Null values should sort to end
+          const aScore = a.reviewScore ?? -1;
+          const bScore = b.reviewScore ?? -1;
+          comparison = aScore - bScore;
+          break;
+        }
+      }
+
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+
+    return sorted;
+  }, [filteredPrs, sortField, sortDirection]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-3 w-3 text-slate-600" />;
+    }
+    return sortDirection === 'asc'
+      ? <ArrowUp className="h-3 w-3 text-indigo-400" />
+      : <ArrowDown className="h-3 w-3 text-indigo-400" />;
   };
 
   if (loading) {
@@ -63,9 +144,46 @@ const PRs: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
          <div className="flex space-x-1">
-             <span className="px-3 py-1 bg-slate-800 text-slate-200 rounded-full text-xs font-medium cursor-pointer border border-slate-700">All</span>
-             <span className="px-3 py-1 text-slate-500 hover:bg-slate-800 hover:text-slate-300 rounded-full text-xs font-medium cursor-pointer transition-colors">Needs Work</span>
-             <span className="px-3 py-1 text-slate-500 hover:bg-slate-800 hover:text-slate-300 rounded-full text-xs font-medium cursor-pointer transition-colors">Pending</span>
+             <button
+               onClick={() => setFilter('all')}
+               className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer border transition-colors ${
+                 filter === 'all'
+                   ? 'bg-slate-800 text-slate-200 border-slate-700'
+                   : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300 border-transparent'
+               }`}
+             >
+               All
+             </button>
+             <button
+               onClick={() => setFilter('needs-work')}
+               className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer border transition-colors ${
+                 filter === 'needs-work'
+                   ? 'bg-red-900/50 text-red-300 border-red-800'
+                   : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300 border-transparent'
+               }`}
+             >
+               Needs Work
+             </button>
+             <button
+               onClick={() => setFilter('pending')}
+               className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer border transition-colors ${
+                 filter === 'pending'
+                   ? 'bg-amber-900/50 text-amber-300 border-amber-800'
+                   : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300 border-transparent'
+               }`}
+             >
+               Pending
+             </button>
+             <button
+               onClick={() => setFilter('passed')}
+               className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer border transition-colors ${
+                 filter === 'passed'
+                   ? 'bg-green-900/50 text-green-300 border-green-800'
+                   : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300 border-transparent'
+               }`}
+             >
+               Passed
+             </button>
          </div>
          <Button size="sm" onClick={handleRunReviewer} disabled={runningReview}>
            <Search className="h-4 w-4 mr-2" />
@@ -77,15 +195,47 @@ const PRs: React.FC = () => {
         <table className="min-w-full divide-y divide-slate-800">
           <thead className="bg-slate-950/50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Title</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Branch</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">CI Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Review Score</th>
+              <th
+                className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-300"
+                onClick={() => handleSort('number')}
+              >
+                <div className="flex items-center space-x-1">
+                  <span>Title</span>
+                  {getSortIcon('number')}
+                </div>
+              </th>
+              <th
+                className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-300"
+                onClick={() => handleSort('branch')}
+              >
+                <div className="flex items-center space-x-1">
+                  <span>Branch</span>
+                  {getSortIcon('branch')}
+                </div>
+              </th>
+              <th
+                className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-300"
+                onClick={() => handleSort('ciStatus')}
+              >
+                <div className="flex items-center space-x-1">
+                  <span>CI Status</span>
+                  {getSortIcon('ciStatus')}
+                </div>
+              </th>
+              <th
+                className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-300"
+                onClick={() => handleSort('reviewScore')}
+              >
+                <div className="flex items-center space-x-1">
+                  <span>Review Score</span>
+                  {getSortIcon('reviewScore')}
+                </div>
+              </th>
               <th className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
-            {prs.map((pr) => (
+            {sortedPrs.map((pr) => (
               <tr key={pr.number} className="hover:bg-slate-800/50 cursor-pointer transition-colors" onClick={() => setSelectedPR(selectedPR === pr.number ? null : pr.number)}>
                 <td className="px-6 py-4">
                   <div className="flex items-center">
@@ -124,10 +274,10 @@ const PRs: React.FC = () => {
                 </td>
               </tr>
             ))}
-            {prs.length === 0 && (
+            {sortedPrs.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-6 py-12 text-center text-slate-500">
-                  No open PRs found.
+                  {prs.length === 0 ? 'No open PRs found.' : `No PRs match the "${filter}" filter.`}
                 </td>
               </tr>
             )}
