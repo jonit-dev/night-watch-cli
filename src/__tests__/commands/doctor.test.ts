@@ -1,15 +1,16 @@
 /**
- * Tests for doctor command — validateWebhook
+ * Tests for doctor command — validateWebhook and CLI
  */
 
 import { describe, it, expect } from "vitest";
+import { execSync } from "child_process";
 import { validateWebhook } from "../../commands/doctor.js";
-import { WebhookConfig } from "../../types.js";
+import { IIWebhookConfig } from "../../types.js";
 
 describe("doctor command", () => {
   describe("validateWebhook", () => {
     it("should pass valid slack webhook", () => {
-      const webhook: WebhookConfig = {
+      const webhook: IIWebhookConfig = {
         type: "slack",
         url: "https://hooks.slack.com/services/T00/B00/xxx",
         events: ["run_succeeded", "run_failed"],
@@ -18,7 +19,7 @@ describe("doctor command", () => {
     });
 
     it("should fail slack webhook with invalid URL", () => {
-      const webhook: WebhookConfig = {
+      const webhook: IIWebhookConfig = {
         type: "slack",
         url: "https://example.com/webhook",
         events: ["run_failed"],
@@ -29,7 +30,7 @@ describe("doctor command", () => {
     });
 
     it("should fail slack webhook with missing URL", () => {
-      const webhook: WebhookConfig = {
+      const webhook: IIWebhookConfig = {
         type: "slack",
         events: ["run_failed"],
       };
@@ -38,7 +39,7 @@ describe("doctor command", () => {
     });
 
     it("should pass valid discord webhook", () => {
-      const webhook: WebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "discord",
         url: "https://discord.com/api/webhooks/123/abc",
         events: ["run_failed"],
@@ -47,7 +48,7 @@ describe("doctor command", () => {
     });
 
     it("should fail discord webhook with invalid URL", () => {
-      const webhook: WebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "discord",
         url: "https://example.com/hook",
         events: ["run_failed"],
@@ -58,7 +59,7 @@ describe("doctor command", () => {
     });
 
     it("should fail discord webhook with missing URL", () => {
-      const webhook: WebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "discord",
         events: ["run_failed"],
       };
@@ -67,7 +68,7 @@ describe("doctor command", () => {
     });
 
     it("should pass valid telegram webhook", () => {
-      const webhook: WebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "telegram",
         botToken: "123456:ABC-DEF",
         chatId: "-1001234567890",
@@ -77,7 +78,7 @@ describe("doctor command", () => {
     });
 
     it("should fail telegram without botToken", () => {
-      const webhook: WebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "telegram",
         chatId: "-100123",
         events: ["run_failed"],
@@ -87,7 +88,7 @@ describe("doctor command", () => {
     });
 
     it("should fail telegram without chatId", () => {
-      const webhook: WebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "telegram",
         botToken: "123:ABC",
         events: ["run_failed"],
@@ -97,7 +98,7 @@ describe("doctor command", () => {
     });
 
     it("should fail telegram without both botToken and chatId", () => {
-      const webhook: WebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "telegram",
         events: ["run_failed"],
       };
@@ -107,7 +108,7 @@ describe("doctor command", () => {
     });
 
     it("should fail with no events configured", () => {
-      const webhook: WebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "slack",
         url: "https://hooks.slack.com/services/T00/B00/xxx",
         events: [],
@@ -117,7 +118,7 @@ describe("doctor command", () => {
     });
 
     it("should fail with invalid event name", () => {
-      const webhook: WebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "slack",
         url: "https://hooks.slack.com/services/T00/B00/xxx",
         events: ["invalid_event" as any],
@@ -128,7 +129,7 @@ describe("doctor command", () => {
     });
 
     it("should fail with unknown webhook type", () => {
-      const webhook: WebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "teams" as any,
         url: "https://example.com/webhook",
         events: ["run_failed"],
@@ -139,7 +140,7 @@ describe("doctor command", () => {
     });
 
     it("should report multiple issues at once", () => {
-      const webhook: WebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "slack",
         url: "https://example.com/bad-url",
         events: ["invalid_event" as any],
@@ -152,7 +153,7 @@ describe("doctor command", () => {
     });
 
     it("should accept all valid event types", () => {
-      const webhook: WebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "slack",
         url: "https://hooks.slack.com/services/T00/B00/xxx",
         events: [
@@ -163,6 +164,58 @@ describe("doctor command", () => {
         ],
       };
       expect(validateWebhook(webhook)).toEqual([]);
+    });
+  });
+
+  describe("CLI", () => {
+    it("should show doctor command in help", () => {
+      const output = execSync("npx tsx src/cli.ts --help", {
+        encoding: "utf-8",
+        cwd: process.cwd(),
+      });
+
+      expect(output).toContain("doctor");
+    });
+
+    it("should show help text with --fix option", () => {
+      const output = execSync("npx tsx src/cli.ts doctor --help", {
+        encoding: "utf-8",
+        cwd: process.cwd(),
+      });
+
+      expect(output).toContain("Check Night Watch configuration");
+      expect(output).toContain("--fix");
+    });
+
+    it("should run all checks and show pass/fail indicators", () => {
+      const output = execSync("npx tsx src/cli.ts doctor", {
+        encoding: "utf-8",
+        cwd: process.cwd(),
+      });
+
+      // Should show check names
+      expect(output).toContain("Node.js version");
+      expect(output).toContain("git repository");
+      expect(output).toContain("GitHub CLI");
+      expect(output).toContain("provider CLI");
+      expect(output).toContain("config file");
+      expect(output).toContain("PRD directory");
+      expect(output).toContain("logs directory");
+      expect(output).toContain("webhook configuration");
+
+      // Should show summary
+      expect(output).toContain("Summary");
+      expect(output).toContain("Checks passed");
+    });
+
+    it("should show git repo check success in project dir", () => {
+      const output = execSync("npx tsx src/cli.ts doctor", {
+        encoding: "utf-8",
+        cwd: process.cwd(),
+      });
+
+      // This project IS a git repo, so should pass
+      expect(output).toContain("Git repository found");
     });
   });
 });
