@@ -27,6 +27,7 @@ describe('CLI', () => {
       expect(output).toContain('logs');
       expect(output).toContain('doctor');
       expect(output).toContain('dashboard');
+      expect(output).toContain('history');
     });
 
     it('should show init command help', () => {
