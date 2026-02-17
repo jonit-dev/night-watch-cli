@@ -19,7 +19,8 @@ export interface IRegistryEntry {
  * Get the path to the global registry file
  */
 export function getRegistryPath(): string {
-  return path.join(os.homedir(), GLOBAL_CONFIG_DIR, REGISTRY_FILE_NAME);
+  const base = process.env.NIGHT_WATCH_HOME || path.join(os.homedir(), GLOBAL_CONFIG_DIR);
+  return path.join(base, REGISTRY_FILE_NAME);
 }
 
 /**

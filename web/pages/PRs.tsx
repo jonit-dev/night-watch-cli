@@ -118,7 +118,7 @@ const PRs: React.FC = () => {
                   )}
                 </td>
                 <td className="px-6 py-4 text-right">
-                   <a href="#" className="text-slate-500 hover:text-indigo-400" onClick={(e) => e.stopPropagation()}>
+                   <a href={pr.url} target="_blank" rel="noopener noreferrer" className="text-slate-500 hover:text-indigo-400" onClick={(e) => e.stopPropagation()}>
                       <ExternalLink className="h-4 w-4" />
                    </a>
                 </td>

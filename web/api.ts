@@ -146,6 +146,7 @@ export interface PrInfo {
   number: number;
   title: string;
   branch: string;
+  url: string;
   ciStatus: 'pass' | 'fail' | 'pending' | 'unknown';
   reviewScore: number | null;
 }
