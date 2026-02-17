@@ -282,6 +282,51 @@ export function triggerUninstallCron(): Promise<ActionResult> {
   });
 }
 
+// ==================== Roadmap Scanner ====================
+
+export interface RoadmapItem {
+  hash: string;
+  title: string;
+  description: string;
+  checked: boolean;
+  section: string;
+  processed: boolean;
+  prdFile?: string;
+}
+
+export interface RoadmapStatus {
+  found: boolean;
+  enabled: boolean;
+  totalItems: number;
+  processedItems: number;
+  pendingItems: number;
+  status: 'idle' | 'scanning' | 'complete' | 'disabled' | 'no-roadmap';
+  items: RoadmapItem[];
+  lastScan?: string;
+  autoScanInterval?: number;
+}
+
+export interface ScanResult {
+  created: string[];
+  skipped: string[];
+  errors: string[];
+}
+
+export function fetchRoadmap(): Promise<RoadmapStatus> {
+  return apiFetch<RoadmapStatus>(apiPath('/api/roadmap'));
+}
+
+export function triggerRoadmapScan(): Promise<ScanResult> {
+  return apiFetch<ScanResult>(apiPath('/api/roadmap/scan'), { method: 'POST' });
+}
+
+export function toggleRoadmapScanner(enabled: boolean): Promise<NightWatchConfig> {
+  return apiFetch<NightWatchConfig>(apiPath('/api/roadmap/toggle'), {
+    method: 'PUT',
+    body: JSON.stringify({ enabled }),
+  });
+}
+
 // ==================== React Hook ====================
 
 /**

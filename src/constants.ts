@@ -2,7 +2,7 @@
  * Default configuration values for Night Watch CLI
  */
 
-import { INotificationConfig, Provider } from "./types.js";
+import { INotificationConfig, IRoadmapScannerConfig, Provider } from "./types.js";
 
 // Branch Configuration (default branch)
 export const DEFAULT_DEFAULT_BRANCH = ""; // empty = auto-detect
@@ -38,6 +38,13 @@ export const DEFAULT_NOTIFICATIONS: INotificationConfig = { webhooks: [] };
 
 // PRD Priority Configuration
 export const DEFAULT_PRD_PRIORITY: string[] = [];
+
+// Roadmap Scanner Configuration
+export const DEFAULT_ROADMAP_SCANNER: IRoadmapScannerConfig = {
+  enabled: false,
+  roadmapPath: "ROADMAP.md",
+  autoScanInterval: 300,
+};
 
 // Valid providers
 export const VALID_PROVIDERS: Provider[] = ["claude", "codex"];

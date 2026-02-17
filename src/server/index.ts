@@ -21,6 +21,8 @@ import { saveConfig } from "../utils/config-writer.js";
 import { loadRegistry, validateRegistry } from "../utils/registry.js";
 import { generateMarker, getEntries, getProjectEntries } from "../utils/crontab.js";
 import { CronExpressionParser } from "cron-parser";
+import { getRoadmapStatus, scanRoadmap } from "../utils/roadmap-scanner.js";
+import { loadRoadmapState } from "../utils/roadmap-state.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -252,6 +254,33 @@ function handlePutConfig(
       }
     }
 
+    if (changes.roadmapScanner !== undefined) {
+      const rs = changes.roadmapScanner;
+      if (typeof rs !== "object" || rs === null) {
+        res.status(400).json({ error: "roadmapScanner must be an object" });
+        return;
+      }
+
+      if (rs.enabled !== undefined && typeof rs.enabled !== "boolean") {
+        res.status(400).json({ error: "roadmapScanner.enabled must be a boolean" });
+        return;
+      }
+
+      if (rs.roadmapPath !== undefined) {
+        if (typeof rs.roadmapPath !== "string" || rs.roadmapPath.trim().length === 0) {
+          res.status(400).json({ error: "roadmapScanner.roadmapPath must be a non-empty string" });
+          return;
+        }
+      }
+
+      if (rs.autoScanInterval !== undefined) {
+        if (typeof rs.autoScanInterval !== "number" || rs.autoScanInterval < 30) {
+          res.status(400).json({ error: "roadmapScanner.autoScanInterval must be a number >= 30" });
+          return;
+        }
+      }
+    }
+
     const result = saveConfig(projectDir, changes);
 
     if (!result.success) {
@@ -377,6 +406,70 @@ function handleGetScheduleInfo(projectDir: string, config: INightWatchConfig, _r
   }
 }
 
+function handleGetRoadmap(projectDir: string, config: INightWatchConfig, _req: Request, res: Response): void {
+  try {
+    const status = getRoadmapStatus(projectDir, config);
+    const prdDir = path.join(projectDir, config.prdDir);
+    const state = loadRoadmapState(prdDir);
+    res.json({
+      ...status,
+      lastScan: state.lastScan || null,
+      autoScanInterval: config.roadmapScanner.autoScanInterval,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+function handlePostRoadmapScan(projectDir: string, config: INightWatchConfig, _req: Request, res: Response): void {
+  try {
+    if (!config.roadmapScanner.enabled) {
+      res.status(409).json({ error: "Roadmap scanner is disabled" });
+      return;
+    }
+
+    const result = scanRoadmap(projectDir, config);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+function handlePutRoadmapToggle(
+  projectDir: string,
+  getConfig: () => INightWatchConfig,
+  reloadConfig: () => void,
+  req: Request,
+  res: Response,
+): void {
+  try {
+    const { enabled } = req.body as { enabled: unknown };
+
+    if (typeof enabled !== "boolean") {
+      res.status(400).json({ error: "enabled must be a boolean" });
+      return;
+    }
+
+    const currentConfig = getConfig();
+    const result = saveConfig(projectDir, {
+      roadmapScanner: {
+        ...currentConfig.roadmapScanner,
+        enabled,
+      },
+    });
+
+    if (!result.success) {
+      res.status(500).json({ error: result.error });
+      return;
+    }
+
+    reloadConfig();
+    res.json(getConfig());
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 // ==================== Static Files + SPA Fallback ====================
 
 function setupStaticFiles(app: Express): void {
@@ -433,6 +526,41 @@ export function createApp(projectDir: string): Express {
   app.post("/api/actions/review", (req, res) => handleSpawnAction(projectDir, ["review"], req, res));
   app.post("/api/actions/install-cron", (req, res) => handleSpawnAction(projectDir, ["install"], req, res));
   app.post("/api/actions/uninstall-cron", (req, res) => handleSpawnAction(projectDir, ["uninstall"], req, res));
+  app.get("/api/roadmap", (req, res) => handleGetRoadmap(projectDir, config, req, res));
+  app.post("/api/roadmap/scan", (req, res) => handlePostRoadmapScan(projectDir, config, req, res));
+  app.put("/api/roadmap/toggle", (req, res) => handlePutRoadmapToggle(projectDir, () => config, reloadConfig, req, res));
+
+  // Auto-scan timer
+  let autoScanTimer: ReturnType<typeof setInterval> | null = null;
+
+  function startAutoScan(): void {
+    stopAutoScan();
+    const currentConfig = loadConfig(projectDir);
+    if (!currentConfig.roadmapScanner.enabled) return;
+    const intervalMs = currentConfig.roadmapScanner.autoScanInterval * 1000;
+    autoScanTimer = setInterval(() => {
+      try {
+        const cfg = loadConfig(projectDir);
+        if (!cfg.roadmapScanner.enabled) return;
+        const status = getRoadmapStatus(projectDir, cfg);
+        if (status.status === "complete" || status.status === "no-roadmap") return;
+        scanRoadmap(projectDir, cfg);
+      } catch {
+        // Silently ignore auto-scan errors
+      }
+    }, intervalMs);
+  }
+
+  function stopAutoScan(): void {
+    if (autoScanTimer) {
+      clearInterval(autoScanTimer);
+      autoScanTimer = null;
+    }
+  }
+
+  if (config.roadmapScanner.enabled) {
+    startAutoScan();
+  }
 
   setupStaticFiles(app);
   app.use(errorHandler);
@@ -499,6 +627,9 @@ function createProjectRouter(): Router {
   router.post("/actions/review", (req, res) => handleSpawnAction(dir(req), ["review"], req, res));
   router.post("/actions/install-cron", (req, res) => handleSpawnAction(dir(req), ["install"], req, res));
   router.post("/actions/uninstall-cron", (req, res) => handleSpawnAction(dir(req), ["uninstall"], req, res));
+  router.get("/roadmap", (req, res) => handleGetRoadmap(dir(req), cfg(req), req, res));
+  router.post("/roadmap/scan", (req, res) => handlePostRoadmapScan(dir(req), cfg(req), req, res));
+  router.put("/roadmap/toggle", (req, res) => handlePutRoadmapToggle(dir(req), () => cfg(req), () => {}, req, res));
 
   return router;
 }

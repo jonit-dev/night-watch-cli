@@ -6,7 +6,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { INightWatchConfig, INotificationConfig, IWebhookConfig, NotificationEvent, Provider, WebhookType } from "./types.js";
+import { INightWatchConfig, INotificationConfig, IRoadmapScannerConfig, IWebhookConfig, NotificationEvent, Provider, WebhookType } from "./types.js";
 import {
   CONFIG_FILE_NAME,
   DEFAULT_BRANCH_PATTERNS,
@@ -24,6 +24,7 @@ import {
   DEFAULT_REVIEWER_ENABLED,
   DEFAULT_REVIEWER_MAX_RUNTIME,
   DEFAULT_REVIEWER_SCHEDULE,
+  DEFAULT_ROADMAP_SCANNER,
   VALID_PROVIDERS,
 } from "./constants.js";
 
@@ -56,6 +57,9 @@ export function getDefaultConfig(): INightWatchConfig {
 
     // PRD priority
     prdPriority: [...DEFAULT_PRD_PRIORITY],
+
+    // Roadmap scanner
+    roadmapScanner: { ...DEFAULT_ROADMAP_SCANNER },
   };
 }
 
@@ -171,6 +175,21 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   // PRD priority
   normalized.prdPriority = readStringArray(rawConfig.prdPriority);
 
+  // Roadmap Scanner
+  const rawRoadmapScanner = readObject(rawConfig.roadmapScanner);
+  if (rawRoadmapScanner) {
+    const roadmapScanner: IRoadmapScannerConfig = {
+      enabled: readBoolean(rawRoadmapScanner.enabled) ?? DEFAULT_ROADMAP_SCANNER.enabled,
+      roadmapPath: readString(rawRoadmapScanner.roadmapPath) ?? DEFAULT_ROADMAP_SCANNER.roadmapPath,
+      autoScanInterval: readNumber(rawRoadmapScanner.autoScanInterval) ?? DEFAULT_ROADMAP_SCANNER.autoScanInterval,
+    };
+    // Validate autoScanInterval has minimum of 30 seconds
+    if (roadmapScanner.autoScanInterval < 30) {
+      roadmapScanner.autoScanInterval = 30;
+    }
+    normalized.roadmapScanner = roadmapScanner;
+  }
+
   return normalized;
 }
 
@@ -233,6 +252,8 @@ function mergeConfigs(
       merged.notifications = fileConfig.notifications;
     if (fileConfig.prdPriority !== undefined)
       merged.prdPriority = [...fileConfig.prdPriority];
+    if (fileConfig.roadmapScanner !== undefined)
+      merged.roadmapScanner = { ...fileConfig.roadmapScanner };
   }
 
   // Merge env config (takes precedence)
@@ -257,6 +278,8 @@ function mergeConfigs(
     merged.notifications = envConfig.notifications;
   if (envConfig.prdPriority !== undefined)
     merged.prdPriority = [...envConfig.prdPriority];
+  if (envConfig.roadmapScanner !== undefined)
+    merged.roadmapScanner = { ...envConfig.roadmapScanner };
 
   return merged;
 }
@@ -363,6 +386,17 @@ export function loadConfig(projectDir: string): INightWatchConfig {
       }
     } catch {
       // Invalid JSON, ignore
+    }
+  }
+
+  // NW_ROADMAP_SCANNER_ENABLED environment variable
+  if (process.env.NW_ROADMAP_SCANNER_ENABLED) {
+    const roadmapScannerEnabled = parseBoolean(process.env.NW_ROADMAP_SCANNER_ENABLED);
+    if (roadmapScannerEnabled !== null) {
+      envConfig.roadmapScanner = {
+        ...DEFAULT_ROADMAP_SCANNER,
+        enabled: roadmapScannerEnabled,
+      };
     }
   }
 

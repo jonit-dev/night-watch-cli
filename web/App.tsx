@@ -8,6 +8,7 @@ import PRs from './pages/PRs';
 import Scheduling from './pages/Scheduling';
 import Logs from './pages/Logs';
 import Settings from './pages/Settings';
+import Roadmap from './pages/Roadmap';
 import { ToastContainer } from './components/ui/Toast';
 import { useGlobalMode } from './hooks/useGlobalMode';
 
@@ -33,6 +34,7 @@ const App: React.FC = () => {
                 <Route path="/prs" element={<PRs />} />
                 <Route path="/scheduling" element={<Scheduling />} />
                 <Route path="/logs" element={<Logs />} />
+                <Route path="/roadmap" element={<Roadmap />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

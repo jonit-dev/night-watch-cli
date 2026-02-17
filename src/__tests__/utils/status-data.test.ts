@@ -527,6 +527,28 @@ describe("status-data utilities", () => {
       const result = parsePrdDependencies(prdPath);
       expect(result).toEqual(["phase1", "phase2"]);
     });
+
+    it("should handle bold markdown depends on format", () => {
+      const prdPath = path.join(tempDir, "phase4.md");
+      fs.writeFileSync(
+        prdPath,
+        "# Phase 4\n\n**Depends on:** `phase1`, `phase2`\n\nSome content."
+      );
+
+      const result = parsePrdDependencies(prdPath);
+      expect(result).toEqual(["phase1", "phase2"]);
+    });
+
+    it("should return empty array for bold depends on with no deps", () => {
+      const prdPath = path.join(tempDir, "phase5.md");
+      fs.writeFileSync(
+        prdPath,
+        "# Phase 5\n\n**Depends on:**\n\nSome content."
+      );
+
+      const result = parsePrdDependencies(prdPath);
+      expect(result).toEqual([]);
+    });
   });
 
   describe("collectPrdInfo with dependencies", () => {
@@ -561,6 +583,27 @@ describe("status-data utilities", () => {
       expect(phase2!.status).toBe("blocked");
       expect(phase2!.dependencies).toEqual(["phase1"]);
       expect(phase2!.unmetDependencies).toEqual(["phase1"]);
+    });
+
+    it("should resolve deps with .md extension against done PRDs", () => {
+      const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
+      fs.mkdirSync(prdDir, { recursive: true });
+      fs.mkdirSync(path.join(prdDir, "done"), { recursive: true });
+
+      // phase0 is done (stored as phase0.md, name becomes "phase0")
+      fs.writeFileSync(path.join(prdDir, "done", "phase0.md"), "# Phase 0");
+      // phase1 depends on "phase0.md" (with extension) => should still resolve as ready
+      fs.writeFileSync(
+        path.join(prdDir, "phase1.md"),
+        "# Phase 1\n\n**Depends on:** `phase0.md`"
+      );
+
+      const result = collectPrdInfo(tempDir, "docs/PRDs/night-watch", 7200);
+
+      const phase1 = result.find((p) => p.name === "phase1");
+      expect(phase1).toBeDefined();
+      expect(phase1!.status).toBe("ready");
+      expect(phase1!.unmetDependencies).toEqual([]);
     });
   });
 

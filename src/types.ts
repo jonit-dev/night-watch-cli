@@ -61,6 +61,9 @@ export interface INightWatchConfig {
 
   /** PRD execution priority order (filenames without .md extension) */
   prdPriority: string[];
+
+  /** Roadmap scanner configuration */
+  roadmapScanner: IRoadmapScannerConfig;
 }
 
 export type WebhookType = "slack" | "discord" | "telegram";
@@ -76,4 +79,18 @@ export interface IWebhookConfig {
 
 export interface INotificationConfig {
   webhooks: IWebhookConfig[];
+}
+
+/**
+ * Roadmap Scanner configuration
+ */
+export interface IRoadmapScannerConfig {
+  /** Whether the roadmap scanner is enabled */
+  enabled: boolean;
+
+  /** Path to the ROADMAP.md file (relative to project root) */
+  roadmapPath: string;
+
+  /** Interval in seconds between automatic scans */
+  autoScanInterval: number;
 }
