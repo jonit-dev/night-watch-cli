@@ -8,8 +8,8 @@ import { useStore } from '../store/useStore';
 const PRs: React.FC = () => {
   const [selectedPR, setSelectedPR] = useState<number | null>(null);
   const [runningReview, setRunningReview] = useState(false);
-  const { addToast } = useStore();
-  const { data: prs = [], loading, error, refetch } = useApi(fetchPrs, []);
+  const { addToast, selectedProjectId } = useStore();
+  const { data: prs = [], loading, error, refetch } = useApi(fetchPrs, [selectedProjectId]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {

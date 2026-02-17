@@ -1,5 +1,5 @@
 import React from 'react';
-import { Save, RotateCcw, Activity, AlertCircle } from 'lucide-react';
+import { Save, RotateCcw, Activity, AlertCircle, Calendar, CalendarOff, Clock } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
@@ -7,7 +7,118 @@ import Select from '../components/ui/Select';
 import Tabs from '../components/ui/Tabs';
 import Switch from '../components/ui/Switch';
 import { useStore } from '../store/useStore';
-import { fetchConfig, fetchDoctor, NightWatchConfig, updateConfig, useApi } from '../api';
+import { fetchConfig, fetchDoctor, fetchStatus, NightWatchConfig, triggerInstallCron, triggerUninstallCron, updateConfig, useApi } from '../api';
+
+// ==================== Cron Schedule Helpers ====================
+
+const CRON_PRESETS = [
+  { label: 'Every 30 minutes', value: '*/30 * * * *' },
+  { label: 'Every hour', value: '0 * * * *' },
+  { label: 'Every 3 hours', value: '0 */3 * * *' },
+  { label: 'Every 6 hours', value: '0 */6 * * *' },
+  { label: 'Every 12 hours', value: '0 */12 * * *' },
+  { label: 'Daily at midnight', value: '0 0 * * *' },
+  { label: 'Daily at 9 AM', value: '0 9 * * *' },
+  { label: 'Weekdays at 9 AM', value: '0 9 * * 1-5' },
+  { label: 'Custom', value: '__custom__' },
+];
+
+function cronToHuman(expr: string): string {
+  if (!expr) return 'No schedule set';
+  const trimmed = expr.trim();
+
+  const preset = CRON_PRESETS.find(p => p.value === trimmed);
+  if (preset && preset.value !== '__custom__') return preset.label;
+
+  const parts = trimmed.split(/\s+/);
+  if (parts.length !== 5) return trimmed;
+
+  const [min, hour, dom, mon, dow] = parts;
+
+  if (min.startsWith('*/') && hour === '*' && dom === '*' && mon === '*' && dow === '*') {
+    const n = parseInt(min.slice(2));
+    return n === 1 ? 'Every minute' : `Every ${n} minutes`;
+  }
+
+  if (min === '0' && hour.startsWith('*/') && dom === '*' && mon === '*' && dow === '*') {
+    const n = parseInt(hour.slice(2));
+    return n === 1 ? 'Every hour' : `Every ${n} hours`;
+  }
+
+  if (min === '0' && hour === '*' && dom === '*' && mon === '*' && dow === '*') {
+    return 'Every hour';
+  }
+
+  if (dom === '*' && mon === '*' && dow === '1-5') {
+    const h = parseInt(hour);
+    const m = parseInt(min);
+    if (!isNaN(h) && !isNaN(m)) {
+      return `Weekdays at ${h}:${m.toString().padStart(2, '0')}`;
+    }
+  }
+
+  if (dom === '*' && mon === '*' && (dow === '*' || dow === '0-6')) {
+    const h = parseInt(hour);
+    const m = parseInt(min);
+    if (!isNaN(h) && !isNaN(m)) {
+      return `Daily at ${h}:${m.toString().padStart(2, '0')}`;
+    }
+  }
+
+  return trimmed;
+}
+
+function getPresetValue(cronExpr: string): string {
+  const match = CRON_PRESETS.find(p => p.value === cronExpr.trim());
+  return match ? match.value : '__custom__';
+}
+
+// ==================== Schedule Picker Component ====================
+
+const SchedulePicker: React.FC<{
+  label: string;
+  description: string;
+  value: string;
+  onChange: (value: string) => void;
+}> = ({ label, description, value, onChange }) => {
+  const presetValue = getPresetValue(value);
+  const isCustom = presetValue === '__custom__';
+
+  return (
+    <Card className="p-5 space-y-4">
+      <div>
+        <h4 className="text-base font-medium text-slate-200">{label}</h4>
+        <p className="text-xs text-slate-500 mt-0.5">{description}</p>
+      </div>
+
+      <Select
+        label="Schedule Preset"
+        value={presetValue}
+        onChange={(val) => {
+          if (val !== '__custom__') {
+            onChange(val);
+          }
+        }}
+        options={CRON_PRESETS.map(p => ({ label: p.label, value: p.value }))}
+      />
+
+      {isCustom && (
+        <Input
+          label="Cron Expression"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="* * * * *"
+        />
+      )}
+
+      <div className="flex items-center space-x-2 p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
+        <Clock className="h-4 w-4 text-indigo-400 shrink-0" />
+        <span className="text-sm text-slate-300">{cronToHuman(value)}</span>
+        <span className="text-xs text-slate-600 font-mono ml-auto">{value}</span>
+      </div>
+    </Card>
+  );
+};
 
 type ConfigForm = {
   provider: NightWatchConfig['provider'];
@@ -36,7 +147,7 @@ const toFormState = (config: NightWatchConfig): ConfigForm => ({
 });
 
 const Settings: React.FC = () => {
-  const { addToast, projectName } = useStore();
+  const { addToast, projectName, selectedProjectId } = useStore();
   const [saving, setSaving] = React.useState(false);
   const [form, setForm] = React.useState<ConfigForm | null>(null);
 
@@ -45,8 +156,65 @@ const Settings: React.FC = () => {
     loading: configLoading,
     error: configError,
     refetch: refetchConfig,
-  } = useApi(fetchConfig, []);
-  const { data: doctorChecks = [], loading: doctorLoading, refetch: refetchDoctor } = useApi(fetchDoctor, []);
+  } = useApi(fetchConfig, [selectedProjectId]);
+  const { data: doctorChecks = [], loading: doctorLoading, refetch: refetchDoctor } = useApi(fetchDoctor, [selectedProjectId]);
+  const { data: status, refetch: refetchStatus } = useApi(fetchStatus, [selectedProjectId]);
+  const [cronActionLoading, setCronActionLoading] = React.useState(false);
+
+  const cronInstalled = status?.crontab?.installed ?? false;
+  const cronEntries = status?.crontab?.entries ?? [];
+
+  const handleInstallCron = async () => {
+    setCronActionLoading(true);
+    try {
+      await triggerInstallCron();
+      addToast({ title: 'Cron Installed', message: 'Crontab entries have been installed.', type: 'success' });
+      refetchStatus();
+    } catch (err) {
+      addToast({ title: 'Install Failed', message: err instanceof Error ? err.message : 'Failed to install cron', type: 'error' });
+    } finally {
+      setCronActionLoading(false);
+    }
+  };
+
+  const handleUninstallCron = async () => {
+    setCronActionLoading(true);
+    try {
+      await triggerUninstallCron();
+      addToast({ title: 'Cron Removed', message: 'Crontab entries have been removed.', type: 'success' });
+      refetchStatus();
+    } catch (err) {
+      addToast({ title: 'Uninstall Failed', message: err instanceof Error ? err.message : 'Failed to uninstall cron', type: 'error' });
+    } finally {
+      setCronActionLoading(false);
+    }
+  };
+
+  const handleSaveAndInstall = async () => {
+    if (!form) return;
+    setSaving(true);
+    try {
+      await updateConfig({
+        provider: form.provider,
+        defaultBranch: form.defaultBranch,
+        branchPrefix: form.branchPrefix,
+        reviewerEnabled: form.reviewerEnabled,
+        minReviewScore: form.minReviewScore,
+        maxRuntime: form.maxRuntime,
+        reviewerMaxRuntime: form.reviewerMaxRuntime,
+        maxLogSize: form.maxLogSize,
+        cronSchedule: form.cronSchedule,
+        reviewerSchedule: form.reviewerSchedule,
+      });
+      refetchConfig();
+    } catch (saveError) {
+      addToast({ title: 'Save Failed', message: saveError instanceof Error ? saveError.message : 'Failed to save', type: 'error' });
+      setSaving(false);
+      return;
+    }
+    setSaving(false);
+    await handleInstallCron();
+  };
 
   React.useEffect(() => {
     if (config) {
@@ -144,7 +312,7 @@ const Settings: React.FC = () => {
             <Select
               label="Provider"
               value={form.provider}
-              onChange={(e) => updateField('provider', e.target.value as ConfigForm['provider'])}
+              onChange={(val) => updateField('provider', val as ConfigForm['provider'])}
               options={[
                 { label: 'Anthropic (Claude)', value: 'claude' },
                 { label: 'OpenAI (Codex)', value: 'codex' },
@@ -156,7 +324,7 @@ const Settings: React.FC = () => {
               <Switch
                 label="Enable Automated Reviews"
                 checked={form.reviewerEnabled}
-                onChange={(e) => updateField('reviewerEnabled', e.target.checked)}
+                onChange={(checked) => updateField('reviewerEnabled', checked)}
               />
             </div>
           </div>
@@ -213,14 +381,76 @@ const Settings: React.FC = () => {
       id: 'schedules',
       label: 'Schedules',
       content: (
-        <Card className="p-6 space-y-6">
-          <Input label="Executor Cron" value={form.cronSchedule} onChange={(e) => updateField('cronSchedule', e.target.value)} />
-          <Input
-            label="Reviewer Cron"
-            value={form.reviewerSchedule}
-            onChange={(e) => updateField('reviewerSchedule', e.target.value)}
+        <div className="space-y-6">
+          {/* Cron Status Banner */}
+          <Card className={`p-4 flex items-center justify-between ${cronInstalled ? 'border-green-500/30' : 'border-amber-500/30'}`}>
+            <div className="flex items-center space-x-3">
+              <div className={`p-2 rounded-lg ${cronInstalled ? 'bg-green-500/10 text-green-400' : 'bg-amber-500/10 text-amber-400'}`}>
+                {cronInstalled ? <Calendar className="h-5 w-5" /> : <CalendarOff className="h-5 w-5" />}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-200">
+                  {cronInstalled ? 'Cron Jobs Active' : 'Cron Jobs Not Installed'}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {cronInstalled
+                    ? `${cronEntries.length} crontab entr${cronEntries.length === 1 ? 'y' : 'ies'} installed`
+                    : 'Configure schedules below, then click Install to activate'
+                  }
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              {!cronInstalled && (
+                <Button
+                  size="sm"
+                  onClick={handleSaveAndInstall}
+                  loading={saving || cronActionLoading}
+                >
+                  Save & Install
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant={cronInstalled ? 'danger' : 'outline'}
+                onClick={cronInstalled ? handleUninstallCron : handleInstallCron}
+                loading={cronActionLoading}
+              >
+                {cronInstalled ? 'Uninstall' : 'Install'}
+              </Button>
+            </div>
+          </Card>
+
+          {/* Executor Schedule */}
+          <SchedulePicker
+            label="Executor Schedule"
+            description="How often to pick up and process the next ready PRD."
+            value={form.cronSchedule}
+            onChange={(v) => updateField('cronSchedule', v)}
           />
-        </Card>
+
+          {/* Reviewer Schedule */}
+          <SchedulePicker
+            label="Reviewer Schedule"
+            description="How often to review open pull requests for code quality."
+            value={form.reviewerSchedule}
+            onChange={(v) => updateField('reviewerSchedule', v)}
+          />
+
+          {/* Installed Entries */}
+          {cronInstalled && cronEntries.length > 0 && (
+            <Card className="p-4">
+              <p className="text-xs font-medium text-slate-500 uppercase mb-2">Active Crontab Entries</p>
+              <div className="space-y-1">
+                {cronEntries.map((entry, i) => (
+                  <div key={i} className="text-xs font-mono text-slate-400 p-2 bg-slate-950/60 rounded border border-slate-800 break-all">
+                    {entry}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+        </div>
       ),
     },
     {

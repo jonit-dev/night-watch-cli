@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Download, Pause, Play, Search, ArrowDownCircle, AlertCircle } from 'lucide-react';
 import Button from '../components/ui/Button';
 import { useApi, fetchLogs, fetchStatus } from '../api';
+import { useStore } from '../store/useStore';
 
 type LogName = 'executor' | 'reviewer';
 
@@ -10,13 +11,14 @@ const Logs: React.FC = () => {
   const [filter, setFilter] = useState('');
   const [activeLog, setActiveLog] = useState<LogName>('executor');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { selectedProjectId } = useStore();
 
   const { data: logData, loading: logLoading, error: logError, refetch: refetchLogs } = useApi(
     () => fetchLogs(activeLog, 500),
-    [activeLog]
+    [activeLog, selectedProjectId]
   );
 
-  const { data: status } = useApi(fetchStatus, []);
+  const { data: status } = useApi(fetchStatus, [selectedProjectId]);
 
   const logs = logData?.lines || [];
 

@@ -316,7 +316,7 @@ export function initCommand(program: Command): void {
       header('Night Watch CLI - Initializing');
 
       // Step 1: Verify git repository
-      step(1, 9, 'Checking git repository...');
+      step(1, 10, 'Checking git repository...');
       if (!isGitRepo(cwd)) {
         uiError('Current directory is not a git repository.');
         console.log('Please run this command from the root of a git repository.');
@@ -325,7 +325,7 @@ export function initCommand(program: Command): void {
       success('Git repository found');
 
       // Step 2: Verify gh CLI
-      step(2, 9, 'Checking GitHub CLI (gh)...');
+      step(2, 10, 'Checking GitHub CLI (gh)...');
       if (!isGhAuthenticated()) {
         uiError('GitHub CLI (gh) is not authenticated.');
         console.log('Please run: gh auth login');
@@ -334,7 +334,7 @@ export function initCommand(program: Command): void {
       success('GitHub CLI is authenticated');
 
       // Step 3: Detect AI providers
-      step(3, 9, 'Detecting AI providers...');
+      step(3, 10, 'Detecting AI providers...');
       let selectedProvider: Provider;
 
       if (options.provider) {
@@ -394,7 +394,7 @@ export function initCommand(program: Command): void {
       };
 
       // Step 4: Create PRD directory structure
-      step(4, 9, 'Creating PRD directory structure...');
+      step(4, 10, 'Creating PRD directory structure...');
       const prdDirPath = path.join(cwd, prdDir);
       const doneDirPath = path.join(prdDirPath, 'done');
       ensureDir(doneDirPath);
@@ -402,12 +402,12 @@ export function initCommand(program: Command): void {
       success(`Created ${doneDirPath}/`);
 
       // Step 5: Create NIGHT-WATCH-SUMMARY.md
-      step(5, 9, 'Creating NIGHT-WATCH-SUMMARY.md...');
+      step(5, 10, 'Creating NIGHT-WATCH-SUMMARY.md...');
       const summaryPath = path.join(prdDirPath, 'NIGHT-WATCH-SUMMARY.md');
       createSummaryFile(summaryPath, force);
 
       // Step 6: Create logs directory
-      step(6, 9, 'Creating logs directory...');
+      step(6, 10, 'Creating logs directory...');
       const logsPath = path.join(cwd, LOG_DIR);
       ensureDir(logsPath);
       success(`Created ${logsPath}/`);
@@ -416,7 +416,7 @@ export function initCommand(program: Command): void {
       addToGitignore(cwd);
 
       // Step 7: Create .claude/commands directory and copy templates
-      step(7, 9, 'Creating Claude slash commands...');
+      step(7, 10, 'Creating Claude slash commands...');
       const commandsDir = path.join(cwd, '.claude', 'commands');
       ensureDir(commandsDir);
       success(`Created ${commandsDir}/`);
@@ -446,7 +446,7 @@ export function initCommand(program: Command): void {
       );
 
       // Step 8: Create config file
-      step(8, 9, 'Creating configuration file...');
+      step(8, 10, 'Creating configuration file...');
       const configPath = path.join(cwd, CONFIG_FILE_NAME);
 
       if (fs.existsSync(configPath) && !force) {
@@ -484,8 +484,18 @@ export function initCommand(program: Command): void {
         success(`Created ${configPath}`);
       }
 
-      // Step 9: Print summary
-      step(9, 9, 'Initialization complete!');
+      // Step 9: Register in global registry
+      step(9, 10, 'Registering project in global registry...');
+      try {
+        const { registerProject } = await import('../utils/registry.js');
+        const entry = registerProject(cwd);
+        success(`Registered as "${entry.name}" in global registry`);
+      } catch (regErr) {
+        console.warn(`  Warning: Could not register in global registry: ${regErr instanceof Error ? regErr.message : String(regErr)}`);
+      }
+
+      // Step 10: Print summary
+      step(10, 10, 'Initialization complete!');
 
       // Summary with table
       header('Initialization Complete');
@@ -497,6 +507,7 @@ export function initCommand(program: Command): void {
       filesTable.push(['', '.claude/commands/prd-executor.md']);
       filesTable.push(['', '.claude/commands/night-watch-pr-reviewer.md']);
       filesTable.push(['Config File', CONFIG_FILE_NAME]);
+      filesTable.push(['Global Registry', '~/.night-watch/projects.json']);
       console.log(filesTable.toString());
 
       // Configuration summary

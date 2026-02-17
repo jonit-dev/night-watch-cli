@@ -9,8 +9,11 @@ import Actions from './pages/Actions';
 import Logs from './pages/Logs';
 import Settings from './pages/Settings';
 import { ToastContainer } from './components/ui/Toast';
+import { useGlobalMode } from './hooks/useGlobalMode';
 
 const App: React.FC = () => {
+  useGlobalMode();
+
   return (
     <Router>
       <div className="flex h-screen bg-[#030712] text-slate-300 overflow-hidden relative">
