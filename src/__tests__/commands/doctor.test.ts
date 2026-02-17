@@ -4,8 +4,12 @@
 
 import { describe, it, expect } from "vitest";
 import { execSync } from "child_process";
+import path from "path";
 import { validateWebhook } from "../../commands/doctor.js";
 import { IIWebhookConfig } from "../../types.js";
+
+const CLI_PATH = path.join(process.cwd(), "src/cli.ts");
+const TSX_PATH = path.join(process.cwd(), "node_modules", ".bin", "tsx");
 
 describe("doctor command", () => {
   describe("validateWebhook", () => {
@@ -170,7 +174,7 @@ describe("doctor command", () => {
 
   describe("CLI", () => {
     it("should show doctor command in help", () => {
-      const output = execSync("npx tsx src/cli.ts --help", {
+      const output = execSync(`${TSX_PATH} ${CLI_PATH} --help`, {
         encoding: "utf-8",
         cwd: process.cwd(),
       });
@@ -179,7 +183,7 @@ describe("doctor command", () => {
     });
 
     it("should show help text with --fix option", () => {
-      const output = execSync("npx tsx src/cli.ts doctor --help", {
+      const output = execSync(`${TSX_PATH} ${CLI_PATH} doctor --help`, {
         encoding: "utf-8",
         cwd: process.cwd(),
       });
@@ -192,7 +196,7 @@ describe("doctor command", () => {
       // Doctor command may exit with code 1 if checks fail, so we need to handle that
       let output: string;
       try {
-        output = execSync("npx tsx src/cli.ts doctor", {
+        output = execSync(`${TSX_PATH} ${CLI_PATH} doctor`, {
           encoding: "utf-8",
           cwd: process.cwd(),
           stdio: "pipe",
@@ -221,7 +225,7 @@ describe("doctor command", () => {
       // Doctor command may exit with code 1 if checks fail, so we need to handle that
       let output: string;
       try {
-        output = execSync("npx tsx src/cli.ts doctor", {
+        output = execSync(`${TSX_PATH} ${CLI_PATH} doctor`, {
           encoding: "utf-8",
           cwd: process.cwd(),
           stdio: "pipe",
