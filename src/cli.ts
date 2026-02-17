@@ -16,6 +16,7 @@ import { dashboardCommand } from './commands/dashboard.js';
 import { doctorCommand } from './commands/doctor.js';
 import { serveCommand } from './commands/serve.js';
 import { historyCommand } from './commands/history.js';
+import { updateCommand } from './commands/update.js';
 
 // Get package.json version
 const __filename = fileURLToPath(import.meta.url);
@@ -59,5 +60,8 @@ serveCommand(program);
 
 // Register history command (used by bash scripts for cooldown tracking)
 historyCommand(program);
+
+// Register update command
+updateCommand(program);
 
 program.parse();

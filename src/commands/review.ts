@@ -38,6 +38,11 @@ export function buildEnvVars(config: INightWatchConfig, options: IReviewOptions)
   // Provider command - the actual CLI binary to call
   env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[config.provider];
 
+  // Default branch (empty = auto-detect in bash script)
+  if (config.defaultBranch) {
+    env.NW_DEFAULT_BRANCH = config.defaultBranch;
+  }
+
   // Runtime for reviewer (uses NW_REVIEWER_* variables)
   env.NW_REVIEWER_MAX_RUNTIME = String(config.reviewerMaxRuntime);
   env.NW_MIN_REVIEW_SCORE = String(config.minReviewScore);

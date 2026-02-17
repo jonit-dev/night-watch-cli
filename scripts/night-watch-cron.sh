@@ -15,17 +15,17 @@ set -euo pipefail
 PROJECT_DIR="${1:?Usage: $0 /path/to/project}"
 PROJECT_NAME=$(basename "${PROJECT_DIR}")
 PRD_DIR_REL="${NW_PRD_DIR:-docs/PRDs/night-watch}"
-if [[ "${PRD_DIR_REL}" = /* ]]; then
-  PRD_DIR="${PRD_DIR_REL}"
-else
-  PRD_DIR="${PROJECT_DIR}/${PRD_DIR_REL}"
-fi
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/night-watch.log"
-LOCK_FILE="/tmp/night-watch-${PROJECT_NAME}.lock"
+LOCK_FILE=""
 MAX_RUNTIME="${NW_MAX_RUNTIME:-7200}"  # 2 hours
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
+RUNTIME_MIRROR_DIR=""
+RUNTIME_PROJECT_DIR=""
+PRD_DIR=""
+ELIGIBLE_PRD=""
+CLAIMED=0
 
 # Ensure NVM / Node / Claude are on PATH
 export NVM_DIR="${HOME}/.nvm"
@@ -40,6 +40,8 @@ mkdir -p "${LOG_DIR}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
+PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
+LOCK_FILE="/tmp/night-watch-${PROJECT_RUNTIME_KEY}.lock"
 
 # Validate provider
 if ! validate_provider "${PROVIDER_CMD}"; then
@@ -53,7 +55,45 @@ if ! acquire_lock "${LOCK_FILE}"; then
   exit 0
 fi
 
-cleanup_worktrees "${PROJECT_DIR}"
+cleanup_on_exit() {
+  rm -f "${LOCK_FILE}"
+
+  if [ "${CLAIMED}" = "1" ] && [ -n "${ELIGIBLE_PRD}" ] && [ -n "${PRD_DIR}" ]; then
+    release_claim "${PRD_DIR}" "${ELIGIBLE_PRD}" || true
+  fi
+
+  if [ -n "${RUNTIME_MIRROR_DIR}" ] && [ -n "${RUNTIME_PROJECT_DIR}" ]; then
+    cleanup_runtime_workspace "${RUNTIME_MIRROR_DIR}" "${RUNTIME_PROJECT_DIR}" || true
+  fi
+}
+
+trap cleanup_on_exit EXIT
+
+if [ -n "${NW_DEFAULT_BRANCH:-}" ]; then
+  DEFAULT_BRANCH="${NW_DEFAULT_BRANCH}"
+else
+  DEFAULT_BRANCH=$(detect_default_branch "${PROJECT_DIR}")
+fi
+
+runtime_info=()
+if mapfile -t runtime_info < <(prepare_runtime_workspace "${PROJECT_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"); then
+  RUNTIME_MIRROR_DIR="${runtime_info[0]:-}"
+  RUNTIME_PROJECT_DIR="${runtime_info[1]:-}"
+else
+  log "FAIL: Could not prepare runtime workspace for ${PROJECT_DIR}"
+  exit 1
+fi
+
+if [ -z "${RUNTIME_MIRROR_DIR}" ] || [ -z "${RUNTIME_PROJECT_DIR}" ]; then
+  log "FAIL: Runtime workspace paths are missing"
+  exit 1
+fi
+
+if [[ "${PRD_DIR_REL}" = /* ]]; then
+  PRD_DIR="${PRD_DIR_REL}"
+else
+  PRD_DIR="${RUNTIME_PROJECT_DIR}/${PRD_DIR_REL}"
+fi
 
 ELIGIBLE_PRD=$(find_eligible_prd "${PRD_DIR}" "${MAX_RUNTIME}" "${PROJECT_DIR}")
 
@@ -64,29 +104,26 @@ fi
 
 # Claim the PRD to prevent other runs from selecting it
 claim_prd "${PRD_DIR}" "${ELIGIBLE_PRD}"
-
-# Update EXIT trap to also release claim
-trap "rm -f '${LOCK_FILE}'; release_claim '${PRD_DIR}' '${ELIGIBLE_PRD}'" EXIT
+CLAIMED=1
 
 PRD_NAME="${ELIGIBLE_PRD%.md}"
 BRANCH_NAME="night-watch/${PRD_NAME}"
-if [ -n "${NW_DEFAULT_BRANCH:-}" ]; then
-  DEFAULT_BRANCH="${NW_DEFAULT_BRANCH}"
-else
-  DEFAULT_BRANCH=$(detect_default_branch "${PROJECT_DIR}")
+
+log "START: Processing ${ELIGIBLE_PRD} on branch ${BRANCH_NAME} in runtime workspace ${RUNTIME_PROJECT_DIR}"
+
+if ! prepare_branch_checkout "${RUNTIME_PROJECT_DIR}" "${BRANCH_NAME}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
+  log "FAIL: Could not prepare branch ${BRANCH_NAME} in runtime workspace"
+  night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
+  exit 1
 fi
-
-log "START: Processing ${ELIGIBLE_PRD} on branch ${BRANCH_NAME}"
-
-cd "${PROJECT_DIR}"
 
 PROMPT="Implement the PRD at docs/PRDs/night-watch/${ELIGIBLE_PRD}
 
 ## Setup
-- Branch name MUST be exactly: ${BRANCH_NAME}
-- Create the branch from ${DEFAULT_BRANCH}: git checkout ${DEFAULT_BRANCH} && git pull origin ${DEFAULT_BRANCH} && git checkout -b ${BRANCH_NAME}
-- Use a git worktree: git worktree add ../${PROJECT_NAME}-nw-${PRD_NAME} ${BRANCH_NAME}
-- cd into the worktree, install dependencies
+- You are already inside an isolated runtime workspace: ${RUNTIME_PROJECT_DIR}
+- Current branch is already prepared: ${BRANCH_NAME}
+- Do not run git checkout/switch in ${PROJECT_DIR}
+- Do not create or remove worktrees; the runtime controller handles isolation and cleanup
 
 ## Implementation — PRD Executor Workflow
 Read .claude/commands/prd-executor.md and follow its FULL execution pipeline:
@@ -102,7 +139,6 @@ Follow all CLAUDE.md conventions (if present).
 - Commit all changes, push, and open a PR:
   git push -u origin ${BRANCH_NAME}
   gh pr create --title \"feat: <short title>\" --body \"<summary referencing PRD>\"
-- After PR is created, clean up: git worktree remove ../${PROJECT_NAME}-nw-${PRD_NAME}
 - Do NOT move the PRD to done/ — the cron script handles that
 - Do NOT process any other PRDs — only ${ELIGIBLE_PRD}"
 
@@ -115,6 +151,7 @@ if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   echo "Provider:    ${PROVIDER_CMD}"
   echo "Eligible PRD: ${ELIGIBLE_PRD}"
   echo "Branch:      ${BRANCH_NAME}"
+  echo "Runtime Dir: ${RUNTIME_PROJECT_DIR}"
   echo "Timeout:     ${MAX_RUNTIME}s"
   exit 0
 fi
@@ -135,21 +172,25 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
 
   case "${PROVIDER_CMD}" in
     claude)
-      if timeout "${MAX_RUNTIME}" \
-        claude -p "${PROMPT}" \
-          --dangerously-skip-permissions \
-          >> "${LOG_FILE}" 2>&1; then
+      if (
+        cd "${RUNTIME_PROJECT_DIR}" && timeout "${MAX_RUNTIME}" \
+          claude -p "${PROMPT}" \
+            --dangerously-skip-permissions \
+            >> "${LOG_FILE}" 2>&1
+      ); then
         EXIT_CODE=0
       else
         EXIT_CODE=$?
       fi
       ;;
     codex)
-      if timeout "${MAX_RUNTIME}" \
-        codex --quiet \
-          --yolo \
-          --prompt "${PROMPT}" \
-          >> "${LOG_FILE}" 2>&1; then
+      if (
+        cd "${RUNTIME_PROJECT_DIR}" && timeout "${MAX_RUNTIME}" \
+          codex --quiet \
+            --yolo \
+            --prompt "${PROMPT}" \
+            >> "${LOG_FILE}" 2>&1
+      ); then
         EXIT_CODE=0
       else
         EXIT_CODE=$?
@@ -185,16 +226,26 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
 done
 
 if [ ${EXIT_CODE} -eq 0 ]; then
-  PR_EXISTS=$(gh pr list --state open --json headRefName --jq '.[].headRefName' 2>/dev/null | grep -cF "${BRANCH_NAME}" || echo "0")
+  PR_EXISTS=$(cd "${RUNTIME_PROJECT_DIR}" && gh pr list --state open --json headRefName --jq '.[].headRefName' 2>/dev/null | grep -cF "${BRANCH_NAME}" || echo "0")
   if [ "${PR_EXISTS}" -gt 0 ]; then
     release_claim "${PRD_DIR}" "${ELIGIBLE_PRD}"
+    CLAIMED=0
+    if ! checkout_default_branch "${RUNTIME_PROJECT_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
+      log "WARN: Could not switch runtime workspace to ${DEFAULT_BRANCH}; PRD not moved to done/"
+      exit 0
+    fi
+
     mark_prd_done "${PRD_DIR}" "${ELIGIBLE_PRD}"
     night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" success --exit-code 0 2>/dev/null || true
-    git -C "${PROJECT_DIR}" add -A docs/PRDs/night-watch/
-    git -C "${PROJECT_DIR}" commit -m "chore: mark ${ELIGIBLE_PRD} as done (PR opened on ${BRANCH_NAME})
+    if [[ "${PRD_DIR_REL}" = /* ]]; then
+      log "WARN: PRD directory is absolute; skipping auto-commit of done/ move"
+    else
+      git -C "${RUNTIME_PROJECT_DIR}" add -A "${PRD_DIR_REL}/" || true
+      git -C "${RUNTIME_PROJECT_DIR}" commit -m "chore: mark ${ELIGIBLE_PRD} as done (PR opened on ${BRANCH_NAME})
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" || true
-    git -C "${PROJECT_DIR}" push origin "${DEFAULT_BRANCH}" || true
+      git -C "${RUNTIME_PROJECT_DIR}" push origin "${DEFAULT_BRANCH}" || true
+    fi
     log "DONE: ${ELIGIBLE_PRD} implemented, PR opened, PRD moved to done/"
   else
     log "WARN: ${PROVIDER_CMD} exited 0 but no PR found on ${BRANCH_NAME} — PRD NOT moved to done"
@@ -202,9 +253,7 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" || true
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: Night watch killed after ${MAX_RUNTIME}s while processing ${ELIGIBLE_PRD}"
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" timeout --exit-code 124 2>/dev/null || true
-  cleanup_worktrees "${PROJECT_DIR}"
 else
   log "FAIL: Night watch exited with code ${EXIT_CODE} while processing ${ELIGIBLE_PRD}"
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code "${EXIT_CODE}" 2>/dev/null || true
-  cleanup_worktrees "${PROJECT_DIR}"
 fi

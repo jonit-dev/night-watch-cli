@@ -122,6 +122,15 @@ describe("review command", () => {
       expect(env.NW_PROVIDER_CMD).toBe("codex");
     });
 
+    it("should pass NW_DEFAULT_BRANCH when configured", () => {
+      const config = createTestConfig({ defaultBranch: "main" });
+      const options: ReviewOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_DEFAULT_BRANCH).toBe("main");
+    });
+
     it("should set NW_DRY_RUN when dryRun is true", () => {
       const config = createTestConfig();
       const options: ReviewOptions = { dryRun: true };
