@@ -24,6 +24,7 @@ PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 RUNTIME_MIRROR_DIR=""
 RUNTIME_PROJECT_DIR=""
 PRD_DIR=""
+ORIGINAL_PRD_DIR=""
 ELIGIBLE_PRD=""
 CLAIMED=0
 
@@ -60,6 +61,9 @@ cleanup_on_exit() {
 
   if [ "${CLAIMED}" = "1" ] && [ -n "${ELIGIBLE_PRD}" ] && [ -n "${PRD_DIR}" ]; then
     release_claim "${PRD_DIR}" "${ELIGIBLE_PRD}" || true
+    if [ -n "${ORIGINAL_PRD_DIR}" ] && [ "${ORIGINAL_PRD_DIR}" != "${PRD_DIR}" ]; then
+      release_claim "${ORIGINAL_PRD_DIR}" "${ELIGIBLE_PRD}" || true
+    fi
   fi
 
   if [ -n "${RUNTIME_MIRROR_DIR}" ] && [ -n "${RUNTIME_PROJECT_DIR}" ]; then
@@ -91,8 +95,10 @@ fi
 
 if [[ "${PRD_DIR_REL}" = /* ]]; then
   PRD_DIR="${PRD_DIR_REL}"
+  ORIGINAL_PRD_DIR="${PRD_DIR_REL}"
 else
   PRD_DIR="${RUNTIME_PROJECT_DIR}/${PRD_DIR_REL}"
+  ORIGINAL_PRD_DIR="${PROJECT_DIR}/${PRD_DIR_REL}"
 fi
 
 ELIGIBLE_PRD=$(find_eligible_prd "${PRD_DIR}" "${MAX_RUNTIME}" "${PROJECT_DIR}")
@@ -104,6 +110,10 @@ fi
 
 # Claim the PRD to prevent other runs from selecting it
 claim_prd "${PRD_DIR}" "${ELIGIBLE_PRD}"
+# Also mirror claim to original project dir so the status dashboard can see it
+if [ "${ORIGINAL_PRD_DIR}" != "${PRD_DIR}" ]; then
+  claim_prd "${ORIGINAL_PRD_DIR}" "${ELIGIBLE_PRD}" || true
+fi
 CLAIMED=1
 
 PRD_NAME="${ELIGIBLE_PRD%.md}"
