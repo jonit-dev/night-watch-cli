@@ -3,9 +3,15 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { fileURLToPath } from 'url';
+import { resolveTemplatePath } from '../../commands/init.js';
 
-const CLI_PATH = path.join(process.cwd(), 'src/cli.ts');
-const TSX_PATH = path.join(process.cwd(), 'node_modules', '.bin', 'tsx');
+// Get project root directory (4 levels up from this test file)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
+const CLI_PATH = path.join(PROJECT_ROOT, 'src', 'cli.ts');
+const TSX_PATH = path.join(PROJECT_ROOT, 'node_modules', '.bin', 'tsx');
 
 describe('init command', () => {
   let tempDir: string;
@@ -560,6 +566,99 @@ describe('init command', () => {
       const configPath = path.join(tempDir, 'night-watch.config.json');
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       expect(config.reviewerEnabled).toBe(false);
+    });
+  });
+
+  describe('resolveTemplatePath', () => {
+    it('should return custom path when file exists', () => {
+      const customDir = path.join(tempDir, 'custom-templates');
+      fs.mkdirSync(customDir, { recursive: true });
+      fs.writeFileSync(path.join(customDir, 'night-watch.md'), '# Custom Night Watch');
+
+      const result = resolveTemplatePath('night-watch.md', customDir, '/bundled/templates');
+
+      expect(result.source).toBe('custom');
+      expect(result.path).toBe(path.join(customDir, 'night-watch.md'));
+    });
+
+    it('should fall back to bundled when custom missing', () => {
+      const customDir = path.join(tempDir, 'custom-templates');
+      fs.mkdirSync(customDir, { recursive: true });
+      // No night-watch.md in custom dir
+
+      const result = resolveTemplatePath('night-watch.md', customDir, '/bundled/templates');
+
+      expect(result.source).toBe('bundled');
+      expect(result.path).toBe('/bundled/templates/night-watch.md');
+    });
+
+    it('should fall back to bundled when custom dir missing', () => {
+      // customTemplatesDir is null (dir doesn't exist)
+      const result = resolveTemplatePath('night-watch.md', null, '/bundled/templates');
+
+      expect(result.source).toBe('bundled');
+      expect(result.path).toBe('/bundled/templates/night-watch.md');
+    });
+  });
+
+  describe('custom template integration', () => {
+    it('should use custom template when available during init', () => {
+      // This test requires gh and claude to be available
+      let ghAvailable = false;
+      let claudeAvailable = false;
+
+      try {
+        execSync('gh auth status', { stdio: 'pipe' });
+        ghAvailable = true;
+      } catch {
+        // gh not available
+      }
+
+      try {
+        execSync('which claude', { stdio: 'pipe' });
+        claudeAvailable = true;
+      } catch {
+        // claude not available
+      }
+
+      if (!ghAvailable || !claudeAvailable) {
+        // Skip test
+        expect(true).toBe(true);
+        return;
+      }
+
+      // Initialize git repo
+      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
+
+      // Create custom templates directory with a custom night-watch.md
+      const customTemplatesDir = path.join(tempDir, '.night-watch', 'templates');
+      fs.mkdirSync(customTemplatesDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(customTemplatesDir, 'night-watch.md'),
+        '# Custom Night Watch Template\n\nThis is a custom template.\n'
+      );
+
+      // Create config to point to custom templates
+      fs.writeFileSync(
+        path.join(tempDir, 'night-watch.config.json'),
+        JSON.stringify({
+          templatesDir: '.night-watch/templates',
+        })
+      );
+
+      execSync(`"${TSX_PATH}" "${CLI_PATH}" init --force --provider claude`, {
+        encoding: 'utf-8',
+        cwd: tempDir,
+        stdio: 'pipe'
+      });
+
+      const nightWatchMd = path.join(tempDir, '.claude', 'commands', 'night-watch.md');
+      const content = fs.readFileSync(nightWatchMd, 'utf-8');
+
+      // Should contain our custom content
+      expect(content).toContain('Custom Night Watch Template');
     });
   });
 });
