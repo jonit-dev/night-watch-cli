@@ -123,6 +123,9 @@ fi
 export NW_EXECUTION_CONTEXT=agent
 
 MAX_RETRIES="${NW_MAX_RETRIES:-3}"
+if ! [[ "${MAX_RETRIES}" =~ ^[0-9]+$ ]] || [ "${MAX_RETRIES}" -lt 1 ]; then
+  MAX_RETRIES=1
+fi
 BACKOFF_BASE=300  # 5 minutes in seconds
 EXIT_CODE=0
 ATTEMPT=0
@@ -168,7 +171,7 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
     ATTEMPT=$((ATTEMPT + 1))
     if [ "${ATTEMPT}" -ge "${MAX_RETRIES}" ]; then
       log "RATE-LIMITED: All ${MAX_RETRIES} attempts exhausted for ${ELIGIBLE_PRD}"
-      night-watch history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" rate_limited --exit-code ${EXIT_CODE} --attempt ${ATTEMPT} 2>/dev/null || true
+      night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" rate_limited --exit-code "${EXIT_CODE}" --attempt "${ATTEMPT}" 2>/dev/null || true
       break
     fi
     BACKOFF=$(( BACKOFF_BASE * (1 << (ATTEMPT - 1)) ))
@@ -186,7 +189,7 @@ if [ ${EXIT_CODE} -eq 0 ]; then
   if [ "${PR_EXISTS}" -gt 0 ]; then
     release_claim "${PRD_DIR}" "${ELIGIBLE_PRD}"
     mark_prd_done "${PRD_DIR}" "${ELIGIBLE_PRD}"
-    night-watch history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" success --exit-code 0 2>/dev/null || true
+    night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" success --exit-code 0 2>/dev/null || true
     git -C "${PROJECT_DIR}" add -A docs/PRDs/night-watch/
     git -C "${PROJECT_DIR}" commit -m "chore: mark ${ELIGIBLE_PRD} as done (PR opened on ${BRANCH_NAME})
 
@@ -198,10 +201,10 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" || true
   fi
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: Night watch killed after ${MAX_RUNTIME}s while processing ${ELIGIBLE_PRD}"
-  night-watch history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" timeout --exit-code 124 2>/dev/null || true
+  night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" timeout --exit-code 124 2>/dev/null || true
   cleanup_worktrees "${PROJECT_DIR}"
 else
   log "FAIL: Night watch exited with code ${EXIT_CODE} while processing ${ELIGIBLE_PRD}"
-  night-watch history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code ${EXIT_CODE} 2>/dev/null || true
+  night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code "${EXIT_CODE}" 2>/dev/null || true
   cleanup_worktrees "${PROJECT_DIR}"
 fi

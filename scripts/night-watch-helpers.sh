@@ -19,6 +19,44 @@ validate_provider() {
   esac
 }
 
+# Resolve a usable night-watch CLI binary for nested script calls.
+# Resolution order:
+# 1) NW_CLI_BIN from parent environment (absolute path set by installer/runtime)
+# 2) `night-watch` found in PATH
+# 3) bundled bin path next to scripts/ in this package checkout/install
+resolve_night_watch_cli() {
+  if [ -n "${NW_CLI_BIN:-}" ] && [ -x "${NW_CLI_BIN}" ]; then
+    printf "%s" "${NW_CLI_BIN}"
+    return 0
+  fi
+
+  if command -v night-watch >/dev/null 2>&1; then
+    printf "%s" "night-watch"
+    return 0
+  fi
+
+  local script_dir
+  if [ -n "${SCRIPT_DIR:-}" ]; then
+    script_dir="${SCRIPT_DIR}"
+  else
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  fi
+
+  local bundled_bin="${script_dir}/../bin/night-watch.mjs"
+  if [ -x "${bundled_bin}" ]; then
+    printf "%s" "${bundled_bin}"
+    return 0
+  fi
+
+  return 1
+}
+
+night_watch_history() {
+  local cli_bin
+  cli_bin=$(resolve_night_watch_cli) || return 127
+  "${cli_bin}" history "$@"
+}
+
 # ── Logging ──────────────────────────────────────────────────────────────────
 
 log() {
@@ -212,7 +250,7 @@ find_eligible_prd() {
     fi
 
     # Skip if in cooldown after a recent failure (checked via execution history ledger)
-    if [ -n "${project_dir}" ] && night-watch history check "${project_dir}" "${prd_file}" --cooldown "${max_runtime}" 2>/dev/null; then
+    if [ -n "${project_dir}" ] && night_watch_history check "${project_dir}" "${prd_file}" --cooldown "${max_runtime}" 2>/dev/null; then
       log "SKIP-PRD: ${prd_file} — in cooldown after recent failure"
       continue
     fi
