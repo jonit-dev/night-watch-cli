@@ -23,6 +23,11 @@ import {
   success,
   error as uiError,
 } from '../utils/ui.js';
+import {
+  checkGhCli,
+  checkGitRepo,
+  detectProviders,
+} from '../utils/checks.js';
 
 // Get templates directory path
 const __filename = fileURLToPath(import.meta.url);
@@ -111,72 +116,6 @@ export function getDefaultBranch(cwd: string): string {
  */
 function getProjectName(cwd: string): string {
   return path.basename(cwd);
-}
-
-/**
- * Check if current directory is a git repository
- */
-function isGitRepo(cwd: string): boolean {
-  return fs.existsSync(path.join(cwd, '.git'));
-}
-
-/**
- * Check if gh CLI is authenticated
- */
-function isGhAuthenticated(): boolean {
-  try {
-    execSync('gh auth status', {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Check if claude CLI is available
- */
-function isClaudeAvailable(): boolean {
-  try {
-    execSync('which claude', {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Check if codex CLI is available
- */
-function isCodexAvailable(): boolean {
-  try {
-    execSync('which codex', {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Detect which AI provider CLIs are installed
- */
-function detectProviders(): Provider[] {
-  const providers: Provider[] = [];
-  if (isClaudeAvailable()) {
-    providers.push('claude');
-  }
-  if (isCodexAvailable()) {
-    providers.push('codex');
-  }
-  return providers;
 }
 
 /**
@@ -316,22 +255,23 @@ export function initCommand(program: Command): void {
       header('Night Watch CLI - Initializing');
 
       // Step 1: Verify git repository
-      step(1, 10, 'Checking git repository...');
-      if (!isGitRepo(cwd)) {
-        uiError('Current directory is not a git repository.');
+      step(1, 9, 'Checking git repository...');
+      const gitCheck = checkGitRepo(cwd);
+      if (!gitCheck.passed) {
+        uiError(gitCheck.message);
         console.log('Please run this command from the root of a git repository.');
         process.exit(1);
       }
-      success('Git repository found');
+      success(gitCheck.message);
 
       // Step 2: Verify gh CLI
-      step(2, 10, 'Checking GitHub CLI (gh)...');
-      if (!isGhAuthenticated()) {
-        uiError('GitHub CLI (gh) is not authenticated.');
-        console.log('Please run: gh auth login');
+      step(2, 9, 'Checking GitHub CLI (gh)...');
+      const ghCheck = checkGhCli();
+      if (!ghCheck.passed) {
+        uiError(ghCheck.message);
         process.exit(1);
       }
-      success('GitHub CLI is authenticated');
+      success(ghCheck.message);
 
       // Step 3: Detect AI providers
       step(3, 10, 'Detecting AI providers...');
