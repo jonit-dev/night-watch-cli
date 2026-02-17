@@ -8,6 +8,7 @@ import { execSync } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import { loadConfig } from "../config.js";
+import { INightWatchConfig } from "../types.js";
 import { LOG_DIR } from "../constants.js";
 import {
   generateMarker,
@@ -94,6 +95,81 @@ function getProjectName(projectDir: string): string {
 
   // Fall back to directory name
   return path.basename(projectDir);
+}
+
+export interface IInstallResult {
+  success: boolean;
+  entries: string[];
+  error?: string;
+}
+
+/**
+ * Core install logic, reusable from dashboard.
+ * Returns result without printing to console.
+ */
+export function performInstall(
+  projectDir: string,
+  config: INightWatchConfig,
+  options?: { schedule?: string; reviewerSchedule?: string; noReviewer?: boolean; force?: boolean }
+): IInstallResult {
+  try {
+    const executorSchedule = options?.schedule || config.cronSchedule;
+    const reviewerSchedule = options?.reviewerSchedule || config.reviewerSchedule;
+    const nightWatchBin = getNightWatchBinPath();
+    const projectName = getProjectName(projectDir);
+    const marker = generateMarker(projectName);
+    const logDir = path.join(projectDir, LOG_DIR);
+
+    if (!fs.existsSync(logDir)) {
+      fs.mkdirSync(logDir, { recursive: true });
+    }
+
+    const executorLog = path.join(logDir, "executor.log");
+    const reviewerLog = path.join(logDir, "reviewer.log");
+
+    // Check if already installed (unless force)
+    if (!options?.force) {
+      const existingEntries = Array.from(
+        new Set([...getEntries(marker), ...getProjectEntries(projectDir)])
+      );
+      if (existingEntries.length > 0) {
+        return { success: false, entries: existingEntries, error: "Already installed. Uninstall first or use force." };
+      }
+    }
+
+    const entries: string[] = [];
+    const nodeBinDir = getNodeBinDir();
+    const pathPrefix = nodeBinDir ? `export PATH="${nodeBinDir}:$PATH" && ` : "";
+
+    let providerEnvPrefix = "";
+    if (config.providerEnv && Object.keys(config.providerEnv).length > 0) {
+      const exports = Object.entries(config.providerEnv)
+        .map(([key, value]) => `export ${key}=${shellQuote(value)}`)
+        .join(" && ");
+      providerEnvPrefix = exports + " && ";
+    }
+
+    const executorEntry = `${executorSchedule} ${pathPrefix}${providerEnvPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
+    entries.push(executorEntry);
+
+    const installReviewer = options?.noReviewer === true ? false : config.reviewerEnabled;
+    if (installReviewer) {
+      const reviewerEntry = `${reviewerSchedule} ${pathPrefix}${providerEnvPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} review >> ${shellQuote(reviewerLog)} 2>&1  ${marker}`;
+      entries.push(reviewerEntry);
+    }
+
+    const currentCrontab = readCrontab();
+    const newCrontab = [...currentCrontab, ...entries];
+    writeCrontab(newCrontab);
+
+    return { success: true, entries };
+  } catch (err) {
+    return {
+      success: false,
+      entries: [],
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 /**

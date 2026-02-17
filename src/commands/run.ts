@@ -52,6 +52,11 @@ export function buildEnvVars(config: INightWatchConfig, options: IRunOptions): R
     Object.assign(env, config.providerEnv);
   }
 
+  // PRD priority order
+  if (config.prdPriority && config.prdPriority.length > 0) {
+    env.NW_PRD_PRIORITY = config.prdPriority.join(":");
+  }
+
   // Dry run flag
   if (options.dryRun) {
     env.NW_DRY_RUN = "1";

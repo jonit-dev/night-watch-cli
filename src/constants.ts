@@ -36,6 +36,9 @@ export const DEFAULT_PROVIDER_ENV: Record<string, string> = {};
 // Notification Configuration
 export const DEFAULT_NOTIFICATIONS: INotificationConfig = { webhooks: [] };
 
+// PRD Priority Configuration
+export const DEFAULT_PRD_PRIORITY: string[] = [];
+
 // Valid providers
 export const VALID_PROVIDERS: Provider[] = ["claude", "codex"];
 
