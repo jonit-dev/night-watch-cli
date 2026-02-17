@@ -62,6 +62,12 @@ export function buildEnvVars(config: INightWatchConfig, options: IRunOptions): R
     env.NW_DRY_RUN = "1";
   }
 
+  // Sandbox flag — prevents the agent from modifying crontab during execution
+  env.NW_EXECUTION_CONTEXT = "agent";
+
+  // Max retries for rate-limited API calls
+  env.NW_MAX_RETRIES = String(config.maxRetries ?? 3);
+
   return env;
 }
 

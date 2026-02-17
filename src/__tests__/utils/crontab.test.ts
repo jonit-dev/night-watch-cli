@@ -94,6 +94,23 @@ describe("crontab utilities", () => {
       const writeCall = vi.mocked(execSync).mock.calls[1];
       expect(writeCall[0]).toContain("crontab -");
     });
+
+    it("should throw when NW_EXECUTION_CONTEXT is agent", () => {
+      const original = process.env.NW_EXECUTION_CONTEXT;
+      process.env.NW_EXECUTION_CONTEXT = "agent";
+      try {
+        const lines = ["0 * * * * /usr/bin/command1"];
+        expect(() => writeCrontab(lines)).toThrow(/blocked during agent execution/);
+        // Ensure execSync was never called
+        expect(execSync).not.toHaveBeenCalled();
+      } finally {
+        if (original === undefined) {
+          delete process.env.NW_EXECUTION_CONTEXT;
+        } else {
+          process.env.NW_EXECUTION_CONTEXT = original;
+        }
+      }
+    });
   });
 
   describe("addEntry", () => {

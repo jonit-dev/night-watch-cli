@@ -119,35 +119,66 @@ if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   exit 0
 fi
 
-EXIT_CODE=0
+# Sandbox: prevent the agent from modifying crontab during execution
+export NW_EXECUTION_CONTEXT=agent
 
-case "${PROVIDER_CMD}" in
-  claude)
-    if timeout "${MAX_RUNTIME}" \
-      claude -p "${PROMPT}" \
-        --dangerously-skip-permissions \
-        >> "${LOG_FILE}" 2>&1; then
-      EXIT_CODE=0
-    else
-      EXIT_CODE=$?
+MAX_RETRIES="${NW_MAX_RETRIES:-3}"
+BACKOFF_BASE=300  # 5 minutes in seconds
+EXIT_CODE=0
+ATTEMPT=0
+
+while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
+  EXIT_CODE=0
+
+  case "${PROVIDER_CMD}" in
+    claude)
+      if timeout "${MAX_RUNTIME}" \
+        claude -p "${PROMPT}" \
+          --dangerously-skip-permissions \
+          >> "${LOG_FILE}" 2>&1; then
+        EXIT_CODE=0
+      else
+        EXIT_CODE=$?
+      fi
+      ;;
+    codex)
+      if timeout "${MAX_RUNTIME}" \
+        codex --quiet \
+          --yolo \
+          --prompt "${PROMPT}" \
+          >> "${LOG_FILE}" 2>&1; then
+        EXIT_CODE=0
+      else
+        EXIT_CODE=$?
+      fi
+      ;;
+    *)
+      log "ERROR: Unknown provider: ${PROVIDER_CMD}"
+      exit 1
+      ;;
+  esac
+
+  # Success or timeout — don't retry
+  if [ ${EXIT_CODE} -eq 0 ] || [ ${EXIT_CODE} -eq 124 ]; then
+    break
+  fi
+
+  # Check if this was a rate limit (429) error
+  if check_rate_limited "${LOG_FILE}"; then
+    ATTEMPT=$((ATTEMPT + 1))
+    if [ "${ATTEMPT}" -ge "${MAX_RETRIES}" ]; then
+      log "RATE-LIMITED: All ${MAX_RETRIES} attempts exhausted for ${ELIGIBLE_PRD}"
+      break
     fi
-    ;;
-  codex)
-    if timeout "${MAX_RUNTIME}" \
-      codex --quiet \
-        --yolo \
-        --prompt "${PROMPT}" \
-        >> "${LOG_FILE}" 2>&1; then
-      EXIT_CODE=0
-    else
-      EXIT_CODE=$?
-    fi
-    ;;
-  *)
-    log "ERROR: Unknown provider: ${PROVIDER_CMD}"
-    exit 1
-    ;;
-esac
+    BACKOFF=$(( BACKOFF_BASE * (1 << (ATTEMPT - 1)) ))
+    BACKOFF_MIN=$(( BACKOFF / 60 ))
+    log "RATE-LIMITED: Attempt ${ATTEMPT}/${MAX_RETRIES}, retrying in ${BACKOFF_MIN}m"
+    sleep "${BACKOFF}"
+  else
+    # Non-retryable failure
+    break
+  fi
+done
 
 if [ ${EXIT_CODE} -eq 0 ]; then
   PR_EXISTS=$(gh pr list --state open --json headRefName --jq '.[].headRefName' 2>/dev/null | grep -cF "${BRANCH_NAME}" || echo "0")

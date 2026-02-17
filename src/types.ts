@@ -45,6 +45,12 @@ export interface INightWatchConfig {
   /** Cron schedule for PR reviewer */
   reviewerSchedule: string;
 
+  /** Minute offset (0-59) applied to cron schedules during install. Helps stagger multiple projects. */
+  cronScheduleOffset: number;
+
+  /** Maximum retry attempts for rate-limited API calls (default: 3) */
+  maxRetries: number;
+
   // Provider configuration
 
   /** AI provider to use for execution */

@@ -56,6 +56,13 @@ export function readCrontab(): string[] {
  * @throws Error if crontab write fails
  */
 export function writeCrontab(lines: string[]): void {
+  if (process.env.NW_EXECUTION_CONTEXT === "agent") {
+    throw new Error(
+      "Crontab writes are blocked during agent execution (NW_EXECUTION_CONTEXT=agent). " +
+      "This prevents the running agent from accidentally modifying its own scheduling."
+    );
+  }
+
   const content = lines.join("\n");
 
   // Create a backup first
