@@ -1,22 +1,31 @@
 /**
  * Doctor command for Night Watch CLI
- * Validates webhook configuration and checks system health
+ * Validates environment setup and system health
  */
 
 import { Command } from "commander";
-import * as fs from "fs";
-import * as path from "path";
-import { execSync } from "child_process";
 import { loadConfig } from "../config.js";
 import { IWebhookConfig } from "../types.js";
 import {
   header,
   info,
+  label,
   step,
   success,
   error as uiError,
   warn,
 } from "../utils/ui.js";
+import {
+  checkConfigFile,
+  checkCrontabAccess,
+  checkGhCli,
+  checkGitRepo,
+  checkLogsDirectory,
+  checkNodeVersion,
+  checkPrdDirectory,
+  checkProviderCli,
+} from "../utils/checks.js";
+import type { ICheckResult } from "../utils/checks.js";
 
 /**
  * Validate a single webhook configuration and return a list of issues.
@@ -76,74 +85,155 @@ export function validateWebhook(webhook: IWebhookConfig): string[] {
 }
 
 /**
+ * Options for doctor command
+ */
+interface IDoctorOptions {
+  fix: boolean;
+}
+
+/**
+ * Run a single check and print the result
+ */
+function runCheck(
+  checkNum: number,
+  total: number,
+  checkName: string,
+  checkFn: () => ICheckResult,
+  options: IDoctorOptions
+): { passed: boolean; fixed: boolean } {
+  step(checkNum, total, `Checking ${checkName}...`);
+  const result = checkFn();
+
+  if (result.passed) {
+    success(result.message);
+    return { passed: true, fixed: false };
+  }
+
+  // Check failed
+  if (options.fix && result.fixable && result.fix) {
+    result.fix();
+    // Re-run check after fix
+    const recheckResult = checkFn();
+    if (recheckResult.passed) {
+      success(`Fixed: ${checkName}`);
+      return { passed: true, fixed: true };
+    } else {
+      uiError(`Failed to fix: ${checkName}`);
+      return { passed: false, fixed: false };
+    }
+  }
+
+  if (result.fixable) {
+    warn(`${result.message} (run with --fix to auto-fix)`);
+  } else {
+    uiError(result.message);
+  }
+  return { passed: false, fixed: false };
+}
+
+/**
  * Register the doctor command on the program
  */
 export function doctorCommand(program: Command): void {
   program
     .command("doctor")
     .description("Check Night Watch configuration and system health")
-    .action(async () => {
+    .option("--fix", "Automatically fix fixable issues")
+    .action(async (options: IDoctorOptions) => {
       const projectDir = process.cwd();
-      let hasErrors = false;
+      const config = loadConfig(projectDir);
+      const totalChecks = 8;
+      let checkNum = 1;
+      let passedChecks = 0;
+      let fixedChecks = 0;
 
       header("Night Watch Doctor");
 
-      // Check 1: Git repository
-      step(1, 5, "Checking git repository...");
-      try {
-        execSync("git rev-parse --is-inside-work-tree", {
-          cwd: projectDir,
-          stdio: "pipe",
-        });
-        success("Git repository detected");
-      } catch {
-        uiError("Not a git repository");
-        hasErrors = true;
-      }
+      // Check 1: Node.js version
+      const nodeResult = runCheck(
+        checkNum++,
+        totalChecks,
+        "Node.js version",
+        () => checkNodeVersion(18),
+        options
+      );
+      if (nodeResult.passed) passedChecks++;
+      if (nodeResult.fixed) fixedChecks++;
 
-      // Check 2: GitHub CLI
-      step(2, 5, "Checking GitHub CLI...");
-      try {
-        execSync("gh auth status", { stdio: "pipe" });
-        success("GitHub CLI authenticated");
-      } catch {
-        warn("GitHub CLI not authenticated (run: gh auth login)");
-      }
+      // Check 2: Git repository
+      const gitResult = runCheck(
+        checkNum++,
+        totalChecks,
+        "git repository",
+        () => checkGitRepo(projectDir),
+        options
+      );
+      if (gitResult.passed) passedChecks++;
+      if (gitResult.fixed) fixedChecks++;
 
-      // Check 3: Provider CLI
-      step(3, 5, "Checking provider CLI...");
-      const config = loadConfig(projectDir);
-      try {
-        execSync(`which ${config.provider}`, { stdio: "pipe" });
-        success(`Provider CLI found: ${config.provider}`);
-      } catch {
-        uiError(`Provider CLI not found: ${config.provider}`);
-        hasErrors = true;
-      }
+      // Check 3: GitHub CLI
+      const ghResult = runCheck(
+        checkNum++,
+        totalChecks,
+        "GitHub CLI",
+        () => checkGhCli(),
+        options
+      );
+      if (ghResult.passed) passedChecks++;
+      if (ghResult.fixed) fixedChecks++;
 
-      // Check 4: PRD directory
-      step(4, 5, "Checking PRD directory...");
-      const prdDir = path.join(projectDir, config.prdDir);
-      if (fs.existsSync(prdDir)) {
-        const prds = fs
-          .readdirSync(prdDir)
-          .filter(
-            (f) => f.endsWith(".md") && f !== "NIGHT-WATCH-SUMMARY.md"
-          );
-        success(`PRD directory found (${prds.length} PRDs)`);
-      } else {
-        warn(
-          `PRD directory not found: ${config.prdDir} (run: night-watch init)`
-        );
-      }
+      // Check 4: Provider CLI
+      const providerResult = runCheck(
+        checkNum++,
+        totalChecks,
+        "provider CLI",
+        () => checkProviderCli(config.provider),
+        options
+      );
+      if (providerResult.passed) passedChecks++;
+      if (providerResult.fixed) fixedChecks++;
 
-      // Check 5: Webhook configuration
-      step(5, 5, "Checking webhook configuration...");
+      // Check 5: Config file
+      const configResult = runCheck(
+        checkNum++,
+        totalChecks,
+        "config file",
+        () => checkConfigFile(projectDir),
+        options
+      );
+      if (configResult.passed) passedChecks++;
+      if (configResult.fixed) fixedChecks++;
+
+      // Check 6: PRD directory
+      const prdResult = runCheck(
+        checkNum++,
+        totalChecks,
+        "PRD directory",
+        () => checkPrdDirectory(projectDir, config.prdDir),
+        options
+      );
+      if (prdResult.passed) passedChecks++;
+      if (prdResult.fixed) fixedChecks++;
+
+      // Check 7: Logs directory
+      const logsResult = runCheck(
+        checkNum++,
+        totalChecks,
+        "logs directory",
+        () => checkLogsDirectory(projectDir),
+        options
+      );
+      if (logsResult.passed) passedChecks++;
+      if (logsResult.fixed) fixedChecks++;
+
+      // Check 8: Webhook configuration
+      step(checkNum, totalChecks, "Checking webhook configuration...");
       if (
         !config.notifications ||
         config.notifications.webhooks.length === 0
       ) {
         info("No webhooks configured (optional)");
+        passedChecks++;
       } else {
         let webhookErrors = 0;
         for (const webhook of config.notifications.webhooks) {
@@ -161,18 +251,30 @@ export function doctorCommand(program: Command): void {
           success(
             `All ${config.notifications.webhooks.length} webhook(s) valid`
           );
+          passedChecks++;
         }
       }
 
+      // Check crontab access (non-blocking, informational only)
+      const crontabResult = checkCrontabAccess();
+      info(crontabResult.message);
+
       // Summary
       console.log();
-      if (hasErrors) {
+      header("Summary");
+      label("Checks passed", `${passedChecks}/${totalChecks}`);
+      if (fixedChecks > 0) {
+        label("Issues fixed", `${fixedChecks}`);
+      }
+      console.log();
+
+      if (passedChecks === totalChecks) {
+        success("All checks passed");
+      } else {
         uiError(
           "Issues found — fix errors above before running Night Watch"
         );
         process.exit(1);
-      } else {
-        success("All checks passed");
       }
     });
 }
