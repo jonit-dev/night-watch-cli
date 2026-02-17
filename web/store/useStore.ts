@@ -69,6 +69,12 @@ export const useStore = create<AppState>((set) => ({
     } else {
       localStorage.removeItem('nw-selected-project');
     }
-    set({ selectedProjectId: id });
+    set((state) => {
+      const project = state.projects.find((p) => p.name === id);
+      return {
+        selectedProjectId: id,
+        ...(project ? { projectName: project.name } : {}),
+      };
+    });
   },
 }));
