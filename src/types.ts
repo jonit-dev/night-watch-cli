@@ -58,6 +58,9 @@ export interface INightWatchConfig {
 
   /** Notification webhook configuration */
   notifications: INotificationConfig;
+
+  /** PRD execution priority order (filenames without .md extension) */
+  prdPriority: string[];
 }
 
 export type WebhookType = "slack" | "discord" | "telegram";

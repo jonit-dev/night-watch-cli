@@ -18,6 +18,7 @@ import {
   DEFAULT_MIN_REVIEW_SCORE,
   DEFAULT_NOTIFICATIONS,
   DEFAULT_PRD_DIR,
+  DEFAULT_PRD_PRIORITY,
   DEFAULT_PROVIDER,
   DEFAULT_PROVIDER_ENV,
   DEFAULT_REVIEWER_ENABLED,
@@ -52,6 +53,9 @@ export function getDefaultConfig(): INightWatchConfig {
 
     // Notification configuration
     notifications: { ...DEFAULT_NOTIFICATIONS, webhooks: [] },
+
+    // PRD priority
+    prdPriority: [...DEFAULT_PRD_PRIORITY],
   };
 }
 
@@ -164,6 +168,9 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     normalized.notifications = { webhooks };
   }
 
+  // PRD priority
+  normalized.prdPriority = readStringArray(rawConfig.prdPriority);
+
   return normalized;
 }
 
@@ -224,6 +231,8 @@ function mergeConfigs(
       merged.providerEnv = { ...merged.providerEnv, ...fileConfig.providerEnv };
     if (fileConfig.notifications !== undefined)
       merged.notifications = fileConfig.notifications;
+    if (fileConfig.prdPriority !== undefined)
+      merged.prdPriority = [...fileConfig.prdPriority];
   }
 
   // Merge env config (takes precedence)
@@ -246,6 +255,8 @@ function mergeConfigs(
     merged.providerEnv = { ...merged.providerEnv, ...envConfig.providerEnv };
   if (envConfig.notifications !== undefined)
     merged.notifications = envConfig.notifications;
+  if (envConfig.prdPriority !== undefined)
+    merged.prdPriority = [...envConfig.prdPriority];
 
   return merged;
 }

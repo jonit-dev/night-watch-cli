@@ -176,6 +176,26 @@ find_eligible_prd() {
     return 0
   fi
 
+  # Apply priority ordering if NW_PRD_PRIORITY is set (colon-separated PRD names)
+  if [ -n "${NW_PRD_PRIORITY:-}" ]; then
+    local ordered=""
+    IFS=':' read -ra prio_list <<< "${NW_PRD_PRIORITY}"
+    for pname in "${prio_list[@]}"; do
+      local match
+      match=$(echo "${prd_files}" | grep "/${pname}\.md$" || true)
+      if [ -n "${match}" ]; then
+        ordered="${ordered}${match}"$'\n'
+      fi
+    done
+    # Append remaining files not in priority list
+    while IFS= read -r pf; do
+      if [ -n "${pf}" ] && ! echo "${ordered}" | grep -qF "${pf}"; then
+        ordered="${ordered}${pf}"$'\n'
+      fi
+    done <<< "${prd_files}"
+    prd_files=$(echo "${ordered}" | sed '/^$/d')
+  fi
+
   local open_branches
   open_branches=$(gh pr list --state open --json headRefName --jq '.[].headRefName' 2>/dev/null || echo "")
 

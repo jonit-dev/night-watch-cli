@@ -27,7 +27,7 @@ const mockCwd = vi.spyOn(process, "cwd");
 import {
   buildEnvVars,
   applyCliOverrides,
-  RunOptions,
+  IRunOptions,
   scanPrdDirectory,
 } from "../../commands/run.js";
 import { INightWatchConfig } from "../../types.js";
@@ -47,6 +47,7 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
     reviewerSchedule: "0 0,3,6,9,12,15,18,21 * * *",
     provider: "claude",
     reviewerEnabled: true,
+    prdPriority: [],
     ...overrides,
   };
 }
@@ -93,7 +94,7 @@ describe("run command", () => {
   describe("buildEnvVars", () => {
     it("should pass config as env vars", () => {
       const config = createTestConfig();
-      const options: RunOptions = { dryRun: false };
+      const options: IRunOptions = { dryRun: false };
 
       const env = buildEnvVars(config, options);
 
@@ -104,7 +105,7 @@ describe("run command", () => {
 
     it("should set NW_PROVIDER_CMD for codex provider", () => {
       const config = createTestConfig({ provider: "codex", reviewerEnabled: false });
-      const options: RunOptions = { dryRun: false };
+      const options: IRunOptions = { dryRun: false };
 
       const env = buildEnvVars(config, options);
 
@@ -113,7 +114,7 @@ describe("run command", () => {
 
     it("should set NW_DRY_RUN when dryRun is true", () => {
       const config = createTestConfig();
-      const options: RunOptions = { dryRun: true };
+      const options: IRunOptions = { dryRun: true };
 
       const env = buildEnvVars(config, options);
 
@@ -122,7 +123,7 @@ describe("run command", () => {
 
     it("should not set NW_DRY_RUN when dryRun is false", () => {
       const config = createTestConfig();
-      const options: RunOptions = { dryRun: false };
+      const options: IRunOptions = { dryRun: false };
 
       const env = buildEnvVars(config, options);
 
@@ -131,7 +132,7 @@ describe("run command", () => {
 
     it("should not set any ANTHROPIC_* environment variables", () => {
       const config = createTestConfig();
-      const options: RunOptions = { dryRun: false };
+      const options: IRunOptions = { dryRun: false };
 
       const env = buildEnvVars(config, options);
 
@@ -143,7 +144,7 @@ describe("run command", () => {
 
     it("should not set any budget-related environment variables", () => {
       const config = createTestConfig();
-      const options: RunOptions = { dryRun: false };
+      const options: IRunOptions = { dryRun: false };
 
       const env = buildEnvVars(config, options);
 
@@ -151,12 +152,30 @@ describe("run command", () => {
       expect(env.NW_MAX_BUDGET).toBeUndefined();
       expect(env.NW_REVIEWER_MAX_BUDGET).toBeUndefined();
     });
+
+    it("should set NW_PRD_PRIORITY when prdPriority is non-empty", () => {
+      const config = createTestConfig({ prdPriority: ["phase2", "phase0", "phase1"] });
+      const options: IRunOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_PRD_PRIORITY).toBe("phase2:phase0:phase1");
+    });
+
+    it("should not set NW_PRD_PRIORITY when prdPriority is empty", () => {
+      const config = createTestConfig({ prdPriority: [] });
+      const options: IRunOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_PRD_PRIORITY).toBeUndefined();
+    });
   });
 
   describe("applyCliOverrides", () => {
     it("should override timeout with --timeout flag", () => {
       const config = createTestConfig();
-      const options: RunOptions = { dryRun: false, timeout: "1800" };
+      const options: IRunOptions = { dryRun: false, timeout: "1800" };
 
       const overridden = applyCliOverrides(config, options);
 
@@ -165,7 +184,7 @@ describe("run command", () => {
 
     it("should override provider with --provider flag", () => {
       const config = createTestConfig();
-      const options: RunOptions = { dryRun: false, provider: "codex" };
+      const options: IRunOptions = { dryRun: false, provider: "codex" };
 
       const overridden = applyCliOverrides(config, options);
 

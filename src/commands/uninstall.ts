@@ -44,6 +44,65 @@ function getProjectName(projectDir: string): string {
   return path.basename(projectDir);
 }
 
+export interface IUninstallResult {
+  success: boolean;
+  removedCount: number;
+  error?: string;
+}
+
+/**
+ * Core uninstall logic, reusable from dashboard.
+ * Returns result without printing to console.
+ */
+export function performUninstall(
+  projectDir: string,
+  options?: { keepLogs?: boolean }
+): IUninstallResult {
+  try {
+    const projectName = getProjectName(projectDir);
+    const marker = generateMarker(projectName);
+
+    const existingEntries = Array.from(
+      new Set([...getEntries(marker), ...getProjectEntries(projectDir)])
+    );
+    if (existingEntries.length === 0) {
+      return { success: true, removedCount: 0 };
+    }
+
+    const removedCount = removeEntriesForProject(projectDir, marker);
+
+    if (!options?.keepLogs) {
+      const logDir = path.join(projectDir, "logs");
+      if (fs.existsSync(logDir)) {
+        const logFiles = ["executor.log", "reviewer.log"];
+        logFiles.forEach((logFile) => {
+          const logPath = path.join(logDir, logFile);
+          if (fs.existsSync(logPath)) {
+            fs.unlinkSync(logPath);
+          }
+        });
+
+        try {
+          const remainingFiles = fs.readdirSync(logDir);
+          if (remainingFiles.length === 0) {
+            fs.rmdirSync(logDir);
+          }
+        } catch {
+          // Ignore errors removing directory
+        }
+      }
+    }
+
+    return { success: true, removedCount };
+  } catch (err) {
+    return {
+      success: false,
+      removedCount: 0,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 /**
  * Uninstall crontab entries for night-watch
  */
