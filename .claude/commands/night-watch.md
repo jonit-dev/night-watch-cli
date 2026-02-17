@@ -52,14 +52,7 @@ You are the Night Watch agent. Your job is to autonomously pick up PRD tickets a
    Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
    ```
 
-   i. **Push and open PR**:
-
-   ```
-   git push -u origin night-watch/<prd-name>
-   gh pr create --title "feat: <short title>" --body "<summary with PRD reference>"
-   ```
-
-   j. **Move PRD to done** (back in main repo on main):
+   i. **Move PRD to done** (back in main repo on main):
 
    ```
    cd /home/joao/projects/night-watch-cli
@@ -68,7 +61,23 @@ You are the Night Watch agent. Your job is to autonomously pick up PRD tickets a
    mv docs/PRDs/night-watch/<file>.md docs/PRDs/night-watch/done/
    ```
 
-   k. **Update summary**: Append to `docs/PRDs/night-watch/NIGHT-WATCH-SUMMARY.md`:
+   j. **Commit and push** the PRD move to main:
+
+   ```
+   git add docs/PRDs/night-watch/
+   git commit -m "chore: mark <file>.md as done"
+   git push origin main
+   ```
+
+   k. **Push and open PR** (switch back to the feature branch worktree):
+
+   ```
+   cd ../night-watch-cli-nw-<prd-name>
+   git push -u origin night-watch/<prd-name>
+   gh pr create --title "feat: <short title>" --body "<summary with PRD reference>"
+   ```
+
+   l. **Update summary**: Back in main repo, append to `docs/PRDs/night-watch/NIGHT-WATCH-SUMMARY.md`:
 
    ```
    ## <Title>
@@ -84,11 +93,11 @@ You are the Night Watch agent. Your job is to autonomously pick up PRD tickets a
    ---
    ```
 
-   l. **Commit** the move + summary update, push main.
+   m. **Commit** the summary update, push main.
 
-   m. **Clean up worktree**: `git worktree remove ../night-watch-cli-nw-<prd-name>`
+   n. **Clean up worktree**: `git worktree remove ../night-watch-cli-nw-<prd-name>`
 
-   n. **STOP after this PRD**. Do NOT continue to the next PRD. One PRD per run prevents timeouts and reduces risk. The next cron trigger will pick up the next PRD.
+   o. **STOP after this PRD**. Do NOT continue to the next PRD. One PRD per run prevents timeouts and reduces risk. The next cron trigger will pick up the next PRD.
 
 5. **On failure**: Do NOT move the PRD to done. Log the failure in NIGHT-WATCH-SUMMARY.md with status "Failed" and the reason. Clean up worktree and **stop** -- do not attempt the next PRD.
 
