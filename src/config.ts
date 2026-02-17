@@ -192,6 +192,8 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
       enabled: readBoolean(rawRoadmapScanner.enabled) ?? DEFAULT_ROADMAP_SCANNER.enabled,
       roadmapPath: readString(rawRoadmapScanner.roadmapPath) ?? DEFAULT_ROADMAP_SCANNER.roadmapPath,
       autoScanInterval: readNumber(rawRoadmapScanner.autoScanInterval) ?? DEFAULT_ROADMAP_SCANNER.autoScanInterval,
+      slicerSchedule: readString(rawRoadmapScanner.slicerSchedule) ?? DEFAULT_ROADMAP_SCANNER.slicerSchedule,
+      slicerMaxRuntime: readNumber(rawRoadmapScanner.slicerMaxRuntime) ?? DEFAULT_ROADMAP_SCANNER.slicerMaxRuntime,
     };
     // Validate autoScanInterval has minimum of 30 seconds
     if (roadmapScanner.autoScanInterval < 30) {
@@ -451,6 +453,25 @@ export function loadConfig(projectDir: string): INightWatchConfig {
   // NW_TEMPLATES_DIR environment variable
   if (process.env.NW_TEMPLATES_DIR) {
     envConfig.templatesDir = process.env.NW_TEMPLATES_DIR;
+  }
+
+  // NW_SLICER_SCHEDULE environment variable
+  if (process.env.NW_SLICER_SCHEDULE) {
+    envConfig.roadmapScanner = {
+      ...(envConfig.roadmapScanner ?? DEFAULT_ROADMAP_SCANNER),
+      slicerSchedule: process.env.NW_SLICER_SCHEDULE,
+    };
+  }
+
+  // NW_SLICER_MAX_RUNTIME environment variable
+  if (process.env.NW_SLICER_MAX_RUNTIME) {
+    const slicerMaxRuntime = parseInt(process.env.NW_SLICER_MAX_RUNTIME, 10);
+    if (!isNaN(slicerMaxRuntime) && slicerMaxRuntime > 0) {
+      envConfig.roadmapScanner = {
+        ...(envConfig.roadmapScanner ?? DEFAULT_ROADMAP_SCANNER),
+        slicerMaxRuntime,
+      };
+    }
   }
 
   // Merge all configs
