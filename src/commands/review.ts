@@ -53,6 +53,9 @@ export function buildEnvVars(config: INightWatchConfig, options: IReviewOptions)
     env.NW_DRY_RUN = "1";
   }
 
+  // Sandbox flag — prevents the agent from modifying crontab during execution
+  env.NW_EXECUTION_CONTEXT = "agent";
+
   return env;
 }
 

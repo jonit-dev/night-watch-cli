@@ -196,8 +196,10 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" || true
   fi
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: Night watch killed after ${MAX_RUNTIME}s while processing ${ELIGIBLE_PRD}"
+  set_cooldown "${PRD_DIR}" "${ELIGIBLE_PRD}"
   cleanup_worktrees "${PROJECT_DIR}"
 else
   log "FAIL: Night watch exited with code ${EXIT_CODE} while processing ${ELIGIBLE_PRD}"
+  set_cooldown "${PRD_DIR}" "${ELIGIBLE_PRD}"
   cleanup_worktrees "${PROJECT_DIR}"
 fi
