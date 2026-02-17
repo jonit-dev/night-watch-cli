@@ -20,20 +20,13 @@ You are the Night Watch agent. Your job is to autonomously pick up PRD tickets a
 
    b. **Branch naming**: The branch MUST be named exactly `night-watch/<prd-filename-without-.md>`. Do NOT use `feat/`, `feature/`, or any other prefix. Example: for `health-check-endpoints.md` the branch is `night-watch/health-check-endpoints`.
 
-   c. **Create a feature branch** from ${DEFAULT_BRANCH}:
+   c. **Use the pre-provisioned runtime workspace**:
+      - You are already running in an isolated runtime workspace.
+      - The target branch `night-watch/<prd-filename-without-.md>` is already prepared.
+      - Do **not** run `git checkout`/`git switch` in the original project directory.
+      - Do **not** create/remove worktrees manually; the runtime controller handles isolation and cleanup.
 
-   ```
-   git checkout ${DEFAULT_BRANCH} && git pull origin ${DEFAULT_BRANCH}
-   git checkout -b night-watch/<prd-filename-without-.md>
-   ```
-
-   d. **Create a git worktree** for isolated work:
-
-   ```
-   git worktree add ../${PROJECT_NAME}-nw-<prd-name> night-watch/<prd-name>
-   ```
-
-   Then `cd` into the worktree and run package install (npm install, yarn install, or pnpm install as appropriate).
+   d. Install dependencies in the current runtime workspace (npm install, yarn install, or pnpm install as appropriate).
 
    e. **Implement the PRD using the PRD Executor workflow**:
       - Read `.claude/commands/prd-executor.md` and follow its full execution pipeline.
@@ -64,11 +57,9 @@ You are the Night Watch agent. Your job is to autonomously pick up PRD tickets a
    gh pr create --title "feat: <short title>" --body "<summary with PRD reference>"
    ```
 
-   j. **Move PRD to done** (back in main repo on ${DEFAULT_BRANCH}):
+   j. **Move PRD to done**:
 
    ```
-   cd ${PROJECT_DIR}
-   git checkout ${DEFAULT_BRANCH}
    mkdir -p docs/PRDs/night-watch/done
    mv docs/PRDs/night-watch/<file>.md docs/PRDs/night-watch/done/
    ```
@@ -91,10 +82,8 @@ You are the Night Watch agent. Your job is to autonomously pick up PRD tickets a
 
    l. **Commit** the move + summary update, push ${DEFAULT_BRANCH}.
 
-   m. **Clean up worktree**: `git worktree remove ../${PROJECT_NAME}-nw-<prd-name>`
+   m. **STOP after this PRD**. Do NOT continue to the next PRD. One PRD per run prevents timeouts and reduces risk. The next cron trigger will pick up the next PRD.
 
-   n. **STOP after this PRD**. Do NOT continue to the next PRD. One PRD per run prevents timeouts and reduces risk. The next cron trigger will pick up the next PRD.
-
-5. **On failure**: Do NOT move the PRD to done. Log the failure in NIGHT-WATCH-SUMMARY.md with status "Failed" and the reason. Clean up worktree and **stop** -- do not attempt the next PRD.
+5. **On failure**: Do NOT move the PRD to done. Log the failure in NIGHT-WATCH-SUMMARY.md with status "Failed" and the reason. The runtime controller handles cleanup. Then **stop** -- do not attempt the next PRD.
 
 Start now. Scan for available PRDs and process the first eligible one.

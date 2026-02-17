@@ -28,6 +28,7 @@ describe('CLI', () => {
       expect(output).toContain('doctor');
       expect(output).toContain('dashboard');
       expect(output).toContain('history');
+      expect(output).toContain('update');
     });
 
     it('should show init command help', () => {
@@ -84,6 +85,18 @@ describe('CLI', () => {
 
       expect(output).toContain('Remove crontab entries');
       expect(output).toContain('--keep-logs');
+    });
+
+    it('should show update command help', () => {
+      const output = execSync('npx tsx src/cli.ts update --help', {
+        encoding: 'utf-8',
+        cwd: process.cwd(),
+      });
+
+      expect(output).toContain('Update global CLI and refresh cron');
+      expect(output).toContain('--projects');
+      expect(output).toContain('--global-spec');
+      expect(output).toContain('--no-global');
     });
 
     it('should show status command help', () => {
