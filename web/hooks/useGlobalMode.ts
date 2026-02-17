@@ -8,9 +8,10 @@ import { useStore } from '../store/useStore';
  * If it 404s, stays in single-project mode (no-op).
  */
 export function useGlobalMode(): void {
-  const { setGlobalMode, setProjects, selectProject, selectedProjectId } = useStore();
+  const { setGlobalMode, setGlobalModeLoading, setProjects, selectProject, selectedProjectId } = useStore();
 
   useEffect(() => {
+    setGlobalModeLoading(true);
     fetchProjects()
       .then((projects) => {
         setGlobalMode(true);
@@ -28,6 +29,9 @@ export function useGlobalMode(): void {
       .catch(() => {
         // /api/projects doesn't exist — single-project mode
         setGlobalMode(false);
+      })
+      .finally(() => {
+        setGlobalModeLoading(false);
       });
     // Run only on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps

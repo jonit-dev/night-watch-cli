@@ -8,8 +8,8 @@ import { useStore } from '../store/useStore';
 const PRs: React.FC = () => {
   const [selectedPR, setSelectedPR] = useState<number | null>(null);
   const [runningReview, setRunningReview] = useState(false);
-  const { addToast, selectedProjectId } = useStore();
-  const { data: prs = [], loading, error, refetch } = useApi(fetchPrs, [selectedProjectId]);
+  const { addToast, selectedProjectId, globalModeLoading } = useStore();
+  const { data: prs = [], loading, error, refetch } = useApi(fetchPrs, [selectedProjectId], { enabled: !globalModeLoading });
 
   const getStatusIcon = (status: string) => {
     switch (status) {

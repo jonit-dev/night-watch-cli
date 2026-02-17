@@ -1,9 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, CheckCircle, Clock, Play, Search as SearchIcon, Calendar, CalendarOff, ArrowRight, AlertCircle } from 'lucide-react';
+import { Activity, CheckCircle, Clock, ArrowRight, AlertCircle, Calendar } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { useApi, fetchStatus, triggerInstallCron, triggerReview, triggerRun, triggerUninstallCron } from '../api';
+import { useApi, fetchStatus, fetchScheduleInfo } from '../api';
 import { useStore } from '../store/useStore';
 
 // Map API status to UI status
@@ -16,9 +16,9 @@ const statusMap: Record<string, 'Ready' | 'In Progress' | 'Blocked' | 'Done'> = 
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { setProjectName, addToast, selectedProjectId } = useStore();
-  const { data: status, loading, error, refetch } = useApi(fetchStatus, [selectedProjectId]);
-  const [isTriggering, setIsTriggering] = React.useState<string | null>(null);
+  const { setProjectName, addToast, selectedProjectId, globalModeLoading } = useStore();
+  const { data: status, loading, error, refetch } = useApi(fetchStatus, [selectedProjectId], { enabled: !globalModeLoading });
+  const { data: scheduleInfo } = useApi(fetchScheduleInfo, [selectedProjectId], { enabled: !globalModeLoading });
 
   // Update project name when status loads
   React.useEffect(() => {
@@ -27,7 +27,7 @@ const Dashboard: React.FC = () => {
     }
   }, [status, setProjectName]);
 
-  if (loading) {
+  if (globalModeLoading || loading) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-slate-400">Loading...</div>
@@ -58,24 +58,21 @@ const Dashboard: React.FC = () => {
   const executorProcess = status.processes.find(p => p.name === 'executor');
   const reviewerProcess = status.processes.find(p => p.name === 'reviewer');
 
-  const runAction = async (action: string, fn: () => Promise<{ started: boolean; pid?: number }>) => {
-    setIsTriggering(action);
+  // Helper to format next run time
+  const formatNextRun = (nextRun: string | null | undefined): string => {
+    if (!nextRun) return 'Not scheduled';
     try {
-      const result = await fn();
-      addToast({
-        title: 'Action Started',
-        message: result.pid ? `${action} started (PID ${result.pid})` : `${action} started`,
-        type: 'success',
-      });
-      refetch();
-    } catch (actionError) {
-      addToast({
-        title: 'Action Failed',
-        message: actionError instanceof Error ? actionError.message : `Failed to start ${action}`,
-        type: 'error',
-      });
-    } finally {
-      setIsTriggering(null);
+      const date = new Date(nextRun);
+      const now = new Date();
+      const diffMs = date.getTime() - now.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+
+      if (diffMins < 0) return 'Running now...';
+      if (diffMins < 60) return `In ${diffMins} min`;
+      if (diffMins < 1440) return `In ${Math.floor(diffMins / 60)} hr${diffMins >= 120 ? 's' : ''}`;
+      return `In ${Math.floor(diffMins / 1440)} day${diffMins >= 2880 ? 's' : ''}`;
+    } catch {
+      return 'Unknown';
     }
   };
 
@@ -261,46 +258,41 @@ const Dashboard: React.FC = () => {
           </div>
         </Card>
 
-        {/* Quick Actions */}
+        {/* Scheduling Summary */}
         <Card className="p-6">
-           <h3 className="text-base font-semibold text-slate-200 mb-4">Quick Actions</h3>
-           <div className="grid grid-cols-2 gap-3">
-              <Button
-                variant="outline"
-                className="h-auto py-3 flex flex-col items-center justify-center space-y-1 hover:border-indigo-500/50 hover:bg-indigo-500/10 hover:text-indigo-400"
-                onClick={() => runAction('Executor', triggerRun)}
-                disabled={isTriggering !== null}
-              >
-                 <Play className="h-5 w-5 text-indigo-500" />
-                 <span className="text-xs font-medium">Run Executor</span>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-auto py-3 flex flex-col items-center justify-center space-y-1 hover:border-purple-500/50 hover:bg-purple-500/10 hover:text-purple-400"
-                onClick={() => runAction('Reviewer', triggerReview)}
-                disabled={isTriggering !== null}
-              >
-                 <SearchIcon className="h-5 w-5 text-purple-500" />
-                 <span className="text-xs font-medium">Run Reviewer</span>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-auto py-3 flex flex-col items-center justify-center space-y-1 hover:border-green-500/50 hover:bg-green-500/10 hover:text-green-400"
-                onClick={() => runAction('Cron Install', triggerInstallCron)}
-                disabled={isTriggering !== null}
-              >
-                 <Calendar className="h-5 w-5 text-green-500" />
-                 <span className="text-xs font-medium">Install Cron</span>
-              </Button>
-              <Button
-                variant="outline"
-                className="h-auto py-3 flex flex-col items-center justify-center space-y-1 hover:border-red-500/50 hover:bg-red-500/10 text-red-400 hover:text-red-300"
-                onClick={() => runAction('Cron Uninstall', triggerUninstallCron)}
-                disabled={isTriggering !== null}
-              >
-                 <CalendarOff className="h-5 w-5" />
-                 <span className="text-xs font-medium">Uninstall Cron</span>
-              </Button>
+           <div className="flex items-center justify-between mb-4">
+             <h3 className="text-base font-semibold text-slate-200">Scheduling</h3>
+             <button onClick={() => navigate('/scheduling')} className="text-sm text-indigo-400 hover:text-indigo-300 flex items-center transition-colors">
+               Manage Schedules <ArrowRight className="ml-1 h-3 w-3" />
+             </button>
+           </div>
+           <div className="space-y-3">
+             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
+                <div className="flex items-center space-x-3">
+                  <div className={`p-1.5 rounded-md ${scheduleInfo?.executor.installed ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-800 text-slate-500'}`}>
+                    <Calendar className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className={`text-sm font-medium ${scheduleInfo?.executor.installed ? 'text-slate-200' : 'text-slate-500'}`}>Executor</div>
+                    <div className="text-xs text-slate-500">
+                      {scheduleInfo?.paused ? 'Paused' : formatNextRun(scheduleInfo?.executor.nextRun)}
+                    </div>
+                  </div>
+                </div>
+             </div>
+             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
+                <div className="flex items-center space-x-3">
+                  <div className={`p-1.5 rounded-md ${scheduleInfo?.reviewer.installed ? 'bg-purple-500/10 text-purple-400' : 'bg-slate-800 text-slate-500'}`}>
+                    <Clock className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className={`text-sm font-medium ${scheduleInfo?.reviewer.installed ? 'text-slate-200' : 'text-slate-500'}`}>Reviewer</div>
+                    <div className="text-xs text-slate-500">
+                      {scheduleInfo?.paused ? 'Paused' : formatNextRun(scheduleInfo?.reviewer.nextRun)}
+                    </div>
+                  </div>
+                </div>
+             </div>
            </div>
         </Card>
       </div>

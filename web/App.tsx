@@ -5,7 +5,7 @@ import TopBar from './components/TopBar';
 import Dashboard from './pages/Dashboard';
 import PRDs from './pages/PRDs';
 import PRs from './pages/PRs';
-import Actions from './pages/Actions';
+import Scheduling from './pages/Scheduling';
 import Logs from './pages/Logs';
 import Settings from './pages/Settings';
 import { ToastContainer } from './components/ui/Toast';
@@ -31,7 +31,7 @@ const App: React.FC = () => {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/prds" element={<PRDs />} />
                 <Route path="/prs" element={<PRs />} />
-                <Route path="/actions" element={<Actions />} />
+                <Route path="/scheduling" element={<Scheduling />} />
                 <Route path="/logs" element={<Logs />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

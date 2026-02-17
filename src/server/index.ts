@@ -19,6 +19,8 @@ import { validateWebhook } from "../commands/doctor.js";
 import { collectPrInfo, collectPrdInfo, fetchStatusSnapshot, getLastLogLines } from "../utils/status-data.js";
 import { saveConfig } from "../utils/config-writer.js";
 import { loadRegistry, validateRegistry } from "../utils/registry.js";
+import { generateMarker, getEntries, getProjectEntries } from "../utils/crontab.js";
+import { CronExpressionParser } from "cron-parser";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -283,7 +285,6 @@ function handleGetDoctor(projectDir: string, config: INightWatchConfig, _req: Re
     }
 
     try {
-      const { getEntries, getProjectEntries, generateMarker } = require("../utils/crontab.js");
       const projectName = path.basename(projectDir);
       const marker = generateMarker(projectName);
       const crontabEntries = [...getEntries(marker), ...getProjectEntries(projectDir)];
@@ -342,6 +343,40 @@ function handleSpawnAction(projectDir: string, command: string[], _req: Request,
   }
 }
 
+function handleGetScheduleInfo(projectDir: string, config: INightWatchConfig, _req: Request, res: Response): void {
+  try {
+    const snapshot = fetchStatusSnapshot(projectDir, config);
+    const installed = snapshot.crontab.installed;
+    const entries = snapshot.crontab.entries;
+
+    const computeNextRun = (cronExpr: string): string | null => {
+      try {
+        const interval = CronExpressionParser.parse(cronExpr);
+        return interval.next().toISOString();
+      } catch {
+        return null;
+      }
+    };
+
+    res.json({
+      executor: {
+        schedule: config.cronSchedule,
+        installed,
+        nextRun: installed ? computeNextRun(config.cronSchedule) : null,
+      },
+      reviewer: {
+        schedule: config.reviewerSchedule,
+        installed: installed && config.reviewerEnabled,
+        nextRun: installed && config.reviewerEnabled ? computeNextRun(config.reviewerSchedule) : null,
+      },
+      paused: !installed,
+      entries,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 // ==================== Static Files + SPA Fallback ====================
 
 function setupStaticFiles(app: Express): void {
@@ -386,6 +421,7 @@ export function createApp(projectDir: string): Express {
 
   // API Routes
   app.get("/api/status", (req, res) => handleGetStatus(projectDir, config, req, res));
+  app.get("/api/schedule-info", (req, res) => handleGetScheduleInfo(projectDir, config, req, res));
   app.get("/api/prds", (req, res) => handleGetPrds(projectDir, config, req, res));
   app.get("/api/prds/:name", (req, res) => handleGetPrdByName(projectDir, config, req, res));
   app.get("/api/prs", (req, res) => handleGetPrs(projectDir, config, req, res));
@@ -411,7 +447,8 @@ export function createApp(projectDir: string): Express {
  */
 function resolveProject(req: Request, res: Response, next: NextFunction): void {
   const projectId = req.params.projectId as string;
-  const decodedId = decodeURIComponent(projectId);
+  // Decode ~ back to / (frontend encodes / as ~ to avoid Express 5 %2F routing issues)
+  const decodedId = decodeURIComponent(projectId).replace(/~/g, "/");
   const entries = loadRegistry();
   const entry = entries.find((e) => e.name === decodedId);
 
@@ -440,6 +477,7 @@ function createProjectRouter(): Router {
   const cfg = (req: Request): INightWatchConfig => (req as any).projectConfig;
 
   router.get("/status", (req, res) => handleGetStatus(dir(req), cfg(req), req, res));
+  router.get("/schedule-info", (req, res) => handleGetScheduleInfo(dir(req), cfg(req), req, res));
   router.get("/prds", (req, res) => handleGetPrds(dir(req), cfg(req), req, res));
   router.get("/prds/:name", (req, res) => handleGetPrdByName(dir(req), cfg(req), req, res));
   router.get("/prs", (req, res) => handleGetPrs(dir(req), cfg(req), req, res));

@@ -19,6 +19,8 @@ interface AppState {
   removeToast: (id: string) => void;
 
   // Multi-project state
+  globalModeLoading: boolean;
+  setGlobalModeLoading: (v: boolean) => void;
   isGlobalMode: boolean;
   setGlobalMode: (v: boolean) => void;
   projects: ProjectInfo[];
@@ -48,6 +50,8 @@ export const useStore = create<AppState>((set) => ({
   removeToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
 
   // Multi-project state
+  globalModeLoading: true,
+  setGlobalModeLoading: (v) => set({ globalModeLoading: v }),
   isGlobalMode: false,
   setGlobalMode: (v) => {
     setApiGlobalMode(v);
