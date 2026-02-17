@@ -30,6 +30,7 @@ import {
   IRunOptions,
   scanPrdDirectory,
 } from "../../commands/run.js";
+import { applyScheduleOffset } from "../../commands/install.js";
 import { INightWatchConfig } from "../../types.js";
 import { sendNotifications } from "../../utils/notify.js";
 
@@ -170,6 +171,33 @@ describe("run command", () => {
 
       expect(env.NW_PRD_PRIORITY).toBeUndefined();
     });
+
+    it("should include NW_EXECUTION_CONTEXT=agent", () => {
+      const config = createTestConfig();
+      const options: IRunOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_EXECUTION_CONTEXT).toBe("agent");
+    });
+
+    it("should include NW_MAX_RETRIES from config", () => {
+      const config = createTestConfig({ maxRetries: 5 });
+      const options: IRunOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_MAX_RETRIES).toBe("5");
+    });
+
+    it("should default NW_MAX_RETRIES to 3", () => {
+      const config = createTestConfig();
+      const options: IRunOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_MAX_RETRIES).toBe("3");
+    });
   });
 
   describe("applyCliOverrides", () => {
@@ -195,6 +223,28 @@ describe("run command", () => {
   describe("notification integration", () => {
     it("sendNotifications should be importable", () => {
       expect(typeof sendNotifications).toBe("function");
+    });
+  });
+
+  describe("applyScheduleOffset", () => {
+    it("should replace minute field with offset", () => {
+      expect(applyScheduleOffset("0 0-21 * * *", 15)).toBe("15 0-21 * * *");
+    });
+
+    it("should not change complex minute expressions", () => {
+      expect(applyScheduleOffset("*/5 * * * *", 15)).toBe("*/5 * * * *");
+    });
+
+    it("should noop when offset is 0", () => {
+      expect(applyScheduleOffset("0 0-21 * * *", 0)).toBe("0 0-21 * * *");
+    });
+
+    it("should handle reviewer schedule with comma-separated hours", () => {
+      expect(applyScheduleOffset("0 0,3,6,9,12,15,18,21 * * *", 20)).toBe("20 0,3,6,9,12,15,18,21 * * *");
+    });
+
+    it("should not change comma-separated minutes", () => {
+      expect(applyScheduleOffset("0,30 * * * *", 15)).toBe("0,30 * * * *");
     });
   });
 

@@ -97,6 +97,24 @@ function getProjectName(projectDir: string): string {
   return path.basename(projectDir);
 }
 
+/**
+ * Apply minute offset to a cron schedule expression.
+ * Replaces the minute field (first field) with the offset value.
+ * Only applies if the minute field is a single number (e.g. "0").
+ * Complex expressions (e.g. star-slash, comma-separated) are left unchanged.
+ */
+export function applyScheduleOffset(schedule: string, offset: number): string {
+  if (offset === 0) return schedule;
+  const parts = schedule.split(/\s+/);
+  if (parts.length < 5) return schedule;
+  // Only replace if minute field is a plain number
+  if (/^\d+$/.test(parts[0])) {
+    parts[0] = String(offset);
+    return parts.join(" ");
+  }
+  return schedule;
+}
+
 export interface IInstallResult {
   success: boolean;
   entries: string[];
@@ -113,8 +131,9 @@ export function performInstall(
   options?: { schedule?: string; reviewerSchedule?: string; noReviewer?: boolean; force?: boolean }
 ): IInstallResult {
   try {
-    const executorSchedule = options?.schedule || config.cronSchedule;
-    const reviewerSchedule = options?.reviewerSchedule || config.reviewerSchedule;
+    const offset = config.cronScheduleOffset ?? 0;
+    const executorSchedule = applyScheduleOffset(options?.schedule || config.cronSchedule, offset);
+    const reviewerSchedule = applyScheduleOffset(options?.reviewerSchedule || config.reviewerSchedule, offset);
     const nightWatchBin = getNightWatchBinPath();
     const projectName = getProjectName(projectDir);
     const marker = generateMarker(projectName);
@@ -190,9 +209,10 @@ export function installCommand(program: Command): void {
         // Load configuration
         const config = loadConfig(projectDir);
 
-        // Get schedule from options or config
-        const executorSchedule = options.schedule || config.cronSchedule;
-        const reviewerSchedule = options.reviewerSchedule || config.reviewerSchedule;
+        // Get schedule from options or config, applying offset
+        const offset = config.cronScheduleOffset ?? 0;
+        const executorSchedule = applyScheduleOffset(options.schedule || config.cronSchedule, offset);
+        const reviewerSchedule = applyScheduleOffset(options.reviewerSchedule || config.reviewerSchedule, offset);
 
         // Get paths
         const nightWatchBin = getNightWatchBinPath();

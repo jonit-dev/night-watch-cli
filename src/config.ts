@@ -12,8 +12,10 @@ import {
   DEFAULT_BRANCH_PATTERNS,
   DEFAULT_BRANCH_PREFIX,
   DEFAULT_CRON_SCHEDULE,
+  DEFAULT_CRON_SCHEDULE_OFFSET,
   DEFAULT_DEFAULT_BRANCH,
   DEFAULT_MAX_LOG_SIZE,
+  DEFAULT_MAX_RETRIES,
   DEFAULT_MAX_RUNTIME,
   DEFAULT_MIN_REVIEW_SCORE,
   DEFAULT_NOTIFICATIONS,
@@ -46,6 +48,8 @@ export function getDefaultConfig(): INightWatchConfig {
     // Cron scheduling
     cronSchedule: DEFAULT_CRON_SCHEDULE,
     reviewerSchedule: DEFAULT_REVIEWER_SCHEDULE,
+    cronScheduleOffset: DEFAULT_CRON_SCHEDULE_OFFSET,
+    maxRetries: DEFAULT_MAX_RETRIES,
 
     // Provider configuration
     provider: DEFAULT_PROVIDER,
@@ -133,6 +137,8 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   normalized.reviewerSchedule =
     readString(rawConfig.reviewerSchedule) ??
     readString(cron?.reviewerSchedule);
+  normalized.cronScheduleOffset = readNumber(rawConfig.cronScheduleOffset);
+  normalized.maxRetries = readNumber(rawConfig.maxRetries);
   normalized.provider = validateProvider(String(rawConfig.provider ?? "")) ?? undefined;
   normalized.reviewerEnabled = readBoolean(rawConfig.reviewerEnabled);
 
@@ -243,6 +249,9 @@ function mergeConfigs(
     if (fileConfig.cronSchedule !== undefined) merged.cronSchedule = fileConfig.cronSchedule;
     if (fileConfig.reviewerSchedule !== undefined)
       merged.reviewerSchedule = fileConfig.reviewerSchedule;
+    if (fileConfig.cronScheduleOffset !== undefined)
+      merged.cronScheduleOffset = fileConfig.cronScheduleOffset;
+    if (fileConfig.maxRetries !== undefined) merged.maxRetries = fileConfig.maxRetries;
     if (fileConfig.provider !== undefined) merged.provider = fileConfig.provider;
     if (fileConfig.reviewerEnabled !== undefined)
       merged.reviewerEnabled = fileConfig.reviewerEnabled;
@@ -269,6 +278,9 @@ function mergeConfigs(
   if (envConfig.cronSchedule !== undefined) merged.cronSchedule = envConfig.cronSchedule;
   if (envConfig.reviewerSchedule !== undefined)
     merged.reviewerSchedule = envConfig.reviewerSchedule;
+  if (envConfig.cronScheduleOffset !== undefined)
+    merged.cronScheduleOffset = envConfig.cronScheduleOffset;
+  if (envConfig.maxRetries !== undefined) merged.maxRetries = envConfig.maxRetries;
   if (envConfig.provider !== undefined) merged.provider = envConfig.provider;
   if (envConfig.reviewerEnabled !== undefined)
     merged.reviewerEnabled = envConfig.reviewerEnabled;
@@ -358,6 +370,20 @@ export function loadConfig(projectDir: string): INightWatchConfig {
 
   if (process.env.NW_REVIEWER_SCHEDULE) {
     envConfig.reviewerSchedule = process.env.NW_REVIEWER_SCHEDULE;
+  }
+
+  if (process.env.NW_CRON_SCHEDULE_OFFSET) {
+    const offset = parseInt(process.env.NW_CRON_SCHEDULE_OFFSET, 10);
+    if (!isNaN(offset) && offset >= 0 && offset <= 59) {
+      envConfig.cronScheduleOffset = offset;
+    }
+  }
+
+  if (process.env.NW_MAX_RETRIES) {
+    const retries = parseInt(process.env.NW_MAX_RETRIES, 10);
+    if (!isNaN(retries) && retries >= 0) {
+      envConfig.maxRetries = retries;
+    }
   }
 
   // NW_PROVIDER environment variable

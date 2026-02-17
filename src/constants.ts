@@ -18,6 +18,12 @@ export const DEFAULT_REVIEWER_MAX_RUNTIME = 3600;
 export const DEFAULT_CRON_SCHEDULE = "0 0-21 * * *";
 export const DEFAULT_REVIEWER_SCHEDULE = "0 0,3,6,9,12,15,18,21 * * *";
 
+// Schedule Offset
+export const DEFAULT_CRON_SCHEDULE_OFFSET = 0;
+
+// Max Retries for rate-limited API calls
+export const DEFAULT_MAX_RETRIES = 3;
+
 // Branch Configuration
 export const DEFAULT_BRANCH_PREFIX = "night-watch";
 export const DEFAULT_BRANCH_PATTERNS = ["feat/", "night-watch/"];

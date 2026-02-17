@@ -276,3 +276,12 @@ mark_prd_done() {
     return 1
   fi
 }
+
+# ── Rate limit detection ────────────────────────────────────────────────────
+
+# Check if the last N lines of the log contain a 429 rate limit error.
+# Returns 0 if rate limited, 1 otherwise.
+check_rate_limited() {
+  local log_file="${1:?log_file required}"
+  tail -20 "${log_file}" 2>/dev/null | grep -q "429"
+}
