@@ -15,7 +15,10 @@
   "maxRuntime": 7200,
   "reviewerMaxRuntime": 3600,
   "branchPrefix": "night-watch",
-  "branchPatterns": ["feat/", "night-watch/"],
+  "branchPatterns": [
+    "feat/",
+    "night-watch/"
+  ],
   "minReviewScore": 80,
   "maxLogSize": 524288,
   "cronSchedule": "0 0-21 * * *",
@@ -26,8 +29,18 @@
         "type": "telegram",
         "botToken": "8550756060:AAGOr9eivjM0R8ucGHSVWGEs4zuSV0g69tc",
         "chatId": "1063140002",
-        "events": ["run_succeeded", "run_failed", "run_timeout", "review_completed"]
+        "events": [
+          "run_succeeded",
+          "run_failed",
+          "run_timeout",
+          "review_completed"
+        ]
       }
     ]
+  },
+  "roadmapScanner": {
+    "enabled": true,
+    "roadmapPath": "ROADMAP.md",
+    "autoScanInterval": 300
   }
 }
