@@ -12,6 +12,7 @@ import { uninstallCommand } from './commands/uninstall.js';
 import { statusCommand } from './commands/status.js';
 import { logsCommand } from './commands/logs.js';
 import { prdCommand } from './commands/prd.js';
+import { dashboardCommand } from './commands/dashboard.js';
 import { doctorCommand } from './commands/doctor.js';
 
 // Get package.json version
@@ -47,5 +48,8 @@ prdCommand(program);
 
 // Register doctor command
 doctorCommand(program);
+
+// Register dashboard command
+dashboardCommand(program);
 
 program.parse();
