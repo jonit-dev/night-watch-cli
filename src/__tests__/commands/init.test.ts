@@ -4,6 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
+const CLI_PATH = path.join(process.cwd(), 'src/cli.ts');
+
 describe('init command', () => {
   let tempDir: string;
   let registryDir: string;
@@ -28,7 +30,7 @@ describe('init command', () => {
       // tempDir is not a git repo
       let errorThrown = false;
       try {
-        execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init', {
+        execSync(`npx tsx "${CLI_PATH}" init`, {
           encoding: 'utf-8',
           cwd: tempDir,
           stdio: 'pipe'
@@ -52,7 +54,7 @@ describe('init command', () => {
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
       // Mock gh auth status (will fail but we test directory creation separately)
-      const output = execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init 2>&1 || true', {
+      const output = execSync(`npx tsx "${CLI_PATH}" init 2>&1 || true`, {
         encoding: 'utf-8',
         cwd: tempDir,
         shell: '/bin/bash'
@@ -108,7 +110,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
+      execSync(`npx tsx "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -166,7 +168,7 @@ describe('init command', () => {
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
       // First run
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
+      execSync(`npx tsx "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -176,7 +178,7 @@ describe('init command', () => {
       const configContent1 = fs.readFileSync(configPath, 'utf-8');
 
       // Second run (without --force)
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
+      execSync(`npx tsx "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -220,7 +222,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
+      execSync(`npx tsx "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -267,7 +269,7 @@ describe('init command', () => {
       const gitignorePath = path.join(tempDir, '.gitignore');
       fs.writeFileSync(gitignorePath, 'node_modules\n/logs/\n');
 
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
+      execSync(`npx tsx "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -310,7 +312,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
+      execSync(`npx tsx "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -352,7 +354,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
+      execSync(`npx tsx "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -401,7 +403,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
+      execSync(`npx tsx "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -447,7 +449,7 @@ describe('init command', () => {
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
       // First run
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider claude', {
+      execSync(`npx tsx "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -462,7 +464,7 @@ describe('init command', () => {
       fs.writeFileSync(configPath, JSON.stringify(modifiedConfig, null, 2));
 
       // Run with --force
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --force --provider claude', {
+      execSync(`npx tsx "${CLI_PATH}" init --force --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -505,7 +507,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --provider codex', {
+      execSync(`npx tsx "${CLI_PATH}" init --provider codex`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
@@ -548,7 +550,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync('npx tsx /home/joao/projects/night-watch-cli/src/cli.ts init --no-reviewer --provider claude', {
+      execSync(`npx tsx "${CLI_PATH}" init --no-reviewer --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe'
