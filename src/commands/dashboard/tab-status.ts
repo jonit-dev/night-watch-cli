@@ -55,9 +55,14 @@ export function renderPrdPane(prds: IStatusSnapshot["prds"], priority?: string[]
       case "in-progress":
         indicator = "{cyan-fg}\u25cf{/cyan-fg}";
         break;
+      case "pending-review":
+        indicator = "{yellow-fg}\u25cf{/yellow-fg}";
+        break;
       case "done":
         indicator = "{#888888-fg}\u25cf{/#888888-fg}";
         break;
+      default:
+        indicator = "{white-fg}\u25cf{/white-fg}";
     }
 
     let line = `${indicator} ${prd.name}`;

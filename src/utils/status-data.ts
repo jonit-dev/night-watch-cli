@@ -16,7 +16,7 @@ import { generateMarker, getEntries, getProjectEntries } from "./crontab.js";
  */
 export interface IPrdInfo {
   name: string;
-  status: "ready" | "blocked" | "in-progress" | "done";
+  status: "ready" | "blocked" | "in-progress" | "pending-review" | "done";
   dependencies: string[];
   unmetDependencies: string[];
 }
@@ -180,6 +180,14 @@ export function countPRDs(
           } catch {
             // Ignore errors
           }
+        } else if (entry.name === "pending-review") {
+          // pending-review PRDs count toward done for display purposes (work is complete, PR open)
+          try {
+            const pendingEntries = fs.readdirSync(fullPath);
+            done += pendingEntries.filter((e) => e.endsWith(".md")).length;
+          } catch {
+            // Ignore errors
+          }
         } else {
           countInDir(fullPath);
         }
@@ -268,6 +276,22 @@ export function collectPrdInfo(
                 prds.push({
                   name: doneEntry.replace(/\.md$/, ""),
                   status: "done",
+                  dependencies: [],
+                  unmetDependencies: [],
+                });
+              }
+            }
+          } catch {
+            // Ignore errors
+          }
+        } else if (entry.name === "pending-review") {
+          try {
+            const pendingEntries = fs.readdirSync(fullPath);
+            for (const pendingEntry of pendingEntries) {
+              if (pendingEntry.endsWith(".md")) {
+                prds.push({
+                  name: pendingEntry.replace(/\.md$/, ""),
+                  status: "pending-review",
                   dependencies: [],
                   unmetDependencies: [],
                 });

@@ -8,17 +8,19 @@ import { useApi, fetchPrds, PrdWithContent, triggerRun } from '../api';
 import { useStore } from '../store/useStore';
 
 // Map API status to UI status
-const statusMap: Record<string, 'Ready' | 'In Progress' | 'Blocked' | 'Done'> = {
+const statusMap: Record<string, string> = {
   'ready': 'Ready',
   'in-progress': 'In Progress',
   'blocked': 'Blocked',
+  'pending-review': 'Pending Review',
   'done': 'Done',
 };
 
-const statusVariantMap: Record<string, 'success' | 'info' | 'error' | 'neutral'> = {
+const statusVariantMap: Record<string, 'success' | 'info' | 'error' | 'warning' | 'neutral'> = {
   'ready': 'success',
   'in-progress': 'info',
   'blocked': 'error',
+  'pending-review': 'warning',
   'done': 'neutral',
 };
 
@@ -173,6 +175,9 @@ const PRDs: React.FC = () => {
                   <Badge variant={statusVariantMap[prd.status]}>{statusMap[prd.status]}</Badge>
                   {prd.status === 'in-progress' && (
                     <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse"></div>
+                  )}
+                  {prd.status === 'pending-review' && (
+                    <div className="h-2 w-2 bg-yellow-500 rounded-full animate-pulse"></div>
                   )}
                 </div>
                 <h3 className="text-lg font-semibold text-slate-200 mb-2">{prd.name}</h3>

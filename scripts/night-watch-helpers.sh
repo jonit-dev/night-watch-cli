@@ -456,6 +456,55 @@ mark_prd_done() {
   fi
 }
 
+mark_prd_pending_review() {
+  local prd_dir="${1:?prd_dir required}"
+  local prd_file="${2:?prd_file required}"
+  local pending_dir="${prd_dir}/pending-review"
+
+  mkdir -p "${pending_dir}"
+
+  if [ -f "${prd_dir}/${prd_file}" ]; then
+    mv "${prd_dir}/${prd_file}" "${pending_dir}/${prd_file}"
+    log "PENDING-REVIEW: Moved ${prd_file} to pending-review/"
+    return 0
+  else
+    log "WARN: PRD file not found for pending-review: ${prd_dir}/${prd_file}"
+    return 1
+  fi
+}
+
+# Check pending-review/ PRDs and promote any whose PR has been merged to done/
+promote_merged_prds() {
+  local prd_dir="${1:?prd_dir required}"
+  local project_dir="${2:?project_dir required}"
+  local pending_dir="${prd_dir}/pending-review"
+  local done_dir="${prd_dir}/done"
+
+  [ -d "${pending_dir}" ] || return 0
+
+  local merged_branches
+  merged_branches=$(cd "${project_dir}" && gh pr list --state merged --json headRefName --jq '.[].headRefName' 2>/dev/null || true)
+  [ -z "${merged_branches}" ] && return 0
+
+  local promoted=0
+  for prd_path in "${pending_dir}"/*.md; do
+    [ -f "${prd_path}" ] || continue
+    local prd_file
+    prd_file=$(basename "${prd_path}")
+    local prd_name="${prd_file%.md}"
+    local branch_name="night-watch/${prd_name}"
+
+    if echo "${merged_branches}" | grep -qF "${branch_name}"; then
+      mkdir -p "${done_dir}"
+      mv "${prd_path}" "${done_dir}/${prd_file}"
+      log "MERGED: ${prd_name} PR was merged — promoted from pending-review/ to done/"
+      promoted=$(( promoted + 1 ))
+    fi
+  done
+
+  return 0
+}
+
 # ── Rate limit detection ────────────────────────────────────────────────────
 
 # Check if the last N lines of the log contain a 429 rate limit error.

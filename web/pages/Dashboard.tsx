@@ -7,10 +7,11 @@ import { useApi, fetchStatus, fetchScheduleInfo } from '../api';
 import { useStore } from '../store/useStore';
 
 // Map API status to UI status
-const statusMap: Record<string, 'Ready' | 'In Progress' | 'Blocked' | 'Done'> = {
+const statusMap: Record<string, string> = {
   'ready': 'Ready',
   'in-progress': 'In Progress',
   'blocked': 'Blocked',
+  'pending-review': 'Pending Review',
   'done': 'Done',
 };
 
@@ -164,16 +165,17 @@ const Dashboard: React.FC = () => {
             </button>
            </div>
 
-           <div className="bg-slate-900 rounded-xl p-4 grid grid-cols-4 gap-4 h-64 overflow-hidden border border-slate-800">
-              {(['blocked', 'ready', 'in-progress', 'done'] as const).map(apiStatus => (
+           <div className="bg-slate-900 rounded-xl p-4 grid grid-cols-5 gap-3 h-64 overflow-hidden border border-slate-800">
+              {(['blocked', 'ready', 'in-progress', 'pending-review', 'done'] as const).map(apiStatus => (
                 <div key={apiStatus} className="flex flex-col h-full">
                    <div className="text-xs font-semibold text-slate-500 uppercase mb-3 flex items-center">
-                    <span className={`w-2 h-2 rounded-full mr-2 ${
+                    <span className={`w-2 h-2 rounded-full mr-2 flex-shrink-0 ${
                       apiStatus === 'ready' ? 'bg-green-500' :
                       apiStatus === 'in-progress' ? 'bg-blue-500' :
+                      apiStatus === 'pending-review' ? 'bg-yellow-500' :
                       apiStatus === 'blocked' ? 'bg-red-500' : 'bg-slate-600'
                     }`}></span>
-                    {statusMap[apiStatus]}
+                    <span className="truncate">{statusMap[apiStatus]}</span>
                    </div>
                    <div className="flex-1 space-y-2 overflow-y-auto scrollbar-hide">
                       {status.prds.filter(p => p.status === apiStatus).map(prd => (
@@ -186,6 +188,9 @@ const Dashboard: React.FC = () => {
                            )}
                            {prd.status === 'in-progress' && (
                              <div className="h-1.5 w-1.5 bg-blue-500 rounded-full animate-pulse mt-2"></div>
+                           )}
+                           {prd.status === 'pending-review' && (
+                             <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-pulse mt-2"></div>
                            )}
                         </Card>
                       ))}
