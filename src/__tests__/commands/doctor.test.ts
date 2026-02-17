@@ -189,10 +189,18 @@ describe("doctor command", () => {
     });
 
     it("should run all checks and show pass/fail indicators", () => {
-      const output = execSync("npx tsx src/cli.ts doctor", {
-        encoding: "utf-8",
-        cwd: process.cwd(),
-      });
+      // Doctor command may exit with code 1 if checks fail, so we need to handle that
+      let output: string;
+      try {
+        output = execSync("npx tsx src/cli.ts doctor", {
+          encoding: "utf-8",
+          cwd: process.cwd(),
+          stdio: "pipe",
+        });
+      } catch (error) {
+        const err = error as { stdout?: string };
+        output = err.stdout || "";
+      }
 
       // Should show check names
       expect(output).toContain("Node.js version");
@@ -210,10 +218,18 @@ describe("doctor command", () => {
     });
 
     it("should show git repo check success in project dir", () => {
-      const output = execSync("npx tsx src/cli.ts doctor", {
-        encoding: "utf-8",
-        cwd: process.cwd(),
-      });
+      // Doctor command may exit with code 1 if checks fail, so we need to handle that
+      let output: string;
+      try {
+        output = execSync("npx tsx src/cli.ts doctor", {
+          encoding: "utf-8",
+          cwd: process.cwd(),
+          stdio: "pipe",
+        });
+      } catch (error) {
+        const err = error as { stdout?: string };
+        output = err.stdout || "";
+      }
 
       // This project IS a git repo, so should pass
       expect(output).toContain("Git repository found");
