@@ -36,6 +36,7 @@ export interface IPrInfo {
   number: number;
   title: string;
   branch: string;
+  url: string;
   ciStatus: "pass" | "fail" | "pending" | "unknown";
   reviewScore: number | null;
 }
@@ -385,7 +386,7 @@ export function collectPrInfo(projectDir: string, branchPatterns: string[]): IPr
     }
 
     const output = execSync(
-      "gh pr list --state open --json headRefName,number,title,statusCheckRollup,reviewDecision",
+      "gh pr list --state open --json headRefName,number,title,url,statusCheckRollup,reviewDecision",
       {
         cwd: projectDir,
         encoding: "utf-8",
@@ -397,6 +398,7 @@ export function collectPrInfo(projectDir: string, branchPatterns: string[]): IPr
       number: number;
       title: string;
       headRefName: string;
+      url: string;
       statusCheckRollup?: Array<{ conclusion: string; state: string }>;
       reviewDecision?: string;
     }
@@ -410,6 +412,7 @@ export function collectPrInfo(projectDir: string, branchPatterns: string[]): IPr
         number: pr.number,
         title: pr.title,
         branch: pr.headRefName,
+        url: pr.url,
         ciStatus: deriveCiStatus(pr.statusCheckRollup),
         reviewScore: deriveReviewScore(pr.reviewDecision),
       }));

@@ -321,9 +321,9 @@ describe("status-data utilities", () => {
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
           return JSON.stringify([
-            { headRefName: "feat/new-feature", number: 1, title: "New Feature" },
-            { headRefName: "night-watch/phase-1", number: 2, title: "Phase 1" },
-            { headRefName: "fix/bugfix", number: 3, title: "Bugfix" },
+            { headRefName: "feat/new-feature", number: 1, title: "New Feature", url: "https://github.com/test/repo/pull/1" },
+            { headRefName: "night-watch/phase-1", number: 2, title: "Phase 1", url: "https://github.com/test/repo/pull/2" },
+            { headRefName: "fix/bugfix", number: 3, title: "Bugfix", url: "https://github.com/test/repo/pull/3" },
           ]);
         }
         return "";
@@ -335,6 +335,7 @@ describe("status-data utilities", () => {
         number: 1,
         title: "New Feature",
         branch: "feat/new-feature",
+        url: "https://github.com/test/repo/pull/1",
         ciStatus: "unknown",
         reviewScore: null,
       });
@@ -342,6 +343,7 @@ describe("status-data utilities", () => {
         number: 2,
         title: "Phase 1",
         branch: "night-watch/phase-1",
+        url: "https://github.com/test/repo/pull/2",
         ciStatus: "unknown",
         reviewScore: null,
       });
@@ -357,6 +359,7 @@ describe("status-data utilities", () => {
               headRefName: "feat/passing",
               number: 1,
               title: "Passing PR",
+              url: "https://github.com/test/repo/pull/1",
               statusCheckRollup: [{ conclusion: "SUCCESS", state: "COMPLETED" }],
               reviewDecision: "APPROVED",
             },
@@ -364,6 +367,7 @@ describe("status-data utilities", () => {
               headRefName: "feat/failing",
               number: 2,
               title: "Failing PR",
+              url: "https://github.com/test/repo/pull/2",
               statusCheckRollup: [{ conclusion: "FAILURE", state: "COMPLETED" }],
               reviewDecision: "CHANGES_REQUESTED",
             },
@@ -371,6 +375,7 @@ describe("status-data utilities", () => {
               headRefName: "feat/pending",
               number: 3,
               title: "Pending PR",
+              url: "https://github.com/test/repo/pull/3",
               statusCheckRollup: [{ conclusion: "", state: "PENDING" }],
               reviewDecision: "REVIEW_REQUIRED",
             },

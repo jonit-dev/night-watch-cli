@@ -440,13 +440,27 @@ const Settings: React.FC = () => {
           {/* Installed Entries */}
           {cronInstalled && cronEntries.length > 0 && (
             <Card className="p-4">
-              <p className="text-xs font-medium text-slate-500 uppercase mb-2">Active Crontab Entries</p>
-              <div className="space-y-1">
-                {cronEntries.map((entry, i) => (
-                  <div key={i} className="text-xs font-mono text-slate-400 p-2 bg-slate-950/60 rounded border border-slate-800 break-all">
-                    {entry}
-                  </div>
-                ))}
+              <p className="text-xs font-medium text-slate-500 uppercase mb-3">Active Crontab Entries</p>
+              <div className="space-y-3">
+                {cronEntries.map((entry, i) => {
+                  const scheduleMatch = entry.match(/^([^\s]+\s+[^\s]+\s+[^\s]+\s+[^\s]+\s+[^\s]+)\s/);
+                  const schedule = scheduleMatch ? scheduleMatch[1] : '';
+                  const isReviewer = entry.includes(' review ');
+                  const label = isReviewer ? 'Reviewer' : 'Executor';
+                  return (
+                    <div key={i} className="p-3 bg-slate-950/60 rounded-lg border border-slate-800">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center space-x-2">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase ${isReviewer ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'}`}>
+                            {label}
+                          </span>
+                          <span className="text-sm text-slate-300">{cronToHuman(schedule)}</span>
+                        </div>
+                        <span className="text-xs text-slate-600 font-mono">{schedule}</span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </Card>
           )}
