@@ -3,19 +3,20 @@ import { NavLink } from 'react-router-dom';
 import {
   Home,
   FileText,
-  GitPullRequest, 
-  PlayCircle, 
-  Terminal, 
-  Settings, 
+  GitPullRequest,
+  PlayCircle,
+  Terminal,
+  Settings,
   ChevronLeft,
   ChevronRight,
   Briefcase,
+  ChevronsUpDown,
 } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
 const Sidebar: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
-  const { projectName } = useStore();
+  const { projectName, isGlobalMode, projects, selectedProjectId, selectProject } = useStore();
 
   const navItems = [
     { icon: Home, label: 'Dashboard', path: '/' },
@@ -38,11 +39,29 @@ const Sidebar: React.FC = () => {
       <div className={`p-6 border-b border-white/5 ${collapsed ? 'items-center justify-center flex' : ''}`}>
         {!collapsed ? (
           <div className="relative w-full">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 block pl-1">Workspace</label>
-            <div className="w-full bg-[#111827] border border-white/10 text-slate-200 rounded-lg py-3 px-3.5 text-sm font-medium shadow-sm flex items-center">
-              <Briefcase className="h-4 w-4 text-indigo-400 mr-3" />
-              <span className="truncate">{projectName}</span>
-            </div>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 block pl-1">
+              {isGlobalMode ? 'Projects' : 'Workspace'}
+            </label>
+            {isGlobalMode ? (
+              <div className="relative">
+                <Briefcase className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-indigo-400 pointer-events-none" />
+                <select
+                  value={selectedProjectId || ''}
+                  onChange={(e) => selectProject(e.target.value)}
+                  className="w-full bg-[#111827] border border-white/10 text-slate-200 rounded-lg py-3 pl-10 pr-8 text-sm font-medium shadow-sm appearance-none cursor-pointer hover:border-white/20 transition-colors focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20"
+                >
+                  {projects.filter((p) => p.valid).map((p) => (
+                    <option key={p.name} value={p.name}>{p.name}</option>
+                  ))}
+                </select>
+                <ChevronsUpDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500 pointer-events-none" />
+              </div>
+            ) : (
+              <div className="w-full bg-[#111827] border border-white/10 text-slate-200 rounded-lg py-3 px-3.5 text-sm font-medium shadow-sm flex items-center">
+                <Briefcase className="h-4 w-4 text-indigo-400 mr-3" />
+                <span className="truncate">{projectName}</span>
+              </div>
+            )}
           </div>
         ) : (
            <div className="relative group">

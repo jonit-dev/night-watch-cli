@@ -16,8 +16,8 @@ const statusMap: Record<string, 'Ready' | 'In Progress' | 'Blocked' | 'Done'> = 
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { setProjectName, addToast } = useStore();
-  const { data: status, loading, error, refetch } = useApi(fetchStatus, []);
+  const { setProjectName, addToast, selectedProjectId } = useStore();
+  const { data: status, loading, error, refetch } = useApi(fetchStatus, [selectedProjectId]);
   const [isTriggering, setIsTriggering] = React.useState<string | null>(null);
 
   // Update project name when status loads

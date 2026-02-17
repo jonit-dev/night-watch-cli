@@ -4,20 +4,26 @@
  */
 
 import { Command } from "commander";
-import { startServer } from "../server/index.js";
+import { startGlobalServer, startServer } from "../server/index.js";
 
 export function serveCommand(program: Command): void {
   program
     .command("serve")
     .description("Start the Night Watch web UI server")
     .option("-p, --port <number>", "Port to run the server on", "7575")
+    .option("-g, --global", "Start in global mode (manage all registered projects)")
     .action((options) => {
       const port = parseInt(options.port, 10);
       if (isNaN(port) || port < 1 || port > 65535) {
         console.error(`Invalid port: ${options.port}. Port must be between 1 and 65535.`);
         process.exit(1);
       }
-      const projectDir = process.cwd();
-      startServer(projectDir, port);
+
+      if (options.global) {
+        startGlobalServer(port);
+      } else {
+        const projectDir = process.cwd();
+        startServer(projectDir, port);
+      }
     });
 }

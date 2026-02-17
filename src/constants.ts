@@ -53,3 +53,7 @@ export const CONFIG_FILE_NAME = "night-watch.config.json";
 export const LOCK_FILE_PREFIX = "/tmp/night-watch-";
 export const LOG_DIR = "logs";
 export const CLAIM_FILE_EXTENSION = ".claim";
+
+// Global Registry
+export const GLOBAL_CONFIG_DIR = ".night-watch";
+export const REGISTRY_FILE_NAME = "projects.json";

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { ProjectInfo, setCurrentProject, setGlobalMode as setApiGlobalMode } from '../api';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -16,7 +17,19 @@ interface AppState {
   toasts: ToastMessage[];
   addToast: (toast: Omit<ToastMessage, 'id'>) => void;
   removeToast: (id: string) => void;
+
+  // Multi-project state
+  isGlobalMode: boolean;
+  setGlobalMode: (v: boolean) => void;
+  projects: ProjectInfo[];
+  setProjects: (p: ProjectInfo[]) => void;
+  selectedProjectId: string | null;
+  selectProject: (id: string | null) => void;
 }
+
+const savedProjectId = typeof localStorage !== 'undefined'
+  ? localStorage.getItem('nw-selected-project')
+  : null;
 
 export const useStore = create<AppState>((set) => ({
   projectName: 'Night Watch',
@@ -33,4 +46,25 @@ export const useStore = create<AppState>((set) => ({
     }, 5000);
   },
   removeToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
+
+  // Multi-project state
+  isGlobalMode: false,
+  setGlobalMode: (v) => {
+    setApiGlobalMode(v);
+    set({ isGlobalMode: v });
+  },
+
+  projects: [],
+  setProjects: (p) => set({ projects: p }),
+
+  selectedProjectId: savedProjectId,
+  selectProject: (id) => {
+    setCurrentProject(id);
+    if (id) {
+      localStorage.setItem('nw-selected-project', id);
+    } else {
+      localStorage.removeItem('nw-selected-project');
+    }
+    set({ selectedProjectId: id });
+  },
 }));

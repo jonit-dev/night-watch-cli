@@ -1,6 +1,7 @@
 /**
  * API Client for Night Watch Web UI
  * Fetches real data from the CLI's HTTP API server
+ * Supports both single-project and global (multi-project) modes
  */
 
 import { DependencyList, useCallback, useEffect, useState } from 'react';
@@ -11,6 +12,53 @@ import { DependencyList, useCallback, useEffect, useState } from 'react';
  * Vite proxy will handle /api paths during development
  */
 export const API_BASE = '';
+
+// ==================== Global Mode Project Scoping ====================
+
+let globalMode = false;
+let currentProjectId: string | null = null;
+
+export function setGlobalMode(v: boolean): void {
+  globalMode = v;
+}
+
+export function setCurrentProject(id: string | null): void {
+  currentProjectId = id;
+}
+
+export function getCurrentProject(): string | null {
+  return currentProjectId;
+}
+
+export function isGlobalMode(): boolean {
+  return globalMode;
+}
+
+/**
+ * Build API path with optional project scoping.
+ * In global mode: /api/status → /api/projects/{id}/status
+ * In single-project mode: returns path unchanged.
+ */
+function apiPath(basePath: string): string {
+  if (globalMode && currentProjectId) {
+    return basePath.replace('/api/', `/api/projects/${encodeURIComponent(currentProjectId)}/`);
+  }
+  return basePath;
+}
+
+// ==================== Project List (global mode only) ====================
+
+export interface ProjectInfo {
+  name: string;
+  path: string;
+  valid: boolean;
+}
+
+export function fetchProjects(): Promise<ProjectInfo[]> {
+  return apiFetch<ProjectInfo[]>('/api/projects');
+}
+
+// ==================== Generic Fetch ====================
 
 /**
  * Generic API fetch wrapper with error handling
@@ -39,9 +87,6 @@ async function apiFetch<T>(
 
 // ==================== Status Snapshot ====================
 
-/**
- * Complete status snapshot from the API
- */
 export interface StatusSnapshot {
   projectName: string;
   projectDir: string;
@@ -51,12 +96,9 @@ export interface StatusSnapshot {
   prs: PrInfo[];
   logs: LogInfo[];
   crontab: { installed: boolean; entries: string[] };
-  timestamp: string; // ISO date string
+  timestamp: string;
 }
 
-/**
- * Night Watch configuration
- */
 export interface NightWatchConfig {
   defaultBranch: string;
   prdDir: string;
@@ -75,16 +117,10 @@ export interface NightWatchConfig {
   prdPriority: string[];
 }
 
-/**
- * Notification configuration
- */
 export interface NotificationConfig {
   webhooks: WebhookConfig[];
 }
 
-/**
- * Webhook configuration
- */
 export interface WebhookConfig {
   type: 'slack' | 'discord' | 'telegram';
   url?: string;
@@ -93,9 +129,6 @@ export interface WebhookConfig {
   events: ('run_succeeded' | 'run_failed' | 'run_timeout' | 'review_completed')[];
 }
 
-/**
- * PRD information from status snapshot
- */
 export interface PrdInfo {
   name: string;
   status: 'ready' | 'blocked' | 'in-progress' | 'done';
@@ -103,18 +136,12 @@ export interface PrdInfo {
   unmetDependencies: string[];
 }
 
-/**
- * Process information
- */
 export interface ProcessInfo {
   name: string;
   running: boolean;
   pid: number | null;
 }
 
-/**
- * Pull request information
- */
 export interface PrInfo {
   number: number;
   title: string;
@@ -123,9 +150,6 @@ export interface PrInfo {
   reviewScore: number | null;
 }
 
-/**
- * Log file information
- */
 export interface LogInfo {
   name: string;
   path: string;
@@ -136,9 +160,6 @@ export interface LogInfo {
 
 // ==================== PRD with Content ====================
 
-/**
- * PRD with full content (from /api/prds)
- */
 export interface PrdWithContent {
   name: string;
   status: 'ready' | 'blocked' | 'in-progress' | 'done';
@@ -148,9 +169,6 @@ export interface PrdWithContent {
   path?: string;
 }
 
-/**
- * PRD content response (from /api/prds/:name)
- */
 export interface PrdContent {
   name: string;
   content: string;
@@ -158,9 +176,6 @@ export interface PrdContent {
 
 // ==================== Log Response ====================
 
-/**
- * Log response (from /api/logs/:name)
- */
 export interface LogResponse {
   name: string;
   lines: string[];
@@ -168,9 +183,6 @@ export interface LogResponse {
 
 // ==================== Doctor Check ====================
 
-/**
- * Doctor health check result
- */
 export interface DoctorCheck {
   name: string;
   status: 'pass' | 'warn' | 'fail';
@@ -179,9 +191,6 @@ export interface DoctorCheck {
 
 // ==================== Action Result ====================
 
-/**
- * Action trigger response
- */
 export interface ActionResult {
   started: boolean;
   pid?: number;
@@ -190,98 +199,62 @@ export interface ActionResult {
 
 // ==================== API Functions ====================
 
-/**
- * Fetch complete status snapshot
- */
 export function fetchStatus(): Promise<StatusSnapshot> {
-  return apiFetch<StatusSnapshot>('/api/status');
+  return apiFetch<StatusSnapshot>(apiPath('/api/status'));
 }
 
-/**
- * Fetch all PRDs with content
- */
 export function fetchPrds(): Promise<PrdWithContent[]> {
-  return apiFetch<PrdWithContent[]>('/api/prds');
+  return apiFetch<PrdWithContent[]>(apiPath('/api/prds'));
 }
 
-/**
- * Fetch specific PRD content by name
- */
 export function fetchPrdContent(name: string): Promise<PrdContent> {
-  return apiFetch<PrdContent>(`/api/prds/${encodeURIComponent(name)}`);
+  return apiFetch<PrdContent>(apiPath(`/api/prds/${encodeURIComponent(name)}`));
 }
 
-/**
- * Fetch pull requests
- */
 export function fetchPrs(): Promise<PrInfo[]> {
-  return apiFetch<PrInfo[]>('/api/prs');
+  return apiFetch<PrInfo[]>(apiPath('/api/prs'));
 }
 
-/**
- * Fetch log file lines
- */
 export function fetchLogs(name: string, lines?: number): Promise<LogResponse> {
   const query = lines !== undefined ? `?lines=${encodeURIComponent(lines)}` : '';
-  return apiFetch<LogResponse>(`/api/logs/${encodeURIComponent(name)}${query}`);
+  return apiFetch<LogResponse>(apiPath(`/api/logs/${encodeURIComponent(name)}${query}`));
 }
 
-/**
- * Fetch current configuration
- */
 export function fetchConfig(): Promise<NightWatchConfig> {
-  return apiFetch<NightWatchConfig>('/api/config');
+  return apiFetch<NightWatchConfig>(apiPath('/api/config'));
 }
 
-/**
- * Update configuration
- */
 export function updateConfig(changes: Partial<NightWatchConfig>): Promise<NightWatchConfig> {
-  return apiFetch<NightWatchConfig>('/api/config', {
+  return apiFetch<NightWatchConfig>(apiPath('/api/config'), {
     method: 'PUT',
     body: JSON.stringify(changes),
   });
 }
 
-/**
- * Fetch doctor health checks
- */
 export function fetchDoctor(): Promise<DoctorCheck[]> {
-  return apiFetch<DoctorCheck[]>('/api/doctor');
+  return apiFetch<DoctorCheck[]>(apiPath('/api/doctor'));
 }
 
-/**
- * Trigger executor run
- */
 export function triggerRun(): Promise<ActionResult> {
-  return apiFetch<ActionResult>('/api/actions/run', {
+  return apiFetch<ActionResult>(apiPath('/api/actions/run'), {
     method: 'POST',
   });
 }
 
-/**
- * Trigger reviewer run
- */
 export function triggerReview(): Promise<ActionResult> {
-  return apiFetch<ActionResult>('/api/actions/review', {
+  return apiFetch<ActionResult>(apiPath('/api/actions/review'), {
     method: 'POST',
   });
 }
 
-/**
- * Trigger cron installation
- */
 export function triggerInstallCron(): Promise<ActionResult> {
-  return apiFetch<ActionResult>('/api/actions/install-cron', {
+  return apiFetch<ActionResult>(apiPath('/api/actions/install-cron'), {
     method: 'POST',
   });
 }
 
-/**
- * Trigger cron uninstallation
- */
 export function triggerUninstallCron(): Promise<ActionResult> {
-  return apiFetch<ActionResult>('/api/actions/uninstall-cron', {
+  return apiFetch<ActionResult>(apiPath('/api/actions/uninstall-cron'), {
     method: 'POST',
   });
 }
@@ -290,14 +263,6 @@ export function triggerUninstallCron(): Promise<ActionResult> {
 
 /**
  * Custom React hook for API data fetching with loading, error, and refetch
- *
- * @template T - The type of data returned by the fetch function
- * @param fetchFn - Function that returns a Promise of data
- * @param deps - Dependencies array for useEffect (when to refetch)
- * @returns Object with data, loading, error, and refetch function
- *
- * @example
- * const { data, loading, error, refetch } = useApi(fetchStatus, []);
  */
 export function useApi<T>(
   fetchFn: () => Promise<T>,
