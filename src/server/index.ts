@@ -345,7 +345,7 @@ function handleSpawnAction(projectDir: string, command: string[], _req: Request,
 // ==================== Static Files + SPA Fallback ====================
 
 function setupStaticFiles(app: Express): void {
-  const webDistPath = path.join(__dirname, "../../web/dist");
+  const webDistPath = path.resolve(__dirname, "../../web/dist");
   if (fs.existsSync(webDistPath)) {
     app.use(express.static(webDistPath));
   }
@@ -356,9 +356,11 @@ function setupStaticFiles(app: Express): void {
       return;
     }
 
-    const indexPath = path.join(webDistPath, "index.html");
+    const indexPath = path.resolve(webDistPath, "index.html");
     if (fs.existsSync(indexPath)) {
-      res.sendFile(indexPath);
+      res.sendFile(indexPath, (err) => {
+        if (err) next();
+      });
     } else {
       next();
     }
