@@ -5,9 +5,9 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { INightWatchConfig } from "../types.js";
+import { spawn } from "child_process";
+import { INightWatchConfig, Provider } from "../types.js";
 import { getNextPrdNumber, slugify } from "../commands/prd.js";
-import { renderPrdTemplate } from "../templates/prd-template.js";
 import { IRoadmapItem, parseRoadmap } from "./roadmap-parser.js";
 import {
   IRoadmapStateItem,
@@ -16,6 +16,10 @@ import {
   markItemProcessed,
   saveRoadmapState,
 } from "./roadmap-state.js";
+import {
+  createSlicerPromptVars,
+  renderSlicerPrompt,
+} from "../templates/slicer-prompt.js";
 
 /**
  * Status of the roadmap scanner
@@ -47,6 +51,20 @@ export interface IScanResult {
   skipped: string[];
   /** List of errors encountered */
   errors: string[];
+}
+
+/**
+ * Result of slicing a single roadmap item
+ */
+export interface ISliceResult {
+  /** Whether slicing was successful */
+  sliced: boolean;
+  /** The created PRD file path (relative to PRD dir) */
+  file?: string;
+  /** Error message if slicing failed */
+  error?: string;
+  /** The roadmap item that was processed */
+  item?: IRoadmapItem;
 }
 
 /**
@@ -141,115 +159,6 @@ export function getRoadmapStatus(
 }
 
 /**
- * Scan the roadmap and create PRD files for unprocessed items
- *
- * @param projectDir - The project directory
- * @param config - The Night Watch configuration
- * @returns The scan result with created, skipped, and error lists
- */
-export function scanRoadmap(
-  projectDir: string,
-  config: INightWatchConfig
-): IScanResult {
-  const result: IScanResult = {
-    created: [],
-    skipped: [],
-    errors: [],
-  };
-
-  // Check if enabled
-  if (!config.roadmapScanner.enabled) {
-    return result;
-  }
-
-  const roadmapPath = path.join(projectDir, config.roadmapScanner.roadmapPath);
-
-  // Check if roadmap file exists
-  if (!fs.existsSync(roadmapPath)) {
-    return result;
-  }
-
-  // Parse roadmap
-  const content = fs.readFileSync(roadmapPath, "utf-8");
-  const items = parseRoadmap(content);
-
-  if (items.length === 0) {
-    return result;
-  }
-
-  // Setup PRD directory
-  const prdDir = path.join(projectDir, config.prdDir);
-  if (!fs.existsSync(prdDir)) {
-    fs.mkdirSync(prdDir, { recursive: true });
-  }
-
-  // Load state
-  let state = loadRoadmapState(prdDir);
-
-  // Scan existing PRD files for title-based duplicate detection
-  const existingPrdSlugs = scanExistingPrdSlugs(prdDir);
-
-  // Process each item
-  for (const item of items) {
-    // Skip checked items (completed in roadmap)
-    if (item.checked) {
-      result.skipped.push(`${item.title} (checked)`);
-      continue;
-    }
-
-    // Skip already processed items
-    if (isItemProcessed(state, item.hash)) {
-      result.skipped.push(`${item.title} (processed)`);
-      continue;
-    }
-
-    // Skip items that have a PRD with matching title
-    const itemSlug = slugify(item.title);
-    if (existingPrdSlugs.has(itemSlug)) {
-      result.skipped.push(`${item.title} (duplicate by title)`);
-      continue;
-    }
-
-    try {
-      // Generate PRD file
-      const prdFile = createPrdFromItem(prdDir, item);
-
-      // Update state
-      const stateItem: IRoadmapStateItem = {
-        title: item.title,
-        prdFile,
-        createdAt: new Date().toISOString(),
-      };
-      state = markItemProcessed(state, item.hash, stateItem);
-
-      // Add to existing slugs to prevent duplicates in same scan
-      existingPrdSlugs.add(itemSlug);
-
-      result.created.push(prdFile);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      result.errors.push(`${item.title}: ${errorMessage}`);
-    }
-  }
-
-  // Save state
-  saveRoadmapState(prdDir, state);
-
-  return result;
-}
-
-/**
- * Check if there are new (unprocessed) items in the roadmap
- */
-export function hasNewItems(
-  projectDir: string,
-  config: INightWatchConfig
-): boolean {
-  const status = getRoadmapStatus(projectDir, config);
-  return status.pendingItems > 0;
-}
-
-/**
  * Scan existing PRD files and extract their slugs for duplicate detection
  */
 function scanExistingPrdSlugs(prdDir: string): Set<string> {
@@ -283,44 +192,289 @@ function scanExistingPrdSlugs(prdDir: string): Set<string> {
 }
 
 /**
- * Create a PRD file from a roadmap item
- *
- * @param prdDir - The PRD directory
- * @param item - The roadmap item
- * @returns The filename of the created PRD
+ * Build provider CLI arguments based on provider type
  */
-function createPrdFromItem(prdDir: string, item: IRoadmapItem): string {
-  // Get next PRD number
+function buildProviderArgs(provider: Provider, prompt: string): string[] {
+  if (provider === "codex") {
+    return ["--quiet", "--yolo", "--prompt", prompt];
+  }
+  // Default: claude
+  return ["-p", prompt, "--dangerously-skip-permissions"];
+}
+
+/**
+ * Slice a single roadmap item into a PRD using the AI provider
+ *
+ * @param projectDir - The project directory
+ * @param prdDir - The PRD directory
+ * @param item - The roadmap item to slice
+ * @param config - The Night Watch configuration
+ * @returns The slice result
+ */
+export async function sliceRoadmapItem(
+  projectDir: string,
+  prdDir: string,
+  item: IRoadmapItem,
+  config: INightWatchConfig
+): Promise<ISliceResult> {
+  // Check for duplicate by slug
+  const itemSlug = slugify(item.title);
+  const existingPrdSlugs = scanExistingPrdSlugs(prdDir);
+
+  if (existingPrdSlugs.has(itemSlug)) {
+    return {
+      sliced: false,
+      error: `Duplicate detected: PRD with slug "${itemSlug}" already exists`,
+      item,
+    };
+  }
+
+  // Compute next PRD number and filename
   const nextNum = getNextPrdNumber(prdDir);
   const padded = String(nextNum).padStart(2, "0");
-
-  // Generate filename
-  const slug = slugify(item.title);
-  const filename = `${padded}-${slug}.md`;
+  const filename = `${padded}-${itemSlug}.md`;
   const filePath = path.join(prdDir, filename);
 
-  // Render PRD template
-  const prdContent = renderPrdTemplate({
-    title: item.title,
-    dependsOn: [],
-    complexityScore: 5,
-    complexityLevel: "MEDIUM",
-    complexityBreakdown: [],
-    phaseCount: 3,
+  // Ensure PRD directory exists
+  if (!fs.existsSync(prdDir)) {
+    fs.mkdirSync(prdDir, { recursive: true });
+  }
+
+  // Build slicer prompt
+  const promptVars = createSlicerPromptVars(
+    item.title,
+    item.section,
+    item.description,
+    prdDir,
+    filename
+  );
+  const prompt = renderSlicerPrompt(promptVars);
+
+  // Spawn the AI provider
+  const providerArgs = buildProviderArgs(config.provider, prompt);
+
+  // Create log file for stdout/stderr
+  const logDir = path.join(projectDir, "logs");
+  if (!fs.existsSync(logDir)) {
+    fs.mkdirSync(logDir, { recursive: true });
+  }
+  const logFile = path.join(logDir, `slicer-${itemSlug}.log`);
+  const logStream = fs.createWriteStream(logFile, { flags: "w" });
+
+  // Handle log stream errors silently (don't fail the slice on logging errors)
+  logStream.on("error", () => {
+    // Silently ignore log file errors - the main operation is more important
   });
 
-  // Prepend roadmap context comment
-  const roadmapContext = `<!-- Roadmap Context:
-Section: ${item.section}
-Description: ${item.description}
--->
+  return new Promise((resolve) => {
+    // Merge providerEnv with process.env
+    const childEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...config.providerEnv,
+    };
 
-`;
+    const child = spawn(config.provider, providerArgs, {
+      env: childEnv,
+      cwd: projectDir,
+      stdio: ["inherit", "pipe", "pipe"],
+    });
 
-  const fullContent = roadmapContext + prdContent;
+    // Pipe stdout to log file
+    child.stdout?.on("data", (data: Buffer) => {
+      logStream.write(data);
+    });
 
-  // Write file
-  fs.writeFileSync(filePath, fullContent, "utf-8");
+    // Pipe stderr to log file
+    child.stderr?.on("data", (data: Buffer) => {
+      logStream.write(data);
+    });
 
-  return filename;
+    // Handle process errors
+    child.on("error", (error: Error) => {
+      logStream.end();
+      resolve({
+        sliced: false,
+        error: `Failed to spawn provider: ${error.message}`,
+        item,
+      });
+    });
+
+    // Handle process completion
+    child.on("close", (code: number | null) => {
+      logStream.end();
+
+      if (code !== 0) {
+        resolve({
+          sliced: false,
+          error: `Provider exited with code ${code ?? 1}`,
+          item,
+        });
+        return;
+      }
+
+      // Verify output file was created
+      if (!fs.existsSync(filePath)) {
+        resolve({
+          sliced: false,
+          error: `Provider did not create expected file: ${filePath}`,
+          item,
+        });
+        return;
+      }
+
+      resolve({
+        sliced: true,
+        file: filename,
+        item,
+      });
+    });
+  });
+}
+
+/**
+ * Slice the next unprocessed roadmap item
+ *
+ * @param projectDir - The project directory
+ * @param config - The Night Watch configuration
+ * @returns The slice result
+ */
+export async function sliceNextItem(
+  projectDir: string,
+  config: INightWatchConfig
+): Promise<ISliceResult> {
+  // Check if scanner is enabled
+  if (!config.roadmapScanner.enabled) {
+    return {
+      sliced: false,
+      error: "Roadmap scanner is disabled",
+    };
+  }
+
+  const roadmapPath = path.join(projectDir, config.roadmapScanner.roadmapPath);
+
+  // Check if roadmap file exists
+  if (!fs.existsSync(roadmapPath)) {
+    return {
+      sliced: false,
+      error: "ROADMAP.md not found",
+    };
+  }
+
+  // Parse roadmap
+  const content = fs.readFileSync(roadmapPath, "utf-8");
+  const items = parseRoadmap(content);
+
+  if (items.length === 0) {
+    return {
+      sliced: false,
+      error: "No items in roadmap",
+    };
+  }
+
+  // Setup PRD directory
+  const prdDir = path.join(projectDir, config.prdDir);
+
+  // Load state
+  const state = loadRoadmapState(prdDir);
+
+  // Scan existing PRD files for duplicate detection
+  const existingPrdSlugs = scanExistingPrdSlugs(prdDir);
+
+  // Find first unprocessed, unchecked, non-duplicate item
+  let targetItem: IRoadmapItem | undefined;
+  for (const item of items) {
+    // Skip checked items
+    if (item.checked) {
+      continue;
+    }
+
+    // Skip already processed items
+    if (isItemProcessed(state, item.hash)) {
+      continue;
+    }
+
+    // Skip duplicates by title
+    const itemSlug = slugify(item.title);
+    if (existingPrdSlugs.has(itemSlug)) {
+      continue;
+    }
+
+    targetItem = item;
+    break;
+  }
+
+  if (!targetItem) {
+    return {
+      sliced: false,
+      error: "No pending items to process",
+    };
+  }
+
+  // Slice the item
+  const result = await sliceRoadmapItem(projectDir, prdDir, targetItem, config);
+
+  // On success, update state
+  if (result.sliced && result.file) {
+    let updatedState = loadRoadmapState(prdDir);
+    const stateItem: IRoadmapStateItem = {
+      title: targetItem.title,
+      prdFile: result.file,
+      createdAt: new Date().toISOString(),
+    };
+    updatedState = markItemProcessed(updatedState, targetItem.hash, stateItem);
+    saveRoadmapState(prdDir, updatedState);
+  }
+
+  return result;
+}
+
+/**
+ * Scan the roadmap and slice ONE item
+ * This is now async and processes only a single item per call
+ *
+ * @param projectDir - The project directory
+ * @param config - The Night Watch configuration
+ * @returns The scan result with created, skipped, and error lists
+ */
+export async function scanRoadmap(
+  projectDir: string,
+  config: INightWatchConfig
+): Promise<IScanResult> {
+  const result: IScanResult = {
+    created: [],
+    skipped: [],
+    errors: [],
+  };
+
+  // Slice just one item
+  const sliceResult = await sliceNextItem(projectDir, config);
+
+  if (sliceResult.sliced && sliceResult.file) {
+    result.created.push(sliceResult.file);
+  } else if (sliceResult.item) {
+    // Item was found but not sliced
+    if (sliceResult.error?.includes("checked")) {
+      result.skipped.push(`${sliceResult.item.title} (checked)`);
+    } else if (sliceResult.error?.includes("processed")) {
+      result.skipped.push(`${sliceResult.item.title} (processed)`);
+    } else if (sliceResult.error?.includes("duplicate")) {
+      result.skipped.push(`${sliceResult.item.title} (duplicate)`);
+    } else if (sliceResult.error) {
+      result.errors.push(`${sliceResult.item.title}: ${sliceResult.error}`);
+    }
+  }
+  // If no item was found (all done or no items), return empty result
+
+  return result;
+}
+
+/**
+ * Check if there are new (unprocessed) items in the roadmap
+ */
+export function hasNewItems(
+  projectDir: string,
+  config: INightWatchConfig
+): boolean {
+  const status = getRoadmapStatus(projectDir, config);
+  return status.pendingItems > 0;
 }

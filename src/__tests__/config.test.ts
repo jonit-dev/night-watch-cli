@@ -543,4 +543,49 @@ describe("config", () => {
       expect(config.notifications.webhooks[0].events).toEqual(["run_timeout"]);
     });
   });
+
+  describe("slicer config", () => {
+    it("should load slicerSchedule from config file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          roadmapScanner: {
+            enabled: true,
+            slicerSchedule: "0 */4 * * *",
+          },
+        })
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.roadmapScanner.slicerSchedule).toBe("0 */4 * * *");
+    });
+
+    it("should use default slicerMaxRuntime", () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.roadmapScanner.slicerMaxRuntime).toBe(600);
+    });
+
+    it("should override slicerSchedule from env", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          roadmapScanner: {
+            enabled: true,
+            slicerSchedule: "0 */4 * * *",
+          },
+        })
+      );
+
+      const envValue = "0 */2 * * *";
+      process.env.NW_SLICER_SCHEDULE = envValue;
+
+      const config = loadConfig(tempDir);
+
+      expect(config.roadmapScanner.slicerSchedule).toBe(envValue);
+    });
+  });
 });

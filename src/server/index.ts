@@ -454,14 +454,14 @@ function handleGetRoadmap(projectDir: string, config: INightWatchConfig, _req: R
   }
 }
 
-function handlePostRoadmapScan(projectDir: string, config: INightWatchConfig, _req: Request, res: Response): void {
+async function handlePostRoadmapScan(projectDir: string, config: INightWatchConfig, _req: Request, res: Response): Promise<void> {
   try {
     if (!config.roadmapScanner.enabled) {
       res.status(409).json({ error: "Roadmap scanner is disabled" });
       return;
     }
 
-    const result = scanRoadmap(projectDir, config);
+    const result = await scanRoadmap(projectDir, config);
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
@@ -627,15 +627,14 @@ export function createApp(projectDir: string): Express {
     if (!currentConfig.roadmapScanner.enabled) return;
     const intervalMs = currentConfig.roadmapScanner.autoScanInterval * 1000;
     autoScanTimer = setInterval(() => {
-      try {
-        const cfg = loadConfig(projectDir);
-        if (!cfg.roadmapScanner.enabled) return;
-        const status = getRoadmapStatus(projectDir, cfg);
-        if (status.status === "complete" || status.status === "no-roadmap") return;
-        scanRoadmap(projectDir, cfg);
-      } catch {
+      const cfg = loadConfig(projectDir);
+      if (!cfg.roadmapScanner.enabled) return;
+      const status = getRoadmapStatus(projectDir, cfg);
+      if (status.status === "complete" || status.status === "no-roadmap") return;
+      // Fire and forget - async scan
+      scanRoadmap(projectDir, cfg).catch(() => {
         // Silently ignore auto-scan errors
-      }
+      });
     }, intervalMs);
   }
 
