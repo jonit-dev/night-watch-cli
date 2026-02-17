@@ -29,6 +29,10 @@ describe('CLI', () => {
       expect(output).toContain('dashboard');
       expect(output).toContain('history');
       expect(output).toContain('update');
+      expect(output).toContain('prds');
+      expect(output).toContain('prs');
+      expect(output).toContain('cancel');
+      expect(output).toContain('retry');
     });
 
     it('should show init command help', () => {
@@ -161,6 +165,47 @@ describe('CLI', () => {
 
       expect(output).toContain('List all PRDs');
       expect(output).toContain('--json');
+    });
+
+    it('should show prds command help', () => {
+      const output = execSync('npx tsx src/cli.ts prds --help', {
+        encoding: 'utf-8',
+        cwd: process.cwd(),
+      });
+
+      expect(output).toContain('List all PRDs');
+      expect(output).toContain('--json');
+    });
+
+    it('should show prs command help', () => {
+      const output = execSync('npx tsx src/cli.ts prs --help', {
+        encoding: 'utf-8',
+        cwd: process.cwd(),
+      });
+
+      expect(output).toContain('PRs');
+      expect(output).toContain('--json');
+    });
+
+    it('should show cancel command help', () => {
+      const output = execSync('npx tsx src/cli.ts cancel --help', {
+        encoding: 'utf-8',
+        cwd: process.cwd(),
+      });
+
+      expect(output).toContain('Cancel');
+      expect(output).toContain('--type');
+      expect(output).toContain('--force');
+    });
+
+    it('should show retry command help', () => {
+      const output = execSync('npx tsx src/cli.ts retry --help', {
+        encoding: 'utf-8',
+        cwd: process.cwd(),
+      });
+
+      expect(output).toContain('completed PRD');
+      expect(output).toContain('<prdName>');
     });
   });
 
