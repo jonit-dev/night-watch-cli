@@ -25,7 +25,7 @@ const SENSITIVE_PATTERNS = /TOKEN|KEY|SECRET|PASSWORD/i;
 
 const WEBHOOK_TYPES: WebhookType[] = ["slack", "discord", "telegram"];
 const NOTIFICATION_EVENTS: NotificationEvent[] = [
-  "run_succeeded", "run_failed", "run_timeout", "review_completed",
+  "run_started", "run_succeeded", "run_failed", "run_timeout", "review_completed",
 ];
 
 /**

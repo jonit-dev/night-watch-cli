@@ -112,9 +112,9 @@ describe("status command", () => {
     });
 
     it("should show lock file status - running", async () => {
-      // Create lock file with PID
-      const projectName = path.basename(tempDir);
-      const lockFile = `/tmp/night-watch-${projectName}.lock`;
+      // Create lock file with PID using the hashed runtime key
+      const { executorLockPath } = await import("../../utils/status-data.js");
+      const lockFile = executorLockPath(tempDir);
       fs.writeFileSync(lockFile, "12345");
 
       // Mock process.kill to return true (process exists)

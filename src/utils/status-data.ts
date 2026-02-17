@@ -3,6 +3,7 @@
  * Provides data-fetching functions used by both the status command and the dashboard TUI.
  */
 
+import { createHash } from "crypto";
 import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
@@ -84,6 +85,30 @@ export function getProjectName(projectDir: string): string {
   }
 
   return path.basename(projectDir);
+}
+
+/**
+ * Compute the runtime key for a project directory.
+ * Must stay in sync with project_runtime_key() in night-watch-helpers.sh.
+ */
+export function projectRuntimeKey(projectDir: string): string {
+  const projectName = path.basename(projectDir);
+  const hash = createHash("sha1").update(projectDir).digest("hex").slice(0, 12);
+  return `${projectName}-${hash}`;
+}
+
+/**
+ * Compute the lock file path for the executor of a given project directory.
+ */
+export function executorLockPath(projectDir: string): string {
+  return `${LOCK_FILE_PREFIX}${projectRuntimeKey(projectDir)}.lock`;
+}
+
+/**
+ * Compute the lock file path for the reviewer of a given project directory.
+ */
+export function reviewerLockPath(projectDir: string): string {
+  return `${LOCK_FILE_PREFIX}pr-reviewer-${projectRuntimeKey(projectDir)}.lock`;
 }
 
 /**
@@ -500,10 +525,9 @@ export function fetchStatusSnapshot(
   config: INightWatchConfig
 ): IStatusSnapshot {
   const projectName = getProjectName(projectDir);
-  const lockProjectName = path.basename(projectDir);
 
-  const executorLock = checkLockFile(`${LOCK_FILE_PREFIX}${lockProjectName}.lock`);
-  const reviewerLock = checkLockFile(`${LOCK_FILE_PREFIX}pr-reviewer-${lockProjectName}.lock`);
+  const executorLock = checkLockFile(executorLockPath(projectDir));
+  const reviewerLock = checkLockFile(reviewerLockPath(projectDir));
 
   const processes: IProcessInfo[] = [
     { name: "executor", running: executorLock.running, pid: executorLock.pid },

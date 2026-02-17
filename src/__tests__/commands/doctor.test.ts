@@ -157,6 +157,7 @@ describe("doctor command", () => {
         type: "slack",
         url: "https://hooks.slack.com/services/T00/B00/xxx",
         events: [
+          "run_started",
           "run_succeeded",
           "run_failed",
           "run_timeout",

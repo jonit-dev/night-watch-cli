@@ -27,6 +27,14 @@ const Dashboard: React.FC = () => {
     }
   }, [status, setProjectName]);
 
+  // Poll for status updates every 10 seconds
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      refetch();
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [refetch]);
+
   if (globalModeLoading || loading) {
     return (
       <div className="flex items-center justify-center h-full">

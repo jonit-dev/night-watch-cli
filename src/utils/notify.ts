@@ -30,6 +30,8 @@ export interface INotificationContext {
  */
 export function getEventEmoji(event: NotificationEvent): string {
   switch (event) {
+    case "run_started":
+      return "\uD83D\uDE80";
     case "run_succeeded":
       return "\u2705";
     case "run_failed":
@@ -46,6 +48,8 @@ export function getEventEmoji(event: NotificationEvent): string {
  */
 export function getEventTitle(event: NotificationEvent): string {
   switch (event) {
+    case "run_started":
+      return "PRD Execution Started";
     case "run_succeeded":
       return "PRD Execution Succeeded";
     case "run_failed":
@@ -62,6 +66,8 @@ export function getEventTitle(event: NotificationEvent): string {
  */
 export function getEventColor(event: NotificationEvent): number {
   switch (event) {
+    case "run_started":
+      return 0x3498db;
     case "run_succeeded":
       return 0x00ff00;
     case "run_failed":
@@ -114,6 +120,8 @@ export function formatSlackPayload(ctx: INotificationContext): object {
   let color: string;
   if (ctx.event === "run_succeeded") {
     color = "#00ff00";
+  } else if (ctx.event === "run_started") {
+    color = "#3498db";
   } else if (ctx.event === "review_completed") {
     color = "#0099ff";
   } else {
