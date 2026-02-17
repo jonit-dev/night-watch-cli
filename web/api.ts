@@ -35,13 +35,22 @@ export function isGlobalMode(): boolean {
 }
 
 /**
+ * Encode a project ID for use in URL path segments.
+ * Replaces '/' with '~' before percent-encoding to avoid Express 5
+ * treating %2F as a path separator during route matching.
+ */
+function encodeProjectId(id: string): string {
+  return encodeURIComponent(id.replace(/\//g, '~'));
+}
+
+/**
  * Build API path with optional project scoping.
  * In global mode: /api/status → /api/projects/{id}/status
  * In single-project mode: returns path unchanged.
  */
 function apiPath(basePath: string): string {
   if (globalMode && currentProjectId) {
-    return basePath.replace('/api/', `/api/projects/${encodeURIComponent(currentProjectId)}/`);
+    return basePath.replace('/api/', `/api/projects/${encodeProjectId(currentProjectId)}/`);
   }
   return basePath;
 }
@@ -190,6 +199,15 @@ export interface DoctorCheck {
   detail: string;
 }
 
+// ==================== Schedule Info ====================
+
+export interface ScheduleInfo {
+  executor: { schedule: string; installed: boolean; nextRun: string | null };
+  reviewer: { schedule: string; installed: boolean; nextRun: string | null };
+  paused: boolean;
+  entries: string[];
+}
+
 // ==================== Action Result ====================
 
 export interface ActionResult {
@@ -236,6 +254,10 @@ export function fetchDoctor(): Promise<DoctorCheck[]> {
   return apiFetch<DoctorCheck[]>(apiPath('/api/doctor'));
 }
 
+export function fetchScheduleInfo(): Promise<ScheduleInfo> {
+  return apiFetch<ScheduleInfo>(apiPath('/api/schedule-info'));
+}
+
 export function triggerRun(): Promise<ActionResult> {
   return apiFetch<ActionResult>(apiPath('/api/actions/run'), {
     method: 'POST',
@@ -263,17 +285,20 @@ export function triggerUninstallCron(): Promise<ActionResult> {
 // ==================== React Hook ====================
 
 /**
- * Custom React hook for API data fetching with loading, error, and refetch
+ * Custom React hook for API data fetching with loading, error, and refetch.
+ * Pass enabled=false to skip fetching (useful during global mode detection).
  */
 export function useApi<T>(
   fetchFn: () => Promise<T>,
-  deps: DependencyList = []
+  deps: DependencyList = [],
+  options?: { enabled?: boolean }
 ): {
   data: T | null;
   loading: boolean;
   error: Error | null;
   refetch: () => void;
 } {
+  const enabled = options?.enabled ?? true;
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
@@ -292,9 +317,11 @@ export function useApi<T>(
   }, [fetchFn]);
 
   useEffect(() => {
-    fetchData();
+    if (enabled) {
+      fetchData();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, fetchData]);
+  }, [...deps, fetchData, enabled]);
 
   return { data, loading, error, refetch: fetchData };
 }

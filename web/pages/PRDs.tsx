@@ -27,8 +27,8 @@ const PRDs: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPRD, setSelectedPRD] = useState<PrdWithContent | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
-  const { addToast, selectedProjectId } = useStore();
-  const { data: prds = [], loading, error, refetch } = useApi(fetchPrds, [selectedProjectId]);
+  const { addToast, selectedProjectId, globalModeLoading } = useStore();
+  const { data: prds = [], loading, error, refetch } = useApi(fetchPrds, [selectedProjectId], { enabled: !globalModeLoading });
 
   const statusColors = {
     'Ready': 'success',

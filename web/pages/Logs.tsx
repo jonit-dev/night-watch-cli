@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Pause, Play, Search, ArrowDownCircle, AlertCircle } from 'lucide-react';
+import { Pause, Play, Search, ArrowDownCircle, AlertCircle } from 'lucide-react';
 import Button from '../components/ui/Button';
 import { useApi, fetchLogs, fetchStatus } from '../api';
 import { useStore } from '../store/useStore';
@@ -11,14 +11,15 @@ const Logs: React.FC = () => {
   const [filter, setFilter] = useState('');
   const [activeLog, setActiveLog] = useState<LogName>('executor');
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { selectedProjectId } = useStore();
+  const { selectedProjectId, globalModeLoading } = useStore();
 
   const { data: logData, loading: logLoading, error: logError, refetch: refetchLogs } = useApi(
     () => fetchLogs(activeLog, 500),
-    [activeLog, selectedProjectId]
+    [activeLog, selectedProjectId],
+    { enabled: !globalModeLoading }
   );
 
-  const { data: status } = useApi(fetchStatus, [selectedProjectId]);
+  const { data: status } = useApi(fetchStatus, [selectedProjectId], { enabled: !globalModeLoading });
 
   const logs = logData?.lines || [];
 
@@ -48,7 +49,8 @@ const Logs: React.FC = () => {
   };
 
   const getProcessStatus = (logName: LogName) => {
-    const process = status?.processes.find(p => p.name === logName);
+    if (!status?.processes) return false;
+    const process = status.processes.find(p => p.name === logName);
     return process?.running ?? false;
   };
 
@@ -117,10 +119,6 @@ const Logs: React.FC = () => {
                {autoScroll ? <Pause className="h-4 w-4 mr-2" /> : <Play className="h-4 w-4 mr-2" />}
                {autoScroll ? 'Pause' : 'Resume'}
             </Button>
-            <Button size="sm" variant="ghost">
-               <Download className="h-4 w-4 mr-2" />
-               Export
-            </Button>
          </div>
       </div>
 
@@ -141,7 +139,7 @@ const Logs: React.FC = () => {
               <div className="flex items-center justify-center h-full text-slate-500">Loading logs...</div>
             ) : filteredLogs.length === 0 ? (
               <div className="flex items-center justify-center h-full text-slate-500">
-                {filter ? 'No logs match your filter' : 'No logs available'}
+                {filter ? 'No logs match your filter' : 'No logs yet — logs will appear after the first run'}
               </div>
             ) : (
               filteredLogs.map((log, idx) => {

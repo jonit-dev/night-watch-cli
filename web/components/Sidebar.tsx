@@ -4,7 +4,7 @@ import {
   Home,
   FileText,
   GitPullRequest,
-  PlayCircle,
+  Calendar,
   Terminal,
   Settings,
   ChevronLeft,
@@ -22,7 +22,7 @@ const Sidebar: React.FC = () => {
     { icon: Home, label: 'Dashboard', path: '/' },
     { icon: FileText, label: 'PRDs', path: '/prds', badge: 3 },
     { icon: GitPullRequest, label: 'Pull Requests', path: '/prs', badge: 1 },
-    { icon: PlayCircle, label: 'Actions', path: '/actions' },
+    { icon: Calendar, label: 'Scheduling', path: '/scheduling' },
     { icon: Terminal, label: 'Logs', path: '/logs' },
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];
