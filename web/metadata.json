@@ -1,0 +1,5 @@
+{
+  "name": "Night Watch Web UI",
+  "description": "A comprehensive dashboard for managing Night Watch automation projects, including PRDs, Pull Requests, Actions, and Logs.",
+  "requestFramePermissions": []
+}
