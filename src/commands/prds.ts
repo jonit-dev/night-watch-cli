@@ -115,6 +115,8 @@ function formatStatus(status: IPrdInfo["status"]): string {
       return chalk.yellow("blocked");
     case "in-progress":
       return chalk.cyan("in-progress");
+    case "pending-review":
+      return chalk.magenta("pending-review");
     case "done":
       return chalk.dim("done");
     default:
@@ -176,7 +178,8 @@ export function prdsCommand(program: Command): void {
           "ready": 0,
           "blocked": 1,
           "in-progress": 2,
-          "done": 3,
+          "pending-review": 3,
+          "done": 4,
         };
         filteredPrds.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
 
@@ -223,10 +226,11 @@ export function prdsCommand(program: Command): void {
         const ready = filteredPrds.filter((p) => p.status === "ready").length;
         const blocked = filteredPrds.filter((p) => p.status === "blocked").length;
         const inProgress = filteredPrds.filter((p) => p.status === "in-progress").length;
+        const pendingReview = filteredPrds.filter((p) => p.status === "pending-review").length;
         const done = filteredPrds.filter((p) => p.status === "done").length;
 
         console.log();
-        dim(`  Ready: ${ready} | Blocked: ${blocked} | In Progress: ${inProgress} | Done: ${done}`);
+        dim(`  Ready: ${ready} | Blocked: ${blocked} | In Progress: ${inProgress} | Pending Review: ${pendingReview} | Done: ${done}`);
         console.log();
 
       } catch (error) {
