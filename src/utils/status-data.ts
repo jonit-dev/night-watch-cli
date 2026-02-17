@@ -36,6 +36,7 @@ export interface IPrInfo {
   number: number;
   title: string;
   branch: string;
+  url: string;
   ciStatus: "pass" | "fail" | "pending" | "unknown";
   reviewScore: number | null;
 }
@@ -195,11 +196,12 @@ export function countPRDs(
 export function parsePrdDependencies(prdPath: string): string[] {
   try {
     const content = fs.readFileSync(prdPath, "utf-8");
-    const match = content.match(/depends on[:\s]*([^\n]+)/i);
+    // Match "Depends on:" with optional bold markdown, capture rest of line
+    const match = content.match(/(?:\*\*)?Depends on:(?:\*\*)?[^\S\n]*([^\n]*)/i);
     if (!match) return [];
     return match[1]
       .split(",")
-      .map((d) => d.trim().replace(/`/g, ""))
+      .map((d) => d.replace(/`/g, "").replace(/\*\*/g, "").replace(/\|/g, "").trim())
       .filter((d) => d.length > 0);
   } catch {
     return [];
@@ -285,7 +287,9 @@ export function collectPrdInfo(
   const doneNames = new Set(prds.filter((p) => p.status === "done").map((p) => p.name));
   for (const prd of prds) {
     if (prd.dependencies.length > 0) {
-      prd.unmetDependencies = prd.dependencies.filter((dep) => !doneNames.has(dep));
+      prd.unmetDependencies = prd.dependencies.filter(
+        (dep) => !doneNames.has(dep) && !doneNames.has(dep.replace(/\.md$/, ""))
+      );
       // Mark PRDs with unmet dependencies as blocked (unless already done or in-progress)
       if (prd.unmetDependencies.length > 0 && prd.status === "ready") {
         prd.status = "blocked";
@@ -385,7 +389,7 @@ export function collectPrInfo(projectDir: string, branchPatterns: string[]): IPr
     }
 
     const output = execSync(
-      "gh pr list --state open --json headRefName,number,title,statusCheckRollup,reviewDecision",
+      "gh pr list --state open --json headRefName,number,title,url,statusCheckRollup,reviewDecision",
       {
         cwd: projectDir,
         encoding: "utf-8",
@@ -397,6 +401,7 @@ export function collectPrInfo(projectDir: string, branchPatterns: string[]): IPr
       number: number;
       title: string;
       headRefName: string;
+      url: string;
       statusCheckRollup?: Array<{ conclusion: string; state: string }>;
       reviewDecision?: string;
     }
@@ -410,6 +415,7 @@ export function collectPrInfo(projectDir: string, branchPatterns: string[]): IPr
         number: pr.number,
         title: pr.title,
         branch: pr.headRefName,
+        url: pr.url,
         ciStatus: deriveCiStatus(pr.statusCheckRollup),
         reviewScore: deriveReviewScore(pr.reviewDecision),
       }));

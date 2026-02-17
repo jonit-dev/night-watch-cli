@@ -1,24 +1,40 @@
 import React, { useState } from 'react';
-import { Plus, Filter, SortAsc, LayoutList, LayoutGrid, MoreVertical, Trash, Play, Check, GripVertical } from 'lucide-react';
+import { Plus, Filter, SortAsc, LayoutList, LayoutGrid, MoreVertical, Trash, Play, AlertCircle } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
-import { MOCK_PRDS } from '../constants';
-import { Status, PRD } from '../types';
+import { useApi, fetchPrds, PrdWithContent, triggerRun } from '../api';
+import { useStore } from '../store/useStore';
+
+// Map API status to UI status
+const statusMap: Record<string, 'Ready' | 'In Progress' | 'Blocked' | 'Done'> = {
+  'ready': 'Ready',
+  'in-progress': 'In Progress',
+  'blocked': 'Blocked',
+  'done': 'Done',
+};
+
+const statusVariantMap: Record<string, 'success' | 'info' | 'error' | 'neutral'> = {
+  'ready': 'success',
+  'in-progress': 'info',
+  'blocked': 'error',
+  'done': 'neutral',
+};
 
 const PRDs: React.FC = () => {
   const [viewMode, setViewMode] = useState<'list' | 'card'>('list');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [prds, setPrds] = useState<PRD[]>(MOCK_PRDS);
-  const [selectedPRD, setSelectedPRD] = useState<PRD | null>(null);
+  const [selectedPRD, setSelectedPRD] = useState<PrdWithContent | null>(null);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const { addToast, selectedProjectId, globalModeLoading } = useStore();
+  const { data: prds = [], loading, error, refetch } = useApi(fetchPrds, [selectedProjectId], { enabled: !globalModeLoading });
 
   const statusColors = {
-    [Status.Ready]: 'success',
-    [Status.InProgress]: 'info',
-    [Status.Blocked]: 'error',
-    [Status.Done]: 'neutral',
-    [Status.Failed]: 'error',
+    'Ready': 'success',
+    'In Progress': 'info',
+    'Blocked': 'error',
+    'Done': 'neutral',
   } as const;
 
   const handleCreate = (e: React.FormEvent) => {
@@ -26,6 +42,45 @@ const PRDs: React.FC = () => {
     setIsModalOpen(false);
     // Add logic here
   };
+
+  const handleExecuteNow = async () => {
+    setIsExecuting(true);
+    try {
+      const result = await triggerRun();
+      addToast({
+        title: 'Executor Started',
+        message: result.pid ? `Started with PID ${result.pid}` : 'Executor started',
+        type: 'success',
+      });
+    } catch (runError) {
+      addToast({
+        title: 'Executor Failed',
+        message: runError instanceof Error ? runError.message : 'Failed to start executor',
+        type: 'error',
+      });
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-slate-400">Loading PRDs...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full space-y-4">
+        <AlertCircle className="h-12 w-12 text-red-400" />
+        <div className="text-slate-300">Failed to load PRDs</div>
+        <div className="text-sm text-slate-500">{error.message}</div>
+        <Button onClick={() => refetch()}>Retry</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col">
@@ -64,36 +119,35 @@ const PRDs: React.FC = () => {
             <table className="min-w-full divide-y divide-slate-800">
               <thead className="bg-slate-950/50">
                 <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider w-10">#</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Name</th>
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Complexity</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Created</th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Dependencies</th>
                   <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {prds.map((prd) => (
-                  <tr key={prd.id} className="hover:bg-slate-800/50 group cursor-pointer transition-colors" onClick={() => setSelectedPRD(prd)}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 font-mono">{prd.priority || '-'}</td>
+                  <tr key={prd.name} className="hover:bg-slate-800/50 group cursor-pointer transition-colors" onClick={() => setSelectedPRD(prd)}>
                     <td className="px-6 py-4">
                       <div className="text-sm font-medium text-slate-200">{prd.name}</div>
-                      {prd.dependencies.length > 0 && (
-                        <div className="text-xs text-slate-500 mt-1">Depends on: {prd.dependencies.join(', ')}</div>
+                      {prd.unmetDependencies.length > 0 && (
+                        <div className="text-xs text-amber-400 mt-1">Blocked by: {prd.unmetDependencies.join(', ')}</div>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge variant={statusColors[prd.status]}>{prd.status}</Badge>
+                      <Badge variant={statusVariantMap[prd.status]}>{statusMap[prd.status]}</Badge>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                         prd.complexity === 'HIGH' ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 
-                         prd.complexity === 'MEDIUM' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                      }`}>
-                        {prd.complexity}
-                      </span>
+                    <td className="px-6 py-4">
+                      {prd.dependencies.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {prd.dependencies.map(d => (
+                            <span key={d} className="px-2 py-0.5 bg-slate-800 text-slate-400 text-xs rounded border border-slate-700">{d}</span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-slate-600">None</span>
+                      )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{prd.created}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <button className="text-slate-500 hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">
                         <MoreVertical className="h-4 w-4" />
@@ -101,29 +155,53 @@ const PRDs: React.FC = () => {
                     </td>
                   </tr>
                 ))}
+                {prds.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
+                      No PRDs found. Create your first PRD to get started.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {prds.map((prd) => (
-              <Card key={prd.id} className="p-5 flex flex-col h-full hover:border-indigo-500/50 transition-colors" onClick={() => setSelectedPRD(prd)}>
+              <Card key={prd.name} className="p-5 flex flex-col h-full hover:border-indigo-500/50 transition-colors" onClick={() => setSelectedPRD(prd)}>
                 <div className="flex justify-between items-start mb-4">
-                  <Badge variant={statusColors[prd.status]}>{prd.status}</Badge>
-                  {prd.priority && <span className="text-xs font-mono text-slate-500">#{prd.priority}</span>}
+                  <Badge variant={statusVariantMap[prd.status]}>{statusMap[prd.status]}</Badge>
+                  {prd.status === 'in-progress' && (
+                    <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse"></div>
+                  )}
                 </div>
                 <h3 className="text-lg font-semibold text-slate-200 mb-2">{prd.name}</h3>
-                <p className="text-sm text-slate-400 flex-1 line-clamp-3">
-                  {prd.content.replace(/^#.*\n/, '')}
-                </p>
-                <div className="mt-4 pt-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500">
-                  <span>{prd.created}</span>
-                  <div className="flex -space-x-2">
-                     {/* Avatars placeholder */}
-                  </div>
+                {prd.content && (
+                  <p className="text-sm text-slate-400 flex-1 line-clamp-3">
+                    {prd.content.replace(/^#.*\n/, '')}
+                  </p>
+                )}
+                <div className="mt-4 pt-4 border-t border-slate-800">
+                  {prd.dependencies.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {prd.dependencies.map(d => (
+                        <span key={d} className="px-2 py-0.5 bg-slate-800 text-slate-400 text-xs rounded border border-slate-700">{d}</span>
+                      ))}
+                    </div>
+                  )}
+                  {prd.unmetDependencies.length > 0 && (
+                    <div className="text-xs text-amber-400">
+                      Blocked by: {prd.unmetDependencies.join(', ')}
+                    </div>
+                  )}
                 </div>
               </Card>
             ))}
+            {prds.length === 0 && (
+              <div className="col-span-full text-center py-12 text-slate-500">
+                No PRDs found. Create your first PRD to get started.
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -135,7 +213,7 @@ const PRDs: React.FC = () => {
               <label className="block text-sm font-medium text-slate-400 mb-1">Name</label>
               <input type="text" className="w-full rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-600" placeholder="e.g. User Authentication" />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-1">Complexity</label>
               <div className="flex items-center space-x-4">
@@ -163,11 +241,14 @@ const PRDs: React.FC = () => {
               <label className="block text-sm font-medium text-slate-400 mb-1">Dependencies</label>
               <div className="bg-slate-950/30 p-3 rounded-md border border-slate-800 max-h-32 overflow-y-auto space-y-2">
                  {prds.map(p => (
-                   <label key={p.id} className="flex items-center space-x-2 text-sm text-slate-300 cursor-pointer">
+                   <label key={p.name} className="flex items-center space-x-2 text-sm text-slate-300 cursor-pointer">
                       <input type="checkbox" className="rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500/50 focus:ring-offset-slate-900" />
                       <span>{p.name}</span>
                    </label>
                  ))}
+                 {prds.length === 0 && (
+                   <p className="text-sm text-slate-600 italic">No existing PRDs</p>
+                 )}
               </div>
             </div>
 
@@ -187,19 +268,20 @@ const PRDs: React.FC = () => {
                  <h2 className="text-lg font-bold text-slate-100 line-clamp-1">{selectedPRD.name}</h2>
                  <button onClick={() => setSelectedPRD(null)} className="p-2 hover:bg-slate-800 rounded-full"><LayoutList className="h-5 w-5 text-slate-500" /></button>
               </div>
-              
+
               <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
                  <div className="flex items-center space-x-4">
-                    <Badge variant={statusColors[selectedPRD.status]} className="text-sm px-3 py-1">{selectedPRD.status}</Badge>
-                    <div className="text-sm text-slate-500">Priority: <span className="font-mono font-bold text-slate-300">#{selectedPRD.priority ?? '?'}</span></div>
+                    <Badge variant={statusVariantMap[selectedPRD.status]} className="text-sm px-3 py-1">{statusMap[selectedPRD.status]}</Badge>
                  </div>
 
-                 <div className="prose prose-sm prose-invert max-w-none">
-                    <h3 className="uppercase text-xs font-bold text-slate-500 tracking-wider mb-2">Description</h3>
-                    <div className="whitespace-pre-wrap text-slate-300 bg-slate-950/50 p-4 rounded-lg border border-slate-800 font-mono text-sm">
-                       {selectedPRD.content}
-                    </div>
-                 </div>
+                 {selectedPRD.content && (
+                   <div className="prose prose-sm prose-invert max-w-none">
+                      <h3 className="uppercase text-xs font-bold text-slate-500 tracking-wider mb-2">Description</h3>
+                      <div className="whitespace-pre-wrap text-slate-300 bg-slate-950/50 p-4 rounded-lg border border-slate-800 font-mono text-sm">
+                         {selectedPRD.content}
+                      </div>
+                   </div>
+                 )}
 
                  <div className="space-y-2">
                    <h3 className="uppercase text-xs font-bold text-slate-500 tracking-wider">Dependencies</h3>
@@ -212,13 +294,18 @@ const PRDs: React.FC = () => {
                    ) : (
                      <p className="text-sm text-slate-500 italic">No dependencies.</p>
                    )}
+                   {selectedPRD.unmetDependencies.length > 0 && (
+                     <div className="mt-2">
+                       <p className="text-sm text-amber-400">Unmet dependencies: {selectedPRD.unmetDependencies.join(', ')}</p>
+                     </div>
+                   )}
                  </div>
               </div>
 
               <div className="p-4 border-t border-slate-800 bg-slate-900 flex space-x-3">
-                 <Button className="flex-1">
+                 <Button className="flex-1" onClick={handleExecuteNow} disabled={isExecuting}>
                    <Play className="h-4 w-4 mr-2" />
-                   Execute Now
+                   {isExecuting ? 'Executing...' : 'Execute Now'}
                  </Button>
                  <Button variant="outline" className="flex-1">Move to Done</Button>
               </div>

@@ -1,3 +1,32 @@
+import type {
+  StatusSnapshot,
+  PrdWithContent,
+  PrInfo,
+  LogInfo,
+  DoctorCheck,
+  ActionResult,
+  NightWatchConfig,
+  PrdInfo,
+  ProcessInfo,
+  NotificationConfig,
+  WebhookConfig,
+} from './api';
+
+// Re-export API types for convenience
+export type {
+  StatusSnapshot,
+  PrdWithContent,
+  PrInfo,
+  LogInfo,
+  DoctorCheck,
+  ActionResult,
+  NightWatchConfig,
+  PrdInfo,
+  ProcessInfo,
+  NotificationConfig,
+  WebhookConfig,
+};
+
 export enum Status {
   Ready = 'Ready',
   InProgress = 'In Progress',

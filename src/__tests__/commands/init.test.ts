@@ -6,15 +6,21 @@ import os from 'os';
 
 describe('init command', () => {
   let tempDir: string;
+  let registryDir: string;
 
   beforeEach(() => {
     // Create a unique temp directory for each test
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'night-watch-test-'));
+    // Isolate registry so tests don't pollute ~/.night-watch/projects.json
+    registryDir = fs.mkdtempSync(path.join(os.tmpdir(), 'night-watch-registry-'));
+    process.env.NIGHT_WATCH_HOME = registryDir;
   });
 
   afterEach(() => {
-    // Clean up temp directory
+    // Clean up temp directories
     fs.rmSync(tempDir, { recursive: true, force: true });
+    fs.rmSync(registryDir, { recursive: true, force: true });
+    delete process.env.NIGHT_WATCH_HOME;
   });
 
   describe('should fail if not a git repo', () => {

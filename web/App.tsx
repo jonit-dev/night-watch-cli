@@ -5,12 +5,16 @@ import TopBar from './components/TopBar';
 import Dashboard from './pages/Dashboard';
 import PRDs from './pages/PRDs';
 import PRs from './pages/PRs';
-import Actions from './pages/Actions';
+import Scheduling from './pages/Scheduling';
 import Logs from './pages/Logs';
 import Settings from './pages/Settings';
+import Roadmap from './pages/Roadmap';
 import { ToastContainer } from './components/ui/Toast';
+import { useGlobalMode } from './hooks/useGlobalMode';
 
 const App: React.FC = () => {
+  useGlobalMode();
+
   return (
     <Router>
       <div className="flex h-screen bg-[#030712] text-slate-300 overflow-hidden relative">
@@ -28,8 +32,9 @@ const App: React.FC = () => {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/prds" element={<PRDs />} />
                 <Route path="/prs" element={<PRs />} />
-                <Route path="/actions" element={<Actions />} />
+                <Route path="/scheduling" element={<Scheduling />} />
                 <Route path="/logs" element={<Logs />} />
+                <Route path="/roadmap" element={<Roadmap />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
