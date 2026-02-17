@@ -210,6 +210,12 @@ find_eligible_prd() {
       continue
     fi
 
+    # Skip if in cooldown after a recent failure
+    if is_in_cooldown "${prd_dir}" "${prd_file}" "${max_runtime}"; then
+      log "SKIP-PRD: ${prd_file} — in cooldown after recent failure"
+      continue
+    fi
+
     # Skip if a PR already exists for this PRD
     if echo "${open_branches}" | grep -qF "${prd_name}"; then
       log "SKIP-PRD: ${prd_file} — open PR already exists"
@@ -273,6 +279,47 @@ mark_prd_done() {
     return 0
   else
     log "WARN: PRD file not found: ${prd_dir}/${prd_file}"
+    return 1
+  fi
+}
+
+# ── Cooldown management ─────────────────────────────────────────────────────
+# After a non-retryable failure, mark a PRD with a cooldown so the next cron
+# tick picks a different PRD instead of getting stuck on the same one.
+
+COOLDOWN_EXTENSION=".cooldown"
+
+set_cooldown() {
+  local prd_dir="${1:?prd_dir required}"
+  local prd_file="${2:?prd_file required}"
+  local cooldown_file="${prd_dir}/${prd_file}${COOLDOWN_EXTENSION}"
+
+  echo "$(date +%s)" > "${cooldown_file}"
+}
+
+# Check if a PRD is in cooldown. Default cooldown period is 2 hours (7200s).
+# Returns 0 if in cooldown (should skip), 1 if not.
+is_in_cooldown() {
+  local prd_dir="${1:?prd_dir required}"
+  local prd_file="${2:?prd_file required}"
+  local cooldown_period="${3:-7200}"
+  local cooldown_file="${prd_dir}/${prd_file}${COOLDOWN_EXTENSION}"
+
+  if [ ! -f "${cooldown_file}" ]; then
+    return 1
+  fi
+
+  local cooldown_ts
+  cooldown_ts=$(cat "${cooldown_file}" 2>/dev/null || echo "0")
+  local now
+  now=$(date +%s)
+  local age=$(( now - cooldown_ts ))
+
+  if [ "${age}" -lt "${cooldown_period}" ]; then
+    return 0  # still in cooldown
+  else
+    # Cooldown expired — remove file
+    rm -f "${cooldown_file}"
     return 1
   fi
 }
