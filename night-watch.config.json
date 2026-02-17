@@ -3,6 +3,13 @@
   "projectName": "night-watch-cli",
   "defaultBranch": "main",
   "provider": "claude",
+  "providerEnv": {
+    "ANTHROPIC_AUTH_TOKEN": "efaeca456dab4ae69cb9ce1fa8d99a1a.KSTifNTWPS6NgC6L",
+    "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
+    "API_TIMEOUT_MS": "3000000",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-5"
+  },
   "reviewerEnabled": true,
   "prdDir": "docs/PRDs/night-watch",
   "maxRuntime": 7200,
@@ -12,5 +19,15 @@
   "minReviewScore": 80,
   "maxLogSize": 524288,
   "cronSchedule": "0 0-21 * * *",
-  "reviewerSchedule": "0 0,3,6,9,12,15,18,21 * * *"
+  "reviewerSchedule": "0 0,3,6,9,12,15,18,21 * * *",
+  "notifications": {
+    "webhooks": [
+      {
+        "type": "telegram",
+        "botToken": "8550756060:AAGOr9eivjM0R8ucGHSVWGEs4zuSV0g69tc",
+        "chatId": "1063140002",
+        "events": ["run_succeeded", "run_failed", "run_timeout", "review_completed"]
+      }
+    ]
+  }
 }
