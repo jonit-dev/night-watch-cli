@@ -140,7 +140,7 @@ export interface WebhookConfig {
 
 export interface PrdInfo {
   name: string;
-  status: 'ready' | 'blocked' | 'in-progress' | 'done';
+  status: 'ready' | 'blocked' | 'in-progress' | 'pending-review' | 'done';
   dependencies: string[];
   unmetDependencies: string[];
 }
@@ -172,7 +172,7 @@ export interface LogInfo {
 
 export interface PrdWithContent {
   name: string;
-  status: 'ready' | 'blocked' | 'in-progress' | 'done';
+  status: 'ready' | 'blocked' | 'in-progress' | 'pending-review' | 'done';
   dependencies: string[];
   unmetDependencies: string[];
   content?: string;

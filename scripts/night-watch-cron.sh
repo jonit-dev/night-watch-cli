@@ -101,6 +101,9 @@ else
   ORIGINAL_PRD_DIR="${PROJECT_DIR}/${PRD_DIR_REL}"
 fi
 
+# Promote any pending-review PRDs whose PRs have been merged
+promote_merged_prds "${ORIGINAL_PRD_DIR}" "${PROJECT_DIR}" || true
+
 ELIGIBLE_PRD=$(find_eligible_prd "${PRD_DIR}" "${MAX_RUNTIME}" "${PROJECT_DIR}")
 
 if [ -z "${ELIGIBLE_PRD}" ]; then
@@ -245,20 +248,24 @@ if [ ${EXIT_CODE} -eq 0 ]; then
       exit 0
     fi
 
-    mark_prd_done "${PRD_DIR}" "${ELIGIBLE_PRD}"
+    mark_prd_pending_review "${PRD_DIR}" "${ELIGIBLE_PRD}"
+    # Also mirror to original project dir so dashboard sees it immediately
+    if [ "${ORIGINAL_PRD_DIR}" != "${PRD_DIR}" ]; then
+      mark_prd_pending_review "${ORIGINAL_PRD_DIR}" "${ELIGIBLE_PRD}" || true
+    fi
     night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" success --exit-code 0 2>/dev/null || true
     if [[ "${PRD_DIR_REL}" = /* ]]; then
-      log "WARN: PRD directory is absolute; skipping auto-commit of done/ move"
+      log "WARN: PRD directory is absolute; skipping auto-commit of pending-review/ move"
     else
       git -C "${RUNTIME_PROJECT_DIR}" add -A "${PRD_DIR_REL}/" || true
-      git -C "${RUNTIME_PROJECT_DIR}" commit -m "chore: mark ${ELIGIBLE_PRD} as done (PR opened on ${BRANCH_NAME})
+      git -C "${RUNTIME_PROJECT_DIR}" commit -m "chore: mark ${ELIGIBLE_PRD} as pending-review (PR opened on ${BRANCH_NAME})
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" || true
       git -C "${RUNTIME_PROJECT_DIR}" push origin "${DEFAULT_BRANCH}" || true
     fi
-    log "DONE: ${ELIGIBLE_PRD} implemented, PR opened, PRD moved to done/"
+    log "PENDING-REVIEW: ${ELIGIBLE_PRD} implemented, PR opened, waiting for merge"
   else
-    log "WARN: ${PROVIDER_CMD} exited 0 but no PR found on ${BRANCH_NAME} — PRD NOT moved to done"
+    log "WARN: ${PROVIDER_CMD} exited 0 but no PR found on ${BRANCH_NAME} — PRD NOT moved to pending-review"
   fi
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: Night watch killed after ${MAX_RUNTIME}s while processing ${ELIGIBLE_PRD}"
