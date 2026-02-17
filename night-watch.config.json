@@ -30,6 +30,7 @@
         "botToken": "8550756060:AAGOr9eivjM0R8ucGHSVWGEs4zuSV0g69tc",
         "chatId": "1063140002",
         "events": [
+          "run_started",
           "run_succeeded",
           "run_failed",
           "run_timeout",
