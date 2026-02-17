@@ -1,11 +1,9 @@
 import React from 'react';
 import { Search, Bell, Settings, Wifi, WifiOff } from 'lucide-react';
-import { PROJECTS } from '../constants';
 import { useStore } from '../store/useStore';
 
 const TopBar: React.FC = () => {
-  const { currentProjectId } = useStore();
-  const project = PROJECTS.find(p => p.id === currentProjectId) || PROJECTS[0];
+  const { projectName } = useStore();
   const isLive = true; // Mock connection status
 
   return (
@@ -13,7 +11,7 @@ const TopBar: React.FC = () => {
       <div className="flex items-center space-x-6">
         <div>
            <div className="text-xs font-mono text-indigo-400 mb-0.5 tracking-tight">Active Project</div>
-           <h1 className="text-xl font-semibold text-white tracking-tight leading-none">{project.name}</h1>
+           <h1 className="text-xl font-semibold text-white tracking-tight leading-none">{projectName}</h1>
         </div>
         
         <div className="h-8 w-px bg-white/10 mx-2"></div>

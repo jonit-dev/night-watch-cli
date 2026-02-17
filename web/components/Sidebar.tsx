@@ -1,28 +1,30 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { 
-  Home, 
-  FileText, 
-  GitPullRequest, 
-  PlayCircle, 
-  Terminal, 
-  Settings, 
-  ChevronLeft, 
+import {
+  Home,
+  FileText,
+  GitPullRequest,
+  Calendar,
+  Terminal,
+  Settings,
+  Map,
+  ChevronLeft,
   ChevronRight,
-  Briefcase
+  Briefcase,
+  ChevronsUpDown,
 } from 'lucide-react';
-import { PROJECTS } from '../constants';
 import { useStore } from '../store/useStore';
 
 const Sidebar: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
-  const { currentProjectId, setCurrentProjectId } = useStore();
+  const { projectName, isGlobalMode, projects, selectedProjectId, selectProject } = useStore();
 
   const navItems = [
     { icon: Home, label: 'Dashboard', path: '/' },
     { icon: FileText, label: 'PRDs', path: '/prds', badge: 3 },
     { icon: GitPullRequest, label: 'Pull Requests', path: '/prs', badge: 1 },
-    { icon: PlayCircle, label: 'Actions', path: '/actions' },
+    { icon: Map, label: 'Roadmap', path: '/roadmap' },
+    { icon: Calendar, label: 'Scheduling', path: '/scheduling' },
     { icon: Terminal, label: 'Logs', path: '/logs' },
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];
@@ -39,26 +41,29 @@ const Sidebar: React.FC = () => {
       <div className={`p-6 border-b border-white/5 ${collapsed ? 'items-center justify-center flex' : ''}`}>
         {!collapsed ? (
           <div className="relative w-full">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 block pl-1">Workspace</label>
-            <div className="relative group">
-              <select 
-                value={currentProjectId}
-                onChange={(e) => setCurrentProjectId(e.target.value)}
-                className="w-full appearance-none bg-[#111827] border border-white/10 text-slate-200 rounded-lg py-3 pl-10 pr-8 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all text-sm font-medium hover:border-white/20 cursor-pointer shadow-sm"
-              >
-                {PROJECTS.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-indigo-400">
-                <Briefcase className="h-4 w-4" />
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3 block pl-1">
+              {isGlobalMode ? 'Projects' : 'Workspace'}
+            </label>
+            {isGlobalMode ? (
+              <div className="relative">
+                <Briefcase className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-indigo-400 pointer-events-none" />
+                <select
+                  value={selectedProjectId || ''}
+                  onChange={(e) => selectProject(e.target.value)}
+                  className="w-full bg-[#111827] border border-white/10 text-slate-200 rounded-lg py-3 pl-10 pr-8 text-sm font-medium shadow-sm appearance-none cursor-pointer hover:border-white/20 transition-colors focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20"
+                >
+                  {projects.filter((p) => p.valid).map((p) => (
+                    <option key={p.name} value={p.name}>{p.name}</option>
+                  ))}
+                </select>
+                <ChevronsUpDown className="absolute right-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500 pointer-events-none" />
               </div>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-                <svg className="h-4 w-4 fill-current opacity-50" viewBox="0 0 20 20">
-                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                </svg>
+            ) : (
+              <div className="w-full bg-[#111827] border border-white/10 text-slate-200 rounded-lg py-3 px-3.5 text-sm font-medium shadow-sm flex items-center">
+                <Briefcase className="h-4 w-4 text-indigo-400 mr-3" />
+                <span className="truncate">{projectName}</span>
               </div>
-            </div>
+            )}
           </div>
         ) : (
            <div className="relative group">

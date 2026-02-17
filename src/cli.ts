@@ -14,6 +14,7 @@ import { logsCommand } from './commands/logs.js';
 import { prdCommand } from './commands/prd.js';
 import { dashboardCommand } from './commands/dashboard.js';
 import { doctorCommand } from './commands/doctor.js';
+import { serveCommand } from './commands/serve.js';
 
 // Get package.json version
 const __filename = fileURLToPath(import.meta.url);
@@ -51,5 +52,8 @@ doctorCommand(program);
 
 // Register dashboard command
 dashboardCommand(program);
+
+// Register serve command
+serveCommand(program);
 
 program.parse();

@@ -321,9 +321,9 @@ describe("status-data utilities", () => {
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
           return JSON.stringify([
-            { headRefName: "feat/new-feature", number: 1, title: "New Feature" },
-            { headRefName: "night-watch/phase-1", number: 2, title: "Phase 1" },
-            { headRefName: "fix/bugfix", number: 3, title: "Bugfix" },
+            { headRefName: "feat/new-feature", number: 1, title: "New Feature", url: "https://github.com/test/repo/pull/1" },
+            { headRefName: "night-watch/phase-1", number: 2, title: "Phase 1", url: "https://github.com/test/repo/pull/2" },
+            { headRefName: "fix/bugfix", number: 3, title: "Bugfix", url: "https://github.com/test/repo/pull/3" },
           ]);
         }
         return "";
@@ -335,6 +335,7 @@ describe("status-data utilities", () => {
         number: 1,
         title: "New Feature",
         branch: "feat/new-feature",
+        url: "https://github.com/test/repo/pull/1",
         ciStatus: "unknown",
         reviewScore: null,
       });
@@ -342,6 +343,7 @@ describe("status-data utilities", () => {
         number: 2,
         title: "Phase 1",
         branch: "night-watch/phase-1",
+        url: "https://github.com/test/repo/pull/2",
         ciStatus: "unknown",
         reviewScore: null,
       });
@@ -357,6 +359,7 @@ describe("status-data utilities", () => {
               headRefName: "feat/passing",
               number: 1,
               title: "Passing PR",
+              url: "https://github.com/test/repo/pull/1",
               statusCheckRollup: [{ conclusion: "SUCCESS", state: "COMPLETED" }],
               reviewDecision: "APPROVED",
             },
@@ -364,6 +367,7 @@ describe("status-data utilities", () => {
               headRefName: "feat/failing",
               number: 2,
               title: "Failing PR",
+              url: "https://github.com/test/repo/pull/2",
               statusCheckRollup: [{ conclusion: "FAILURE", state: "COMPLETED" }],
               reviewDecision: "CHANGES_REQUESTED",
             },
@@ -371,6 +375,7 @@ describe("status-data utilities", () => {
               headRefName: "feat/pending",
               number: 3,
               title: "Pending PR",
+              url: "https://github.com/test/repo/pull/3",
               statusCheckRollup: [{ conclusion: "", state: "PENDING" }],
               reviewDecision: "REVIEW_REQUIRED",
             },
@@ -522,6 +527,28 @@ describe("status-data utilities", () => {
       const result = parsePrdDependencies(prdPath);
       expect(result).toEqual(["phase1", "phase2"]);
     });
+
+    it("should handle bold markdown depends on format", () => {
+      const prdPath = path.join(tempDir, "phase4.md");
+      fs.writeFileSync(
+        prdPath,
+        "# Phase 4\n\n**Depends on:** `phase1`, `phase2`\n\nSome content."
+      );
+
+      const result = parsePrdDependencies(prdPath);
+      expect(result).toEqual(["phase1", "phase2"]);
+    });
+
+    it("should return empty array for bold depends on with no deps", () => {
+      const prdPath = path.join(tempDir, "phase5.md");
+      fs.writeFileSync(
+        prdPath,
+        "# Phase 5\n\n**Depends on:**\n\nSome content."
+      );
+
+      const result = parsePrdDependencies(prdPath);
+      expect(result).toEqual([]);
+    });
   });
 
   describe("collectPrdInfo with dependencies", () => {
@@ -556,6 +583,27 @@ describe("status-data utilities", () => {
       expect(phase2!.status).toBe("blocked");
       expect(phase2!.dependencies).toEqual(["phase1"]);
       expect(phase2!.unmetDependencies).toEqual(["phase1"]);
+    });
+
+    it("should resolve deps with .md extension against done PRDs", () => {
+      const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
+      fs.mkdirSync(prdDir, { recursive: true });
+      fs.mkdirSync(path.join(prdDir, "done"), { recursive: true });
+
+      // phase0 is done (stored as phase0.md, name becomes "phase0")
+      fs.writeFileSync(path.join(prdDir, "done", "phase0.md"), "# Phase 0");
+      // phase1 depends on "phase0.md" (with extension) => should still resolve as ready
+      fs.writeFileSync(
+        path.join(prdDir, "phase1.md"),
+        "# Phase 1\n\n**Depends on:** `phase0.md`"
+      );
+
+      const result = collectPrdInfo(tempDir, "docs/PRDs/night-watch", 7200);
+
+      const phase1 = result.find((p) => p.name === "phase1");
+      expect(phase1).toBeDefined();
+      expect(phase1!.status).toBe("ready");
+      expect(phase1!.unmetDependencies).toEqual([]);
     });
   });
 
