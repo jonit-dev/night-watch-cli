@@ -14,33 +14,47 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 
+// Cache help output to avoid repeated CLI spawns
+let cachedHelpOutput: string | null = null;
+let cachedDashboardHelpOutput: string | null = null;
+
+function getMainHelp(): string {
+  if (!cachedHelpOutput) {
+    cachedHelpOutput = execSync("npx tsx src/cli.ts --help", {
+      encoding: "utf-8",
+      cwd: process.cwd(),
+      timeout: 10000,
+    });
+  }
+  return cachedHelpOutput;
+}
+
+function getDashboardHelp(): string {
+  if (!cachedDashboardHelpOutput) {
+    cachedDashboardHelpOutput = execSync("npx tsx src/cli.ts dashboard --help", {
+      encoding: "utf-8",
+      cwd: process.cwd(),
+      timeout: 10000,
+    });
+  }
+  return cachedDashboardHelpOutput;
+}
+
 describe("dashboard command", () => {
   describe("help output", () => {
     it("should show dashboard command in main help", () => {
-      const output = execSync("npx tsx src/cli.ts --help", {
-        encoding: "utf-8",
-        cwd: process.cwd(),
-      });
-
+      const output = getMainHelp();
       expect(output).toContain("dashboard");
     });
 
     it("should show dashboard command help", () => {
-      const output = execSync("npx tsx src/cli.ts dashboard --help", {
-        encoding: "utf-8",
-        cwd: process.cwd(),
-      });
-
+      const output = getDashboardHelp();
       expect(output).toContain("Live terminal dashboard");
       expect(output).toContain("--interval");
     });
 
     it("should show default interval value in help", () => {
-      const output = execSync("npx tsx src/cli.ts dashboard --help", {
-        encoding: "utf-8",
-        cwd: process.cwd(),
-      });
-
+      const output = getDashboardHelp();
       expect(output).toContain("10");
     });
   });
@@ -201,11 +215,7 @@ describe("dashboard command", () => {
     it("should handle missing gh CLI gracefully via status-data", () => {
       // The dashboard relies on status-data.ts which catches gh CLI errors
       // and returns empty arrays. Verify the help still works (no crashes).
-      const output = execSync("npx tsx src/cli.ts dashboard --help", {
-        encoding: "utf-8",
-        cwd: process.cwd(),
-      });
-
+      const output = getDashboardHelp();
       expect(output).toContain("Live terminal dashboard");
     });
   });
@@ -246,11 +256,7 @@ describe("dashboard command", () => {
     it("should show navigation hints in footer text", () => {
       // Verify the dashboard help output includes the command,
       // which confirms the keyboard hints are wired in the footer
-      const output = execSync("npx tsx src/cli.ts dashboard --help", {
-        encoding: "utf-8",
-        cwd: process.cwd(),
-      });
-
+      const output = getDashboardHelp();
       expect(output).toContain("dashboard");
       expect(output).toContain("Live terminal dashboard");
     });

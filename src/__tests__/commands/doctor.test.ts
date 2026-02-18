@@ -11,6 +11,50 @@ import { IIWebhookConfig } from "../../types.js";
 const CLI_PATH = path.join(process.cwd(), "src/cli.ts");
 const TSX_PATH = path.join(process.cwd(), "node_modules", ".bin", "tsx");
 
+// Cache CLI outputs to avoid repeated spawns
+let cachedMainHelp: string | null = null;
+let cachedDoctorHelp: string | null = null;
+let cachedDoctorOutput: string | null = null;
+
+function getMainHelp(): string {
+  if (!cachedMainHelp) {
+    cachedMainHelp = execSync(`${TSX_PATH} ${CLI_PATH} --help`, {
+      encoding: "utf-8",
+      cwd: process.cwd(),
+      timeout: 10000,
+    });
+  }
+  return cachedMainHelp;
+}
+
+function getDoctorHelp(): string {
+  if (!cachedDoctorHelp) {
+    cachedDoctorHelp = execSync(`${TSX_PATH} ${CLI_PATH} doctor --help`, {
+      encoding: "utf-8",
+      cwd: process.cwd(),
+      timeout: 10000,
+    });
+  }
+  return cachedDoctorHelp;
+}
+
+function getDoctorOutput(): string {
+  if (!cachedDoctorOutput) {
+    try {
+      cachedDoctorOutput = execSync(`${TSX_PATH} ${CLI_PATH} doctor`, {
+        encoding: "utf-8",
+        cwd: process.cwd(),
+        stdio: "pipe",
+        timeout: 10000,
+      });
+    } catch (error) {
+      const err = error as { stdout?: string };
+      cachedDoctorOutput = err.stdout || "";
+    }
+  }
+  return cachedDoctorOutput;
+}
+
 describe("doctor command", () => {
   describe("validateWebhook", () => {
     it("should pass valid slack webhook", () => {
@@ -43,7 +87,7 @@ describe("doctor command", () => {
     });
 
     it("should pass valid discord webhook", () => {
-      const webhook: IWebhookConfig = {
+      const webhook: IIWebhookConfig = {
         type: "discord",
         url: "https://discord.com/api/webhooks/123/abc",
         events: ["run_failed"],
@@ -52,7 +96,7 @@ describe("doctor command", () => {
     });
 
     it("should fail discord webhook with invalid URL", () => {
-      const webhook: IWebhookConfig = {
+      const webhook: IIWebhookConfig = {
         type: "discord",
         url: "https://example.com/hook",
         events: ["run_failed"],
@@ -63,7 +107,7 @@ describe("doctor command", () => {
     });
 
     it("should fail discord webhook with missing URL", () => {
-      const webhook: IWebhookConfig = {
+      const webhook: IIWebhookConfig = {
         type: "discord",
         events: ["run_failed"],
       };
@@ -72,7 +116,7 @@ describe("doctor command", () => {
     });
 
     it("should pass valid telegram webhook", () => {
-      const webhook: IWebhookConfig = {
+      const webhook: IIWebhookConfig = {
         type: "telegram",
         botToken: "123456:ABC-DEF",
         chatId: "-1001234567890",
@@ -82,7 +126,7 @@ describe("doctor command", () => {
     });
 
     it("should fail telegram without botToken", () => {
-      const webhook: IWebhookConfig = {
+      const webhook: IIWebhookConfig = {
         type: "telegram",
         chatId: "-100123",
         events: ["run_failed"],
@@ -92,7 +136,7 @@ describe("doctor command", () => {
     });
 
     it("should fail telegram without chatId", () => {
-      const webhook: IWebhookConfig = {
+      const webhook: IIWebhookConfig = {
         type: "telegram",
         botToken: "123:ABC",
         events: ["run_failed"],
@@ -102,7 +146,7 @@ describe("doctor command", () => {
     });
 
     it("should fail telegram without both botToken and chatId", () => {
-      const webhook: IWebhookConfig = {
+      const webhook: IIWebhookConfig = {
         type: "telegram",
         events: ["run_failed"],
       };
@@ -112,7 +156,7 @@ describe("doctor command", () => {
     });
 
     it("should fail with no events configured", () => {
-      const webhook: IWebhookConfig = {
+      const webhook: IIWebhookConfig = {
         type: "slack",
         url: "https://hooks.slack.com/services/T00/B00/xxx",
         events: [],
@@ -122,7 +166,7 @@ describe("doctor command", () => {
     });
 
     it("should fail with invalid event name", () => {
-      const webhook: IWebhookConfig = {
+      const webhook: IIWebhookConfig = {
         type: "slack",
         url: "https://hooks.slack.com/services/T00/B00/xxx",
         events: ["invalid_event" as any],
@@ -133,7 +177,7 @@ describe("doctor command", () => {
     });
 
     it("should fail with unknown webhook type", () => {
-      const webhook: IWebhookConfig = {
+      const webhook: IIWebhookConfig = {
         type: "teams" as any,
         url: "https://example.com/webhook",
         events: ["run_failed"],
@@ -144,7 +188,7 @@ describe("doctor command", () => {
     });
 
     it("should report multiple issues at once", () => {
-      const webhook: IWebhookConfig = {
+      const webhook: IIWebhookConfig = {
         type: "slack",
         url: "https://example.com/bad-url",
         events: ["invalid_event" as any],
@@ -157,7 +201,7 @@ describe("doctor command", () => {
     });
 
     it("should accept all valid event types", () => {
-      const webhook: IWebhookConfig = {
+      const webhook: IIWebhookConfig = {
         type: "slack",
         url: "https://hooks.slack.com/services/T00/B00/xxx",
         events: [
@@ -174,37 +218,18 @@ describe("doctor command", () => {
 
   describe("CLI", () => {
     it("should show doctor command in help", () => {
-      const output = execSync(`${TSX_PATH} ${CLI_PATH} --help`, {
-        encoding: "utf-8",
-        cwd: process.cwd(),
-      });
-
+      const output = getMainHelp();
       expect(output).toContain("doctor");
     });
 
     it("should show help text with --fix option", () => {
-      const output = execSync(`${TSX_PATH} ${CLI_PATH} doctor --help`, {
-        encoding: "utf-8",
-        cwd: process.cwd(),
-      });
-
+      const output = getDoctorHelp();
       expect(output).toContain("Check Night Watch configuration");
       expect(output).toContain("--fix");
     });
 
     it("should run all checks and show pass/fail indicators", () => {
-      // Doctor command may exit with code 1 if checks fail, so we need to handle that
-      let output: string;
-      try {
-        output = execSync(`${TSX_PATH} ${CLI_PATH} doctor`, {
-          encoding: "utf-8",
-          cwd: process.cwd(),
-          stdio: "pipe",
-        });
-      } catch (error) {
-        const err = error as { stdout?: string };
-        output = err.stdout || "";
-      }
+      const output = getDoctorOutput();
 
       // Should show check names
       expect(output).toContain("Node.js version");
@@ -222,18 +247,7 @@ describe("doctor command", () => {
     });
 
     it("should show git repo check success in project dir", () => {
-      // Doctor command may exit with code 1 if checks fail, so we need to handle that
-      let output: string;
-      try {
-        output = execSync(`${TSX_PATH} ${CLI_PATH} doctor`, {
-          encoding: "utf-8",
-          cwd: process.cwd(),
-          stdio: "pipe",
-        });
-      } catch (error) {
-        const err = error as { stdout?: string };
-        output = err.stdout || "";
-      }
+      const output = getDoctorOutput();
 
       // This project IS a git repo, so should pass
       expect(output).toContain("Git repository found");

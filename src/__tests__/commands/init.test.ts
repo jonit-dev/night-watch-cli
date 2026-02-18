@@ -13,6 +13,29 @@ const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
 const CLI_PATH = path.join(PROJECT_ROOT, 'src', 'cli.ts');
 const TSX_PATH = path.join(PROJECT_ROOT, 'node_modules', '.bin', 'tsx');
 
+// Cache external tools availability - check once for all tests
+let ghAvailable = false;
+let claudeAvailable = false;
+
+try {
+  execSync('gh auth status', { stdio: 'pipe', timeout: 2000 });
+  ghAvailable = true;
+} catch {
+  // gh not available
+}
+
+try {
+  execSync('which claude', { stdio: 'pipe', timeout: 2000 });
+  claudeAvailable = true;
+} catch {
+  // claude not available
+}
+
+const externalToolsAvailable = ghAvailable && claudeAvailable;
+
+// Helper to skip tests that require external tools
+const describeIfExternalTools = externalToolsAvailable ? describe : describe.skip;
+
 describe('init command', () => {
   let tempDir: string;
   let registryDir: string;
@@ -40,7 +63,8 @@ describe('init command', () => {
         execSync(`"${TSX_PATH}" "${CLI_PATH}" init`, {
           encoding: 'utf-8',
           cwd: tempDir,
-          stdio: 'pipe'
+          stdio: 'pipe',
+          timeout: 10000,
         });
       } catch (error) {
         errorThrown = true;
@@ -64,7 +88,8 @@ describe('init command', () => {
       const output = execSync(`"${TSX_PATH}" "${CLI_PATH}" init 2>&1 || true`, {
         encoding: 'utf-8',
         cwd: tempDir,
-        shell: '/bin/bash'
+        shell: '/bin/bash',
+        timeout: 10000,
       });
 
       // Even if gh auth fails, directories should be created
@@ -85,33 +110,8 @@ describe('init command', () => {
     });
   });
 
-  describe('should copy slash command templates', () => {
+  describeIfExternalTools('should copy slash command templates', () => {
     it('should create .claude/commands/night-watch.md', () => {
-      // This test requires gh and claude to be available
-      // Skip if not available
-      let ghAvailable = false;
-      let claudeAvailable = false;
-
-      try {
-        execSync('gh auth status', { stdio: 'pipe' });
-        ghAvailable = true;
-      } catch {
-        // gh not available
-      }
-
-      try {
-        execSync('which claude', { stdio: 'pipe' });
-        claudeAvailable = true;
-      } catch {
-        // claude not available
-      }
-
-      if (!ghAvailable || !claudeAvailable) {
-        // Skip test
-        expect(true).toBe(true);
-        return;
-      }
-
       // Initialize git repo
       execSync('git init', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
@@ -120,7 +120,8 @@ describe('init command', () => {
       execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
-        stdio: 'pipe'
+        stdio: 'pipe',
+        timeout: 15000,
       });
 
       const commandsDir = path.join(tempDir, '.claude', 'commands');
@@ -143,32 +144,8 @@ describe('init command', () => {
     });
   });
 
-  describe('should be idempotent', () => {
+  describeIfExternalTools('should be idempotent', () => {
     it('should not error or overwrite when run twice', () => {
-      // This test requires gh and claude to be available
-      let ghAvailable = false;
-      let claudeAvailable = false;
-
-      try {
-        execSync('gh auth status', { stdio: 'pipe' });
-        ghAvailable = true;
-      } catch {
-        // gh not available
-      }
-
-      try {
-        execSync('which claude', { stdio: 'pipe' });
-        claudeAvailable = true;
-      } catch {
-        // claude not available
-      }
-
-      if (!ghAvailable || !claudeAvailable) {
-        // Skip test
-        expect(true).toBe(true);
-        return;
-      }
-
       // Initialize git repo
       execSync('git init', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
@@ -178,7 +155,8 @@ describe('init command', () => {
       execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
-        stdio: 'pipe'
+        stdio: 'pipe',
+        timeout: 15000,
       });
 
       const configPath = path.join(tempDir, 'night-watch.config.json');
@@ -188,7 +166,8 @@ describe('init command', () => {
       execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
-        stdio: 'pipe'
+        stdio: 'pipe',
+        timeout: 15000,
       });
 
       const configContent2 = fs.readFileSync(configPath, 'utf-8');
@@ -198,32 +177,8 @@ describe('init command', () => {
     });
   });
 
-  describe('should add logs to .gitignore', () => {
+  describeIfExternalTools('should add logs to .gitignore', () => {
     it('should add /logs/ to .gitignore', () => {
-      // This test requires gh and claude to be available
-      let ghAvailable = false;
-      let claudeAvailable = false;
-
-      try {
-        execSync('gh auth status', { stdio: 'pipe' });
-        ghAvailable = true;
-      } catch {
-        // gh not available
-      }
-
-      try {
-        execSync('which claude', { stdio: 'pipe' });
-        claudeAvailable = true;
-      } catch {
-        // claude not available
-      }
-
-      if (!ghAvailable || !claudeAvailable) {
-        // Skip test
-        expect(true).toBe(true);
-        return;
-      }
-
       // Initialize git repo
       execSync('git init', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
@@ -232,7 +187,8 @@ describe('init command', () => {
       execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
-        stdio: 'pipe'
+        stdio: 'pipe',
+        timeout: 15000,
       });
 
       const gitignorePath = path.join(tempDir, '.gitignore');
@@ -243,30 +199,6 @@ describe('init command', () => {
     });
 
     it('should not duplicate /logs/ in .gitignore if already present', () => {
-      // This test requires gh and claude to be available
-      let ghAvailable = false;
-      let claudeAvailable = false;
-
-      try {
-        execSync('gh auth status', { stdio: 'pipe' });
-        ghAvailable = true;
-      } catch {
-        // gh not available
-      }
-
-      try {
-        execSync('which claude', { stdio: 'pipe' });
-        claudeAvailable = true;
-      } catch {
-        // claude not available
-      }
-
-      if (!ghAvailable || !claudeAvailable) {
-        // Skip test
-        expect(true).toBe(true);
-        return;
-      }
-
       // Initialize git repo
       execSync('git init', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
@@ -279,7 +211,8 @@ describe('init command', () => {
       execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
-        stdio: 'pipe'
+        stdio: 'pipe',
+        timeout: 15000,
       });
 
       const content = fs.readFileSync(gitignorePath, 'utf-8');
@@ -288,32 +221,8 @@ describe('init command', () => {
     });
   });
 
-  describe('should create logs directory', () => {
+  describeIfExternalTools('should create logs directory', () => {
     it('should create logs/ directory', () => {
-      // This test requires gh and claude to be available
-      let ghAvailable = false;
-      let claudeAvailable = false;
-
-      try {
-        execSync('gh auth status', { stdio: 'pipe' });
-        ghAvailable = true;
-      } catch {
-        // gh not available
-      }
-
-      try {
-        execSync('which claude', { stdio: 'pipe' });
-        claudeAvailable = true;
-      } catch {
-        // claude not available
-      }
-
-      if (!ghAvailable || !claudeAvailable) {
-        // Skip test
-        expect(true).toBe(true);
-        return;
-      }
-
       // Initialize git repo
       execSync('git init', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
@@ -322,7 +231,8 @@ describe('init command', () => {
       execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
-        stdio: 'pipe'
+        stdio: 'pipe',
+        timeout: 15000,
       });
 
       const logsDir = path.join(tempDir, 'logs');
@@ -330,32 +240,8 @@ describe('init command', () => {
     });
   });
 
-  describe('should create config file with project values', () => {
+  describeIfExternalTools('should create config file with project values', () => {
     it('should create night-watch.config.json with projectName and defaultBranch', () => {
-      // This test requires gh and claude to be available
-      let ghAvailable = false;
-      let claudeAvailable = false;
-
-      try {
-        execSync('gh auth status', { stdio: 'pipe' });
-        ghAvailable = true;
-      } catch {
-        // gh not available
-      }
-
-      try {
-        execSync('which claude', { stdio: 'pipe' });
-        claudeAvailable = true;
-      } catch {
-        // claude not available
-      }
-
-      if (!ghAvailable || !claudeAvailable) {
-        // Skip test
-        expect(true).toBe(true);
-        return;
-      }
-
       // Initialize git repo
       execSync('git init', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
@@ -364,7 +250,8 @@ describe('init command', () => {
       execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
-        stdio: 'pipe'
+        stdio: 'pipe',
+        timeout: 15000,
       });
 
       const configPath = path.join(tempDir, 'night-watch.config.json');
@@ -379,32 +266,8 @@ describe('init command', () => {
     });
   });
 
-  describe('should create NIGHT-WATCH-SUMMARY.md', () => {
+  describeIfExternalTools('should create NIGHT-WATCH-SUMMARY.md', () => {
     it('should create NIGHT-WATCH-SUMMARY.md with template header', () => {
-      // This test requires gh and claude to be available
-      let ghAvailable = false;
-      let claudeAvailable = false;
-
-      try {
-        execSync('gh auth status', { stdio: 'pipe' });
-        ghAvailable = true;
-      } catch {
-        // gh not available
-      }
-
-      try {
-        execSync('which claude', { stdio: 'pipe' });
-        claudeAvailable = true;
-      } catch {
-        // claude not available
-      }
-
-      if (!ghAvailable || !claudeAvailable) {
-        // Skip test
-        expect(true).toBe(true);
-        return;
-      }
-
       // Initialize git repo
       execSync('git init', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
@@ -413,7 +276,8 @@ describe('init command', () => {
       execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
-        stdio: 'pipe'
+        stdio: 'pipe',
+        timeout: 15000,
       });
 
       const summaryPath = path.join(tempDir, 'docs', 'PRDs', 'night-watch', 'NIGHT-WATCH-SUMMARY.md');
@@ -424,32 +288,8 @@ describe('init command', () => {
     });
   });
 
-  describe('--force flag', () => {
+  describeIfExternalTools('--force flag', () => {
     it('should overwrite existing files with --force flag', () => {
-      // This test requires gh and claude to be available
-      let ghAvailable = false;
-      let claudeAvailable = false;
-
-      try {
-        execSync('gh auth status', { stdio: 'pipe' });
-        ghAvailable = true;
-      } catch {
-        // gh not available
-      }
-
-      try {
-        execSync('which claude', { stdio: 'pipe' });
-        claudeAvailable = true;
-      } catch {
-        // claude not available
-      }
-
-      if (!ghAvailable || !claudeAvailable) {
-        // Skip test
-        expect(true).toBe(true);
-        return;
-      }
-
       // Initialize git repo
       execSync('git init', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
@@ -459,7 +299,8 @@ describe('init command', () => {
       execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
-        stdio: 'pipe'
+        stdio: 'pipe',
+        timeout: 15000,
       });
 
       const configPath = path.join(tempDir, 'night-watch.config.json');
@@ -474,7 +315,8 @@ describe('init command', () => {
       execSync(`"${TSX_PATH}" "${CLI_PATH}" init --force --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
-        stdio: 'pipe'
+        stdio: 'pipe',
+        timeout: 15000,
       });
 
       // Config should be reset (not contain MODIFIED)
@@ -483,32 +325,8 @@ describe('init command', () => {
     });
   });
 
-  describe('--provider flag', () => {
+  describeIfExternalTools('--provider flag', () => {
     it('should set provider in config with --provider codex', () => {
-      // This test requires gh and claude to be available (using --provider codex)
-      let ghAvailable = false;
-      let claudeAvailable = false;
-
-      try {
-        execSync('gh auth status', { stdio: 'pipe' });
-        ghAvailable = true;
-      } catch {
-        // gh not available
-      }
-
-      try {
-        execSync('which claude', { stdio: 'pipe' });
-        claudeAvailable = true;
-      } catch {
-        // claude not available
-      }
-
-      if (!ghAvailable || !claudeAvailable) {
-        // Skip test
-        expect(true).toBe(true);
-        return;
-      }
-
       // Initialize git repo
       execSync('git init', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
@@ -517,7 +335,8 @@ describe('init command', () => {
       execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider codex`, {
         encoding: 'utf-8',
         cwd: tempDir,
-        stdio: 'pipe'
+        stdio: 'pipe',
+        timeout: 15000,
       });
 
       const configPath = path.join(tempDir, 'night-watch.config.json');
@@ -526,32 +345,8 @@ describe('init command', () => {
     });
   });
 
-  describe('--no-reviewer flag', () => {
+  describeIfExternalTools('--no-reviewer flag', () => {
     it('should set reviewerEnabled to false in config', () => {
-      // This test requires gh and claude to be available
-      let ghAvailable = false;
-      let claudeAvailable = false;
-
-      try {
-        execSync('gh auth status', { stdio: 'pipe' });
-        ghAvailable = true;
-      } catch {
-        // gh not available
-      }
-
-      try {
-        execSync('which claude', { stdio: 'pipe' });
-        claudeAvailable = true;
-      } catch {
-        // claude not available
-      }
-
-      if (!ghAvailable || !claudeAvailable) {
-        // Skip test
-        expect(true).toBe(true);
-        return;
-      }
-
       // Initialize git repo
       execSync('git init', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
@@ -560,7 +355,8 @@ describe('init command', () => {
       execSync(`"${TSX_PATH}" "${CLI_PATH}" init --no-reviewer --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
-        stdio: 'pipe'
+        stdio: 'pipe',
+        timeout: 15000,
       });
 
       const configPath = path.join(tempDir, 'night-watch.config.json');
@@ -601,32 +397,8 @@ describe('init command', () => {
     });
   });
 
-  describe('custom template integration', () => {
+  describeIfExternalTools('custom template integration', () => {
     it('should use custom template when available during init', () => {
-      // This test requires gh and claude to be available
-      let ghAvailable = false;
-      let claudeAvailable = false;
-
-      try {
-        execSync('gh auth status', { stdio: 'pipe' });
-        ghAvailable = true;
-      } catch {
-        // gh not available
-      }
-
-      try {
-        execSync('which claude', { stdio: 'pipe' });
-        claudeAvailable = true;
-      } catch {
-        // claude not available
-      }
-
-      if (!ghAvailable || !claudeAvailable) {
-        // Skip test
-        expect(true).toBe(true);
-        return;
-      }
-
       // Initialize git repo
       execSync('git init', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
@@ -651,7 +423,8 @@ describe('init command', () => {
       execSync(`"${TSX_PATH}" "${CLI_PATH}" init --force --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
-        stdio: 'pipe'
+        stdio: 'pipe',
+        timeout: 15000,
       });
 
       const nightWatchMd = path.join(tempDir, '.claude', 'commands', 'night-watch.md');

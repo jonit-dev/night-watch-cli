@@ -42,7 +42,7 @@ describe("retry command", () => {
           cwd: tempDir,
           stdio: "pipe",
           env: { ...process.env, NODE_ENV: "test" },
-          timeout: 30000,
+          timeout: 10000,
         }
       );
       return { output, exitCode: 0 };
