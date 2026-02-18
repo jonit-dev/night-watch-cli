@@ -46,10 +46,15 @@ export const DEFAULT_NOTIFICATIONS: INotificationConfig = { webhooks: [] };
 export const DEFAULT_PRD_PRIORITY: string[] = [];
 
 // Roadmap Scanner Configuration
+export const DEFAULT_SLICER_SCHEDULE = "0 */6 * * *"; // every 6 hours
+export const DEFAULT_SLICER_MAX_RUNTIME = 600; // 10 minutes
+
 export const DEFAULT_ROADMAP_SCANNER: IRoadmapScannerConfig = {
   enabled: false,
   roadmapPath: "ROADMAP.md",
   autoScanInterval: 300,
+  slicerSchedule: DEFAULT_SLICER_SCHEDULE,
+  slicerMaxRuntime: DEFAULT_SLICER_MAX_RUNTIME,
 };
 
 // Templates Configuration

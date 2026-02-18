@@ -102,4 +102,10 @@ export interface IRoadmapScannerConfig {
 
   /** Interval in seconds between automatic scans */
   autoScanInterval: number;
+
+  /** Cron schedule for the slicer (AI-powered PRD generation from roadmap items) */
+  slicerSchedule: string;
+
+  /** Maximum runtime in seconds for the slicer */
+  slicerMaxRuntime: number;
 }

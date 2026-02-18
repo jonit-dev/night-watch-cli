@@ -47,6 +47,8 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
       enabled: false,
       roadmapPath: "ROADMAP.md",
       autoScanInterval: 300,
+      slicerSchedule: "0 */6 * * *",
+      slicerMaxRuntime: 600,
     },
     ...overrides,
   };
@@ -94,5 +96,65 @@ describe("install command", () => {
     );
 
     expect(writeCrontab).toHaveBeenCalledTimes(1);
+  });
+
+  it("should add slicer crontab entry when scanner enabled", () => {
+    const config = createTestConfig({
+      roadmapScanner: {
+        enabled: true,
+        roadmapPath: "ROADMAP.md",
+        autoScanInterval: 300,
+        slicerSchedule: "0 */6 * * *",
+        slicerMaxRuntime: 600,
+      },
+    });
+    const result = performInstall(tempDir, config);
+
+    expect(result.success).toBe(true);
+    expect(result.entries).toHaveLength(3); // executor, reviewer, slicer
+
+    const slicerEntry = result.entries[2];
+    expect(slicerEntry).toContain("' slice ");
+    expect(slicerEntry).toContain("slicer.log");
+    expect(slicerEntry).toContain("0 */6 * * *");
+    expect(slicerEntry).toContain("# night-watch-cli:");
+  });
+
+  it("should skip slicer entry when scanner disabled", () => {
+    const config = createTestConfig({
+      roadmapScanner: {
+        enabled: false,
+        roadmapPath: "ROADMAP.md",
+        autoScanInterval: 300,
+        slicerSchedule: "0 */6 * * *",
+        slicerMaxRuntime: 600,
+      },
+    });
+    const result = performInstall(tempDir, config);
+
+    expect(result.success).toBe(true);
+    expect(result.entries).toHaveLength(2); // executor and reviewer only
+
+    const hasSlicerEntry = result.entries.some((entry) => entry.includes("' slice "));
+    expect(hasSlicerEntry).toBe(false);
+  });
+
+  it("should skip slicer entry with --no-slicer flag", () => {
+    const config = createTestConfig({
+      roadmapScanner: {
+        enabled: true,
+        roadmapPath: "ROADMAP.md",
+        autoScanInterval: 300,
+        slicerSchedule: "0 */6 * * *",
+        slicerMaxRuntime: 600,
+      },
+    });
+    const result = performInstall(tempDir, config, { noSlicer: true });
+
+    expect(result.success).toBe(true);
+    expect(result.entries).toHaveLength(2); // executor and reviewer only
+
+    const hasSlicerEntry = result.entries.some((entry) => entry.includes("' slice "));
+    expect(hasSlicerEntry).toBe(false);
   });
 });
