@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Plus, Filter, SortAsc, LayoutList, LayoutGrid, MoreVertical, Trash, Play, AlertCircle } from 'lucide-react';
+import { Plus, SortAsc, LayoutList, LayoutGrid, MoreVertical, Play, AlertCircle, RotateCcw } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
-import { useApi, fetchPrds, PrdWithContent, triggerRun } from '../api';
+import { useApi, fetchPrds, PrdWithContent, triggerRun, retryPrd } from '../api';
 import { useStore } from '../store/useStore';
 
 // Map API status to UI status
@@ -29,6 +29,7 @@ const PRDs: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPRD, setSelectedPRD] = useState<PrdWithContent | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const { addToast, selectedProjectId, globalModeLoading } = useStore();
   const { data: prds = [], loading, error, refetch } = useApi(fetchPrds, [selectedProjectId], { enabled: !globalModeLoading });
 
@@ -38,6 +39,29 @@ const PRDs: React.FC = () => {
     'Blocked': 'error',
     'Done': 'neutral',
   } as const;
+
+  const handleRetry = async () => {
+    if (!selectedPRD) return;
+    setIsRetrying(true);
+    try {
+      const result = await retryPrd(selectedPRD.name);
+      addToast({
+        title: 'PRD Queued',
+        message: result.message,
+        type: 'success',
+      });
+      setSelectedPRD(null);
+      refetch();
+    } catch (retryError) {
+      addToast({
+        title: 'Retry Failed',
+        message: retryError instanceof Error ? retryError.message : 'Failed to retry PRD',
+        type: 'error',
+      });
+    } finally {
+      setIsRetrying(false);
+    }
+  };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -308,11 +332,17 @@ const PRDs: React.FC = () => {
               </div>
 
               <div className="p-4 border-t border-slate-800 bg-slate-900 flex space-x-3">
-                 <Button className="flex-1" onClick={handleExecuteNow} disabled={isExecuting}>
-                   <Play className="h-4 w-4 mr-2" />
-                   {isExecuting ? 'Executing...' : 'Execute Now'}
-                 </Button>
-                 <Button variant="outline" className="flex-1">Move to Done</Button>
+                 {selectedPRD.status === 'done' ? (
+                   <Button className="flex-1" onClick={handleRetry} disabled={isRetrying}>
+                     <RotateCcw className="h-4 w-4 mr-2" />
+                     {isRetrying ? 'Moving...' : 'Retry'}
+                   </Button>
+                 ) : (
+                   <Button className="flex-1" onClick={handleExecuteNow} disabled={isExecuting || selectedPRD.status === 'in-progress'}>
+                     <Play className="h-4 w-4 mr-2" />
+                     {isExecuting ? 'Executing...' : 'Execute Now'}
+                   </Button>
+                 )}
               </div>
            </div>
         </div>

@@ -377,11 +377,15 @@ describe("config", () => {
       const configPath = path.join(tempDir, "night-watch.config.json");
       fs.writeFileSync(configPath, "{ invalid json }");
 
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
       // Should not throw and return defaults
       const config = loadConfig(tempDir);
       const defaults = getDefaultConfig();
 
       expect(config.maxRuntime).toBe(defaults.maxRuntime);
+      expect(warnSpy).toHaveBeenCalledOnce();
+      warnSpy.mockRestore();
     });
 
     it("should ignore invalid numeric env vars", () => {
