@@ -30,7 +30,7 @@ import {
   sendNotifications,
   NotificationContext,
 } from "../../utils/notify.js";
-import { INightWatchConfig, WebhookConfig } from "../../types.js";
+import { INightWatchConfig, IWebhookConfig } from "../../types.js";
 
 describe("notification utilities", () => {
   let consoleSpy: ReturnType<typeof vi.spyOn>;
@@ -170,7 +170,7 @@ describe("notification utilities", () => {
 
   describe("sendWebhook", () => {
     it("should skip events not in config", async () => {
-      const webhook: WebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "slack",
         url: "https://hooks.slack.com/test",
         events: ["run_failed"],
@@ -182,7 +182,7 @@ describe("notification utilities", () => {
     });
 
     it("should call fetch for matching events", async () => {
-      const webhook: WebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "slack",
         url: "https://hooks.slack.com/test",
         events: ["run_failed"],
@@ -203,7 +203,7 @@ describe("notification utilities", () => {
     it("should not throw on fetch failure", async () => {
       mockFetch.mockRejectedValueOnce(new Error("Network error"));
 
-      const webhook: WebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "slack",
         url: "https://hooks.slack.com/test",
         events: ["run_failed"],

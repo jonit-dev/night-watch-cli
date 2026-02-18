@@ -24,7 +24,7 @@ export default defineConfig(() => {
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),
-          '@night-watch/types': path.resolve(__dirname, '../packages/types/src/index.ts'),
+          '@shared/types': path.resolve(__dirname, '../shared/types.ts'),
         }
       }
     };

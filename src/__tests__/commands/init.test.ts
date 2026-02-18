@@ -12,6 +12,8 @@ const __dirname = path.dirname(__filename);
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
 const CLI_PATH = path.join(PROJECT_ROOT, 'src', 'cli.ts');
 const TSX_PATH = path.join(PROJECT_ROOT, 'node_modules', '.bin', 'tsx');
+const TSCONFIG_PATH = path.join(PROJECT_ROOT, 'tsconfig.json');
+const TSX_CMD = `"${TSX_PATH}" --tsconfig "${TSCONFIG_PATH}" "${CLI_PATH}"`;
 
 // Cache external tools availability - check once for all tests
 let ghAvailable = false;
@@ -60,7 +62,7 @@ describe('init command', () => {
       // tempDir is not a git repo
       let errorThrown = false;
       try {
-        execSync(`"${TSX_PATH}" "${CLI_PATH}" init`, {
+        execSync(`${TSX_CMD} init`, {
           encoding: 'utf-8',
           cwd: tempDir,
           stdio: 'pipe',
@@ -85,7 +87,7 @@ describe('init command', () => {
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
       // Mock gh auth status (will fail but we test directory creation separately)
-      const output = execSync(`"${TSX_PATH}" "${CLI_PATH}" init 2>&1 || true`, {
+      const output = execSync(`${TSX_CMD} init 2>&1 || true`, {
         encoding: 'utf-8',
         cwd: tempDir,
         shell: '/bin/bash',
@@ -117,7 +119,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
+      execSync(`${TSX_CMD} init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe',
@@ -152,7 +154,7 @@ describe('init command', () => {
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
       // First run
-      execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
+      execSync(`${TSX_CMD} init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe',
@@ -163,7 +165,7 @@ describe('init command', () => {
       const configContent1 = fs.readFileSync(configPath, 'utf-8');
 
       // Second run (without --force)
-      execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
+      execSync(`${TSX_CMD} init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe',
@@ -184,7 +186,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
+      execSync(`${TSX_CMD} init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe',
@@ -208,7 +210,7 @@ describe('init command', () => {
       const gitignorePath = path.join(tempDir, '.gitignore');
       fs.writeFileSync(gitignorePath, 'node_modules\n/logs/\n');
 
-      execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
+      execSync(`${TSX_CMD} init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe',
@@ -228,7 +230,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
+      execSync(`${TSX_CMD} init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe',
@@ -247,7 +249,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
+      execSync(`${TSX_CMD} init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe',
@@ -273,7 +275,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
+      execSync(`${TSX_CMD} init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe',
@@ -296,7 +298,7 @@ describe('init command', () => {
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
       // First run
-      execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider claude`, {
+      execSync(`${TSX_CMD} init --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe',
@@ -312,7 +314,7 @@ describe('init command', () => {
       fs.writeFileSync(configPath, JSON.stringify(modifiedConfig, null, 2));
 
       // Run with --force
-      execSync(`"${TSX_PATH}" "${CLI_PATH}" init --force --provider claude`, {
+      execSync(`${TSX_CMD} init --force --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe',
@@ -332,7 +334,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync(`"${TSX_PATH}" "${CLI_PATH}" init --provider codex`, {
+      execSync(`${TSX_CMD} init --provider codex`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe',
@@ -352,7 +354,7 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      execSync(`"${TSX_PATH}" "${CLI_PATH}" init --no-reviewer --provider claude`, {
+      execSync(`${TSX_CMD} init --no-reviewer --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe',
@@ -420,7 +422,7 @@ describe('init command', () => {
         })
       );
 
-      execSync(`"${TSX_PATH}" "${CLI_PATH}" init --force --provider claude`, {
+      execSync(`${TSX_CMD} init --force --provider claude`, {
         encoding: 'utf-8',
         cwd: tempDir,
         stdio: 'pipe',

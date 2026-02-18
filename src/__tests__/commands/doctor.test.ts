@@ -6,7 +6,7 @@ import { describe, it, expect } from "vitest";
 import { execSync } from "child_process";
 import path from "path";
 import { validateWebhook } from "../../commands/doctor.js";
-import { IIWebhookConfig } from "../../types.js";
+import { IWebhookConfig } from "../../types.js";
 
 const CLI_PATH = path.join(process.cwd(), "src/cli.ts");
 const TSX_PATH = path.join(process.cwd(), "node_modules", ".bin", "tsx");
@@ -58,7 +58,7 @@ function getDoctorOutput(): string {
 describe("doctor command", () => {
   describe("validateWebhook", () => {
     it("should pass valid slack webhook", () => {
-      const webhook: IIWebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "slack",
         url: "https://hooks.slack.com/services/T00/B00/xxx",
         events: ["run_succeeded", "run_failed"],
@@ -67,7 +67,7 @@ describe("doctor command", () => {
     });
 
     it("should fail slack webhook with invalid URL", () => {
-      const webhook: IIWebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "slack",
         url: "https://example.com/webhook",
         events: ["run_failed"],
@@ -78,7 +78,7 @@ describe("doctor command", () => {
     });
 
     it("should fail slack webhook with missing URL", () => {
-      const webhook: IIWebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "slack",
         events: ["run_failed"],
       };
@@ -87,7 +87,7 @@ describe("doctor command", () => {
     });
 
     it("should pass valid discord webhook", () => {
-      const webhook: IIWebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "discord",
         url: "https://discord.com/api/webhooks/123/abc",
         events: ["run_failed"],
@@ -96,7 +96,7 @@ describe("doctor command", () => {
     });
 
     it("should fail discord webhook with invalid URL", () => {
-      const webhook: IIWebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "discord",
         url: "https://example.com/hook",
         events: ["run_failed"],
@@ -107,7 +107,7 @@ describe("doctor command", () => {
     });
 
     it("should fail discord webhook with missing URL", () => {
-      const webhook: IIWebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "discord",
         events: ["run_failed"],
       };
@@ -116,7 +116,7 @@ describe("doctor command", () => {
     });
 
     it("should pass valid telegram webhook", () => {
-      const webhook: IIWebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "telegram",
         botToken: "123456:ABC-DEF",
         chatId: "-1001234567890",
@@ -126,7 +126,7 @@ describe("doctor command", () => {
     });
 
     it("should fail telegram without botToken", () => {
-      const webhook: IIWebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "telegram",
         chatId: "-100123",
         events: ["run_failed"],
@@ -136,7 +136,7 @@ describe("doctor command", () => {
     });
 
     it("should fail telegram without chatId", () => {
-      const webhook: IIWebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "telegram",
         botToken: "123:ABC",
         events: ["run_failed"],
@@ -146,7 +146,7 @@ describe("doctor command", () => {
     });
 
     it("should fail telegram without both botToken and chatId", () => {
-      const webhook: IIWebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "telegram",
         events: ["run_failed"],
       };
@@ -156,7 +156,7 @@ describe("doctor command", () => {
     });
 
     it("should fail with no events configured", () => {
-      const webhook: IIWebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "slack",
         url: "https://hooks.slack.com/services/T00/B00/xxx",
         events: [],
@@ -166,7 +166,7 @@ describe("doctor command", () => {
     });
 
     it("should fail with invalid event name", () => {
-      const webhook: IIWebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "slack",
         url: "https://hooks.slack.com/services/T00/B00/xxx",
         events: ["invalid_event" as any],
@@ -177,7 +177,7 @@ describe("doctor command", () => {
     });
 
     it("should fail with unknown webhook type", () => {
-      const webhook: IIWebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "teams" as any,
         url: "https://example.com/webhook",
         events: ["run_failed"],
@@ -188,7 +188,7 @@ describe("doctor command", () => {
     });
 
     it("should report multiple issues at once", () => {
-      const webhook: IIWebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "slack",
         url: "https://example.com/bad-url",
         events: ["invalid_event" as any],
@@ -201,7 +201,7 @@ describe("doctor command", () => {
     });
 
     it("should accept all valid event types", () => {
-      const webhook: IIWebhookConfig = {
+      const webhook: IWebhookConfig = {
         type: "slack",
         url: "https://hooks.slack.com/services/T00/B00/xxx",
         events: [

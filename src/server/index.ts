@@ -677,8 +677,8 @@ function resolveProject(req: Request, res: Response, next: NextFunction): void {
     return;
   }
 
-  (req as any).projectDir = entry.path;
-  (req as any).projectConfig = loadConfig(entry.path);
+  req.projectDir = entry.path;
+  req.projectConfig = loadConfig(entry.path);
   next();
 }
 
@@ -688,8 +688,8 @@ function resolveProject(req: Request, res: Response, next: NextFunction): void {
 function createProjectRouter(): Router {
   const router = Router({ mergeParams: true });
 
-  const dir = (req: Request): string => (req as any).projectDir;
-  const cfg = (req: Request): INightWatchConfig => (req as any).projectConfig;
+  const dir = (req: Request): string => req.projectDir!;
+  const cfg = (req: Request): INightWatchConfig => req.projectConfig!;
 
   router.get("/status", (req, res) => handleGetStatus(dir(req), cfg(req), req, res));
   router.get("/schedule-info", (req, res) => handleGetScheduleInfo(dir(req), cfg(req), req, res));

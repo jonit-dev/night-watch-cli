@@ -6,30 +6,30 @@
 
 import { DependencyList, useEffect, useRef, useState } from 'react';
 import type {
-  NightWatchConfig,
-  NotificationConfig,
-  WebhookConfig,
-  PrdInfo,
-  ProcessInfo,
-  PrInfo,
-  LogInfo,
-  StatusSnapshot,
-  RoadmapItem,
-  RoadmapStatus,
-} from '@night-watch/types';
+  INightWatchConfig,
+  INotificationConfig,
+  IWebhookConfig,
+  IPrdInfo,
+  IProcessInfo,
+  IPrInfo,
+  ILogInfo,
+  IStatusSnapshot,
+  IRoadmapItem,
+  IRoadmapStatus,
+} from '@shared/types';
 
 // Re-export shared types so consumers can import from either place
 export type {
-  NightWatchConfig,
-  NotificationConfig,
-  WebhookConfig,
-  PrdInfo,
-  ProcessInfo,
-  PrInfo,
-  LogInfo,
-  StatusSnapshot,
-  RoadmapItem,
-  RoadmapStatus,
+  INightWatchConfig,
+  INotificationConfig,
+  IWebhookConfig,
+  IPrdInfo,
+  IProcessInfo,
+  IPrInfo,
+  ILogInfo,
+  IStatusSnapshot,
+  IRoadmapItem,
+  IRoadmapStatus,
 };
 
 /**
@@ -157,7 +157,7 @@ export interface DoctorCheck {
 
 // ==================== Schedule Info ====================
 
-export interface ScheduleInfo {
+export interface IScheduleInfo {
   executor: { schedule: string; installed: boolean; nextRun: string | null };
   reviewer: { schedule: string; installed: boolean; nextRun: string | null };
   paused: boolean;
@@ -174,8 +174,8 @@ export interface ActionResult {
 
 // ==================== API Functions ====================
 
-export function fetchStatus(): Promise<StatusSnapshot> {
-  return apiFetch<StatusSnapshot>(apiPath('/api/status'));
+export function fetchStatus(): Promise<IStatusSnapshot> {
+  return apiFetch<IStatusSnapshot>(apiPath('/api/status'));
 }
 
 export function fetchPrds(): Promise<PrdWithContent[]> {
@@ -186,8 +186,8 @@ export function fetchPrdContent(name: string): Promise<PrdContent> {
   return apiFetch<PrdContent>(apiPath(`/api/prds/${encodeURIComponent(name)}`));
 }
 
-export function fetchPrs(): Promise<PrInfo[]> {
-  return apiFetch<PrInfo[]>(apiPath('/api/prs'));
+export function fetchPrs(): Promise<IPrInfo[]> {
+  return apiFetch<IPrInfo[]>(apiPath('/api/prs'));
 }
 
 export function fetchLogs(name: string, lines?: number): Promise<LogResponse> {
@@ -195,11 +195,11 @@ export function fetchLogs(name: string, lines?: number): Promise<LogResponse> {
   return apiFetch<LogResponse>(apiPath(`/api/logs/${encodeURIComponent(name)}${query}`));
 }
 
-export function fetchConfig(): Promise<NightWatchConfig> {
+export function fetchConfig(): Promise<INightWatchConfig> {
   return apiFetch<NightWatchConfig>(apiPath('/api/config'));
 }
 
-export function updateConfig(changes: Partial<NightWatchConfig>): Promise<NightWatchConfig> {
+export function updateConfig(changes: Partial<INightWatchConfig>): Promise<INightWatchConfig> {
   return apiFetch<NightWatchConfig>(apiPath('/api/config'), {
     method: 'PUT',
     body: JSON.stringify(changes),
@@ -210,7 +210,7 @@ export function fetchDoctor(): Promise<DoctorCheck[]> {
   return apiFetch<DoctorCheck[]>(apiPath('/api/doctor'));
 }
 
-export function fetchScheduleInfo(): Promise<ScheduleInfo> {
+export function fetchScheduleInfo(): Promise<IScheduleInfo> {
   return apiFetch<ScheduleInfo>(apiPath('/api/schedule-info'));
 }
 
@@ -271,7 +271,7 @@ export interface ScanResult {
   errors: string[];
 }
 
-export function fetchRoadmap(): Promise<RoadmapStatus> {
+export function fetchRoadmap(): Promise<IRoadmapStatus> {
   return apiFetch<RoadmapStatus>(apiPath('/api/roadmap'));
 }
 
@@ -279,7 +279,7 @@ export function triggerRoadmapScan(): Promise<ScanResult> {
   return apiFetch<ScanResult>(apiPath('/api/roadmap/scan'), { method: 'POST' });
 }
 
-export function toggleRoadmapScanner(enabled: boolean): Promise<NightWatchConfig> {
+export function toggleRoadmapScanner(enabled: boolean): Promise<INightWatchConfig> {
   return apiFetch<NightWatchConfig>(apiPath('/api/roadmap/toggle'), {
     method: 'PUT',
     body: JSON.stringify({ enabled }),

@@ -19,7 +19,7 @@ export type NotificationEvent =
   | "run_timeout"
   | "review_completed";
 
-export interface WebhookConfig {
+export interface IWebhookConfig {
   type: WebhookType;
   url?: string;
   botToken?: string;
@@ -27,8 +27,8 @@ export interface WebhookConfig {
   events: NotificationEvent[];
 }
 
-export interface NotificationConfig {
-  webhooks: WebhookConfig[];
+export interface INotificationConfig {
+  webhooks: IWebhookConfig[];
 }
 
 // ==================== Night Watch Config ====================
@@ -37,7 +37,7 @@ export interface NotificationConfig {
  * The configuration object as returned by the /api/config endpoint.
  * This is the subset of INightWatchConfig that the web client consumes.
  */
-export interface NightWatchConfig {
+export interface INightWatchConfig {
   defaultBranch: string;
   prdDir: string;
   maxRuntime: number;
@@ -53,14 +53,14 @@ export interface NightWatchConfig {
   provider: Provider;
   reviewerEnabled: boolean;
   providerEnv: Record<string, string>;
-  notifications: NotificationConfig;
+  notifications: INotificationConfig;
   prdPriority: string[];
   templatesDir: string;
 }
 
 // ==================== PRD Info ====================
 
-export interface PrdInfo {
+export interface IPrdInfo {
   name: string;
   status: "ready" | "blocked" | "in-progress" | "pending-review" | "done";
   dependencies: string[];
@@ -69,7 +69,7 @@ export interface PrdInfo {
 
 // ==================== Process Info ====================
 
-export interface ProcessInfo {
+export interface IProcessInfo {
   name: string;
   running: boolean;
   pid: number | null;
@@ -77,7 +77,7 @@ export interface ProcessInfo {
 
 // ==================== PR Info ====================
 
-export interface PrInfo {
+export interface IPrInfo {
   number: number;
   title: string;
   branch: string;
@@ -88,7 +88,7 @@ export interface PrInfo {
 
 // ==================== Log Info ====================
 
-export interface LogInfo {
+export interface ILogInfo {
   name: string;
   path: string;
   exists: boolean;
@@ -98,21 +98,21 @@ export interface LogInfo {
 
 // ==================== Status Snapshot ====================
 
-export interface StatusSnapshot {
+export interface IStatusSnapshot {
   projectName: string;
   projectDir: string;
-  config: NightWatchConfig;
-  prds: PrdInfo[];
-  processes: ProcessInfo[];
-  prs: PrInfo[];
-  logs: LogInfo[];
+  config: INightWatchConfig;
+  prds: IPrdInfo[];
+  processes: IProcessInfo[];
+  prs: IPrInfo[];
+  logs: ILogInfo[];
   crontab: { installed: boolean; entries: string[] };
   timestamp: string;
 }
 
 // ==================== Roadmap ====================
 
-export interface RoadmapItem {
+export interface IRoadmapItem {
   hash: string;
   title: string;
   description: string;
@@ -122,14 +122,14 @@ export interface RoadmapItem {
   prdFile?: string;
 }
 
-export interface RoadmapStatus {
+export interface IRoadmapStatus {
   found: boolean;
   enabled: boolean;
   totalItems: number;
   processedItems: number;
   pendingItems: number;
   status: "idle" | "scanning" | "complete" | "disabled" | "no-roadmap";
-  items: RoadmapItem[];
+  items: IRoadmapItem[];
   lastScan?: string;
   autoScanInterval?: number;
 }

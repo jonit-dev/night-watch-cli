@@ -22,8 +22,8 @@
       "@/*": [
         "./*"
       ],
-      "@night-watch/types": [
-        "../packages/types/src/index.ts"
+      "@shared/types": [
+        "../shared/types.ts"
       ]
     },
     "allowImportingTsExtensions": true,
