@@ -4,7 +4,7 @@
  * Supports both single-project and global (multi-project) modes
  */
 
-import { DependencyList, useCallback, useEffect, useState } from 'react';
+import { DependencyList, useEffect, useRef, useState } from 'react';
 
 /**
  * Base URL for API requests
@@ -356,6 +356,11 @@ export function toggleRoadmapScanner(enabled: boolean): Promise<NightWatchConfig
 /**
  * Custom React hook for API data fetching with loading, error, and refetch.
  * Pass enabled=false to skip fetching (useful during global mode detection).
+ *
+ * Key design decisions to prevent infinite re-renders:
+ * - fetchFn is stored in a ref so refetch callback is stable regardless of function identity
+ * - refetch does NOT set loading=true — prevents flashing during polling
+ * - Initial fetch and dependency changes still show loading state
  */
 export function useApi<T>(
   fetchFn: () => Promise<T>,
@@ -372,25 +377,59 @@ export function useApi<T>(
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const fetchData = useCallback(async () => {
+  // Store fetchFn in a ref to avoid dependency on function identity
+  const fetchFnRef = useRef(fetchFn);
+  fetchFnRef.current = fetchFn;
+
+  // Stable refetch function that doesn't set loading (silent refresh)
+  const refetch = useRef(() => {
+    const doFetch = async () => {
+      setError(null);
+      try {
+        const result = await fetchFnRef.current();
+        setData(result);
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error('Unknown error'));
+      }
+    };
+    doFetch();
+  });
+  refetch.current = refetch.current.bind(refetch);
+
+  // Initial fetch effect - shows loading state
+  useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
+    let cancelled = false;
     setLoading(true);
     setError(null);
-    try {
-      const result = await fetchFn();
-      setData(result);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Unknown error'));
-    } finally {
-      setLoading(false);
-    }
-  }, [fetchFn]);
 
-  useEffect(() => {
-    if (enabled) {
-      fetchData();
-    }
+    const doFetch = async () => {
+      try {
+        const result = await fetchFnRef.current();
+        if (!cancelled) {
+          setData(result);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err : new Error('Unknown error'));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    doFetch();
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, fetchData, enabled]);
+  }, [...deps, enabled]);
 
-  return { data, loading, error, refetch: fetchData };
+  return { data, loading, error, refetch: refetch.current };
 }
