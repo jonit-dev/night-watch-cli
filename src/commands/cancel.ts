@@ -5,10 +5,9 @@
 
 import { Command } from "commander";
 import * as fs from "fs";
-import * as path from "path";
 import * as readline from "readline";
 import { LOCK_FILE_PREFIX } from "../constants.js";
-import { checkLockFile } from "../utils/status-data.js";
+import { checkLockFile, projectRuntimeKey } from "../utils/status-data.js";
 import {
   dim,
   info,
@@ -25,13 +24,14 @@ export interface ICancelOptions {
 /**
  * Get lock file paths for a project
  */
-export function getLockFilePaths(projectName: string): {
+export function getLockFilePaths(projectDir: string): {
   executor: string;
   reviewer: string;
 } {
+  const runtimeKey = projectRuntimeKey(projectDir);
   return {
-    executor: `${LOCK_FILE_PREFIX}${projectName}.lock`,
-    reviewer: `${LOCK_FILE_PREFIX}pr-reviewer-${projectName}.lock`,
+    executor: `${LOCK_FILE_PREFIX}${runtimeKey}.lock`,
+    reviewer: `${LOCK_FILE_PREFIX}pr-reviewer-${runtimeKey}.lock`,
   };
 }
 
@@ -225,8 +225,7 @@ export async function performCancel(
   projectDir: string,
   options: ICancelOptions
 ): Promise<ICancelResult[]> {
-  const projectName = path.basename(projectDir);
-  const lockPaths = getLockFilePaths(projectName);
+  const lockPaths = getLockFilePaths(projectDir);
   const results: ICancelResult[] = [];
   const force = options.force ?? false;
 

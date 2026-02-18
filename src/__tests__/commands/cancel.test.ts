@@ -35,6 +35,7 @@ import {
   performCancel,
   ICancelOptions,
 } from "../../commands/cancel.js";
+import { projectRuntimeKey } from "../../utils/status-data.js";
 
 describe("cancel command", () => {
   let tempDir: string;
@@ -78,8 +79,7 @@ describe("cancel command", () => {
 
   afterEach(() => {
     // Clean up any lock files created during tests
-    const projectName = path.basename(tempDir);
-    const lockPaths = getLockFilePaths(projectName);
+    const lockPaths = getLockFilePaths(tempDir);
     for (const lockPath of Object.values(lockPaths)) {
       if (fs.existsSync(lockPath)) {
         fs.unlinkSync(lockPath);
@@ -91,10 +91,11 @@ describe("cancel command", () => {
 
   describe("getLockFilePaths", () => {
     it("should return correct lock file paths", () => {
-      const paths = getLockFilePaths("test-project");
+      const runtimeKey = projectRuntimeKey(tempDir);
+      const paths = getLockFilePaths(tempDir);
 
-      expect(paths.executor).toBe("/tmp/night-watch-test-project.lock");
-      expect(paths.reviewer).toBe("/tmp/night-watch-pr-reviewer-test-project.lock");
+      expect(paths.executor).toBe(`/tmp/night-watch-${runtimeKey}.lock`);
+      expect(paths.reviewer).toBe(`/tmp/night-watch-pr-reviewer-${runtimeKey}.lock`);
     });
   });
 
@@ -119,8 +120,7 @@ describe("cancel command", () => {
     });
 
     it("should detect stale lock files", async () => {
-      const projectName = path.basename(tempDir);
-      const lockPaths = getLockFilePaths(projectName);
+      const lockPaths = getLockFilePaths(tempDir);
 
       // Create stale lock files with non-existent PIDs
       fs.writeFileSync(lockPaths.executor, "99999998");

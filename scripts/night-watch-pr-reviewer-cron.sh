@@ -15,8 +15,6 @@ PROJECT_DIR="${1:?Usage: $0 /path/to/project}"
 PROJECT_NAME=$(basename "${PROJECT_DIR}")
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/night-watch-pr-reviewer.log"
-# NOTE: Lock file path must match LOCK_FILE_PREFIX in src/constants.ts (reviewer: prefix + "pr-reviewer-" + name)
-LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_NAME}.lock"
 MAX_RUNTIME="${NW_REVIEWER_MAX_RUNTIME:-3600}"  # 1 hour
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
@@ -35,6 +33,9 @@ mkdir -p "${LOG_DIR}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
+PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
+# NOTE: Lock file path must match reviewerLockPath() in src/utils/status-data.ts
+LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_RUNTIME_KEY}.lock"
 
 # Validate provider
 if ! validate_provider "${PROVIDER_CMD}"; then

@@ -77,6 +77,25 @@ rotate_log() {
 
 # ── Lock management ──────────────────────────────────────────────────────────
 
+project_runtime_key() {
+  local project_dir="${1:?project_dir required}"
+  local project_name
+  local project_hash=""
+  project_name=$(basename "${project_dir}")
+
+  if command -v sha1sum >/dev/null 2>&1; then
+    project_hash=$(printf '%s' "${project_dir}" | sha1sum | awk '{print $1}')
+  elif command -v shasum >/dev/null 2>&1; then
+    project_hash=$(printf '%s' "${project_dir}" | shasum -a 1 | awk '{print $1}')
+  elif command -v openssl >/dev/null 2>&1; then
+    project_hash=$(printf '%s' "${project_dir}" | openssl sha1 | awk '{print $NF}')
+  else
+    return 1
+  fi
+
+  printf '%s-%s' "${project_name}" "${project_hash:0:12}"
+}
+
 acquire_lock() {
   local lock_file="${1:?lock_file required}"
 
