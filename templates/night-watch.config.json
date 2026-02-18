@@ -5,6 +5,7 @@
   "provider": "claude",
   "reviewerEnabled": true,
   "prdDir": "docs/PRDs/night-watch",
+  "templatesDir": ".night-watch/templates",
   "maxRuntime": 7200,
   "reviewerMaxRuntime": 3600,
   "branchPrefix": "night-watch",
