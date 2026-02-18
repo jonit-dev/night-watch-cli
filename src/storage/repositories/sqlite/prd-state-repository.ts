@@ -5,7 +5,7 @@
 
 import Database from "better-sqlite3";
 
-import { IPrdStateEntry } from "../../../utils/prd-states.js";
+import { IPrdStateEntry } from "@/utils/prd-states.js";
 import { IPrdStateRepository } from "../interfaces.js";
 
 interface IPrdStateRow {

@@ -4,7 +4,7 @@
  */
 
 import blessed from "blessed";
-import { getLastLogLines } from "../../utils/status-data.js";
+import { getLastLogLines } from "@/utils/status-data.js";
 import { ITab, ITabContext } from "./types.js";
 import * as fs from "fs";
 import * as path from "path";

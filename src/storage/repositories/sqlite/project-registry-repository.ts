@@ -5,7 +5,7 @@
 
 import Database from "better-sqlite3";
 
-import { IRegistryEntry } from "../../../utils/registry.js";
+import { IRegistryEntry } from "@/utils/registry.js";
 import { IProjectRegistryRepository } from "../interfaces.js";
 
 interface IProjectRow {

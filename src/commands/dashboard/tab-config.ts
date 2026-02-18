@@ -4,9 +4,9 @@
  */
 
 import blessed from "blessed";
-import { INightWatchConfig, IWebhookConfig, NotificationEvent, WebhookType } from "../../types.js";
-import { VALID_PROVIDERS } from "../../constants.js";
-import { saveConfig } from "../../utils/config-writer.js";
+import { INightWatchConfig, IWebhookConfig, NotificationEvent, WebhookType } from "@/types.js";
+import { VALID_PROVIDERS } from "@/constants.js";
+import { saveConfig } from "@/utils/config-writer.js";
 import { performUninstall } from "../uninstall.js";
 import { performInstall } from "../install.js";
 import { ITab, ITabContext } from "./types.js";

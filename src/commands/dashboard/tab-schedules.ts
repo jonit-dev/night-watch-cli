@@ -7,7 +7,7 @@ import blessed from "blessed";
 import cronstrue from "cronstrue";
 import { performInstall } from "../install.js";
 import { performUninstall } from "../uninstall.js";
-import { saveConfig } from "../../utils/config-writer.js";
+import { saveConfig } from "@/utils/config-writer.js";
 import { ITab, ITabContext } from "./types.js";
 
 /**

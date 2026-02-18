@@ -25,6 +25,12 @@ export default tseslint.config(
       "prefer-const": "warn",
       "preserve-caught-error": "off",
       "sort-imports": ["error", { ignoreDeclarationSort: true }],
+      "no-restricted-imports": ["warn", {
+        patterns: [{
+          regex: "^\\.\\./\\.\\.[\\/]",
+          message: "Avoid deep relative imports (../../). Use @/* path aliases instead.",
+        }],
+      }],
     },
   },
   // SQL boundary rule: restrict better-sqlite3 imports to src/storage/** only
