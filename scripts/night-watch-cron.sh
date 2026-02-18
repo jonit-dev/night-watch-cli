@@ -84,6 +84,48 @@ else
   BOOKKEEP_PRD_DIR="${BOOKKEEP_WORKTREE_DIR}/${PRD_DIR_REL}"
 fi
 
+count_prs_for_branch() {
+  local pr_state="${1:?pr_state required}"
+  local branch_name="${2:?branch_name required}"
+  local count
+  count=$(
+    { gh pr list --state "${pr_state}" --json headRefName --jq '.[].headRefName' 2>/dev/null || true; } \
+      | { grep -xF "${branch_name}" || true; } \
+      | wc -l \
+      | tr -d '[:space:]'
+  )
+  echo "${count:-0}"
+}
+
+finalize_prd_done() {
+  local reason="${1:?reason required}"
+
+  release_claim "${PRD_DIR}" "${ELIGIBLE_PRD}"
+  # NOTE: PRDs are moved to done/ immediately when a PR is opened (or already merged)
+  # rather than waiting for reviewer/merge loops.
+  if prepare_detached_worktree "${PROJECT_DIR}" "${BOOKKEEP_WORKTREE_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
+    if mark_prd_done "${BOOKKEEP_PRD_DIR}" "${ELIGIBLE_PRD}"; then
+      night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" success --exit-code 0 2>/dev/null || true
+      if [[ "${PRD_DIR_REL}" = /* ]]; then
+        git -C "${BOOKKEEP_WORKTREE_DIR}" add -A "${PRD_DIR_REL}" || true
+      else
+        git -C "${BOOKKEEP_WORKTREE_DIR}" add -A "${PRD_DIR_REL}/" || true
+      fi
+      git -C "${BOOKKEEP_WORKTREE_DIR}" commit -m "chore: mark ${ELIGIBLE_PRD} as done (${reason})
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" || true
+      git -C "${BOOKKEEP_WORKTREE_DIR}" push origin "HEAD:${DEFAULT_BRANCH}" || true
+      log "DONE: ${ELIGIBLE_PRD} ${reason}, PRD moved to done/"
+      return 0
+    fi
+    log "WARN: Failed to move ${ELIGIBLE_PRD} to done/ in bookkeeping worktree"
+    return 1
+  fi
+
+  log "WARN: Unable to prepare bookkeeping worktree for ${ELIGIBLE_PRD}"
+  return 1
+}
+
 log "START: Processing ${ELIGIBLE_PRD} on branch ${BRANCH_NAME} (worktree: ${WORKTREE_DIR})"
 
 PROMPT="Implement the PRD at docs/PRDs/night-watch/${ELIGIBLE_PRD}
@@ -125,6 +167,17 @@ if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   echo "Bookkeeping: ${BOOKKEEP_WORKTREE_DIR}"
   echo "Timeout:     ${MAX_RUNTIME}s"
   exit 0
+fi
+
+# If this PRD already has a merged PR for its branch, finalize it immediately.
+MERGED_PR_COUNT=$(count_prs_for_branch merged "${BRANCH_NAME}")
+if [ "${MERGED_PR_COUNT}" -gt 0 ]; then
+  log "INFO: Found merged PR for ${BRANCH_NAME}; skipping provider run"
+  if finalize_prd_done "already merged on ${BRANCH_NAME}"; then
+    exit 0
+  fi
+  night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
+  exit 1
 fi
 
 if ! prepare_branch_worktree "${PROJECT_DIR}" "${WORKTREE_DIR}" "${BRANCH_NAME}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
@@ -203,33 +256,21 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
 done
 
 if [ ${EXIT_CODE} -eq 0 ]; then
-  PR_EXISTS=$(gh pr list --state open --json headRefName --jq '.[].headRefName' 2>/dev/null | grep -cF "${BRANCH_NAME}" || echo "0")
-  if [ "${PR_EXISTS}" -gt 0 ]; then
-    release_claim "${PRD_DIR}" "${ELIGIBLE_PRD}"
-    # NOTE: PRDs are moved to done/ immediately when a PR is opened rather than waiting for
-    # the PR to merge. This is intentional — once a PR exists, the agent's implementation
-    # work is complete and it should not pick up this PRD again. Human review takes it from here.
-    if prepare_detached_worktree "${PROJECT_DIR}" "${BOOKKEEP_WORKTREE_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
-      if mark_prd_done "${BOOKKEEP_PRD_DIR}" "${ELIGIBLE_PRD}"; then
-        night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" success --exit-code 0 2>/dev/null || true
-        if [[ "${PRD_DIR_REL}" = /* ]]; then
-          git -C "${BOOKKEEP_WORKTREE_DIR}" add -A "${PRD_DIR_REL}" || true
-        else
-          git -C "${BOOKKEEP_WORKTREE_DIR}" add -A "${PRD_DIR_REL}/" || true
-        fi
-        git -C "${BOOKKEEP_WORKTREE_DIR}" commit -m "chore: mark ${ELIGIBLE_PRD} as done (PR opened on ${BRANCH_NAME})
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" || true
-        git -C "${BOOKKEEP_WORKTREE_DIR}" push origin "HEAD:${DEFAULT_BRANCH}" || true
-        log "DONE: ${ELIGIBLE_PRD} implemented, PR opened, PRD moved to done/"
-      else
-        log "WARN: Failed to move ${ELIGIBLE_PRD} to done/ in bookkeeping worktree"
-      fi
-    else
-      log "WARN: Unable to prepare bookkeeping worktree for ${ELIGIBLE_PRD}"
+  OPEN_PR_COUNT=$(count_prs_for_branch open "${BRANCH_NAME}")
+  if [ "${OPEN_PR_COUNT}" -gt 0 ]; then
+    if ! finalize_prd_done "implemented, PR opened on ${BRANCH_NAME}"; then
+      night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
     fi
   else
-    log "WARN: ${PROVIDER_CMD} exited 0 but no PR found on ${BRANCH_NAME} — PRD NOT moved to done"
+    MERGED_PR_COUNT=$(count_prs_for_branch merged "${BRANCH_NAME}")
+    if [ "${MERGED_PR_COUNT}" -gt 0 ]; then
+      if ! finalize_prd_done "already merged on ${BRANCH_NAME}"; then
+        night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
+      fi
+    else
+      log "WARN: ${PROVIDER_CMD} exited 0 but no open/merged PR found on ${BRANCH_NAME} — recording cooldown to avoid repeated stuck runs"
+      night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
+    fi
   fi
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: Night watch killed after ${MAX_RUNTIME}s while processing ${ELIGIBLE_PRD}"
