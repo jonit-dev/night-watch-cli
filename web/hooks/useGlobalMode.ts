@@ -34,6 +34,5 @@ export function useGlobalMode(): void {
         setGlobalModeLoading(false);
       });
     // Run only on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }
