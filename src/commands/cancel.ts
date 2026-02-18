@@ -39,6 +39,10 @@ export function getLockFilePaths(projectName: string): {
  * Prompt user for confirmation
  */
 export async function promptConfirmation(prompt: string): Promise<boolean> {
+  if (!process.stdin.isTTY) {
+    return false;
+  }
+
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,

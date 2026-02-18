@@ -22,6 +22,7 @@ else
 fi
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/night-watch.log"
+# NOTE: Lock file path must match LOCK_FILE_PREFIX in src/constants.ts
 LOCK_FILE="/tmp/night-watch-${PROJECT_NAME}.lock"
 MAX_RUNTIME="${NW_MAX_RUNTIME:-7200}"  # 2 hours
 MAX_LOG_SIZE="524288"  # 512 KB
@@ -205,6 +206,9 @@ if [ ${EXIT_CODE} -eq 0 ]; then
   PR_EXISTS=$(gh pr list --state open --json headRefName --jq '.[].headRefName' 2>/dev/null | grep -cF "${BRANCH_NAME}" || echo "0")
   if [ "${PR_EXISTS}" -gt 0 ]; then
     release_claim "${PRD_DIR}" "${ELIGIBLE_PRD}"
+    # NOTE: PRDs are moved to done/ immediately when a PR is opened rather than waiting for
+    # the PR to merge. This is intentional — once a PR exists, the agent's implementation
+    # work is complete and it should not pick up this PRD again. Human review takes it from here.
     if prepare_detached_worktree "${PROJECT_DIR}" "${BOOKKEEP_WORKTREE_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
       if mark_prd_done "${BOOKKEEP_PRD_DIR}" "${ELIGIBLE_PRD}"; then
         night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" success --exit-code 0 2>/dev/null || true
