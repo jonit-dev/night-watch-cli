@@ -5,7 +5,7 @@
 
 import Database from "better-sqlite3";
 
-import { IExecutionRecord } from "../../../utils/execution-history.js";
+import { IExecutionRecord } from "@/utils/execution-history.js";
 import { IExecutionHistoryRepository } from "../interfaces.js";
 
 interface IExecutionHistoryRow {

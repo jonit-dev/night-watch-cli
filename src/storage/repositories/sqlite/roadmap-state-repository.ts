@@ -5,7 +5,7 @@
 
 import Database from "better-sqlite3";
 
-import { IRoadmapState } from "../../../utils/roadmap-state.js";
+import { IRoadmapState } from "@/utils/roadmap-state.js";
 import { IRoadmapStateRepository } from "../interfaces.js";
 
 interface IRoadmapStateRow {

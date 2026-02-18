@@ -3,10 +3,10 @@
  * These interfaces define the API that concrete SQLite implementations must satisfy.
  */
 
-import { IRegistryEntry } from "../../utils/registry.js";
-import { IExecutionRecord } from "../../utils/execution-history.js";
-import { IPrdStateEntry } from "../../utils/prd-states.js";
-import { IRoadmapState } from "../../utils/roadmap-state.js";
+import { IRegistryEntry } from "@/utils/registry.js";
+import { IExecutionRecord } from "@/utils/execution-history.js";
+import { IPrdStateEntry } from "@/utils/prd-states.js";
+import { IRoadmapState } from "@/utils/roadmap-state.js";
 
 export interface IProjectRegistryRepository {
   getAll(): IRegistryEntry[];

@@ -4,8 +4,8 @@
  */
 
 import blessed from "blessed";
-import { IStatusSnapshot, getLastLogLines } from "../../utils/status-data.js";
-import { saveConfig } from "../../utils/config-writer.js";
+import { IStatusSnapshot, getLastLogLines } from "@/utils/status-data.js";
+import { saveConfig } from "@/utils/config-writer.js";
 import { ITab, ITabContext } from "./types.js";
 import * as fs from "fs";
 

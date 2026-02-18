@@ -10,7 +10,7 @@ import * as path from "path";
 
 import Database from "better-sqlite3";
 
-import { GLOBAL_CONFIG_DIR, STATE_DB_FILE_NAME } from "../../constants.js";
+import { GLOBAL_CONFIG_DIR, STATE_DB_FILE_NAME } from "@/constants.js";
 
 let _db: Database.Database | null = null;
 

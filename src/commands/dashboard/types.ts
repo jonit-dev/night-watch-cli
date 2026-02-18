@@ -3,8 +3,8 @@
  */
 
 import blessed from "blessed";
-import { INightWatchConfig } from "../../types.js";
-import { IStatusSnapshot } from "../../utils/status-data.js";
+import { INightWatchConfig } from "@/types.js";
+import { IStatusSnapshot } from "@/utils/status-data.js";
 
 /**
  * Context passed to each tab for accessing shared state and utilities
