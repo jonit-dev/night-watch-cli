@@ -396,7 +396,8 @@ describe("status-data utilities", () => {
               number: 1,
               title: "Passing PR",
               url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [{ conclusion: "SUCCESS", state: "COMPLETED" }],
+              // CheckRun format: status + conclusion
+              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
               reviewDecision: "APPROVED",
             },
             {
@@ -404,7 +405,7 @@ describe("status-data utilities", () => {
               number: 2,
               title: "Failing PR",
               url: "https://github.com/test/repo/pull/2",
-              statusCheckRollup: [{ conclusion: "FAILURE", state: "COMPLETED" }],
+              statusCheckRollup: [{ status: "COMPLETED", conclusion: "FAILURE" }],
               reviewDecision: "CHANGES_REQUESTED",
             },
             {
@@ -412,7 +413,8 @@ describe("status-data utilities", () => {
               number: 3,
               title: "Pending PR",
               url: "https://github.com/test/repo/pull/3",
-              statusCheckRollup: [{ conclusion: "", state: "PENDING" }],
+              // In-progress check has no conclusion yet
+              statusCheckRollup: [{ status: "IN_PROGRESS", conclusion: null }],
               reviewDecision: "REVIEW_REQUIRED",
             },
           ]);
