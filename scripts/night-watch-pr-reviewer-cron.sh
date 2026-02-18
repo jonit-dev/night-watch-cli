@@ -15,6 +15,7 @@ PROJECT_DIR="${1:?Usage: $0 /path/to/project}"
 PROJECT_NAME=$(basename "${PROJECT_DIR}")
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/night-watch-pr-reviewer.log"
+# NOTE: Lock file path must match LOCK_FILE_PREFIX in src/constants.ts (reviewer: prefix + "pr-reviewer-" + name)
 LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_NAME}.lock"
 MAX_RUNTIME="${NW_REVIEWER_MAX_RUNTIME:-3600}"  # 1 hour
 MAX_LOG_SIZE="524288"  # 512 KB
