@@ -282,6 +282,30 @@ export function triggerUninstallCron(): Promise<ActionResult> {
   });
 }
 
+export interface CancelResultItem {
+  success: boolean;
+  message: string;
+  cleanedUp?: boolean;
+}
+
+export interface CancelActionResult {
+  results: CancelResultItem[];
+}
+
+export function triggerCancel(type: 'run' | 'review' | 'all' = 'all'): Promise<CancelActionResult> {
+  return apiFetch<CancelActionResult>(apiPath('/api/actions/cancel'), {
+    method: 'POST',
+    body: JSON.stringify({ type }),
+  });
+}
+
+export function retryPrd(prdName: string): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>(apiPath('/api/actions/retry'), {
+    method: 'POST',
+    body: JSON.stringify({ prdName }),
+  });
+}
+
 // ==================== Roadmap Scanner ====================
 
 export interface RoadmapItem {

@@ -67,14 +67,15 @@ A PR needs attention if **either** the review score is below 80 **or** any CI jo
 
 4. **Fix the PR**:
 
-   a. **Use the pre-provisioned runtime workspace**:
-      - You are already running in an isolated runtime workspace.
-      - Do **not** run `git checkout`/`git switch` in the original project directory.
-      - Do **not** create/remove worktrees manually; the runtime controller handles isolation and cleanup.
-
-   b. **Check out the PR branch inside the runtime workspace**:
+   a. **Create an isolated review worktree**:
       ```
       git fetch origin
+      git worktree add --detach ../${PROJECT_NAME}-nw-review-<branch-name> origin/${DEFAULT_BRANCH}
+      ```
+
+   b. **Check out the PR branch inside that worktree**:
+      ```
+      cd ../${PROJECT_NAME}-nw-review-<branch-name>
       git checkout <branch-name>
       git pull origin <branch-name>
       ```
@@ -135,6 +136,10 @@ A PR needs attention if **either** the review score is below 80 **or** any CI jo
       Night Watch PR Reviewer"
       ```
 
+   h. **Clean up worktree**: `git worktree remove ../${PROJECT_NAME}-nw-review-<branch-name>`
+
 5. **Repeat** for all open PRs that need work.
+
+6. When done, return to ${DEFAULT_BRANCH}: `git checkout ${DEFAULT_BRANCH}`
 
 Start now. Check for open PRs that need review feedback addressed or CI failures fixed.

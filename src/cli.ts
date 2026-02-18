@@ -18,6 +18,10 @@ import { serveCommand } from './commands/serve.js';
 import { historyCommand } from './commands/history.js';
 import { updateCommand } from './commands/update.js';
 import { prdStateCommand } from './commands/prd-state.js';
+import { retryCommand } from './commands/retry.js';
+import { prsCommand } from './commands/prs.js';
+import { prdsCommand } from './commands/prds.js';
+import { cancelCommand } from './commands/cancel.js';
 
 // Get package.json version
 const __filename = fileURLToPath(import.meta.url);
@@ -67,5 +71,17 @@ updateCommand(program);
 
 // Register prd-state command (used by bash scripts for pending-review state)
 prdStateCommand(program);
+
+// Register retry command
+retryCommand(program);
+
+// Register prs command
+prsCommand(program);
+
+// Register prds command
+prdsCommand(program);
+
+// Register cancel command
+cancelCommand(program);
 
 program.parse();

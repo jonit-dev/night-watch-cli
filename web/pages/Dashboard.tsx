@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, CheckCircle, Clock, ArrowRight, AlertCircle, Calendar } from 'lucide-react';
+import { Activity, CheckCircle, Clock, ArrowRight, AlertCircle, Calendar, XCircle } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { useApi, fetchStatus, fetchScheduleInfo } from '../api';
+import { useApi, fetchStatus, fetchScheduleInfo, triggerCancel } from '../api';
 import { useStore } from '../store/useStore';
 
 // Map API status to UI status
@@ -17,6 +17,7 @@ const statusMap: Record<string, string> = {
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const [cancellingProcess, setCancellingProcess] = useState<'run' | 'review' | null>(null);
   const { setProjectName, addToast, selectedProjectId, globalModeLoading } = useStore();
   const { data: status, loading, error, refetch } = useApi(fetchStatus, [selectedProjectId], { enabled: !globalModeLoading });
   const { data: scheduleInfo } = useApi(fetchScheduleInfo, [selectedProjectId], { enabled: !globalModeLoading });
@@ -66,6 +67,28 @@ const Dashboard: React.FC = () => {
 
   const executorProcess = status.processes.find(p => p.name === 'executor');
   const reviewerProcess = status.processes.find(p => p.name === 'reviewer');
+
+  const handleCancelProcess = async (type: 'run' | 'review') => {
+    setCancellingProcess(type);
+    try {
+      const result = await triggerCancel(type);
+      const allOk = result.results.every(r => r.success);
+      addToast({
+        title: allOk ? 'Process Cancelled' : 'Cancel Failed',
+        message: result.results.map(r => r.message).join('; '),
+        type: allOk ? 'success' : 'error',
+      });
+      if (allOk) refetch();
+    } catch (err) {
+      addToast({
+        title: 'Cancel Failed',
+        message: err instanceof Error ? err.message : 'Failed to cancel process',
+        type: 'error',
+      });
+    } finally {
+      setCancellingProcess(null);
+    }
+  };
 
   // Helper to format next run time
   const formatNextRun = (nextRun: string | null | undefined): string => {
@@ -251,7 +274,15 @@ const Dashboard: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>
+                <div className="flex items-center space-x-2">
+                  {executorProcess?.running && (
+                    <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300" onClick={() => handleCancelProcess('run')} disabled={cancellingProcess === 'run'}>
+                      <XCircle className="h-4 w-4 mr-1" />
+                      {cancellingProcess === 'run' ? 'Stopping...' : 'Stop'}
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>
+                </div>
              </div>
              <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
                 <div className="flex items-center space-x-3">
@@ -266,7 +297,15 @@ const Dashboard: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <Button size="sm" variant="ghost" onClick={() => navigate('/logs')} disabled={!reviewerProcess?.running}>View Log</Button>
+                <div className="flex items-center space-x-2">
+                  {reviewerProcess?.running && (
+                    <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300" onClick={() => handleCancelProcess('review')} disabled={cancellingProcess === 'review'}>
+                      <XCircle className="h-4 w-4 mr-1" />
+                      {cancellingProcess === 'review' ? 'Stopping...' : 'Stop'}
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => navigate('/logs')} disabled={!reviewerProcess?.running}>View Log</Button>
+                </div>
              </div>
           </div>
         </Card>

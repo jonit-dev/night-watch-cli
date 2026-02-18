@@ -534,4 +534,93 @@ describe("server API", () => {
       );
     });
   });
+
+  describe("POST /api/actions/cancel", () => {
+    it("should cancel all processes when no type specified", async () => {
+      const response = await request(app).post("/api/actions/cancel").send({});
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty("results");
+      expect(Array.isArray(response.body.results)).toBe(true);
+    });
+
+    it("should cancel executor when type is run", async () => {
+      const response = await request(app).post("/api/actions/cancel").send({ type: "run" });
+
+      expect(response.status).toBe(200);
+      expect(response.body.results).toHaveLength(1);
+      expect(response.body.results[0].success).toBe(true);
+    });
+
+    it("should cancel reviewer when type is review", async () => {
+      const response = await request(app).post("/api/actions/cancel").send({ type: "review" });
+
+      expect(response.status).toBe(200);
+      expect(response.body.results).toHaveLength(1);
+      expect(response.body.results[0].success).toBe(true);
+    });
+
+    it("should return 400 for invalid type", async () => {
+      const response = await request(app).post("/api/actions/cancel").send({ type: "invalid" });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain("Invalid type");
+    });
+  });
+
+  describe("POST /api/actions/retry", () => {
+    it("should move a done PRD back to pending", async () => {
+      const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
+
+      // Verify phase0.md is in done/ before retry
+      expect(fs.existsSync(path.join(prdDir, "done", "phase0.md"))).toBe(true);
+      expect(fs.existsSync(path.join(prdDir, "phase0.md"))).toBe(false);
+
+      const response = await request(app).post("/api/actions/retry").send({ prdName: "phase0" });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty("message");
+      expect(response.body.message).toContain("phase0.md");
+
+      // Verify file was moved
+      expect(fs.existsSync(path.join(prdDir, "phase0.md"))).toBe(true);
+      expect(fs.existsSync(path.join(prdDir, "done", "phase0.md"))).toBe(false);
+    });
+
+    it("should work with .md extension in prdName", async () => {
+      const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
+      const response = await request(app).post("/api/actions/retry").send({ prdName: "phase0.md" });
+
+      expect(response.status).toBe(200);
+      expect(fs.existsSync(path.join(prdDir, "phase0.md"))).toBe(true);
+    });
+
+    it("should return message when PRD is already pending", async () => {
+      const response = await request(app).post("/api/actions/retry").send({ prdName: "phase1" });
+
+      expect(response.status).toBe(200);
+      expect(response.body.message).toContain("already pending");
+    });
+
+    it("should return 404 for PRD not found in done/", async () => {
+      const response = await request(app).post("/api/actions/retry").send({ prdName: "nonexistent" });
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toContain("not found in done/");
+    });
+
+    it("should return 400 when prdName is missing", async () => {
+      const response = await request(app).post("/api/actions/retry").send({});
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain("prdName is required");
+    });
+
+    it("should return 400 for invalid PRD name", async () => {
+      const response = await request(app).post("/api/actions/retry").send({ prdName: "../etc/passwd" });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain("Invalid PRD name");
+    });
+  });
 });

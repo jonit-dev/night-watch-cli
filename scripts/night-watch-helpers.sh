@@ -238,9 +238,6 @@ find_eligible_prd() {
   local open_branches
   open_branches=$(gh pr list --state open --json headRefName --jq '.[].headRefName' 2>/dev/null || echo "")
 
-  local cli_bin
-  cli_bin=$(resolve_night_watch_cli 2>/dev/null) || true
-
   for prd_path in ${prd_files}; do
     local prd_file
     prd_file=$(basename "${prd_path}")
@@ -261,12 +258,6 @@ find_eligible_prd() {
     # Skip if a PR already exists for this PRD
     if echo "${open_branches}" | grep -qF "${prd_name}"; then
       log "SKIP-PRD: ${prd_file} — open PR already exists"
-      continue
-    fi
-
-    # Skip if marked pending-review in prd-states.json
-    if [ -n "${project_dir}" ] && [ -n "${cli_bin}" ] && "${cli_bin}" prd-state list "${project_dir}" --status pending-review 2>/dev/null | grep -qF "${prd_name}"; then
-      log "SKIP-PRD: ${prd_file} — pending-review in prd-states.json"
       continue
     fi
 
@@ -301,149 +292,78 @@ cleanup_worktrees() {
   local project_dir="${1:?project_dir required}"
   local project_name
   project_name=$(basename "${project_dir}")
-  local marker="${2:-${project_name}-nw}"
 
   git -C "${project_dir}" worktree list --porcelain 2>/dev/null \
     | grep '^worktree ' \
     | awk '{print $2}' \
-    | grep "${marker}" \
+    | grep "${project_name}-nw" \
     | while read -r wt; do
         log "CLEANUP: Removing leftover worktree ${wt}"
         git -C "${project_dir}" worktree remove --force "${wt}" 2>/dev/null || true
       done || true
 }
 
-# ── Runtime workspace isolation ───────────────────────────────────────────────
-
-project_runtime_key() {
+# Pick the best available ref for creating a new detached worktree.
+resolve_worktree_base_ref() {
   local project_dir="${1:?project_dir required}"
-  local project_name
-  local hash
-  project_name=$(basename "${project_dir}")
-
-  if command -v sha1sum >/dev/null 2>&1; then
-    hash=$(printf "%s" "${project_dir}" | sha1sum | awk '{print $1}')
-  elif command -v shasum >/dev/null 2>&1; then
-    hash=$(printf "%s" "${project_dir}" | shasum | awk '{print $1}')
-  else
-    hash=$(printf "%s" "${project_dir}" | cksum | awk '{print $1}')
-  fi
-
-  printf "%s-%s" "${project_name}" "${hash:0:12}"
-}
-
-resolve_runtime_base_ref() {
-  local git_dir="${1:?git_dir required}"
   local default_branch="${2:?default_branch required}"
 
-  if git -C "${git_dir}" rev-parse --verify --quiet "refs/remotes/origin/${default_branch}" >/dev/null; then
-    printf "%s" "refs/remotes/origin/${default_branch}"
+  if git -C "${project_dir}" rev-parse --verify --quiet "refs/remotes/origin/${default_branch}" >/dev/null; then
+    printf "%s" "origin/${default_branch}"
     return 0
   fi
 
-  if git -C "${git_dir}" rev-parse --verify --quiet "refs/heads/${default_branch}" >/dev/null; then
-    printf "%s" "refs/heads/${default_branch}"
+  if git -C "${project_dir}" rev-parse --verify --quiet "refs/heads/${default_branch}" >/dev/null; then
+    printf "%s" "${default_branch}"
     return 0
   fi
 
-  if git -C "${git_dir}" rev-parse --verify --quiet "refs/remotes/origin/HEAD" >/dev/null; then
-    printf "%s" "refs/remotes/origin/HEAD"
+  if git -C "${project_dir}" rev-parse --verify --quiet "refs/remotes/origin/HEAD" >/dev/null; then
+    printf "%s" "origin/HEAD"
     return 0
   fi
 
   return 1
 }
 
-prepare_runtime_workspace() {
+# Create an isolated worktree on a branch without checking out that branch
+# in the user's current project directory.
+prepare_branch_worktree() {
   local project_dir="${1:?project_dir required}"
-  local default_branch="${2:?default_branch required}"
-  local log_file="${3:-${LOG_FILE:-/dev/null}}"
-  local runtime_root="${NW_RUNTIME_ROOT:-${HOME}/.night-watch/runtime}"
-  local runtime_key
-  local runtime_base
-  local mirror_dir
-  local runs_dir
-  local worktree_dir
-  local clone_source=""
+  local worktree_dir="${2:?worktree_dir required}"
+  local branch_name="${3:?branch_name required}"
+  local default_branch="${4:?default_branch required}"
+  local log_file="${5:-${LOG_FILE:-/dev/null}}"
   local base_ref=""
 
-  runtime_key=$(project_runtime_key "${project_dir}")
-  runtime_base="${runtime_root}/${runtime_key}"
-  mirror_dir="${runtime_base}/mirror.git"
-  runs_dir="${runtime_base}/runs"
-  worktree_dir="${runs_dir}/run-$(date +%Y%m%d-%H%M%S)-$$"
+  git -C "${project_dir}" fetch origin "${default_branch}" >> "${log_file}" 2>&1 || true
+  base_ref=$(resolve_worktree_base_ref "${project_dir}" "${default_branch}") || return 1
 
-  mkdir -p "${runs_dir}"
-
-  if [ ! -d "${mirror_dir}" ]; then
-    clone_source=$(git -C "${project_dir}" config --get remote.origin.url 2>/dev/null || echo "")
-
-    if [ -n "${clone_source}" ]; then
-      if ! git clone --mirror "${clone_source}" "${mirror_dir}" >> "${log_file}" 2>&1; then
-        git clone --mirror "${project_dir}" "${mirror_dir}" >> "${log_file}" 2>&1
-      fi
-    else
-      git clone --mirror "${project_dir}" "${mirror_dir}" >> "${log_file}" 2>&1
-    fi
+  if git -C "${project_dir}" rev-parse --verify --quiet "refs/heads/${branch_name}" >/dev/null; then
+    git -C "${project_dir}" worktree add "${worktree_dir}" "${branch_name}" >> "${log_file}" 2>&1
+    return $?
   fi
 
-  git -C "${mirror_dir}" remote update --prune >> "${log_file}" 2>&1 || true
+  if git -C "${project_dir}" rev-parse --verify --quiet "refs/remotes/origin/${branch_name}" >/dev/null; then
+    git -C "${project_dir}" worktree add -b "${branch_name}" "${worktree_dir}" "origin/${branch_name}" >> "${log_file}" 2>&1
+    return $?
+  fi
 
-  base_ref=$(resolve_runtime_base_ref "${mirror_dir}" "${default_branch}") || return 1
-  git -C "${mirror_dir}" worktree add --detach "${worktree_dir}" "${base_ref}" >> "${log_file}" 2>&1
-
-  printf "%s\n%s\n" "${mirror_dir}" "${worktree_dir}"
+  git -C "${project_dir}" worktree add -b "${branch_name}" "${worktree_dir}" "${base_ref}" >> "${log_file}" 2>&1
 }
 
-cleanup_runtime_workspace() {
-  local mirror_dir="${1:?mirror_dir required}"
+# Create an isolated detached worktree (useful for reviewer/controller flows).
+prepare_detached_worktree() {
+  local project_dir="${1:?project_dir required}"
   local worktree_dir="${2:?worktree_dir required}"
-
-  git -C "${mirror_dir}" worktree remove --force "${worktree_dir}" 2>/dev/null || true
-  git -C "${mirror_dir}" worktree prune 2>/dev/null || true
-}
-
-prepare_branch_checkout() {
-  local repo_dir="${1:?repo_dir required}"
-  local branch_name="${2:?branch_name required}"
   local default_branch="${3:?default_branch required}"
   local log_file="${4:-${LOG_FILE:-/dev/null}}"
   local base_ref=""
 
-  git -C "${repo_dir}" fetch origin "${default_branch}" "${branch_name}" >> "${log_file}" 2>&1 || true
+  git -C "${project_dir}" fetch origin "${default_branch}" >> "${log_file}" 2>&1 || true
+  base_ref=$(resolve_worktree_base_ref "${project_dir}" "${default_branch}") || return 1
 
-  if git -C "${repo_dir}" rev-parse --verify --quiet "refs/heads/${branch_name}" >/dev/null; then
-    git -C "${repo_dir}" checkout "${branch_name}" >> "${log_file}" 2>&1
-    return $?
-  fi
-
-  if git -C "${repo_dir}" rev-parse --verify --quiet "refs/remotes/origin/${branch_name}" >/dev/null; then
-    git -C "${repo_dir}" checkout -b "${branch_name}" "origin/${branch_name}" >> "${log_file}" 2>&1
-    return $?
-  fi
-
-  base_ref=$(resolve_runtime_base_ref "${repo_dir}" "${default_branch}") || return 1
-  git -C "${repo_dir}" checkout -b "${branch_name}" "${base_ref}" >> "${log_file}" 2>&1
-}
-
-checkout_default_branch() {
-  local repo_dir="${1:?repo_dir required}"
-  local default_branch="${2:?default_branch required}"
-  local log_file="${3:-${LOG_FILE:-/dev/null}}"
-
-  git -C "${repo_dir}" fetch origin "${default_branch}" >> "${log_file}" 2>&1 || true
-
-  if git -C "${repo_dir}" rev-parse --verify --quiet "refs/remotes/origin/${default_branch}" >/dev/null; then
-    git -C "${repo_dir}" checkout -B "${default_branch}" "origin/${default_branch}" >> "${log_file}" 2>&1
-    return $?
-  fi
-
-  if git -C "${repo_dir}" rev-parse --verify --quiet "refs/heads/${default_branch}" >/dev/null; then
-    git -C "${repo_dir}" checkout "${default_branch}" >> "${log_file}" 2>&1
-    return $?
-  fi
-
-  git -C "${repo_dir}" checkout -B "${default_branch}" HEAD >> "${log_file}" 2>&1
+  git -C "${project_dir}" worktree add --detach "${worktree_dir}" "${base_ref}" >> "${log_file}" 2>&1
 }
 
 # ── Mark PRD as done ─────────────────────────────────────────────────────────
@@ -463,62 +383,6 @@ mark_prd_done() {
     log "WARN: PRD file not found: ${prd_dir}/${prd_file}"
     return 1
   fi
-}
-
-mark_prd_pending_review() {
-  local prd_dir="${1:?prd_dir required}"
-  local prd_file="${2:?prd_file required}"
-  local project_dir="${3:?project_dir required}"
-  local branch_name="${4:-}"
-  local prd_name="${prd_file%.md}"
-
-  local cli_bin
-  cli_bin=$(resolve_night_watch_cli) || {
-    log "WARN: Could not resolve night-watch CLI — skipping prd-state set"
-    return 1
-  }
-
-  "${cli_bin}" prd-state set "${project_dir}" "${prd_name}" --branch "${branch_name}" 2>/dev/null
-  log "PENDING-REVIEW: ${prd_file} marked as pending-review in prd-states.json"
-}
-
-# Check prd-states.json for pending-review PRDs and promote any whose PR has been merged to done/
-promote_merged_prds() {
-  local original_prd_dir="${1:?original_prd_dir required}"
-  local project_dir="${2:?project_dir required}"
-  local done_dir="${original_prd_dir}/done"
-
-  local cli_bin
-  cli_bin=$(resolve_night_watch_cli) || return 0
-
-  local pending_prds
-  pending_prds=$("${cli_bin}" prd-state list "${project_dir}" --status pending-review 2>/dev/null || echo "")
-  [ -z "${pending_prds}" ] && return 0
-
-  local merged_branches
-  merged_branches=$(cd "${project_dir}" && gh pr list --state merged --json headRefName --jq '.[].headRefName' 2>/dev/null || true)
-  [ -z "${merged_branches}" ] && return 0
-
-  while IFS= read -r prd_name; do
-    [ -z "${prd_name}" ] && continue
-    local prd_file="${prd_name}.md"
-    local branch_name="night-watch/${prd_name}"
-
-    if echo "${merged_branches}" | grep -qF "${branch_name}"; then
-      mkdir -p "${done_dir}"
-      if [ -f "${original_prd_dir}/${prd_file}" ]; then
-        mv "${original_prd_dir}/${prd_file}" "${done_dir}/${prd_file}"
-        "${cli_bin}" prd-state clear "${project_dir}" "${prd_name}" 2>/dev/null || true
-        log "MERGED: ${prd_name} PR was merged — moved to done/ and cleared from prd-states.json"
-      else
-        # File already gone (e.g. moved manually) — just clear the state
-        "${cli_bin}" prd-state clear "${project_dir}" "${prd_name}" 2>/dev/null || true
-        log "MERGED: ${prd_name} PR was merged — cleared from prd-states.json (file not found)"
-      fi
-    fi
-  done <<< "${pending_prds}"
-
-  return 0
 }
 
 # ── Rate limit detection ────────────────────────────────────────────────────

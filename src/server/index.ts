@@ -17,6 +17,7 @@ import { INightWatchConfig } from "../types.js";
 import { loadConfig } from "../config.js";
 import { validateWebhook } from "../commands/doctor.js";
 import { checkLockFile, collectPrInfo, collectPrdInfo, executorLockPath, fetchStatusSnapshot, getLastLogLines, reviewerLockPath } from "../utils/status-data.js";
+import { performCancel } from "../commands/cancel.js";
 import { saveConfig } from "../utils/config-writer.js";
 import { loadRegistry, validateRegistry } from "../utils/registry.js";
 import { generateMarker, getEntries, getProjectEntries } from "../utils/crontab.js";
@@ -502,6 +503,59 @@ function handlePutRoadmapToggle(
   }
 }
 
+async function handleCancelAction(projectDir: string, req: Request, res: Response): Promise<void> {
+  try {
+    const { type = "all" } = req.body as { type?: string };
+    const validTypes = ["run", "review", "all"];
+    if (!validTypes.includes(type)) {
+      res.status(400).json({ error: `Invalid type. Must be one of: ${validTypes.join(", ")}` });
+      return;
+    }
+
+    const results = await performCancel(projectDir, { type: type as "run" | "review" | "all", force: true });
+    const hasFailure = results.some((r) => !r.success);
+    res.status(hasFailure ? 500 : 200).json({ results });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+function handleRetryAction(projectDir: string, config: INightWatchConfig, req: Request, res: Response): void {
+  try {
+    const { prdName } = req.body as { prdName?: string };
+
+    if (!prdName || typeof prdName !== "string") {
+      res.status(400).json({ error: "prdName is required" });
+      return;
+    }
+
+    if (!validatePrdName(prdName)) {
+      res.status(400).json({ error: "Invalid PRD name" });
+      return;
+    }
+
+    const prdDir = path.join(projectDir, config.prdDir);
+    const normalized = prdName.endsWith(".md") ? prdName : `${prdName}.md`;
+    const pendingPath = path.join(prdDir, normalized);
+    const donePath = path.join(prdDir, "done", normalized);
+
+    if (fs.existsSync(pendingPath)) {
+      res.json({ message: `"${normalized}" is already pending` });
+      return;
+    }
+
+    if (!fs.existsSync(donePath)) {
+      res.status(404).json({ error: `PRD "${normalized}" not found in done/` });
+      return;
+    }
+
+    fs.renameSync(donePath, pendingPath);
+    res.json({ message: `Moved "${normalized}" back to pending` });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 // ==================== Static Files + SPA Fallback ====================
 
 function setupStaticFiles(app: Express): void {
@@ -558,6 +612,8 @@ export function createApp(projectDir: string): Express {
   app.post("/api/actions/review", (req, res) => handleSpawnAction(projectDir, ["review"], req, res));
   app.post("/api/actions/install-cron", (req, res) => handleSpawnAction(projectDir, ["install"], req, res));
   app.post("/api/actions/uninstall-cron", (req, res) => handleSpawnAction(projectDir, ["uninstall"], req, res));
+  app.post("/api/actions/cancel", (req, res) => handleCancelAction(projectDir, req, res));
+  app.post("/api/actions/retry", (req, res) => handleRetryAction(projectDir, config, req, res));
   app.get("/api/roadmap", (req, res) => handleGetRoadmap(projectDir, config, req, res));
   app.post("/api/roadmap/scan", (req, res) => handlePostRoadmapScan(projectDir, config, req, res));
   app.put("/api/roadmap/toggle", (req, res) => handlePutRoadmapToggle(projectDir, () => config, reloadConfig, req, res));
@@ -659,6 +715,8 @@ function createProjectRouter(): Router {
   router.post("/actions/review", (req, res) => handleSpawnAction(dir(req), ["review"], req, res));
   router.post("/actions/install-cron", (req, res) => handleSpawnAction(dir(req), ["install"], req, res));
   router.post("/actions/uninstall-cron", (req, res) => handleSpawnAction(dir(req), ["uninstall"], req, res));
+  router.post("/actions/cancel", (req, res) => handleCancelAction(dir(req), req, res));
+  router.post("/actions/retry", (req, res) => handleRetryAction(dir(req), cfg(req), req, res));
   router.get("/roadmap", (req, res) => handleGetRoadmap(dir(req), cfg(req), req, res));
   router.post("/roadmap/scan", (req, res) => handlePostRoadmapScan(dir(req), cfg(req), req, res));
   router.put("/roadmap/toggle", (req, res) => handlePutRoadmapToggle(dir(req), () => cfg(req), () => {}, req, res));
