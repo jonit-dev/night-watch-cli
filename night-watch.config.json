@@ -40,7 +40,7 @@
     ]
   },
   "roadmapScanner": {
-    "enabled": true,
+    "enabled": false,
     "roadmapPath": "ROADMAP.md",
     "autoScanInterval": 300
   }
