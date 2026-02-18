@@ -103,6 +103,7 @@ describe("run command", () => {
       expect(env.NW_MAX_RUNTIME).toBe("7200");
       expect(env.NW_PROVIDER_CMD).toBe("claude");
       expect(env.NW_PRD_DIR).toBe("docs/PRDs/night-watch");
+      expect(env.NW_BRANCH_PREFIX).toBe("night-watch");
     });
 
     it("should set NW_PROVIDER_CMD for codex provider", () => {
@@ -162,6 +163,15 @@ describe("run command", () => {
       const env = buildEnvVars(config, options);
 
       expect(env.NW_PRD_PRIORITY).toBe("phase2:phase0:phase1");
+    });
+
+    it("should pass custom NW_BRANCH_PREFIX from config", () => {
+      const config = createTestConfig({ branchPrefix: "automation" });
+      const options: IRunOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_BRANCH_PREFIX).toBe("automation");
     });
 
     it("should not set NW_PRD_PRIORITY when prdPriority is empty", () => {

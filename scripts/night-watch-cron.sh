@@ -22,11 +22,10 @@ else
 fi
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/night-watch.log"
-# NOTE: Lock file path must match LOCK_FILE_PREFIX in src/constants.ts
-LOCK_FILE="/tmp/night-watch-${PROJECT_NAME}.lock"
 MAX_RUNTIME="${NW_MAX_RUNTIME:-7200}"  # 2 hours
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
+BRANCH_PREFIX="${NW_BRANCH_PREFIX:-night-watch}"
 
 # Ensure NVM / Node / Claude are on PATH
 export NVM_DIR="${HOME}/.nvm"
@@ -41,6 +40,9 @@ mkdir -p "${LOG_DIR}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
+PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
+# NOTE: Lock file path must match executorLockPath() in src/utils/status-data.ts
+LOCK_FILE="/tmp/night-watch-${PROJECT_RUNTIME_KEY}.lock"
 
 # Validate provider
 if ! validate_provider "${PROVIDER_CMD}"; then
@@ -70,7 +72,7 @@ claim_prd "${PRD_DIR}" "${ELIGIBLE_PRD}"
 trap "rm -f '${LOCK_FILE}'; release_claim '${PRD_DIR}' '${ELIGIBLE_PRD}'" EXIT
 
 PRD_NAME="${ELIGIBLE_PRD%.md}"
-BRANCH_NAME="night-watch/${PRD_NAME}"
+BRANCH_NAME="${BRANCH_PREFIX}/${PRD_NAME}"
 WORKTREE_DIR="$(dirname "${PROJECT_DIR}")/${PROJECT_NAME}-nw-${PRD_NAME}"
 BOOKKEEP_WORKTREE_DIR="$(dirname "${PROJECT_DIR}")/${PROJECT_NAME}-nw-bookkeeping"
 if [ -n "${NW_DEFAULT_BRANCH:-}" ]; then
@@ -126,9 +128,11 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" || true
   return 1
 }
 
+PROMPT_PRD_PATH="${PRD_DIR_REL}/${ELIGIBLE_PRD}"
+
 log "START: Processing ${ELIGIBLE_PRD} on branch ${BRANCH_NAME} (worktree: ${WORKTREE_DIR})"
 
-PROMPT="Implement the PRD at docs/PRDs/night-watch/${ELIGIBLE_PRD}
+PROMPT="Implement the PRD at ${PROMPT_PRD_PATH}
 
 ## Setup
 - You are already inside an isolated worktree at: ${WORKTREE_DIR}

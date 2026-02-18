@@ -46,6 +46,7 @@ export function buildEnvVars(config: INightWatchConfig, options: IRunOptions): R
   // Runtime
   env.NW_MAX_RUNTIME = String(config.maxRuntime);
   env.NW_PRD_DIR = config.prdDir;
+  env.NW_BRANCH_PREFIX = config.branchPrefix;
 
   // Provider environment variables (API keys, base URLs, etc.)
   if (config.providerEnv) {
