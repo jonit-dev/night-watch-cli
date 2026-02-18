@@ -28,6 +28,7 @@ import {
   checkGitRepo,
   detectProviders,
 } from '../utils/checks.js';
+import { loadConfig } from '../config.js';
 
 // Get templates directory path
 const __filename = fileURLToPath(import.meta.url);
@@ -155,21 +156,51 @@ function ensureDir(dirPath: string): void {
 }
 
 /**
+ * Result of template path resolution
+ */
+interface ITemplateResolution {
+  path: string;
+  source: "custom" | "bundled";
+}
+
+/**
+ * Resolve a template path with per-file fallback.
+ * If customTemplatesDir is non-null and the file exists there, return custom path.
+ * Otherwise return the bundled template path.
+ */
+export function resolveTemplatePath(
+  templateName: string,
+  customTemplatesDir: string | null,
+  bundledTemplatesDir: string
+): ITemplateResolution {
+  if (customTemplatesDir !== null) {
+    const customPath = join(customTemplatesDir, templateName);
+    if (fs.existsSync(customPath)) {
+      return { path: customPath, source: "custom" };
+    }
+  }
+  return { path: join(bundledTemplatesDir, templateName), source: "bundled" };
+}
+
+/**
  * Copy and process template file
  */
 function processTemplate(
   templateName: string,
   targetPath: string,
   replacements: Record<string, string>,
-  force: boolean
-): boolean {
+  force: boolean,
+  sourcePath?: string,
+  source?: "custom" | "bundled"
+): { created: boolean; source: "custom" | "bundled" } {
   // Skip if exists and not forcing
   if (fs.existsSync(targetPath) && !force) {
     console.log(`  Skipped (exists): ${targetPath}`);
-    return false;
+    return { created: false, source: source ?? "bundled" };
   }
 
-  const templatePath = join(TEMPLATES_DIR, templateName);
+  const templatePath = sourcePath ?? join(TEMPLATES_DIR, templateName);
+  const resolvedSource = source ?? "bundled";
   let content = fs.readFileSync(templatePath, 'utf-8');
 
   // Replace placeholders
@@ -178,8 +209,8 @@ function processTemplate(
   }
 
   fs.writeFileSync(targetPath, content);
-  console.log(`  Created: ${targetPath}`);
-  return true;
+  console.log(`  Created: ${targetPath} (${resolvedSource})`);
+  return { created: true, source: resolvedSource };
 }
 
 /**
@@ -361,29 +392,49 @@ export function initCommand(program: Command): void {
       ensureDir(commandsDir);
       success(`Created ${commandsDir}/`);
 
+      // Load existing config (if present) to get templatesDir
+      const existingConfig = loadConfig(cwd);
+      const customTemplatesDirPath = path.join(cwd, existingConfig.templatesDir);
+      const customTemplatesDir = fs.existsSync(customTemplatesDirPath) ? customTemplatesDirPath : null;
+
+      // Track template sources for summary
+      const templateSources: { name: string; source: "custom" | "bundled" }[] = [];
+
       // Copy night-watch.md template
-      processTemplate(
+      const nwResolution = resolveTemplatePath('night-watch.md', customTemplatesDir, TEMPLATES_DIR);
+      const nwResult = processTemplate(
         'night-watch.md',
         path.join(commandsDir, 'night-watch.md'),
         replacements,
-        force
+        force,
+        nwResolution.path,
+        nwResolution.source
       );
+      templateSources.push({ name: 'night-watch.md', source: nwResult.source });
 
       // Copy prd-executor.md template
-      processTemplate(
+      const peResolution = resolveTemplatePath('prd-executor.md', customTemplatesDir, TEMPLATES_DIR);
+      const peResult = processTemplate(
         'prd-executor.md',
         path.join(commandsDir, 'prd-executor.md'),
         replacements,
-        force
+        force,
+        peResolution.path,
+        peResolution.source
       );
+      templateSources.push({ name: 'prd-executor.md', source: peResult.source });
 
       // Copy night-watch-pr-reviewer.md template
-      processTemplate(
+      const prResolution = resolveTemplatePath('night-watch-pr-reviewer.md', customTemplatesDir, TEMPLATES_DIR);
+      const prResult = processTemplate(
         'night-watch-pr-reviewer.md',
         path.join(commandsDir, 'night-watch-pr-reviewer.md'),
         replacements,
-        force
+        force,
+        prResolution.path,
+        prResolution.source
       );
+      templateSources.push({ name: 'night-watch-pr-reviewer.md', source: prResult.source });
 
       // Step 8: Create config file
       step(8, 10, 'Creating configuration file...');
@@ -443,9 +494,9 @@ export function initCommand(program: Command): void {
       filesTable.push(['PRD Directory', `${prdDir}/done/`]);
       filesTable.push(['Summary File', `${prdDir}/NIGHT-WATCH-SUMMARY.md`]);
       filesTable.push(['Logs Directory', `${LOG_DIR}/`]);
-      filesTable.push(['Slash Commands', '.claude/commands/night-watch.md']);
-      filesTable.push(['', '.claude/commands/prd-executor.md']);
-      filesTable.push(['', '.claude/commands/night-watch-pr-reviewer.md']);
+      filesTable.push(['Slash Commands', `.claude/commands/night-watch.md (${templateSources[0].source})`]);
+      filesTable.push(['', `.claude/commands/prd-executor.md (${templateSources[1].source})`]);
+      filesTable.push(['', `.claude/commands/night-watch-pr-reviewer.md (${templateSources[2].source})`]);
       filesTable.push(['Config File', CONFIG_FILE_NAME]);
       filesTable.push(['Global Registry', '~/.night-watch/projects.json']);
       console.log(filesTable.toString());

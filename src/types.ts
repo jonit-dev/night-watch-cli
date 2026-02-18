@@ -70,6 +70,9 @@ export interface INightWatchConfig {
 
   /** Roadmap scanner configuration */
   roadmapScanner: IRoadmapScannerConfig;
+
+  /** Directory containing custom template overrides (relative to project root) */
+  templatesDir: string;
 }
 
 export type WebhookType = "slack" | "discord" | "telegram";
