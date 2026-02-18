@@ -42,7 +42,8 @@ const Settings: React.FC = () => {
     error: configError,
     refetch: refetchConfig,
   } = useApi(fetchConfig, [selectedProjectId], { enabled: !globalModeLoading });
-  const { data: doctorChecks = [], loading: doctorLoading, refetch: refetchDoctor } = useApi(fetchDoctor, [selectedProjectId], { enabled: !globalModeLoading });
+  const { data: doctorChecksData, loading: doctorLoading, refetch: refetchDoctor } = useApi(fetchDoctor, [selectedProjectId], { enabled: !globalModeLoading });
+  const doctorChecks = doctorChecksData ?? [];
 
   React.useEffect(() => {
     if (config) {

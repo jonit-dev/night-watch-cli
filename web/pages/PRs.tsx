@@ -16,7 +16,8 @@ const PRs: React.FC = () => {
   const [sortField, setSortField] = useState<SortField>('number');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const { addToast, selectedProjectId, globalModeLoading } = useStore();
-  const { data: prs = [], loading, error, refetch } = useApi(fetchPrs, [selectedProjectId], { enabled: !globalModeLoading });
+  const { data: prsData, loading, error, refetch } = useApi(fetchPrs, [selectedProjectId], { enabled: !globalModeLoading });
+  const prs = prsData ?? [];
 
   const getStatusIcon = (status: string) => {
     switch (status) {
