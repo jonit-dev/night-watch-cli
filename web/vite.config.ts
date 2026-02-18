@@ -9,13 +9,13 @@ export default defineConfig(() => {
         emptyOutDir: true,
       },
       server: {
-        port: 3000,
+        port: 7576,
+        strictPort: true,
         host: '0.0.0.0',
         proxy: {
-          '/api': {
+          '^/api(?:/|$)': {
             target: 'http://localhost:7575',
             changeOrigin: true,
-            rewrite: (path) => path,
           },
         },
       },
