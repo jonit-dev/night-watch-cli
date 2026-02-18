@@ -398,9 +398,16 @@ function deriveCiStatus(
   const allComplete = checks.every((c) => {
     const status = c.status?.toUpperCase();
     const state = c.state?.toUpperCase();
-    // CheckRun: status === "COMPLETED"
+    const conclusion = c.conclusion?.toUpperCase();
+    // CheckRun: status === "COMPLETED" or conclusion === "SUCCESS"/"FAILURE"
     // StatusContext: state === "SUCCESS" or "FAILURE" (not PENDING)
-    return status === "COMPLETED" || state === "SUCCESS" || state === "FAILURE";
+    return (
+      status === "COMPLETED" ||
+      state === "SUCCESS" ||
+      state === "FAILURE" ||
+      conclusion === "SUCCESS" ||
+      conclusion === "FAILURE"
+    );
   });
   if (allComplete) return "pass";
 
