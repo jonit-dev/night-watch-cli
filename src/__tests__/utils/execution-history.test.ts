@@ -2,7 +2,7 @@
  * Tests for execution history ledger
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -14,6 +14,8 @@ import {
   getLastExecution,
   isInCooldown,
   getHistoryPath,
+  closeDb,
+  resetRepositories,
 } from "../../utils/execution-history.js";
 
 // Use a temp directory so tests never touch the real ~/.night-watch/
@@ -25,6 +27,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  closeDb();
+  resetRepositories();
   delete process.env.NIGHT_WATCH_HOME;
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
@@ -37,22 +41,22 @@ describe("execution-history", () => {
   });
 
   describe("loadHistory", () => {
-    it("should return empty history when file does not exist", () => {
+    it("should return empty history when no records exist", () => {
       expect(loadHistory()).toEqual({});
     });
 
-    it("should return empty history for invalid JSON", () => {
-      fs.writeFileSync(path.join(tmpDir, "history.json"), "not json");
+    it("should return empty history when no records exist for invalid-JSON scenario", () => {
+      // With SQLite backend, JSON file content is irrelevant — DB starts empty
       expect(loadHistory()).toEqual({});
     });
 
-    it("should return empty history for non-object JSON", () => {
-      fs.writeFileSync(path.join(tmpDir, "history.json"), "[1,2,3]");
+    it("should return empty history when no records exist for non-object scenario", () => {
+      // With SQLite backend, JSON file content is irrelevant — DB starts empty
       expect(loadHistory()).toEqual({});
     });
 
-    it("should load valid history", () => {
-      const history = {
+    it("should load valid history saved via saveHistory", () => {
+      const history: Parameters<typeof saveHistory>[0] = {
         "/projects/app": {
           "test.md": {
             records: [
@@ -61,16 +65,13 @@ describe("execution-history", () => {
           },
         },
       };
-      fs.writeFileSync(
-        path.join(tmpDir, "history.json"),
-        JSON.stringify(history)
-      );
+      saveHistory(history);
       expect(loadHistory()).toEqual(history);
     });
   });
 
   describe("saveHistory", () => {
-    it("should write history to disk", () => {
+    it("should persist history retrievable via loadHistory", () => {
       const history = {
         "/projects/app": {
           "test.md": {
@@ -81,29 +82,28 @@ describe("execution-history", () => {
         },
       };
       saveHistory(history);
-      const content = fs.readFileSync(
-        path.join(tmpDir, "history.json"),
-        "utf-8"
-      );
-      expect(JSON.parse(content)).toEqual(history);
+      expect(loadHistory()).toEqual(history);
     });
 
-    it("should create directory if missing", () => {
+    it("should create the DB directory if missing", () => {
       delete process.env.NIGHT_WATCH_HOME;
+      closeDb();
+      resetRepositories();
       const nested = path.join(tmpDir, "sub", "dir");
       process.env.NIGHT_WATCH_HOME = nested;
       saveHistory({});
-      expect(fs.existsSync(path.join(nested, "history.json"))).toBe(true);
+      // SQLite DB is created in the nested directory
+      expect(fs.existsSync(path.join(nested, "state.db"))).toBe(true);
     });
 
-    it("should clean up lock files after saving", () => {
+    it("should not create lock files (SQLite handles concurrency)", () => {
       saveHistory({});
       expect(fs.existsSync(path.join(tmpDir, "history.json.lock"))).toBe(false);
     });
   });
 
   describe("recordExecution", () => {
-    it("should record execution and persist to file", () => {
+    it("should record execution and persist to the repository", () => {
       recordExecution("/projects/app", "feature.md", "failure", 1);
       const history = loadHistory();
       const resolved = path.resolve("/projects/app");
@@ -153,21 +153,6 @@ describe("execution-history", () => {
       expect(history[resolved]["prd-a.md"].records[0].outcome).toBe("failure");
       expect(history[resolved]["prd-b.md"].records[0].outcome).toBe("success");
     });
-
-    it("should recover from stale lock files", () => {
-      const historyPath = path.join(tmpDir, "history.json");
-      const lockPath = `${historyPath}.lock`;
-      fs.writeFileSync(lockPath, "stale");
-      const staleDate = new Date(Date.now() - 60000);
-      fs.utimesSync(lockPath, staleDate, staleDate);
-
-      recordExecution("/projects/app", "feature.md", "failure", 1);
-
-      const history = loadHistory();
-      const resolved = path.resolve("/projects/app");
-      expect(history[resolved]["feature.md"].records).toHaveLength(1);
-      expect(fs.existsSync(lockPath)).toBe(false);
-    });
   });
 
   describe("getLastExecution", () => {
@@ -211,7 +196,6 @@ describe("execution-history", () => {
     });
 
     it("should report not in cooldown when last failure is old", () => {
-      // Manually write a record with an old timestamp
       const resolved = path.resolve("/projects/app");
       const history = {
         [resolved]: {

@@ -1,6 +1,6 @@
 {
   "name": "@jonit-dev/night-watch-cli",
-  "version": "1.5.9",
+  "version": "1.6.0",
   "description": "Autonomous PRD execution using AI Provider CLIs + cron",
   "type": "module",
   "bin": {
@@ -19,6 +19,9 @@
     "build:cli": "tsc",
     "test": "vitest run",
     "dev": "tsx src/cli.ts",
+    "dev:sandbox": "NIGHT_WATCH_HOME=/tmp/nw-sandbox tsx src/cli.ts",
+    "dev:sandbox:inspect": "sqlite3 /tmp/nw-sandbox/state.db",
+    "dev:sandbox:reset": "rm -rf /tmp/nw-sandbox && echo 'Sandbox cleared'",
     "dev:web": "concurrently --names \"api,vite\" --prefix-colors \"cyan,magenta\" \"tsx src/cli.ts serve\" \"yarn --cwd web dev\"",
     "prepublishOnly": "npm run build && npm test",
     "publish:npm": "npm publish --access public",
@@ -54,6 +57,7 @@
     "url": "https://github.com/jonit-dev/night-watch-cli/issues"
   },
   "dependencies": {
+    "better-sqlite3": "^12.6.2",
     "blessed": "^0.1.81",
     "chalk": "^5.6.2",
     "cli-table3": "^0.6.5",
@@ -66,6 +70,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/blessed": "^0.1.27",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",

@@ -1,6 +1,6 @@
 /**
  * Global project registry for Night Watch CLI
- * Manages ~/.night-watch/projects.json to track all registered projects
+ * Manages project entries via the SQLite repository layer.
  */
 
 import * as fs from "fs";
@@ -8,6 +8,8 @@ import * as os from "os";
 import * as path from "path";
 
 import { CONFIG_FILE_NAME, GLOBAL_CONFIG_DIR, REGISTRY_FILE_NAME } from "../constants.js";
+import { getRepositories, resetRepositories } from "../storage/repositories/index.js";
+import { closeDb } from "../storage/sqlite/client.js";
 import { getProjectName } from "./status-data.js";
 
 export interface IRegistryEntry {
@@ -16,7 +18,8 @@ export interface IRegistryEntry {
 }
 
 /**
- * Get the path to the global registry file
+ * Get the path to the global registry file.
+ * Kept for backward compatibility.
  */
 export function getRegistryPath(): string {
   const base = process.env.NIGHT_WATCH_HOME || path.join(os.homedir(), GLOBAL_CONFIG_DIR);
@@ -24,33 +27,23 @@ export function getRegistryPath(): string {
 }
 
 /**
- * Load the global registry, returning [] if the file does not exist
+ * Load all registry entries from the SQLite repository.
  */
 export function loadRegistry(): IRegistryEntry[] {
-  const registryPath = getRegistryPath();
-  if (!fs.existsSync(registryPath)) {
-    return [];
-  }
-  try {
-    const content = fs.readFileSync(registryPath, "utf-8");
-    const parsed = JSON.parse(content);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-    return parsed;
-  } catch {
-    return [];
-  }
+  const { projectRegistry } = getRepositories();
+  return projectRegistry.getAll();
 }
 
 /**
- * Save the registry (full replace)
+ * Save a full set of registry entries (full replace).
+ * Deletes all existing entries then upserts each provided entry in a transaction.
  */
 export function saveRegistry(entries: IRegistryEntry[]): void {
-  const registryPath = getRegistryPath();
-  const dir = path.dirname(registryPath);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(registryPath, JSON.stringify(entries, null, 2) + "\n");
+  const { projectRegistry } = getRepositories();
+  projectRegistry.clear();
+  for (const entry of entries) {
+    projectRegistry.upsert(entry);
+  }
 }
 
 /**
@@ -59,7 +52,8 @@ export function saveRegistry(entries: IRegistryEntry[]): void {
  */
 export function registerProject(projectDir: string): IRegistryEntry {
   const resolvedPath = path.resolve(projectDir);
-  const entries = loadRegistry();
+  const { projectRegistry } = getRepositories();
+  const entries = projectRegistry.getAll();
 
   const existing = entries.find((e) => e.path === resolvedPath);
   if (existing) {
@@ -73,8 +67,7 @@ export function registerProject(projectDir: string): IRegistryEntry {
   const finalName = nameExists ? `${name}-${path.basename(resolvedPath)}` : name;
 
   const entry: IRegistryEntry = { name: finalName, path: resolvedPath };
-  entries.push(entry);
-  saveRegistry(entries);
+  projectRegistry.upsert(entry);
   return entry;
 }
 
@@ -84,13 +77,8 @@ export function registerProject(projectDir: string): IRegistryEntry {
  */
 export function unregisterProject(projectDir: string): boolean {
   const resolvedPath = path.resolve(projectDir);
-  const entries = loadRegistry();
-  const filtered = entries.filter((e) => e.path !== resolvedPath);
-  if (filtered.length === entries.length) {
-    return false;
-  }
-  saveRegistry(filtered);
-  return true;
+  const { projectRegistry } = getRepositories();
+  return projectRegistry.remove(resolvedPath);
 }
 
 /**
@@ -112,3 +100,5 @@ export function validateRegistry(): { valid: IRegistryEntry[]; invalid: IRegistr
 
   return { valid, invalid };
 }
+
+export { closeDb, resetRepositories };

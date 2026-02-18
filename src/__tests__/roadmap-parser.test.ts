@@ -25,6 +25,8 @@ import {
   getStateFilePath,
   type IRoadmapState,
 } from "../utils/roadmap-state.js";
+import { closeDb, resetRepositories } from "../storage/sqlite/client.js";
+import { resetRepositories as resetRepos } from "../storage/repositories/index.js";
 
 describe("roadmap-parser", () => {
   describe("generateItemHash", () => {
@@ -301,9 +303,13 @@ describe("roadmap-state", () => {
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "roadmap-state-test-"));
+    process.env.NIGHT_WATCH_HOME = tempDir;
   });
 
   afterEach(() => {
+    closeDb();
+    resetRepos();
+    delete process.env.NIGHT_WATCH_HOME;
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 

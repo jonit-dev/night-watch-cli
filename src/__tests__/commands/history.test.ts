@@ -51,15 +51,11 @@ describe("night-watch history", () => {
     );
     expect(recordExitCode).toBe(0);
 
-    // Verify history file was written
-    const historyPath = path.join(tmpDir, "history.json");
-    expect(fs.existsSync(historyPath)).toBe(true);
-    const history = JSON.parse(fs.readFileSync(historyPath, "utf-8"));
-    const resolved = path.resolve("/tmp/test-project");
-    expect(history[resolved]["test.md"].records).toHaveLength(1);
-    expect(history[resolved]["test.md"].records[0].outcome).toBe("failure");
+    // Verify the SQLite DB was created (history is now stored in state.db)
+    const dbPath = path.join(tmpDir, "state.db");
+    expect(fs.existsSync(dbPath)).toBe(true);
 
-    // Check cooldown — should exit 0 (in cooldown)
+    // Check cooldown — should exit 0 (in cooldown), which verifies the record was persisted
     const { exitCode: checkExitCode } = runCli(
       `history check /tmp/test-project test.md --cooldown 7200`
     );

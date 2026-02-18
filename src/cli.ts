@@ -23,6 +23,7 @@ import { prsCommand } from './commands/prs.js';
 import { prdsCommand } from './commands/prds.js';
 import { cancelCommand } from './commands/cancel.js';
 import { sliceCommand } from './commands/slice.js';
+import { createStateCommand } from './commands/state.js';
 
 // Get package.json version
 const __filename = fileURLToPath(import.meta.url);
@@ -87,5 +88,8 @@ cancelCommand(program);
 
 // Register slice command (roadmap slicer)
 sliceCommand(program);
+
+// Register state command (state management + migration)
+program.addCommand(createStateCommand());
 
 program.parse();
