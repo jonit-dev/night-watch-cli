@@ -22,6 +22,7 @@ import { retryCommand } from './commands/retry.js';
 import { prsCommand } from './commands/prs.js';
 import { prdsCommand } from './commands/prds.js';
 import { cancelCommand } from './commands/cancel.js';
+import { sliceCommand } from './commands/slice.js';
 
 // Get package.json version
 const __filename = fileURLToPath(import.meta.url);
@@ -83,5 +84,8 @@ prdsCommand(program);
 
 // Register cancel command
 cancelCommand(program);
+
+// Register slice command (roadmap slicer)
+sliceCommand(program);
 
 program.parse();

@@ -29,6 +29,7 @@ export interface IInstallOptions {
   schedule?: string;
   reviewerSchedule?: string;
   noReviewer?: boolean;
+  noSlicer?: boolean;
 }
 
 /**
@@ -144,7 +145,7 @@ export interface IInstallResult {
 export function performInstall(
   projectDir: string,
   config: INightWatchConfig,
-  options?: { schedule?: string; reviewerSchedule?: string; noReviewer?: boolean; force?: boolean }
+  options?: { schedule?: string; reviewerSchedule?: string; noReviewer?: boolean; noSlicer?: boolean; force?: boolean }
 ): IInstallResult {
   try {
     const offset = config.cronScheduleOffset ?? 0;
@@ -194,6 +195,15 @@ export function performInstall(
       entries.push(reviewerEntry);
     }
 
+    // Slicer entry (if roadmap scanner enabled and noSlicer not set)
+    const installSlicer = options?.noSlicer === true ? false : config.roadmapScanner.enabled;
+    if (installSlicer) {
+      const slicerSchedule = applyScheduleOffset(config.roadmapScanner.slicerSchedule, offset);
+      const slicerLog = path.join(logDir, "slicer.log");
+      const slicerEntry = `${slicerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} slice >> ${shellQuote(slicerLog)} 2>&1  ${marker}`;
+      entries.push(slicerEntry);
+    }
+
     const currentCrontab = readCrontab();
     const newCrontab = [...currentCrontab, ...entries];
     writeCrontab(newCrontab);
@@ -218,6 +228,7 @@ export function installCommand(program: Command): void {
     .option("-s, --schedule <cron>", "Cron schedule for PRD executor")
     .option("--reviewer-schedule <cron>", "Cron schedule for reviewer")
     .option("--no-reviewer", "Skip installing reviewer cron")
+    .option("--no-slicer", "Skip installing slicer cron")
     .action(async (options: IInstallOptions) => {
       try {
         // Get project directory
@@ -290,6 +301,19 @@ export function installCommand(program: Command): void {
           entries.push(reviewerEntry);
         }
 
+        // Determine if slicer should be installed
+        // Priority: --no-slicer flag > config.roadmapScanner.enabled
+        const installSlicer = options.noSlicer === true ? false : config.roadmapScanner.enabled;
+
+        // Slicer entry (if roadmap scanner enabled)
+        let slicerLog: string | undefined;
+        if (installSlicer) {
+          slicerLog = path.join(logDir, "slicer.log");
+          const slicerSchedule = applyScheduleOffset(config.roadmapScanner.slicerSchedule, offset);
+          const slicerEntry = `${slicerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} slice >> ${shellQuote(slicerLog)} 2>&1  ${marker}`;
+          entries.push(slicerEntry);
+        }
+
         // Add all entries
         const currentCrontab = readCrontab();
         const newCrontab = [...currentCrontab, ...entries];
@@ -305,6 +329,9 @@ export function installCommand(program: Command): void {
         dim(`  Executor: ${executorLog}`);
         if (installReviewer) {
           dim(`  Reviewer: ${reviewerLog}`);
+        }
+        if (installSlicer && slicerLog) {
+          dim(`  Slicer: ${slicerLog}`);
         }
         console.log();
         dim("To uninstall, run: night-watch uninstall");
