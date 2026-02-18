@@ -5,6 +5,32 @@
  */
 
 import { DependencyList, useEffect, useRef, useState } from 'react';
+import type {
+  NightWatchConfig,
+  NotificationConfig,
+  WebhookConfig,
+  PrdInfo,
+  ProcessInfo,
+  PrInfo,
+  LogInfo,
+  StatusSnapshot,
+  RoadmapItem,
+  RoadmapStatus,
+} from '@night-watch/types';
+
+// Re-export shared types so consumers can import from either place
+export type {
+  NightWatchConfig,
+  NotificationConfig,
+  WebhookConfig,
+  PrdInfo,
+  ProcessInfo,
+  PrInfo,
+  LogInfo,
+  StatusSnapshot,
+  RoadmapItem,
+  RoadmapStatus,
+};
 
 /**
  * Base URL for API requests
@@ -95,78 +121,8 @@ async function apiFetch<T>(
 }
 
 // ==================== Status Snapshot ====================
-
-export interface StatusSnapshot {
-  projectName: string;
-  projectDir: string;
-  config: NightWatchConfig;
-  prds: PrdInfo[];
-  processes: ProcessInfo[];
-  prs: PrInfo[];
-  logs: LogInfo[];
-  crontab: { installed: boolean; entries: string[] };
-  timestamp: string;
-}
-
-export interface NightWatchConfig {
-  defaultBranch: string;
-  prdDir: string;
-  maxRuntime: number;
-  reviewerMaxRuntime: number;
-  branchPrefix: string;
-  branchPatterns: string[];
-  minReviewScore: number;
-  maxLogSize: number;
-  cronSchedule: string;
-  reviewerSchedule: string;
-  provider: 'claude' | 'codex';
-  reviewerEnabled: boolean;
-  providerEnv: Record<string, string>;
-  notifications: NotificationConfig;
-  prdPriority: string[];
-}
-
-export interface NotificationConfig {
-  webhooks: WebhookConfig[];
-}
-
-export interface WebhookConfig {
-  type: 'slack' | 'discord' | 'telegram';
-  url?: string;
-  botToken?: string;
-  chatId?: string;
-  events: ('run_started' | 'run_succeeded' | 'run_failed' | 'run_timeout' | 'review_completed')[];
-}
-
-export interface PrdInfo {
-  name: string;
-  status: 'ready' | 'blocked' | 'in-progress' | 'pending-review' | 'done';
-  dependencies: string[];
-  unmetDependencies: string[];
-}
-
-export interface ProcessInfo {
-  name: string;
-  running: boolean;
-  pid: number | null;
-}
-
-export interface PrInfo {
-  number: number;
-  title: string;
-  branch: string;
-  url: string;
-  ciStatus: 'pass' | 'fail' | 'pending' | 'unknown';
-  reviewScore: number | null;
-}
-
-export interface LogInfo {
-  name: string;
-  path: string;
-  exists: boolean;
-  size: number;
-  lastLines: string[];
-}
+// StatusSnapshot, NightWatchConfig, NotificationConfig, WebhookConfig,
+// PrdInfo, ProcessInfo, PrInfo, and LogInfo are imported from @night-watch/types above.
 
 // ==================== PRD with Content ====================
 
@@ -307,28 +263,7 @@ export function retryPrd(prdName: string): Promise<{ message: string }> {
 }
 
 // ==================== Roadmap Scanner ====================
-
-export interface RoadmapItem {
-  hash: string;
-  title: string;
-  description: string;
-  checked: boolean;
-  section: string;
-  processed: boolean;
-  prdFile?: string;
-}
-
-export interface RoadmapStatus {
-  found: boolean;
-  enabled: boolean;
-  totalItems: number;
-  processedItems: number;
-  pendingItems: number;
-  status: 'idle' | 'scanning' | 'complete' | 'disabled' | 'no-roadmap';
-  items: RoadmapItem[];
-  lastScan?: string;
-  autoScanInterval?: number;
-}
+// RoadmapItem and RoadmapStatus are imported from @night-watch/types above.
 
 export interface ScanResult {
   created: string[];
@@ -428,7 +363,6 @@ export function useApi<T>(
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, enabled]);
 
   return { data, loading, error, refetch: refetch.current };

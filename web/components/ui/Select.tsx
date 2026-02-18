@@ -16,10 +16,6 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
       if (onChange) {
         onChange(e.target.value);
       }
-      // Also call original onChange if provided in props
-      if (props.onChange) {
-        (props.onChange as (e: React.ChangeEvent<HTMLSelectElement>) => void)(e);
-      }
     };
 
     return (

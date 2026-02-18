@@ -27,3 +27,12 @@ jobs:
 
       - name: Run TypeScript Compiler
         run: tsc --noEmit
+
+      - name: Install web dependencies
+        run: yarn --cwd web install --frozen-lockfile
+
+      - name: Web lint
+        run: yarn --cwd web lint
+
+      - name: Web typecheck
+        run: yarn --cwd web typecheck
