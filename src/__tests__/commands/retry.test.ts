@@ -11,6 +11,7 @@ import { execSync } from "child_process";
 // Resolve the project root directory for running CLI commands
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..", "..");
 const TSX_BIN = path.join(PROJECT_ROOT, "node_modules", ".bin", "tsx");
+const TSCONFIG_PATH = path.join(PROJECT_ROOT, "tsconfig.json");
 const CLI_PATH = path.join(PROJECT_ROOT, "src", "cli.ts");
 
 describe("retry command", () => {
@@ -36,7 +37,7 @@ describe("retry command", () => {
   function runRetry(prdName: string): { output: string; exitCode: number } {
     try {
       const output = execSync(
-        `"${TSX_BIN}" "${CLI_PATH}" retry "${prdName}"`,
+        `"${TSX_BIN}" --tsconfig "${TSCONFIG_PATH}" "${CLI_PATH}" retry "${prdName}"`,
         {
           encoding: "utf-8",
           cwd: tempDir,

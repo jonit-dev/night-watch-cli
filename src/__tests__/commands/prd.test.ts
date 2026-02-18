@@ -13,6 +13,10 @@ import { slugify, getNextPrdNumber } from "../../commands/prd.js";
 
 // Resolve the project root directory for running CLI commands
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..", "..");
+const TSCONFIG_PATH = path.join(PROJECT_ROOT, "tsconfig.json");
+const TSX_BIN = path.join(PROJECT_ROOT, "node_modules", ".bin", "tsx");
+const CLI_PATH = path.join(PROJECT_ROOT, "src", "cli.ts");
+const TSX_CMD = `"${TSX_BIN}" --tsconfig "${TSCONFIG_PATH}" "${CLI_PATH}"`;
 
 describe("prd command", () => {
   describe("slugify", () => {
@@ -100,7 +104,7 @@ describe("prd command", () => {
 
     function runPrdCreate(args: string): string {
       return execSync(
-        `npx tsx ${path.join(PROJECT_ROOT, "src", "cli.ts")} prd create ${args}`,
+        `${TSX_CMD} prd create ${args}`,
         {
           encoding: "utf-8",
           cwd: tempDir,
@@ -232,7 +236,7 @@ describe("prd command", () => {
 
     function runPrdList(args = ""): string {
       return execSync(
-        `npx tsx ${path.join(PROJECT_ROOT, "src", "cli.ts")} prd list ${args}`,
+        `${TSX_CMD} prd list ${args}`,
         {
           encoding: "utf-8",
           cwd: tempDir,

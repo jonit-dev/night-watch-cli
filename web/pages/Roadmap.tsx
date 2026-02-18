@@ -10,8 +10,8 @@ import {
   toggleRoadmapScanner,
   triggerRoadmapScan,
   useApi,
-  RoadmapStatus,
-  RoadmapItem,
+  IRoadmapStatus,
+  IRoadmapItem,
 } from '../api';
 
 const Roadmap: React.FC = () => {
@@ -232,7 +232,7 @@ const Roadmap: React.FC = () => {
   );
 };
 
-function RoadmapItemRow({ item }: { item: RoadmapItem }) {
+function RoadmapItemRow({ item }: { item: IRoadmapItem }) {
   const isChecked = item.checked;
   const isProcessed = item.processed;
 
@@ -274,7 +274,7 @@ function RoadmapItemRow({ item }: { item: RoadmapItem }) {
   );
 }
 
-function getStatusConfig(status: RoadmapStatus['status']) {
+function getStatusConfig(status: IRoadmapStatus['status']) {
   switch (status) {
     case 'complete':
       return {
@@ -314,8 +314,8 @@ function getStatusConfig(status: RoadmapStatus['status']) {
   }
 }
 
-function groupBySection(items: RoadmapItem[]): Record<string, RoadmapItem[]> {
-  const groups: Record<string, RoadmapItem[]> = {};
+function groupBySection(items: IRoadmapItem[]): Record<string, IRoadmapItem[]> {
+  const groups: Record<string, IRoadmapItem[]> = {};
   for (const item of items) {
     const section = item.section || 'General';
     if (!groups[section]) groups[section] = [];

@@ -34,13 +34,6 @@ const PRDs: React.FC = () => {
   const { data: prdsData, loading, error, refetch } = useApi(fetchPrds, [selectedProjectId], { enabled: !globalModeLoading });
   const prds = prdsData ?? [];
 
-  const statusColors = {
-    'Ready': 'success',
-    'In Progress': 'info',
-    'Blocked': 'error',
-    'Done': 'neutral',
-  } as const;
-
   const handleRetry = async () => {
     if (!selectedPRD) return;
     setIsRetrying(true);

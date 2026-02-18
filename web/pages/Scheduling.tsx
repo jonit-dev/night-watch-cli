@@ -12,8 +12,6 @@ import {
   triggerInstallCron,
   triggerUninstallCron,
   useApi,
-  ScheduleInfo,
-  NightWatchConfig,
 } from '../api';
 import {
   CRON_PRESETS,
@@ -22,7 +20,6 @@ import {
   formatRelativeTime,
   formatAbsoluteTime,
   isWithin30Minutes,
-  getNextRunTime,
 } from '../utils/cron';
 
 interface ScheduleEditState {
@@ -161,7 +158,7 @@ const Scheduling: React.FC = () => {
     }
   };
 
-  const renderNextRun = (nextRunStr: string | null | undefined, cronExpr: string) => {
+  const renderNextRun = (nextRunStr: string | null | undefined, _cronExpr: string) => {
     if (!nextRunStr) {
       return <span className="text-slate-500">Not scheduled</span>;
     }

@@ -7,10 +7,10 @@ import Select from '../components/ui/Select';
 import Tabs from '../components/ui/Tabs';
 import Switch from '../components/ui/Switch';
 import { useStore } from '../store/useStore';
-import { fetchConfig, fetchDoctor, NightWatchConfig, updateConfig, useApi } from '../api';
+import { fetchConfig, fetchDoctor, INightWatchConfig, updateConfig, useApi } from '../api';
 
 type ConfigForm = {
-  provider: NightWatchConfig['provider'];
+  provider: INightWatchConfig['provider'];
   defaultBranch: string;
   branchPrefix: string;
   reviewerEnabled: boolean;
@@ -20,7 +20,7 @@ type ConfigForm = {
   maxLogSize: number;
 };
 
-const toFormState = (config: NightWatchConfig): ConfigForm => ({
+const toFormState = (config: INightWatchConfig): ConfigForm => ({
   provider: config.provider,
   defaultBranch: config.defaultBranch,
   branchPrefix: config.branchPrefix,

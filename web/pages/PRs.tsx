@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ExternalLink, CheckCircle, XCircle, Loader2, AlertCircle, Search, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
-import { useApi, fetchPrs, triggerReview, PrInfo } from '../api';
+import { useApi, fetchPrs, triggerReview } from '../api';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import { useStore } from '../store/useStore';
