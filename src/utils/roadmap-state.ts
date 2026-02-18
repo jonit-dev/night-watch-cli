@@ -1,10 +1,15 @@
 /**
  * Roadmap State Manager for Night Watch CLI
- * Manages .roadmap-state.json for tracking processed items
+ * Manages roadmap processing state via the SQLite repository layer.
+ * Writes the legacy .roadmap-state.json file alongside SQLite for backward
+ * compatibility and falls back to it when no SQLite row exists for a given
+ * prdDir (migration path).
  */
 
 import * as fs from "fs";
 import * as path from "path";
+
+import { getRepositories } from "../storage/repositories/index.js";
 
 /**
  * Represents the state of a single processed roadmap item
@@ -44,68 +49,90 @@ export function getStateFilePath(prdDir: string): string {
 }
 
 /**
- * Load the roadmap state from disk
- * Returns an empty state if the file does not exist or is invalid
- *
- * @param prdDir - Directory containing PRD files (where state file lives)
- * @returns The loaded or empty roadmap state
+ * Attempt to read state from the legacy JSON file.
+ * Returns null if the file does not exist or is invalid.
  */
-export function loadRoadmapState(prdDir: string): IRoadmapState {
+function readJsonState(prdDir: string): IRoadmapState | null {
   const statePath = getStateFilePath(prdDir);
 
   if (!fs.existsSync(statePath)) {
-    return createEmptyState();
+    return null;
   }
 
   try {
     const content = fs.readFileSync(statePath, "utf-8");
-    const parsed = JSON.parse(content);
+    const parsed: unknown = JSON.parse(content);
 
-    // Validate structure
     if (typeof parsed !== "object" || parsed === null) {
-      return createEmptyState();
+      return null;
     }
 
-    // Ensure version and items exist
-    if (typeof parsed.version !== "number" || typeof parsed.items !== "object") {
-      return createEmptyState();
+    const obj = parsed as Record<string, unknown>;
+
+    if (typeof obj.version !== "number" || typeof obj.items !== "object") {
+      return null;
     }
 
-    // Validate lastScan is a string if present
-    if (parsed.lastScan !== undefined && typeof parsed.lastScan !== "string") {
-      parsed.lastScan = new Date().toISOString();
+    if (obj.lastScan !== undefined && typeof obj.lastScan !== "string") {
+      obj.lastScan = new Date().toISOString();
     }
 
     return {
-      version: parsed.version,
-      lastScan: parsed.lastScan || "",
-      items: parsed.items || {},
+      version: obj.version,
+      lastScan: typeof obj.lastScan === "string" ? obj.lastScan : "",
+      items: (obj.items ?? {}) as Record<string, IRoadmapStateItem>,
     };
   } catch {
-    // Invalid JSON or other error
-    return createEmptyState();
+    return null;
   }
 }
 
 /**
- * Save the roadmap state to disk
+ * Load the roadmap state.
+ * Checks the SQLite repository first; falls back to the legacy JSON file when
+ * no SQLite entry exists for prdDir (supports migration from old installs).
+ * Returns an empty state if neither source has data.
  *
- * @param prdDir - Directory containing PRD files (where state file lives)
+ * @param prdDir - Directory containing PRD files (primary key in SQLite)
+ * @returns The loaded or empty roadmap state
+ */
+export function loadRoadmapState(prdDir: string): IRoadmapState {
+  const { roadmapState } = getRepositories();
+  const fromDb = roadmapState.load(prdDir);
+  if (fromDb !== null) {
+    return fromDb;
+  }
+
+  const fromJson = readJsonState(prdDir);
+  if (fromJson !== null) {
+    return fromJson;
+  }
+
+  return createEmptyState();
+}
+
+/**
+ * Save the roadmap state.
+ * Writes to SQLite (primary) and also writes the legacy .roadmap-state.json
+ * file so that external tooling and existing tests continue to work.
+ *
+ * @param prdDir - Directory containing PRD files (primary key in SQLite)
  * @param state - The state to save
  */
 export function saveRoadmapState(prdDir: string, state: IRoadmapState): void {
-  const statePath = getStateFilePath(prdDir);
+  // Update lastScan timestamp
+  state.lastScan = new Date().toISOString();
 
-  // Ensure directory exists
+  // Persist to SQLite
+  const { roadmapState } = getRepositories();
+  roadmapState.save(prdDir, state);
+
+  // Also write the legacy JSON file for backward compatibility
+  const statePath = getStateFilePath(prdDir);
   const dir = path.dirname(statePath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-
-  // Update lastScan timestamp
-  state.lastScan = new Date().toISOString();
-
-  // Write with pretty formatting
   fs.writeFileSync(statePath, JSON.stringify(state, null, 2) + "\n", "utf-8");
 }
 

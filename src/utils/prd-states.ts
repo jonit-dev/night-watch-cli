@@ -1,13 +1,9 @@
 /**
  * PRD state persistence for Night Watch CLI
- * Tracks pending-review (and future) PRD states in ~/.night-watch/prd-states.json
- * so PRD files do not need to move directories.
+ * Tracks pending-review (and future) PRD states via the SQLite repository layer.
  */
 
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
-import { GLOBAL_CONFIG_DIR, PRD_STATES_FILE_NAME } from "../constants.js";
+import { getRepositories } from "../storage/repositories/index.js";
 
 export interface IPrdStateEntry {
   status: "pending-review";
@@ -17,26 +13,14 @@ export interface IPrdStateEntry {
 
 export type IPrdStates = Record<string, Record<string, IPrdStateEntry>>;
 
-function prdStatesPath(): string {
-  return path.join(os.homedir(), GLOBAL_CONFIG_DIR, PRD_STATES_FILE_NAME);
-}
-
 export function readPrdStates(): IPrdStates {
-  const filePath = prdStatesPath();
-  if (!fs.existsSync(filePath)) {
-    return {};
-  }
-  try {
-    const raw = fs.readFileSync(filePath, "utf-8");
-    return JSON.parse(raw) as IPrdStates;
-  } catch {
-    return {};
-  }
+  const { prdState } = getRepositories();
+  return prdState.readAll();
 }
 
 export function getPrdStatesForProject(projectDir: string): Record<string, IPrdStateEntry> {
-  const all = readPrdStates();
-  return all[projectDir] ?? {};
+  const { prdState } = getRepositories();
+  return prdState.getAll(projectDir);
 }
 
 export function writePrdState(
@@ -44,30 +28,13 @@ export function writePrdState(
   prdName: string,
   entry: IPrdStateEntry
 ): void {
-  const filePath = prdStatesPath();
-  const dir = path.dirname(filePath);
-  fs.mkdirSync(dir, { recursive: true });
-
-  const all = readPrdStates();
-  if (!all[projectDir]) {
-    all[projectDir] = {};
-  }
-  all[projectDir][prdName] = entry;
-  fs.writeFileSync(filePath, JSON.stringify(all, null, 2), "utf-8");
+  const { prdState } = getRepositories();
+  prdState.set(projectDir, prdName, entry);
 }
 
 export function clearPrdState(projectDir: string, prdName: string): void {
-  const filePath = prdStatesPath();
-  if (!fs.existsSync(filePath)) return;
-
-  const all = readPrdStates();
-  if (!all[projectDir]) return;
-
-  delete all[projectDir][prdName];
-  if (Object.keys(all[projectDir]).length === 0) {
-    delete all[projectDir];
-  }
-  fs.writeFileSync(filePath, JSON.stringify(all, null, 2), "utf-8");
+  const { prdState } = getRepositories();
+  prdState.delete(projectDir, prdName);
 }
 
 export function listPrdStatesByStatus(

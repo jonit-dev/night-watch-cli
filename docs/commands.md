@@ -109,3 +109,25 @@ night-watch logs --follow         # Follow logs in real-time
 night-watch logs --type run       # View executor logs only
 night-watch logs --type review    # View reviewer logs only
 ```
+
+---
+
+## `night-watch state migrate`
+
+Migrate legacy JSON state files to the SQLite backend. Run this once after upgrading to a Night Watch version that uses SQLite for state persistence.
+
+```bash
+night-watch state migrate           # Migrate JSON state to SQLite
+night-watch state migrate --dry-run # Preview what would be migrated
+```
+
+**What it migrates:**
+- `~/.night-watch/projects.json` — project registry
+- `~/.night-watch/history.json` — PRD execution history
+- `~/.night-watch/prd-states.json` — PRD pending-review states
+- `.roadmap-state.json` files found in each registered project's PRD directory
+
+**Behavior:**
+- Safe to run multiple times — migration is idempotent. If already migrated, exits immediately with a notice.
+- Creates a timestamped backup of all legacy JSON files in `~/.night-watch/backups/json-migration-<timestamp>/` before making any changes.
+- The legacy JSON files are not deleted; they remain as-is alongside the backup.

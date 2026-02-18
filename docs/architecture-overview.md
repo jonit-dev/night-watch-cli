@@ -343,3 +343,54 @@ flowchart LR
 | Concurrency control | PID lock files | Simple, reliable, auto-cleanup via bash trap |
 | Provider abstraction | Strategy pattern | Easy to add new AI provider CLIs |
 | Config hierarchy | Defaults < File < Env < Flags | Standard precedence, 12-factor friendly |
+| Persistence layer | SQLite via repository pattern | Structured state with enforced architectural boundary |
+
+---
+
+## Persistence Architecture
+
+Night Watch uses a layered persistence architecture backed by SQLite. All SQL operations are confined to `src/storage/**` and enforced at lint time.
+
+```mermaid
+flowchart LR
+    CLI[Commands / Server] --> Utils[Utility Functions]
+    Utils --> Repos[Repository Interfaces]
+    Repos --> SqliteImpl[SQLite Implementations]
+    SqliteImpl --> DB[(~/.night-watch/state.db)]
+    Migrate[state migrate command] --> DB
+```
+
+### Layers
+
+| Layer | Location | Responsibility |
+|-------|----------|----------------|
+| Commands / Server | `src/commands/**`, `src/server/**` | User-facing logic; calls utility functions only |
+| Utility Functions | `src/utils/**` | Business logic; accesses state via repository interfaces |
+| Repository Interfaces | `src/storage/repositories/interfaces.ts` | Persistence contracts; no SQL |
+| SQLite Implementations | `src/storage/repositories/sqlite/**` | Concrete SQL implementations of the repository interfaces |
+| SQLite Client | `src/storage/sqlite/client.ts` | Database connection and setup |
+| Migrations | `src/storage/sqlite/migrations.ts` | Schema versioning |
+
+### Repository Interfaces
+
+- `IProjectRegistryRepository` — registered project paths
+- `IExecutionHistoryRepository` — PRD execution records and cooldown tracking
+- `IPrdStateRepository` — per-PRD workflow state (e.g. `pending-review`)
+- `IRoadmapStateRepository` — roadmap scan metadata
+
+### Boundary Enforcement
+
+- All `better-sqlite3` imports are restricted to `src/storage/**` by an ESLint `no-restricted-imports` rule in `eslint.config.js`
+- Any attempt to import `better-sqlite3` outside `src/storage/**` will produce a lint error:
+  `SQL access is restricted to src/storage/**. Use repository interfaces instead.`
+- The `state migrate` command (`src/commands/state.ts`) performs one-time migration of legacy JSON state files into SQLite and writes directly to the database through the storage layer
+
+### Verifying the Boundary
+
+Run the following to confirm no raw SQL or `better-sqlite3` imports exist outside the storage layer:
+
+```bash
+rg -n "SELECT|INSERT|UPDATE|DELETE|better-sqlite3" src --glob '!src/storage/**'
+```
+
+This should return zero results.
