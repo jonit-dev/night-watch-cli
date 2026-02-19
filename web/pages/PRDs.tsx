@@ -4,7 +4,7 @@ import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
-import { useApi, fetchPrds, PrdWithContent, triggerRun, retryPrd, useStatusStream } from '../api';
+import { useApi, fetchPrds, fetchBoardStatus, PrdWithContent, IBoardIssue, IBoardStatus, triggerRun, retryPrd, useStatusStream } from '../api';
 import { useStore } from '../store/useStore';
 
 // Map API status to UI status
@@ -34,6 +34,35 @@ const PRDs: React.FC = () => {
   const { addToast, selectedProjectId, globalModeLoading } = useStore();
   const { data: prdsData, loading, error, refetch } = useApi(fetchPrds, [selectedProjectId], { enabled: !globalModeLoading });
   const prds = prdsData ?? [];
+  const { data: boardStatus } = useApi<IBoardStatus | null>(
+    () => fetchBoardStatus().catch(() => null),
+    [selectedProjectId],
+    { enabled: !globalModeLoading },
+  );
+
+  // Build a lookup of board issues by normalized title for badge display
+  const boardIssueByTitle = React.useMemo(() => {
+    const map = new Map<string, IBoardIssue>();
+    if (!boardStatus) return map;
+    for (const col of Object.values(boardStatus.columns)) {
+      for (const issue of col) {
+        map.set(issue.title.toLowerCase().trim(), issue);
+      }
+    }
+    return map;
+  }, [boardStatus]);
+
+  // Get the first H1 heading from PRD content (used to match board issues)
+  const getPrdTitle = (prd: PrdWithContent): string => {
+    if (!prd.content) return prd.name;
+    const match = prd.content.match(/^#\s+(.+)$/m);
+    return match ? match[1].trim() : prd.name;
+  };
+
+  const getBoardIssue = (prd: PrdWithContent): IBoardIssue | null => {
+    const title = getPrdTitle(prd).toLowerCase().trim();
+    return boardIssueByTitle.get(title) ?? null;
+  };
 
   // Merge optimistic status into displayed PRD list
   const displayPrds = prds.map(p =>
@@ -211,7 +240,25 @@ const PRDs: React.FC = () => {
                 {displayPrds.map((prd) => (
                   <tr key={prd.name} className="hover:bg-slate-800/50 group cursor-pointer transition-colors" onClick={() => setSelectedPRD(prd)}>
                     <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-slate-200">{prd.name}</div>
+                      <div className="flex items-center space-x-2">
+                        <div className="text-sm font-medium text-slate-200">{prd.name}</div>
+                        {(() => {
+                          const boardIssue = getBoardIssue(prd);
+                          if (!boardIssue) return null;
+                          return (
+                            <a
+                              href={boardIssue.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-indigo-500/10 text-indigo-400 ring-1 ring-inset ring-indigo-500/20 hover:bg-indigo-500/20 transition-colors"
+                              title={`Board: #${boardIssue.number} — ${boardIssue.column}`}
+                            >
+                              #{boardIssue.number} · {boardIssue.column}
+                            </a>
+                          );
+                        })()}
+                      </div>
                       {prd.unmetDependencies.length > 0 && (
                         <div className="text-xs text-amber-400 mt-1">Blocked by: {prd.unmetDependencies.join(', ')}</div>
                       )}
@@ -260,7 +307,24 @@ const PRDs: React.FC = () => {
                     <div className="h-2 w-2 bg-yellow-500 rounded-full animate-pulse"></div>
                   )}
                 </div>
-                <h3 className="text-lg font-semibold text-slate-200 mb-2">{prd.name}</h3>
+                <div className="flex items-center space-x-2 mb-2">
+                  <h3 className="text-lg font-semibold text-slate-200">{prd.name}</h3>
+                  {(() => {
+                    const boardIssue = getBoardIssue(prd);
+                    if (!boardIssue) return null;
+                    return (
+                      <a
+                        href={boardIssue.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-indigo-500/10 text-indigo-400 ring-1 ring-inset ring-indigo-500/20 hover:bg-indigo-500/20 transition-colors flex-shrink-0"
+                      >
+                        #{boardIssue.number} · {boardIssue.column}
+                      </a>
+                    );
+                  })()}
+                </div>
                 {prd.content && (
                   <p className="text-sm text-slate-400 flex-1 line-clamp-3">
                     {prd.content.replace(/^#.*\n/, '')}

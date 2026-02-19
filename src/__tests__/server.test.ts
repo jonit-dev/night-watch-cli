@@ -18,6 +18,23 @@ vi.mock("child_process", () => ({
   spawn: vi.fn(),
 }));
 
+// Mock board factory
+const mockBoardProvider = {
+  getAllIssues: vi.fn(),
+  createIssue: vi.fn(),
+  moveIssue: vi.fn(),
+  closeIssue: vi.fn(),
+  commentOnIssue: vi.fn(),
+  getBoard: vi.fn(),
+  getColumns: vi.fn(),
+  getIssue: vi.fn(),
+  getIssuesByColumn: vi.fn(),
+  setupBoard: vi.fn(),
+};
+vi.mock("../board/factory.js", () => ({
+  createBoardProvider: vi.fn(() => mockBoardProvider),
+}));
+
 vi.mock("../utils/crontab.js", () => ({
   getEntries: vi.fn(() => []),
   getProjectEntries: vi.fn(() => []),
@@ -621,6 +638,156 @@ describe("server API", () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain("Invalid PRD name");
+    });
+  });
+
+  describe("Board endpoints", () => {
+    const boardIssue = {
+      id: "issue-node-1",
+      number: 10,
+      title: "Test Issue",
+      body: "Issue body",
+      url: "https://github.com/owner/repo/issues/10",
+      column: "Ready" as const,
+      labels: [],
+      assignees: [],
+    };
+
+    describe("when board is not configured", () => {
+      it("GET /api/board/status returns 404", async () => {
+        const response = await request(app).get("/api/board/status");
+        expect(response.status).toBe(404);
+        expect(response.body.error).toBe("Board not configured");
+      });
+
+      it("GET /api/board/issues returns 404", async () => {
+        const response = await request(app).get("/api/board/issues");
+        expect(response.status).toBe(404);
+        expect(response.body.error).toBe("Board not configured");
+      });
+    });
+
+    describe("when board is configured", () => {
+      beforeEach(() => {
+        // Write config with boardProvider set
+        const configWithBoard = {
+          projectName: "test-project",
+          defaultBranch: "main",
+          provider: "claude",
+          reviewerEnabled: true,
+          prdDirectory: "docs/PRDs/night-watch",
+          maxRuntime: 7200,
+          reviewerMaxRuntime: 3600,
+          cron: {
+            executorSchedule: "0 0-21 * * *",
+            reviewerSchedule: "0 0,3,6,9,12,15,18,21 * * *"
+          },
+          review: {
+            minScore: 80,
+            branchPatterns: ["feat/", "night-watch/"]
+          },
+          logging: { maxLogSize: 524288 },
+          boardProvider: { enabled: true, provider: "github", projectNumber: 6 },
+        };
+        fs.writeFileSync(
+          path.join(tempDir, "night-watch.config.json"),
+          JSON.stringify(configWithBoard, null, 2)
+        );
+        app = createApp(tempDir);
+
+        vi.mocked(mockBoardProvider.getAllIssues).mockReset();
+        vi.mocked(mockBoardProvider.createIssue).mockReset();
+        vi.mocked(mockBoardProvider.moveIssue).mockReset();
+        vi.mocked(mockBoardProvider.closeIssue).mockReset();
+        vi.mocked(mockBoardProvider.commentOnIssue).mockReset();
+      });
+
+      it("GET /api/board/status returns grouped issues", async () => {
+        vi.mocked(mockBoardProvider.getAllIssues).mockResolvedValue([boardIssue]);
+        const response = await request(app).get("/api/board/status");
+        expect(response.status).toBe(200);
+        expect(response.body.enabled).toBe(true);
+        expect(response.body.columns.Ready).toHaveLength(1);
+        expect(response.body.columns.Ready[0].number).toBe(10);
+        expect(response.body.columns.Draft).toHaveLength(0);
+      });
+
+      it("GET /api/board/issues returns flat list", async () => {
+        vi.mocked(mockBoardProvider.getAllIssues).mockResolvedValue([boardIssue]);
+        const response = await request(app).get("/api/board/issues");
+        expect(response.status).toBe(200);
+        expect(response.body).toHaveLength(1);
+        expect(response.body[0].number).toBe(10);
+      });
+
+      it("POST /api/board/issues creates an issue", async () => {
+        vi.mocked(mockBoardProvider.createIssue).mockResolvedValue(boardIssue);
+        const response = await request(app)
+          .post("/api/board/issues")
+          .send({ title: "New Issue", body: "Body text", column: "Ready" });
+        expect(response.status).toBe(201);
+        expect(response.body.number).toBe(10);
+      });
+
+      it("POST /api/board/issues returns 400 without title", async () => {
+        const response = await request(app)
+          .post("/api/board/issues")
+          .send({ body: "Body text" });
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain("title is required");
+      });
+
+      it("POST /api/board/issues returns 400 for invalid column", async () => {
+        const response = await request(app)
+          .post("/api/board/issues")
+          .send({ title: "Test", column: "InvalidColumn" });
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain("Invalid column");
+      });
+
+      it("PATCH /api/board/issues/:number/move moves issue", async () => {
+        vi.mocked(mockBoardProvider.moveIssue).mockResolvedValue(undefined);
+        const response = await request(app)
+          .patch("/api/board/issues/10/move")
+          .send({ column: "In Progress" });
+        expect(response.status).toBe(200);
+        expect(response.body.moved).toBe(true);
+        expect(mockBoardProvider.moveIssue).toHaveBeenCalledWith(10, "In Progress");
+      });
+
+      it("PATCH /api/board/issues/:number/move returns 400 for invalid column", async () => {
+        const response = await request(app)
+          .patch("/api/board/issues/10/move")
+          .send({ column: "Bogus" });
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain("Invalid column");
+      });
+
+      it("POST /api/board/issues/:number/comment adds a comment", async () => {
+        vi.mocked(mockBoardProvider.commentOnIssue).mockResolvedValue(undefined);
+        const response = await request(app)
+          .post("/api/board/issues/10/comment")
+          .send({ body: "Great progress!" });
+        expect(response.status).toBe(200);
+        expect(response.body.commented).toBe(true);
+        expect(mockBoardProvider.commentOnIssue).toHaveBeenCalledWith(10, "Great progress!");
+      });
+
+      it("POST /api/board/issues/:number/comment returns 400 without body", async () => {
+        const response = await request(app)
+          .post("/api/board/issues/10/comment")
+          .send({});
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain("body is required");
+      });
+
+      it("DELETE /api/board/issues/:number closes issue", async () => {
+        vi.mocked(mockBoardProvider.closeIssue).mockResolvedValue(undefined);
+        const response = await request(app).delete("/api/board/issues/10");
+        expect(response.status).toBe(200);
+        expect(response.body.closed).toBe(true);
+        expect(mockBoardProvider.closeIssue).toHaveBeenCalledWith(10);
+      });
     });
   });
 });

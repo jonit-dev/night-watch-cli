@@ -3,9 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { Activity, CheckCircle, Clock, ArrowRight, AlertCircle, Calendar, XCircle } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { useApi, fetchStatus, fetchScheduleInfo, triggerCancel, triggerClearLock, useStatusStream } from '../api';
+import { useApi, fetchStatus, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, useStatusStream, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
 import { useStore } from '../store/useStore';
 import type { IStatusSnapshot } from '@shared/types';
+
+const BOARD_COLUMN_COLORS: Record<BoardColumnName, string> = {
+  'Draft':       'text-slate-400  bg-slate-500/10  ring-slate-500/20',
+  'Ready':       'text-green-400  bg-green-500/10  ring-green-500/20',
+  'In Progress': 'text-blue-400   bg-blue-500/10   ring-blue-500/20',
+  'Review':      'text-amber-400  bg-amber-500/10  ring-amber-500/20',
+  'Done':        'text-slate-500  bg-slate-600/10  ring-slate-600/20',
+};
 
 // Map API status to UI status
 const statusMap: Record<string, string> = {
@@ -24,6 +32,11 @@ const Dashboard: React.FC = () => {
   const { setProjectName, addToast, selectedProjectId, globalModeLoading } = useStore();
   const { data: status, loading, error, refetch } = useApi(fetchStatus, [selectedProjectId], { enabled: !globalModeLoading });
   const { data: scheduleInfo } = useApi(fetchScheduleInfo, [selectedProjectId], { enabled: !globalModeLoading });
+  const { data: boardStatus } = useApi<IBoardStatus | null>(
+    () => fetchBoardStatus().catch(() => null),
+    [selectedProjectId],
+    { enabled: !globalModeLoading },
+  );
 
   // Subscribe to SSE for real-time updates (primary path)
   useStatusStream((snapshot) => {
@@ -390,6 +403,39 @@ const Dashboard: React.FC = () => {
                 </div>
              </div>
            </div>
+        </Card>
+      </div>
+
+      {/* Board Widget */}
+      <div className="mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-slate-200">GitHub Board</h2>
+          <button onClick={() => navigate('/board')} className="text-sm text-indigo-400 hover:text-indigo-300 flex items-center transition-colors">
+            View board <ArrowRight className="ml-1 h-3 w-3" />
+          </button>
+        </div>
+        <Card className="p-4">
+          {!boardStatus ? (
+            <p className="text-sm text-slate-500 italic">
+              Board not configured — run <code className="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-indigo-300 text-xs">night-watch board setup</code> to enable.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              {BOARD_COLUMNS.map(col => {
+                const count = boardStatus.columns[col]?.length ?? 0;
+                return (
+                  <button
+                    key={col}
+                    onClick={() => navigate('/board')}
+                    className={`inline-flex items-center space-x-2 px-3 py-2 rounded-lg ring-1 ring-inset transition-colors hover:opacity-80 ${BOARD_COLUMN_COLORS[col]}`}
+                  >
+                    <span className="text-xs font-medium">{col}</span>
+                    <span className="text-xs font-bold">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </Card>
       </div>
     </div>

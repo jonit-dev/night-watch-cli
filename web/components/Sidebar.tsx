@@ -8,6 +8,7 @@ import {
   Terminal,
   Settings,
   Map,
+  Kanban,
   ChevronLeft,
   ChevronRight,
   Briefcase,
@@ -21,6 +22,7 @@ const Sidebar: React.FC = () => {
 
   const navItems = [
     { icon: Home, label: 'Dashboard', path: '/' },
+    { icon: Kanban, label: 'Board', path: '/board' },
     { icon: FileText, label: 'PRDs', path: '/prds', badge: 3 },
     { icon: GitPullRequest, label: 'Pull Requests', path: '/prs', badge: 1 },
     { icon: Map, label: 'Roadmap', path: '/roadmap' },
