@@ -57,6 +57,7 @@
     "url": "https://github.com/jonit-dev/night-watch-cli/issues"
   },
   "dependencies": {
+    "@slack/web-api": "^7.14.1",
     "better-sqlite3": "^12.6.2",
     "blessed": "^0.1.81",
     "chalk": "^5.6.2",

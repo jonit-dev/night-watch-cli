@@ -3,7 +3,7 @@
  */
 
 import { IBoardProviderConfig } from "./board/types.js";
-import { ClaudeModel, INotificationConfig, IQaConfig, IRoadmapScannerConfig, MergeMethod, Provider, QaArtifacts } from "./types.js";
+import { ClaudeModel, INotificationConfig, IQaConfig, IRoadmapScannerConfig, ISlackBotConfig, MergeMethod, Provider, QaArtifacts } from "./types.js";
 
 // Branch Configuration (default branch)
 export const DEFAULT_DEFAULT_BRANCH = ""; // empty = auto-detect
@@ -103,6 +103,15 @@ export const DEFAULT_QA: IQaConfig = {
 };
 
 export const QA_LOG_NAME = "night-watch-qa";
+
+// Slack Bot Configuration
+export const DEFAULT_SLACK_BOT_CONFIG: ISlackBotConfig = {
+  enabled: false,
+  botToken: '',
+  channels: { eng: '', prs: '', incidents: '', releases: '' },
+  autoCreateProjectChannels: false,
+  discussionEnabled: false,
+};
 
 // Valid providers
 export const VALID_PROVIDERS: Provider[] = ["claude", "codex"];

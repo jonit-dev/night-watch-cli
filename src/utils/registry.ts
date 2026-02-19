@@ -15,6 +15,7 @@ import { getProjectName } from "./status-data.js";
 export interface IRegistryEntry {
   name: string;
   path: string;
+  slackChannelId?: string;
 }
 
 /**

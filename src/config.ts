@@ -7,7 +7,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import { BoardProviderType, IBoardProviderConfig } from "./board/types.js";
-import { ClaudeModel, INightWatchConfig, INotificationConfig, IQaConfig, IRoadmapScannerConfig, IWebhookConfig, MergeMethod, NotificationEvent, Provider, QaArtifacts, WebhookType } from "./types.js";
+import { ClaudeModel, INightWatchConfig, INotificationConfig, IQaConfig, IRoadmapScannerConfig, ISlackBotConfig, IWebhookConfig, MergeMethod, NotificationEvent, Provider, QaArtifacts, WebhookType } from "./types.js";
 import {
   CONFIG_FILE_NAME,
   DEFAULT_AUTO_MERGE,
@@ -34,6 +34,7 @@ import {
   DEFAULT_REVIEWER_MAX_RUNTIME,
   DEFAULT_REVIEWER_SCHEDULE,
   DEFAULT_ROADMAP_SCANNER,
+  DEFAULT_SLACK_BOT_CONFIG,
   DEFAULT_TEMPLATES_DIR,
   VALID_CLAUDE_MODELS,
   VALID_MERGE_METHODS,
@@ -91,6 +92,9 @@ export function getDefaultConfig(): INightWatchConfig {
 
     // QA process
     qa: { ...DEFAULT_QA },
+
+    // Slack Bot API
+    slack: { ...DEFAULT_SLACK_BOT_CONFIG, channels: { ...DEFAULT_SLACK_BOT_CONFIG.channels } },
   };
 }
 
@@ -258,6 +262,31 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     normalized.autoMergeMethod = mergeMethod as MergeMethod;
   }
 
+  // Slack Bot Configuration
+  const rawSlack = readObject(rawConfig.slack);
+  if (rawSlack) {
+    const rawChannels = readObject(rawSlack.channels) ?? {};
+    const slack: ISlackBotConfig = {
+      enabled: readBoolean(rawSlack.enabled) ?? DEFAULT_SLACK_BOT_CONFIG.enabled,
+      botToken: readString(rawSlack.botToken) ?? DEFAULT_SLACK_BOT_CONFIG.botToken,
+      channels: {
+        eng: readString(rawChannels.eng) ?? DEFAULT_SLACK_BOT_CONFIG.channels.eng,
+        prs: readString(rawChannels.prs) ?? DEFAULT_SLACK_BOT_CONFIG.channels.prs,
+        incidents: readString(rawChannels.incidents) ?? DEFAULT_SLACK_BOT_CONFIG.channels.incidents,
+        releases: readString(rawChannels.releases) ?? DEFAULT_SLACK_BOT_CONFIG.channels.releases,
+      },
+      autoCreateProjectChannels:
+        readBoolean(rawSlack.autoCreateProjectChannels) ??
+        DEFAULT_SLACK_BOT_CONFIG.autoCreateProjectChannels,
+      discussionEnabled:
+        readBoolean(rawSlack.discussionEnabled) ?? DEFAULT_SLACK_BOT_CONFIG.discussionEnabled,
+    };
+    if (typeof rawSlack.appToken === "string") {
+      slack.appToken = rawSlack.appToken;
+    }
+    normalized.slack = slack;
+  }
+
   // QA Configuration
   const rawQa = readObject(rawConfig.qa);
   if (rawQa) {
@@ -375,6 +404,8 @@ function mergeConfigs(
     if (fileConfig.claudeModel !== undefined) merged.claudeModel = fileConfig.claudeModel;
     if (fileConfig.qa !== undefined)
       merged.qa = { ...merged.qa, ...fileConfig.qa };
+    if (fileConfig.slack !== undefined)
+      merged.slack = { ...merged.slack, ...fileConfig.slack, channels: { ...merged.slack?.channels, ...fileConfig.slack.channels } };
   }
 
   // Merge env config (takes precedence)
@@ -413,6 +444,8 @@ function mergeConfigs(
   if (envConfig.claudeModel !== undefined) merged.claudeModel = envConfig.claudeModel;
   if (envConfig.qa !== undefined)
     merged.qa = { ...merged.qa, ...envConfig.qa };
+  if (envConfig.slack !== undefined)
+    merged.slack = { ...merged.slack, ...envConfig.slack, channels: { ...merged.slack?.channels, ...envConfig.slack.channels } };
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
 
