@@ -2,6 +2,8 @@
  * TypeScript interfaces for Night Watch CLI configuration
  */
 
+import { IBoardProviderConfig } from "./board/types.js";
+
 /**
  * Supported AI providers
  */
@@ -73,6 +75,9 @@ export interface INightWatchConfig {
 
   /** Directory containing custom template overrides (relative to project root) */
   templatesDir: string;
+
+  /** Board provider configuration for PRD tracking */
+  boardProvider: IBoardProviderConfig;
 }
 
 export type WebhookType = "slack" | "discord" | "telegram";

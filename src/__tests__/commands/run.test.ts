@@ -228,6 +228,39 @@ describe("run command", () => {
 
       expect(env.NW_CLI_BIN).toBe(process.argv[1]);
     });
+
+    it("sets NW_BOARD_ENABLED when boardProvider is enabled and projectNumber is set", () => {
+      const config = createTestConfig({
+        boardProvider: { enabled: true, provider: "github", projectNumber: 42 },
+      });
+      const options: IRunOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_BOARD_ENABLED).toBe("true");
+    });
+
+    it("does not set NW_BOARD_ENABLED when boardProvider enabled but projectNumber missing", () => {
+      const config = createTestConfig({
+        boardProvider: { enabled: true, provider: "github" },
+      });
+      const options: IRunOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_BOARD_ENABLED).toBeUndefined();
+    });
+
+    it("does not set NW_BOARD_ENABLED when boardProvider explicitly disabled", () => {
+      const config = createTestConfig({
+        boardProvider: { enabled: false, provider: "github", projectNumber: 42 },
+      });
+      const options: IRunOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_BOARD_ENABLED).toBeUndefined();
+    });
   });
 
   describe("applyCliOverrides", () => {
