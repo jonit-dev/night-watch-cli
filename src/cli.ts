@@ -24,6 +24,7 @@ import { prdsCommand } from './commands/prds.js';
 import { cancelCommand } from './commands/cancel.js';
 import { sliceCommand } from './commands/slice.js';
 import { createStateCommand } from './commands/state.js';
+import { boardCommand } from './commands/board.js';
 
 // Get package.json version
 const __filename = fileURLToPath(import.meta.url);
@@ -91,5 +92,8 @@ sliceCommand(program);
 
 // Register state command (state management + migration)
 program.addCommand(createStateCommand());
+
+// Register board command (GitHub Projects board provider)
+boardCommand(program);
 
 program.parse();
