@@ -6,9 +6,11 @@
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+import { BoardProviderType, IBoardProviderConfig } from "./board/types.js";
 import { INightWatchConfig, INotificationConfig, IRoadmapScannerConfig, IWebhookConfig, NotificationEvent, Provider, WebhookType } from "./types.js";
 import {
   CONFIG_FILE_NAME,
+  DEFAULT_BOARD_PROVIDER,
   DEFAULT_BRANCH_PATTERNS,
   DEFAULT_BRANCH_PREFIX,
   DEFAULT_CRON_SCHEDULE,
@@ -68,6 +70,9 @@ export function getDefaultConfig(): INightWatchConfig {
 
     // Templates
     templatesDir: DEFAULT_TEMPLATES_DIR,
+
+    // Board provider
+    boardProvider: { ...DEFAULT_BOARD_PROVIDER },
   };
 }
 
@@ -205,6 +210,22 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   // Templates Directory
   normalized.templatesDir = readString(rawConfig.templatesDir);
 
+  // Board Provider
+  const rawBoardProvider = readObject(rawConfig.boardProvider);
+  if (rawBoardProvider) {
+    const bp: IBoardProviderConfig = {
+      enabled: readBoolean(rawBoardProvider.enabled) ?? DEFAULT_BOARD_PROVIDER.enabled,
+      provider: (readString(rawBoardProvider.provider) as BoardProviderType) ?? DEFAULT_BOARD_PROVIDER.provider,
+    };
+    if (typeof rawBoardProvider.projectNumber === "number") {
+      bp.projectNumber = rawBoardProvider.projectNumber;
+    }
+    if (typeof rawBoardProvider.repo === "string") {
+      bp.repo = rawBoardProvider.repo;
+    }
+    normalized.boardProvider = bp;
+  }
+
   return normalized;
 }
 
@@ -284,6 +305,8 @@ function mergeConfigs(
     if (fileConfig.roadmapScanner !== undefined)
       merged.roadmapScanner = { ...fileConfig.roadmapScanner };
     if (fileConfig.templatesDir !== undefined) merged.templatesDir = fileConfig.templatesDir;
+    if (fileConfig.boardProvider !== undefined)
+      merged.boardProvider = { ...merged.boardProvider, ...fileConfig.boardProvider };
   }
 
   // Merge env config (takes precedence)
@@ -314,6 +337,8 @@ function mergeConfigs(
   if (envConfig.roadmapScanner !== undefined)
     merged.roadmapScanner = { ...envConfig.roadmapScanner };
   if (envConfig.templatesDir !== undefined) merged.templatesDir = envConfig.templatesDir;
+  if (envConfig.boardProvider !== undefined)
+    merged.boardProvider = { ...merged.boardProvider, ...envConfig.boardProvider };
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
 

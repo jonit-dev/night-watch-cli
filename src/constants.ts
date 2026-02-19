@@ -2,6 +2,7 @@
  * Default configuration values for Night Watch CLI
  */
 
+import { IBoardProviderConfig } from "./board/types.js";
 import { INotificationConfig, IRoadmapScannerConfig, Provider } from "./types.js";
 
 // Branch Configuration (default branch)
@@ -59,6 +60,12 @@ export const DEFAULT_ROADMAP_SCANNER: IRoadmapScannerConfig = {
 
 // Templates Configuration
 export const DEFAULT_TEMPLATES_DIR = ".night-watch/templates";
+
+// Board Provider Configuration
+export const DEFAULT_BOARD_PROVIDER: IBoardProviderConfig = {
+  enabled: true,
+  provider: "github" as const,
+};
 
 // Valid providers
 export const VALID_PROVIDERS: Provider[] = ["claude", "codex"];

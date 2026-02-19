@@ -98,6 +98,13 @@ export function buildEnvVars(config: INightWatchConfig, options: IRunOptions): R
     env.NW_CLI_BIN = process.argv[1];
   }
 
+  // Board provider — signal to the cron script to use board mode.
+  // Requires both enabled (default: true) AND a configured projectNumber so the
+  // cron script doesn't attempt board mode against an unconfigured board.
+  if (config.boardProvider?.enabled !== false && config.boardProvider?.projectNumber) {
+    env.NW_BOARD_ENABLED = "true";
+  }
+
   return env;
 }
 
