@@ -281,14 +281,12 @@ describe("GitHubProjectsProvider", () => {
       queueCachePrimingMocks();
 
       mockExecFileSync
-        // gh issue create (REST)
+        // gh issue create → returns URL
         .mockReturnValueOnce(
-          JSON.stringify({
-            number: 7,
-            id: "issue-node-id-7",
-            url: "https://github.com/owner/repo/issues/7",
-          }) as unknown as Buffer
+          "https://github.com/owner/repo/issues/7\n" as unknown as Buffer
         )
+        // gh api repos/owner/repo/issues/7 --jq .node_id → returns node ID
+        .mockReturnValueOnce("issue-node-id-7\n" as unknown as Buffer)
         // addProjectV2ItemById mutation
         .mockReturnValueOnce(
           gqlResponse({
@@ -351,14 +349,12 @@ describe("GitHubProjectsProvider", () => {
       queueCachePrimingMocks();
 
       mockExecFileSync
-        // gh issue create
+        // gh issue create → returns URL
         .mockReturnValueOnce(
-          JSON.stringify({
-            number: 8,
-            id: "issue-node-id-8",
-            url: "https://github.com/owner/repo/issues/8",
-          }) as unknown as Buffer
+          "https://github.com/owner/repo/issues/8\n" as unknown as Buffer
         )
+        // gh api repos/owner/repo/issues/8 --jq .node_id
+        .mockReturnValueOnce("issue-node-id-8\n" as unknown as Buffer)
         // addProjectV2ItemById
         .mockReturnValueOnce(
           gqlResponse({

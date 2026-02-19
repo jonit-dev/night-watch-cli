@@ -400,7 +400,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
     const repo = this.getRepo();
     const { projectId, fieldId, optionIds } = await this.ensureProjectCache();
 
-    // Create the issue via gh CLI (REST is simpler here)
+    // Create the issue via gh CLI (outputs URL, e.g. https://github.com/owner/repo/issues/123)
     const issueArgs = [
       "issue",
       "create",
@@ -410,25 +410,32 @@ export class GitHubProjectsProvider implements IBoardProvider {
       input.body,
       "--repo",
       repo,
-      "--json",
-      "number,id,url",
     ];
 
     if (input.labels && input.labels.length > 0) {
       issueArgs.push("--label", input.labels.join(","));
     }
 
-    const issueOutput = execFileSync("gh", issueArgs, {
+    const issueUrl = execFileSync("gh", issueArgs, {
       cwd: this.cwd,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
-    });
+    }).trim();
 
-    const issueJson = JSON.parse(issueOutput) as {
-      number: number;
-      id: string;
-      url: string;
-    };
+    const issueNumber = parseInt(issueUrl.split("/").pop() ?? "", 10);
+    if (!issueNumber) {
+      throw new Error(`Failed to parse issue number from URL: ${issueUrl}`);
+    }
+
+    // Fetch the node ID needed for the GraphQL project mutation
+    const [owner, repoName] = repo.split("/");
+    const nodeIdOutput = execFileSync(
+      "gh",
+      ["api", `repos/${owner}/${repoName}/issues/${issueNumber}`, "--jq", ".node_id"],
+      { cwd: this.cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
+    ).trim();
+
+    const issueJson = { number: issueNumber, id: nodeIdOutput, url: issueUrl };
 
     // Add the issue to the project board
     const addData = graphql<IAddItemData>(
