@@ -162,6 +162,7 @@ export interface DoctorCheck {
 export interface IScheduleInfo {
   executor: { schedule: string; installed: boolean; nextRun: string | null };
   reviewer: { schedule: string; installed: boolean; nextRun: string | null };
+  qa: { schedule: string; installed: boolean; nextRun: string | null };
   paused: boolean;
   entries: string[];
 }

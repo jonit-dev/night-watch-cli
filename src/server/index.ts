@@ -178,7 +178,7 @@ function handleGetLogs(projectDir: string, _config: INightWatchConfig, req: Requ
   try {
     const { name } = req.params;
 
-    const validNames = ["executor", "reviewer"];
+    const validNames = ["executor", "reviewer", "qa"];
     if (!validNames.includes(name as string)) {
       res.status(400).json({ error: `Invalid log name. Must be one of: ${validNames.join(", ")}` });
       return;
@@ -504,6 +504,11 @@ function handleGetScheduleInfo(projectDir: string, config: INightWatchConfig, _r
         installed: installed && config.reviewerEnabled,
         nextRun: installed && config.reviewerEnabled ? computeNextRun(config.reviewerSchedule) : null,
       },
+      qa: {
+        schedule: config.qa.schedule,
+        installed: installed && config.qa.enabled,
+        nextRun: installed && config.qa.enabled ? computeNextRun(config.qa.schedule) : null,
+      },
       paused: !installed,
       entries,
     });
@@ -576,6 +581,34 @@ function handlePutRoadmapToggle(
   }
 }
 
+// ==================== Board Cache ====================
+
+interface IBoardCache {
+  data: unknown;
+  timestamp: number;
+}
+
+const BOARD_CACHE_TTL_MS = 60_000; // 60 seconds
+const boardCacheMap = new Map<string, IBoardCache>();
+
+function getCachedBoardData(projectDir: string): unknown | null {
+  const entry = boardCacheMap.get(projectDir);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > BOARD_CACHE_TTL_MS) {
+    boardCacheMap.delete(projectDir);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCachedBoardData(projectDir: string, data: unknown): void {
+  boardCacheMap.set(projectDir, { data, timestamp: Date.now() });
+}
+
+function invalidateBoardCache(projectDir: string): void {
+  boardCacheMap.delete(projectDir);
+}
+
 // ==================== Board Handlers ====================
 
 function getBoardProvider(config: INightWatchConfig, projectDir: string) {
@@ -592,6 +625,13 @@ async function handleGetBoardStatus(projectDir: string, config: INightWatchConfi
       res.status(404).json({ error: "Board not configured" });
       return;
     }
+
+    const cached = getCachedBoardData(projectDir);
+    if (cached) {
+      res.json(cached);
+      return;
+    }
+
     const issues = await provider.getAllIssues();
     const columns: Record<BoardColumnName, typeof issues> = {
       Draft: [], Ready: [], "In Progress": [], Review: [], Done: [],
@@ -600,7 +640,10 @@ async function handleGetBoardStatus(projectDir: string, config: INightWatchConfi
       const col = issue.column ?? "Draft";
       columns[col].push(issue);
     }
-    res.json({ enabled: true, columns });
+
+    const result = { enabled: true, columns };
+    setCachedBoardData(projectDir, result);
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
   }
@@ -637,6 +680,7 @@ async function handlePostBoardIssue(projectDir: string, config: INightWatchConfi
       return;
     }
     const issue = await provider.createIssue({ title: title.trim(), body: body ?? "", column });
+    invalidateBoardCache(projectDir);
     res.status(201).json(issue);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
@@ -661,6 +705,7 @@ async function handlePatchBoardIssueMove(projectDir: string, config: INightWatch
       return;
     }
     await provider.moveIssue(issueNumber, column);
+    invalidateBoardCache(projectDir);
     res.json({ moved: true });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
@@ -685,6 +730,7 @@ async function handlePostBoardIssueComment(projectDir: string, config: INightWat
       return;
     }
     await provider.commentOnIssue(issueNumber, body);
+    invalidateBoardCache(projectDir);
     res.json({ commented: true });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
@@ -704,6 +750,7 @@ async function handleDeleteBoardIssue(projectDir: string, config: INightWatchCon
       return;
     }
     await provider.closeIssue(issueNumber);
+    invalidateBoardCache(projectDir);
     res.json({ closed: true });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : String(error) });

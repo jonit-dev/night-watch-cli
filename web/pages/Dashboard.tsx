@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, CheckCircle, Clock, ArrowRight, AlertCircle, Calendar, XCircle } from 'lucide-react';
+import { Activity, CheckCircle, Clock, ArrowRight, AlertCircle, Calendar, XCircle, TestTube2 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import { useApi, fetchStatus, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, useStatusStream, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
@@ -89,6 +89,7 @@ const Dashboard: React.FC = () => {
 
   const executorProcess = currentStatus.processes.find(p => p.name === 'executor');
   const reviewerProcess = currentStatus.processes.find(p => p.name === 'reviewer');
+  const qaProcess = currentStatus.processes.find(p => p.name === 'qa');
 
   const handleCancelProcess = async (type: 'run' | 'review') => {
     setCancellingProcess(type);
@@ -300,6 +301,23 @@ const Dashboard: React.FC = () => {
                   <Button size="sm" variant="ghost" onClick={() => navigate('/logs')} disabled={!reviewerProcess?.running}>View Log</Button>
                 </div>
              </div>
+             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
+                <div className="flex items-center space-x-3">
+                  <div className={`h-2.5 w-2.5 rounded-full ${qaProcess?.running ? 'bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-slate-700'}`}></div>
+                  <div>
+                    <div className={`font-medium ${qaProcess?.running ? 'text-slate-200' : 'text-slate-400'}`}>QA</div>
+                    <div className="text-xs text-slate-500">
+                      {qaProcess?.running
+                        ? `PID: ${qaProcess.pid} • Running`
+                        : 'Idle'
+                      }
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>
+                </div>
+             </div>
           </div>
         </Card>
 
@@ -334,6 +352,19 @@ const Dashboard: React.FC = () => {
                     <div className={`text-sm font-medium ${scheduleInfo?.reviewer.installed ? 'text-slate-200' : 'text-slate-500'}`}>Reviewer</div>
                     <div className="text-xs text-slate-500">
                       {scheduleInfo?.paused ? 'Paused' : formatNextRun(scheduleInfo?.reviewer.nextRun)}
+                    </div>
+                  </div>
+                </div>
+             </div>
+             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
+                <div className="flex items-center space-x-3">
+                  <div className={`p-1.5 rounded-md ${scheduleInfo?.qa?.installed ? 'bg-green-500/10 text-green-400' : 'bg-slate-800 text-slate-500'}`}>
+                    <TestTube2 className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className={`text-sm font-medium ${scheduleInfo?.qa?.installed ? 'text-slate-200' : 'text-slate-500'}`}>QA</div>
+                    <div className="text-xs text-slate-500">
+                      {scheduleInfo?.paused ? 'Paused' : formatNextRun(scheduleInfo?.qa?.nextRun)}
                     </div>
                   </div>
                 </div>
