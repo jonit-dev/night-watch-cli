@@ -14,6 +14,7 @@ import {
   VALID_PROVIDERS,
 } from '../constants.js';
 import { Provider } from '../types.js';
+import { createBoardProvider } from '../board/factory.js';
 import {
   createTable,
   header,
@@ -475,8 +476,43 @@ export function initCommand(program: Command): void {
         success(`Created ${configPath}`);
       }
 
-      // Step 9: Register in global registry
-      step(9, 10, 'Registering project in global registry...');
+      // Step 9: Create GitHub Project board (only when repo has a GitHub remote)
+      step(9, 11, 'Setting up GitHub Project board...');
+      const existingRaw = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
+      const existingBoard = existingRaw.boardProvider as { projectNumber?: number } | undefined;
+      if (existingBoard?.projectNumber && !force) {
+        info(`Board already configured (#${existingBoard.projectNumber}), skipping.`);
+      } else {
+        // Check for a GitHub remote before attempting board setup
+        let hasGitHubRemote = false;
+        try {
+          const remoteUrl = execSync('git remote get-url origin', {
+            cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe']
+          }).trim();
+          hasGitHubRemote = remoteUrl.includes('github.com');
+        } catch { /* no remote */ }
+
+        if (!hasGitHubRemote) {
+          info('No GitHub remote detected — skipping board setup. Run `night-watch board setup` manually.');
+        } else {
+          try {
+            const provider = createBoardProvider({ enabled: true, provider: 'github' }, cwd);
+            const boardTitle = `${projectName} Night Watch`;
+            const board = await provider.setupBoard(boardTitle);
+            // Update the config file with the projectNumber
+            const rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
+            rawConfig.boardProvider = { enabled: true, provider: 'github', projectNumber: board.number };
+            fs.writeFileSync(configPath, JSON.stringify(rawConfig, null, 2) + '\n');
+            success(`GitHub Project board "${boardTitle}" ready (#${board.number})`);
+          } catch (boardErr) {
+            console.warn(`  Warning: Could not set up GitHub Project board: ${boardErr instanceof Error ? boardErr.message : String(boardErr)}`);
+            info('Run `night-watch board setup` to create the board manually.');
+          }
+        }
+      }
+
+      // Step 10: Register in global registry
+      step(10, 11, 'Registering project in global registry...');
       try {
         const { registerProject } = await import('../utils/registry.js');
         const entry = registerProject(cwd);
@@ -485,8 +521,8 @@ export function initCommand(program: Command): void {
         console.warn(`  Warning: Could not register in global registry: ${regErr instanceof Error ? regErr.message : String(regErr)}`);
       }
 
-      // Step 10: Print summary
-      step(10, 10, 'Initialization complete!');
+      // Step 11: Print summary
+      step(11, 11, 'Initialization complete!');
 
       // Summary with table
       header('Initialization Complete');

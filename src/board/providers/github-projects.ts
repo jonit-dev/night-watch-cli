@@ -17,8 +17,17 @@ import { getRepoNwo, getViewerLogin, graphql } from "./github-graphql.js";
 
 interface IProjectV2Node {
   id: string;
+  number: number;
   title: string;
   url: string;
+}
+
+interface IListProjectsData {
+  viewer: {
+    projectsV2: {
+      nodes: IProjectV2Node[];
+    };
+  };
 }
 
 interface IGetUserProjectData {
@@ -228,6 +237,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
           user(login: $login) {
             projectV2(number: $number) {
               id
+              number
               title
               url
             }
@@ -250,6 +260,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
           organization(login: $login) {
             projectV2(number: $number) {
               id
+              number
               title
               url
             }
@@ -308,7 +319,111 @@ export class GitHubProjectsProvider implements IBoardProvider {
   // IBoardProvider implementation
   // -------------------------------------------------------------------------
 
+  /**
+   * Find an existing project by title among the viewer's first 50 projects.
+   * Returns null if not found.
+   */
+  private findExistingProject(title: string): IProjectV2Node | null {
+    try {
+      const data = graphql<IListProjectsData>(
+        `query ListProjects {
+          viewer {
+            projectsV2(first: 50) {
+              nodes { id number title url }
+            }
+          }
+        }`,
+        {},
+        this.cwd
+      );
+      return data.viewer.projectsV2.nodes.find((p) => p.title === title) ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Ensure the Status field on an existing project has all five Night Watch
+   * lifecycle columns, updating it via GraphQL if any are missing.
+   */
+  private ensureStatusColumns(projectId: string): void {
+    const fieldData = graphql<IStatusFieldData>(
+      `query GetStatusField($projectId: ID!) {
+        node(id: $projectId) {
+          ... on ProjectV2 {
+            field(name: "Status") {
+              ... on ProjectV2SingleSelectField {
+                id
+                options { id name }
+              }
+            }
+          }
+        }
+      }`,
+      { projectId },
+      this.cwd
+    );
+
+    const field = fieldData.node?.field;
+    if (!field) return;
+
+    const existing = new Set(field.options.map((o) => o.name));
+    const required = ["Draft", "Ready", "In Progress", "Review", "Done"];
+    const missing = required.filter((n) => !existing.has(n));
+    if (missing.length === 0) return;
+
+    // Rebuild full options list in the correct order
+    interface IUpdateFieldData {
+      updateProjectV2Field: {
+        projectV2Field: { id: string; options: IStatusFieldOption[] };
+      };
+    }
+    const colorMap: Record<string, string> = {
+      Draft: "GRAY",
+      Ready: "BLUE",
+      "In Progress": "YELLOW",
+      Review: "ORANGE",
+      Done: "GREEN",
+    };
+    const allOptions = required.map((name) => ({
+      name,
+      color: colorMap[name],
+      description: "",
+    }));
+    graphql<IUpdateFieldData>(
+      `mutation UpdateField($fieldId: ID!) {
+        updateProjectV2Field(input: {
+          fieldId: $fieldId,
+          singleSelectOptions: [
+            { name: "Draft",       color: GRAY,   description: "" },
+            { name: "Ready",       color: BLUE,   description: "" },
+            { name: "In Progress", color: YELLOW, description: "" },
+            { name: "Review",      color: ORANGE, description: "" },
+            { name: "Done",        color: GREEN,  description: "" }
+          ]
+        }) {
+          projectV2Field {
+            ... on ProjectV2SingleSelectField {
+              id
+              options { id name }
+            }
+          }
+        }
+      }`,
+      { fieldId: field.id, allOptions },
+      this.cwd
+    );
+  }
+
   async setupBoard(title: string): Promise<IBoardInfo> {
+    // Find or create — avoid duplicating boards on re-runs
+    const existing = this.findExistingProject(title);
+    if (existing) {
+      this.cachedProjectId = existing.id;
+      this.ensureStatusColumns(existing.id);
+      return { id: existing.id, number: existing.number, title: existing.title, url: existing.url };
+    }
+
     // Resolve the authenticated user/org node ID
     const viewerData = graphql<IViewerData>(
       `query { viewer { id login } }`,
@@ -367,7 +482,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
     this.cachedFieldId = field.id;
     this.cachedOptionIds = new Map(field.options.map((o) => [o.name, o.id]));
 
-    return { id: project.id, title: project.title, url: project.url };
+    return { id: project.id, number: project.number, title: project.title, url: project.url };
   }
 
   async getBoard(): Promise<IBoardInfo | null> {
@@ -382,7 +497,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
       if (!node) {
         return null;
       }
-      return { id: node.id, title: node.title, url: node.url };
+      return { id: node.id, number: node.number, title: node.title, url: node.url };
     } catch {
       return null;
     }

@@ -26,9 +26,10 @@ function viewerLoginResponse(login = "octocat"): string {
 function projectV2Response(
   id = "project-node-id",
   title = "My Board",
-  url = "https://github.com/users/octocat/projects/1"
+  url = "https://github.com/users/octocat/projects/1",
+  number = 1
 ): string {
-  return gqlResponse({ user: { projectV2: { id, title, url } } });
+  return gqlResponse({ user: { projectV2: { id, number, title, url } } });
 }
 
 /** Build a Status field GraphQL response with the five lifecycle columns. */
@@ -123,6 +124,12 @@ describe("GitHubProjectsProvider", () => {
   describe("setupBoard", () => {
     it("creates a project and Status field with five columns", async () => {
       mockExecFileSync
+        // findExistingProject → no match
+        .mockReturnValueOnce(
+          gqlResponse({
+            viewer: { projectsV2: { nodes: [] } },
+          }) as unknown as Buffer
+        )
         // viewer query { viewer { id login } }
         .mockReturnValueOnce(
           gqlResponse({
@@ -165,6 +172,7 @@ describe("GitHubProjectsProvider", () => {
 
       expect(board).toEqual({
         id: "project-node-id",
+        number: 42,
         title: "My Board",
         url: "https://github.com/orgs/owner/projects/42",
       });
@@ -215,6 +223,7 @@ describe("GitHubProjectsProvider", () => {
 
       expect(board).toEqual({
         id: "project-node-id",
+        number: 1,
         title: "My Board",
         url: "https://github.com/users/octocat/projects/1",
       });

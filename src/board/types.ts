@@ -6,6 +6,7 @@ export const BOARD_COLUMNS: BoardColumnName[] = [
 
 export interface IBoardInfo {
   id: string;
+  number: number;
   title: string;
   url: string;
 }

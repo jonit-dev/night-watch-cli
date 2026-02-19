@@ -11,6 +11,7 @@ import { createTable, dim, header, info } from "../utils/ui.js";
 
 export interface IPrsOptions {
   json?: boolean;
+  debug?: boolean;
 }
 
 /**
@@ -61,8 +62,14 @@ export function prsCommand(program: Command): void {
     .command("prs")
     .description("List matching PRs with CI status and review scores")
     .option("--json", "Output PRs as JSON")
+    .option("--debug", "Enable debug logging to show raw API data")
     .action(async (options: IPrsOptions) => {
       try {
+        // Enable debug mode if requested
+        if (options.debug) {
+          process.env.DEBUG_PR_DATA = "1";
+        }
+
         const projectDir = process.cwd();
         const config = loadConfig(projectDir);
         const prs = collectPrInfo(projectDir, config.branchPatterns);

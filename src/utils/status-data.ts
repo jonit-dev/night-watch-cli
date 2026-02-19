@@ -401,57 +401,130 @@ export function countOpenPRs(projectDir: string, branchPatterns: string[]): numb
  * Derive CI status from gh statusCheckRollup data
  * Supports both CheckRun (status: "COMPLETED", "IN_PROGRESS", etc.)
  * and StatusContext (state: "SUCCESS", "FAILURE", "PENDING", etc.) types
+ *
+ * Status derivation priority:
+ * 1. If any check has FAILURE, ERROR, CANCELLED, or TIMED_OUT conclusion → "fail"
+ * 2. If all checks have SUCCESS or NEUTRAL conclusion → "pass"
+ * 3. If any check has IN_PROGRESS, QUEUED, or PENDING status → "pending"
+ * 4. Otherwise → "unknown"
  */
 function deriveCiStatus(
-  checks?: Array<{ conclusion?: string; status?: string; state?: string }> | null
+  checks?: Array<{ conclusion?: string | null; status?: string | null; state?: string | null }> | null
 ): IPrInfo["ciStatus"] {
-  if (!checks || checks.length === 0) return "unknown";
+  // Handle null, undefined, or empty array
+  if (!checks || !Array.isArray(checks) || checks.length === 0) {
+    if (process.env.DEBUG_PR_DATA === "1") {
+      console.log("[DEBUG] deriveCiStatus: No checks available, returning 'unknown'");
+    }
+    return "unknown";
+  }
+
+  if (process.env.DEBUG_PR_DATA === "1") {
+    console.log("[DEBUG] deriveCiStatus: Processing", checks.length, "checks");
+    console.log("[DEBUG] deriveCiStatus: checks =", JSON.stringify(checks, null, 2));
+  }
+
+  // Normalize check data - handle both CheckRun and StatusContext formats
+  const normalizedChecks = checks.map((c) => ({
+    conclusion: c.conclusion?.toUpperCase() ?? null,
+    status: c.status?.toUpperCase() ?? null,
+    state: c.state?.toUpperCase() ?? null,
+  }));
 
   // Check for failures in CheckRun conclusion or StatusContext state
-  const hasFailure = checks.some((c) => {
-    const conclusion = c.conclusion?.toUpperCase();
-    const state = c.state?.toUpperCase();
+  // FAILURE, ERROR, CANCELLED, TIMED_OUT all count as failures
+  const hasFailure = normalizedChecks.some((c) => {
+    const failConclusions = ["FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"];
+    const failStates = ["FAILURE", "ERROR"];
     return (
-      conclusion === "FAILURE" ||
-      conclusion === "ERROR" ||
-      conclusion === "CANCELLED" ||
-      conclusion === "TIMED_OUT" ||
-      state === "FAILURE" ||
-      state === "ERROR"
+      (c.conclusion !== null && failConclusions.includes(c.conclusion)) ||
+      (c.state !== null && failStates.includes(c.state))
     );
   });
-  if (hasFailure) return "fail";
+  if (hasFailure) {
+    if (process.env.DEBUG_PR_DATA === "1") {
+      console.log("[DEBUG] deriveCiStatus: Found failure, returning 'fail'");
+    }
+    return "fail";
+  }
 
-  // Check if all checks are complete (CheckRun uses status, StatusContext uses state)
-  const allComplete = checks.every((c) => {
-    const status = c.status?.toUpperCase();
-    const state = c.state?.toUpperCase();
-    const conclusion = c.conclusion?.toUpperCase();
-    // CheckRun: status === "COMPLETED" or conclusion === "SUCCESS"/"FAILURE"
-    // StatusContext: state === "SUCCESS" or "FAILURE" (not PENDING)
+  // Check if any checks are still pending/in-progress
+  const hasPending = normalizedChecks.some((c) => {
+    const pendingStatuses = ["IN_PROGRESS", "QUEUED", "PENDING", "WAITING", "REQUESTED"];
+    const pendingStates = ["PENDING", "IN_PROGRESS"];
     return (
-      status === "COMPLETED" ||
-      state === "SUCCESS" ||
-      state === "FAILURE" ||
-      conclusion === "SUCCESS" ||
-      conclusion === "FAILURE"
+      (c.status !== null && pendingStatuses.includes(c.status)) ||
+      (c.state !== null && pendingStates.includes(c.state))
     );
   });
-  if (allComplete) return "pass";
+  if (hasPending) {
+    if (process.env.DEBUG_PR_DATA === "1") {
+      console.log("[DEBUG] deriveCiStatus: Found pending checks, returning 'pending'");
+    }
+    return "pending";
+  }
 
-  return "pending";
+  // Check if all checks are complete (success or neutral)
+  const allComplete = normalizedChecks.every((c) => {
+    const completeConclusions = ["SUCCESS", "NEUTRAL", "SKIPPED"];
+    const completeStatuses = ["COMPLETED"];
+    const completeStates = ["SUCCESS"];
+
+    // If there's a conclusion and it's a success/neutral state
+    if (c.conclusion !== null && completeConclusions.includes(c.conclusion)) {
+      return true;
+    }
+    // If there's a status and it's completed
+    if (c.status !== null && completeStatuses.includes(c.status)) {
+      return true;
+    }
+    // If there's a state and it's success
+    if (c.state !== null && completeStates.includes(c.state)) {
+      return true;
+    }
+    return false;
+  });
+  if (allComplete) {
+    if (process.env.DEBUG_PR_DATA === "1") {
+      console.log("[DEBUG] deriveCiStatus: All checks complete, returning 'pass'");
+    }
+    return "pass";
+  }
+
+  // Default to unknown if we can't determine status
+  if (process.env.DEBUG_PR_DATA === "1") {
+    console.log("[DEBUG] deriveCiStatus: Could not determine status, returning 'unknown'");
+  }
+  return "unknown";
 }
 
 /**
  * Derive review score from gh reviewDecision field
  * Maps GitHub review decisions to a numeric score (0-100)
  * Returns null if no review has been submitted or review is required
+ *
+ * GitHub reviewDecision values:
+ * - "APPROVED" — PR has been approved by required reviewers → 100
+ * - "CHANGES_REQUESTED" — Reviewer requested changes → 0
+ * - "REVIEW_REQUIRED" — PR requires review but hasn't been reviewed yet → null
+ * - "" / null / undefined — No review required or not yet reviewed → null
  */
 function deriveReviewScore(reviewDecision?: string | null): number | null {
-  // reviewDecision can be null, undefined, or empty string (meaning no review yet)
-  if (!reviewDecision || reviewDecision === "") return null;
+  // Handle null, undefined, or empty string (meaning no review yet)
+  if (reviewDecision === null || reviewDecision === undefined || reviewDecision === "") {
+    if (process.env.DEBUG_PR_DATA === "1") {
+      console.log("[DEBUG] deriveReviewScore: No review decision, returning null");
+    }
+    return null;
+  }
 
-  switch (reviewDecision.toUpperCase()) {
+  const normalizedDecision = reviewDecision.toUpperCase();
+
+  if (process.env.DEBUG_PR_DATA === "1") {
+    console.log("[DEBUG] deriveReviewScore: reviewDecision =", reviewDecision, "-> normalized:", normalizedDecision);
+  }
+
+  switch (normalizedDecision) {
     case "APPROVED":
       return 100;
     case "CHANGES_REQUESTED":
@@ -459,6 +532,10 @@ function deriveReviewScore(reviewDecision?: string | null): number | null {
     case "REVIEW_REQUIRED":
       return null;
     default:
+      // Handle any unknown values gracefully
+      if (process.env.DEBUG_PR_DATA === "1") {
+        console.log("[DEBUG] deriveReviewScore: Unknown review decision:", reviewDecision);
+      }
       return null;
   }
 }
@@ -489,33 +566,60 @@ export function collectPrInfo(projectDir: string, branchPatterns: string[]): IPr
       }
     );
 
+    if (process.env.DEBUG_PR_DATA === "1") {
+      console.log("[DEBUG] collectPrInfo: Raw gh output:", output);
+    }
+
     interface IGhPr {
       number: number;
       title: string;
       headRefName: string;
       url: string;
       statusCheckRollup?: Array<{
-        conclusion?: string;
-        status?: string;
-        state?: string;
+        conclusion?: string | null;
+        status?: string | null;
+        state?: string | null;
       }> | null;
       reviewDecision?: string | null;
     }
 
     const prs: IGhPr[] = JSON.parse(output);
+
+    if (process.env.DEBUG_PR_DATA === "1") {
+      console.log("[DEBUG] collectPrInfo: Parsed", prs.length, "PRs from gh CLI");
+    }
+
     return prs
-      .filter((pr) =>
-        branchPatterns.some((pattern) => pr.headRefName.startsWith(pattern))
-      )
-      .map((pr) => ({
-        number: pr.number,
-        title: pr.title,
-        branch: pr.headRefName,
-        url: pr.url,
-        ciStatus: deriveCiStatus(pr.statusCheckRollup),
-        reviewScore: deriveReviewScore(pr.reviewDecision),
-      }));
-  } catch {
+      .filter((pr) => {
+        const matches = branchPatterns.some((pattern) => pr.headRefName.startsWith(pattern));
+        if (process.env.DEBUG_PR_DATA === "1" && !matches) {
+          console.log("[DEBUG] collectPrInfo: Filtering out PR #" + pr.number + " (" + pr.headRefName + ") - doesn't match branch patterns");
+        }
+        return matches;
+      })
+      .map((pr) => {
+        if (process.env.DEBUG_PR_DATA === "1") {
+          console.log("[DEBUG] collectPrInfo: Processing PR #" + pr.number);
+          console.log("[DEBUG] collectPrInfo:   statusCheckRollup:", JSON.stringify(pr.statusCheckRollup));
+          console.log("[DEBUG] collectPrInfo:   reviewDecision:", JSON.stringify(pr.reviewDecision));
+        }
+        const result = {
+          number: pr.number,
+          title: pr.title,
+          branch: pr.headRefName,
+          url: pr.url,
+          ciStatus: deriveCiStatus(pr.statusCheckRollup),
+          reviewScore: deriveReviewScore(pr.reviewDecision),
+        };
+        if (process.env.DEBUG_PR_DATA === "1") {
+          console.log("[DEBUG] collectPrInfo:   -> ciStatus:", result.ciStatus, ", reviewScore:", result.reviewScore);
+        }
+        return result;
+      });
+  } catch (error) {
+    if (process.env.DEBUG_PR_DATA === "1") {
+      console.log("[DEBUG] collectPrInfo: Error:", error instanceof Error ? error.message : String(error));
+    }
     return [];
   }
 }
