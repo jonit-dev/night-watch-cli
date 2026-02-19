@@ -7,7 +7,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import { BoardProviderType, IBoardProviderConfig } from "./board/types.js";
-import { ClaudeModel, INightWatchConfig, INotificationConfig, IRoadmapScannerConfig, IWebhookConfig, MergeMethod, NotificationEvent, Provider, WebhookType } from "./types.js";
+import { ClaudeModel, INightWatchConfig, INotificationConfig, IQaConfig, IRoadmapScannerConfig, IWebhookConfig, MergeMethod, NotificationEvent, Provider, QaArtifacts, WebhookType } from "./types.js";
 import {
   CONFIG_FILE_NAME,
   DEFAULT_AUTO_MERGE,
@@ -29,6 +29,7 @@ import {
   DEFAULT_PRD_PRIORITY,
   DEFAULT_PROVIDER,
   DEFAULT_PROVIDER_ENV,
+  DEFAULT_QA,
   DEFAULT_REVIEWER_ENABLED,
   DEFAULT_REVIEWER_MAX_RUNTIME,
   DEFAULT_REVIEWER_SCHEDULE,
@@ -87,6 +88,9 @@ export function getDefaultConfig(): INightWatchConfig {
     // Rate-limit fallback
     fallbackOnRateLimit: DEFAULT_FALLBACK_ON_RATE_LIMIT,
     claudeModel: DEFAULT_CLAUDE_MODEL,
+
+    // QA process
+    qa: { ...DEFAULT_QA },
   };
 }
 
@@ -254,6 +258,26 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     normalized.autoMergeMethod = mergeMethod as MergeMethod;
   }
 
+  // QA Configuration
+  const rawQa = readObject(rawConfig.qa);
+  if (rawQa) {
+    const artifactsValue = readString(rawQa.artifacts);
+    const artifacts = artifactsValue && ["screenshot", "video", "both"].includes(artifactsValue)
+      ? (artifactsValue as QaArtifacts)
+      : DEFAULT_QA.artifacts;
+
+    const qa: IQaConfig = {
+      enabled: readBoolean(rawQa.enabled) ?? DEFAULT_QA.enabled,
+      schedule: readString(rawQa.schedule) ?? DEFAULT_QA.schedule,
+      maxRuntime: readNumber(rawQa.maxRuntime) ?? DEFAULT_QA.maxRuntime,
+      branchPatterns: readStringArray(rawQa.branchPatterns) ?? DEFAULT_QA.branchPatterns,
+      artifacts,
+      skipLabel: readString(rawQa.skipLabel) ?? DEFAULT_QA.skipLabel,
+      autoInstallPlaywright: readBoolean(rawQa.autoInstallPlaywright) ?? DEFAULT_QA.autoInstallPlaywright,
+    };
+    normalized.qa = qa;
+  }
+
   return normalized;
 }
 
@@ -349,6 +373,8 @@ function mergeConfigs(
     if (fileConfig.autoMergeMethod !== undefined) merged.autoMergeMethod = fileConfig.autoMergeMethod;
     if (fileConfig.fallbackOnRateLimit !== undefined) merged.fallbackOnRateLimit = fileConfig.fallbackOnRateLimit;
     if (fileConfig.claudeModel !== undefined) merged.claudeModel = fileConfig.claudeModel;
+    if (fileConfig.qa !== undefined)
+      merged.qa = { ...merged.qa, ...fileConfig.qa };
   }
 
   // Merge env config (takes precedence)
@@ -385,6 +411,8 @@ function mergeConfigs(
   if (envConfig.autoMergeMethod !== undefined) merged.autoMergeMethod = envConfig.autoMergeMethod;
   if (envConfig.fallbackOnRateLimit !== undefined) merged.fallbackOnRateLimit = envConfig.fallbackOnRateLimit;
   if (envConfig.claudeModel !== undefined) merged.claudeModel = envConfig.claudeModel;
+  if (envConfig.qa !== undefined)
+    merged.qa = { ...merged.qa, ...envConfig.qa };
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
 
@@ -574,6 +602,73 @@ export function loadConfig(projectDir: string): INightWatchConfig {
     const model = process.env.NW_CLAUDE_MODEL;
     if (VALID_CLAUDE_MODELS.includes(model as ClaudeModel)) {
       envConfig.claudeModel = model as ClaudeModel;
+    }
+  }
+
+  const qaBaseConfig = (): IQaConfig => envConfig.qa ?? fileConfig?.qa ?? DEFAULT_QA;
+
+  // QA configuration from env vars
+  if (process.env.NW_QA_ENABLED) {
+    const qaEnabled = parseBoolean(process.env.NW_QA_ENABLED);
+    if (qaEnabled !== null) {
+      envConfig.qa = {
+        ...qaBaseConfig(),
+        enabled: qaEnabled,
+      };
+    }
+  }
+
+  if (process.env.NW_QA_SCHEDULE) {
+    envConfig.qa = {
+      ...qaBaseConfig(),
+      schedule: process.env.NW_QA_SCHEDULE,
+    };
+  }
+
+  if (process.env.NW_QA_MAX_RUNTIME) {
+    const qaMaxRuntime = parseInt(process.env.NW_QA_MAX_RUNTIME, 10);
+    if (!isNaN(qaMaxRuntime) && qaMaxRuntime > 0) {
+      envConfig.qa = {
+        ...qaBaseConfig(),
+        maxRuntime: qaMaxRuntime,
+      };
+    }
+  }
+
+  if (process.env.NW_QA_ARTIFACTS) {
+    const artifacts = process.env.NW_QA_ARTIFACTS;
+    if (["screenshot", "video", "both"].includes(artifacts)) {
+      envConfig.qa = {
+        ...qaBaseConfig(),
+        artifacts: artifacts as QaArtifacts,
+      };
+    }
+  }
+
+  if (process.env.NW_QA_SKIP_LABEL) {
+    envConfig.qa = {
+      ...qaBaseConfig(),
+      skipLabel: process.env.NW_QA_SKIP_LABEL,
+    };
+  }
+
+  if (process.env.NW_QA_AUTO_INSTALL_PLAYWRIGHT) {
+    const autoInstall = parseBoolean(process.env.NW_QA_AUTO_INSTALL_PLAYWRIGHT);
+    if (autoInstall !== null) {
+      envConfig.qa = {
+        ...qaBaseConfig(),
+        autoInstallPlaywright: autoInstall,
+      };
+    }
+  }
+
+  if (process.env.NW_QA_BRANCH_PATTERNS) {
+    const patterns = process.env.NW_QA_BRANCH_PATTERNS.split(",").map((s) => s.trim()).filter(Boolean);
+    if (patterns.length > 0) {
+      envConfig.qa = {
+        ...qaBaseConfig(),
+        branchPatterns: patterns,
+      };
     }
   }
 

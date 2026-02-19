@@ -1197,13 +1197,13 @@ describe("status-data utilities", () => {
   });
 
   describe("collectLogInfo", () => {
-    it("should collect info for both executor and reviewer logs", () => {
+    it("should collect info for executor, reviewer, and qa logs", () => {
       const logDir = path.join(tempDir, "logs");
       fs.mkdirSync(logDir, { recursive: true });
       fs.writeFileSync(path.join(logDir, "night-watch.log"), "Executor line 1");
 
       const result = collectLogInfo(tempDir);
-      expect(result).toHaveLength(2);
+      expect(result).toHaveLength(3);
 
       const executorLog = result.find((l) => l.name === "executor");
       expect(executorLog).toBeDefined();
@@ -1213,16 +1213,21 @@ describe("status-data utilities", () => {
       const reviewerLog = result.find((l) => l.name === "reviewer");
       expect(reviewerLog).toBeDefined();
       expect(reviewerLog!.exists).toBe(false);
+
+      const qaLog = result.find((l) => l.name === "qa");
+      expect(qaLog).toBeDefined();
+      expect(qaLog!.exists).toBe(false);
     });
 
-    it("should use correct file names (night-watch.log and night-watch-pr-reviewer.log)", () => {
+    it("should use correct file names (night-watch.log, night-watch-pr-reviewer.log, night-watch-qa.log)", () => {
       const logDir = path.join(tempDir, "logs");
       fs.mkdirSync(logDir, { recursive: true });
       fs.writeFileSync(path.join(logDir, "night-watch.log"), "Executor line 1");
       fs.writeFileSync(path.join(logDir, "night-watch-pr-reviewer.log"), "Reviewer line 1");
+      fs.writeFileSync(path.join(logDir, "night-watch-qa.log"), "QA line 1");
 
       const result = collectLogInfo(tempDir);
-      expect(result).toHaveLength(2);
+      expect(result).toHaveLength(3);
 
       const executorLog = result.find((l) => l.name === "executor");
       expect(executorLog).toBeDefined();
@@ -1233,6 +1238,11 @@ describe("status-data utilities", () => {
       expect(reviewerLog).toBeDefined();
       expect(reviewerLog!.exists).toBe(true);
       expect(reviewerLog!.path).toContain("night-watch-pr-reviewer.log");
+
+      const qaLog = result.find((l) => l.name === "qa");
+      expect(qaLog).toBeDefined();
+      expect(qaLog!.exists).toBe(true);
+      expect(qaLog!.path).toContain("night-watch-qa.log");
     });
   });
 
@@ -1397,12 +1407,13 @@ describe("status-data utilities", () => {
       expect(snapshot.config).toBe(config);
       expect(Array.isArray(snapshot.prds)).toBe(true);
       expect(Array.isArray(snapshot.processes)).toBe(true);
-      expect(snapshot.processes).toHaveLength(2);
+      expect(snapshot.processes).toHaveLength(3);
       expect(snapshot.processes[0].name).toBe("executor");
       expect(snapshot.processes[1].name).toBe("reviewer");
+      expect(snapshot.processes[2].name).toBe("qa");
       expect(Array.isArray(snapshot.prs)).toBe(true);
       expect(Array.isArray(snapshot.logs)).toBe(true);
-      expect(snapshot.logs).toHaveLength(2);
+      expect(snapshot.logs).toHaveLength(3);
       expect(snapshot.crontab).toHaveProperty("installed");
       expect(snapshot.crontab).toHaveProperty("entries");
       expect(snapshot.activePrd).toBeNull();
