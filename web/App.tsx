@@ -5,6 +5,7 @@ import TopBar from './components/TopBar';
 import Dashboard from './pages/Dashboard';
 import PRDs from './pages/PRDs';
 import PRs from './pages/PRs';
+import Board from './pages/Board';
 import Scheduling from './pages/Scheduling';
 import Logs from './pages/Logs';
 import Settings from './pages/Settings';
@@ -32,6 +33,7 @@ const App: React.FC = () => {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/prds" element={<PRDs />} />
                 <Route path="/prs" element={<PRs />} />
+                <Route path="/board" element={<Board />} />
                 <Route path="/scheduling" element={<Scheduling />} />
                 <Route path="/logs" element={<Logs />} />
                 <Route path="/roadmap" element={<Roadmap />} />

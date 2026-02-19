@@ -15,6 +15,8 @@ import { fileURLToPath } from "url";
 import { CLAIM_FILE_EXTENSION, CONFIG_FILE_NAME, LOG_DIR } from "../constants.js";
 import { INightWatchConfig } from "../types.js";
 import { loadConfig } from "../config.js";
+import { createBoardProvider } from "../board/factory.js";
+import { BOARD_COLUMNS, BoardColumnName } from "../board/types.js";
 import { validateWebhook } from "../commands/doctor.js";
 import { checkLockFile, collectPrInfo, collectPrdInfo, executorLockPath, fetchStatusSnapshot, getLastLogLines, reviewerLockPath } from "../utils/status-data.js";
 import { performCancel } from "../commands/cancel.js";
@@ -572,6 +574,140 @@ function handlePutRoadmapToggle(
   }
 }
 
+// ==================== Board Handlers ====================
+
+function getBoardProvider(config: INightWatchConfig, projectDir: string) {
+  if (!config.boardProvider?.enabled || !config.boardProvider?.projectNumber) {
+    return null;
+  }
+  return createBoardProvider(config.boardProvider, projectDir);
+}
+
+async function handleGetBoardStatus(projectDir: string, config: INightWatchConfig, _req: Request, res: Response): Promise<void> {
+  try {
+    const provider = getBoardProvider(config, projectDir);
+    if (!provider) {
+      res.status(404).json({ error: "Board not configured" });
+      return;
+    }
+    const issues = await provider.getAllIssues();
+    const columns: Record<BoardColumnName, typeof issues> = {
+      Draft: [], Ready: [], "In Progress": [], Review: [], Done: [],
+    };
+    for (const issue of issues) {
+      const col = issue.column ?? "Draft";
+      columns[col].push(issue);
+    }
+    res.json({ enabled: true, columns });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+async function handleGetBoardIssues(projectDir: string, config: INightWatchConfig, _req: Request, res: Response): Promise<void> {
+  try {
+    const provider = getBoardProvider(config, projectDir);
+    if (!provider) {
+      res.status(404).json({ error: "Board not configured" });
+      return;
+    }
+    const issues = await provider.getAllIssues();
+    res.json(issues);
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+async function handlePostBoardIssue(projectDir: string, config: INightWatchConfig, req: Request, res: Response): Promise<void> {
+  try {
+    const provider = getBoardProvider(config, projectDir);
+    if (!provider) {
+      res.status(404).json({ error: "Board not configured" });
+      return;
+    }
+    const { title, body, column } = req.body as { title?: string; body?: string; column?: BoardColumnName };
+    if (!title || typeof title !== "string" || title.trim().length === 0) {
+      res.status(400).json({ error: "title is required" });
+      return;
+    }
+    if (column && !BOARD_COLUMNS.includes(column)) {
+      res.status(400).json({ error: `Invalid column. Must be one of: ${BOARD_COLUMNS.join(", ")}` });
+      return;
+    }
+    const issue = await provider.createIssue({ title: title.trim(), body: body ?? "", column });
+    res.status(201).json(issue);
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+async function handlePatchBoardIssueMove(projectDir: string, config: INightWatchConfig, req: Request, res: Response): Promise<void> {
+  try {
+    const provider = getBoardProvider(config, projectDir);
+    if (!provider) {
+      res.status(404).json({ error: "Board not configured" });
+      return;
+    }
+    const issueNumber = parseInt(req.params.number as string, 10);
+    if (isNaN(issueNumber)) {
+      res.status(400).json({ error: "Invalid issue number" });
+      return;
+    }
+    const { column } = req.body as { column?: BoardColumnName };
+    if (!column || !BOARD_COLUMNS.includes(column)) {
+      res.status(400).json({ error: `Invalid column. Must be one of: ${BOARD_COLUMNS.join(", ")}` });
+      return;
+    }
+    await provider.moveIssue(issueNumber, column);
+    res.json({ moved: true });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+async function handlePostBoardIssueComment(projectDir: string, config: INightWatchConfig, req: Request, res: Response): Promise<void> {
+  try {
+    const provider = getBoardProvider(config, projectDir);
+    if (!provider) {
+      res.status(404).json({ error: "Board not configured" });
+      return;
+    }
+    const issueNumber = parseInt(req.params.number as string, 10);
+    if (isNaN(issueNumber)) {
+      res.status(400).json({ error: "Invalid issue number" });
+      return;
+    }
+    const { body } = req.body as { body?: string };
+    if (!body || typeof body !== "string" || body.trim().length === 0) {
+      res.status(400).json({ error: "body is required" });
+      return;
+    }
+    await provider.commentOnIssue(issueNumber, body);
+    res.json({ commented: true });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+async function handleDeleteBoardIssue(projectDir: string, config: INightWatchConfig, req: Request, res: Response): Promise<void> {
+  try {
+    const provider = getBoardProvider(config, projectDir);
+    if (!provider) {
+      res.status(404).json({ error: "Board not configured" });
+      return;
+    }
+    const issueNumber = parseInt(req.params.number as string, 10);
+    if (isNaN(issueNumber)) {
+      res.status(400).json({ error: "Invalid issue number" });
+      return;
+    }
+    await provider.closeIssue(issueNumber);
+    res.json({ closed: true });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 async function handleCancelAction(projectDir: string, req: Request, res: Response): Promise<void> {
   try {
     const { type = "all" } = req.body as { type?: string };
@@ -788,6 +924,14 @@ export function createApp(projectDir: string): Express {
   app.post("/api/roadmap/scan", (req, res) => handlePostRoadmapScan(projectDir, config, req, res));
   app.put("/api/roadmap/toggle", (req, res) => handlePutRoadmapToggle(projectDir, () => config, reloadConfig, req, res));
 
+  // Board routes
+  app.get("/api/board/status", (req, res) => handleGetBoardStatus(projectDir, config, req, res));
+  app.get("/api/board/issues", (req, res) => handleGetBoardIssues(projectDir, config, req, res));
+  app.post("/api/board/issues", (req, res) => handlePostBoardIssue(projectDir, config, req, res));
+  app.patch("/api/board/issues/:number/move", (req, res) => handlePatchBoardIssueMove(projectDir, config, req, res));
+  app.post("/api/board/issues/:number/comment", (req, res) => handlePostBoardIssueComment(projectDir, config, req, res));
+  app.delete("/api/board/issues/:number", (req, res) => handleDeleteBoardIssue(projectDir, config, req, res));
+
   // Auto-scan timer
   let autoScanTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -946,6 +1090,14 @@ function createProjectRouter(): Router {
   router.get("/roadmap", (req, res) => handleGetRoadmap(dir(req), cfg(req), req, res));
   router.post("/roadmap/scan", (req, res) => handlePostRoadmapScan(dir(req), cfg(req), req, res));
   router.put("/roadmap/toggle", (req, res) => handlePutRoadmapToggle(dir(req), () => cfg(req), () => {}, req, res));
+
+  // Board routes
+  router.get("/board/status", (req, res) => handleGetBoardStatus(dir(req), cfg(req), req, res));
+  router.get("/board/issues", (req, res) => handleGetBoardIssues(dir(req), cfg(req), req, res));
+  router.post("/board/issues", (req, res) => handlePostBoardIssue(dir(req), cfg(req), req, res));
+  router.patch("/board/issues/:number/move", (req, res) => handlePatchBoardIssueMove(dir(req), cfg(req), req, res));
+  router.post("/board/issues/:number/comment", (req, res) => handlePostBoardIssueComment(dir(req), cfg(req), req, res));
+  router.delete("/board/issues/:number", (req, res) => handleDeleteBoardIssue(dir(req), cfg(req), req, res));
 
   return router;
 }

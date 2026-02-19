@@ -270,6 +270,69 @@ export function triggerClearLock(): Promise<{ cleared: boolean }> {
   });
 }
 
+// ==================== Board ====================
+
+export type BoardColumnName = 'Draft' | 'Ready' | 'In Progress' | 'Review' | 'Done';
+
+export const BOARD_COLUMNS: BoardColumnName[] = ['Draft', 'Ready', 'In Progress', 'Review', 'Done'];
+
+export interface IBoardIssue {
+  id: string;
+  number: number;
+  title: string;
+  body: string;
+  url: string;
+  column: BoardColumnName | null;
+  labels: string[];
+  assignees: string[];
+}
+
+export interface IBoardStatus {
+  enabled: boolean;
+  columns: Record<BoardColumnName, IBoardIssue[]>;
+}
+
+export interface ICreateIssueInput {
+  title: string;
+  body: string;
+  column?: BoardColumnName;
+}
+
+export function fetchBoardStatus(): Promise<IBoardStatus> {
+  return apiFetch<IBoardStatus>(apiPath('/api/board/status'));
+}
+
+export function fetchBoardIssues(): Promise<IBoardIssue[]> {
+  return apiFetch<IBoardIssue[]>(apiPath('/api/board/issues'));
+}
+
+export function createBoardIssue(input: ICreateIssueInput): Promise<IBoardIssue> {
+  return apiFetch<IBoardIssue>(apiPath('/api/board/issues'), {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function moveBoardIssue(number: number, column: BoardColumnName): Promise<{ moved: boolean }> {
+  return apiFetch<{ moved: boolean }>(apiPath(`/api/board/issues/${number}/move`), {
+    method: 'PATCH',
+    body: JSON.stringify({ column }),
+  });
+}
+
+export function commentBoardIssue(number: number, body: string): Promise<{ commented: boolean }> {
+  return apiFetch<{ commented: boolean }>(apiPath(`/api/board/issues/${number}/comment`), {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  });
+}
+
+export function closeBoardIssue(number: number): Promise<{ closed: boolean }> {
+  return apiFetch<{ closed: boolean }>(apiPath(`/api/board/issues/${number}`), {
+    method: 'DELETE',
+  });
+}
+
 // ==================== Roadmap Scanner ====================
 // RoadmapItem and RoadmapStatus are imported from @night-watch/types above.
 
