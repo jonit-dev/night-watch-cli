@@ -50,6 +50,21 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
       slicerSchedule: "0 */6 * * *",
       slicerMaxRuntime: 600,
     },
+    templatesDir: ".night-watch/templates",
+    boardProvider: { enabled: true, provider: "github" as const },
+    autoMerge: false,
+    autoMergeMethod: "squash" as const,
+    fallbackOnRateLimit: false,
+    claudeModel: "sonnet" as const,
+    qa: {
+      enabled: false,
+      schedule: "30 1,7,13,19 * * *",
+      maxRuntime: 3600,
+      branchPatterns: [],
+      artifacts: "both" as const,
+      skipLabel: "skip-qa",
+      autoInstallPlaywright: true,
+    },
     ...overrides,
   };
 }
@@ -156,5 +171,93 @@ describe("install command", () => {
 
     const hasSlicerEntry = result.entries.some((entry) => entry.includes("' slice "));
     expect(hasSlicerEntry).toBe(false);
+  });
+
+  it("should add QA crontab entry when qa.enabled is true", () => {
+    const config = createTestConfig({
+      qa: {
+        enabled: true,
+        schedule: "30 1,7,13,19 * * *",
+        maxRuntime: 3600,
+        branchPatterns: [],
+        artifacts: "both",
+        skipLabel: "skip-qa",
+        autoInstallPlaywright: true,
+      },
+    });
+    const result = performInstall(tempDir, config);
+
+    expect(result.success).toBe(true);
+    // executor + reviewer + qa = 3
+    expect(result.entries).toHaveLength(3);
+
+    const qaEntry = result.entries[2];
+    expect(qaEntry).toContain("' qa ");
+    expect(qaEntry).toContain("qa.log");
+    expect(qaEntry).toContain("30 1,7,13,19 * * *");
+    expect(qaEntry).toContain("# night-watch-cli:");
+  });
+
+  it("should not include QA entry when qa.enabled is false", () => {
+    const config = createTestConfig({
+      qa: {
+        enabled: false,
+        schedule: "30 1,7,13,19 * * *",
+        maxRuntime: 3600,
+        branchPatterns: [],
+        artifacts: "both",
+        skipLabel: "skip-qa",
+        autoInstallPlaywright: true,
+      },
+    });
+    const result = performInstall(tempDir, config);
+
+    expect(result.success).toBe(true);
+    expect(result.entries).toHaveLength(2); // executor and reviewer only
+
+    const hasQaEntry = result.entries.some((entry) => entry.includes("' qa "));
+    expect(hasQaEntry).toBe(false);
+  });
+
+  it("should skip QA entry when --no-qa flag is set", () => {
+    const config = createTestConfig({
+      qa: {
+        enabled: true,
+        schedule: "30 1,7,13,19 * * *",
+        maxRuntime: 3600,
+        branchPatterns: [],
+        artifacts: "both",
+        skipLabel: "skip-qa",
+        autoInstallPlaywright: true,
+      },
+    });
+    const result = performInstall(tempDir, config, { noQa: true });
+
+    expect(result.success).toBe(true);
+    expect(result.entries).toHaveLength(2); // executor and reviewer only
+
+    const hasQaEntry = result.entries.some((entry) => entry.includes("' qa "));
+    expect(hasQaEntry).toBe(false);
+  });
+
+  it("should skip QA entry when Commander passes qa=false from --no-qa", () => {
+    const config = createTestConfig({
+      qa: {
+        enabled: true,
+        schedule: "30 1,7,13,19 * * *",
+        maxRuntime: 3600,
+        branchPatterns: [],
+        artifacts: "both",
+        skipLabel: "skip-qa",
+        autoInstallPlaywright: true,
+      },
+    });
+    const result = performInstall(tempDir, config, { qa: false });
+
+    expect(result.success).toBe(true);
+    expect(result.entries).toHaveLength(2); // executor and reviewer only
+
+    const hasQaEntry = result.entries.some((entry) => entry.includes("' qa "));
+    expect(hasQaEntry).toBe(false);
   });
 });

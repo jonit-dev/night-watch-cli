@@ -105,10 +105,32 @@ export interface INightWatchConfig {
 
   /** Git merge method for auto-merge */
   autoMergeMethod: MergeMethod;
+
+  /** QA process configuration */
+  qa: IQaConfig;
+}
+
+export type QaArtifacts = "screenshot" | "video" | "both";
+
+export interface IQaConfig {
+  /** Whether the QA process is enabled */
+  enabled: boolean;
+  /** Cron schedule for QA execution */
+  schedule: string;
+  /** Maximum runtime in seconds for QA */
+  maxRuntime: number;
+  /** Branch patterns to match for QA (defaults to top-level branchPatterns if empty) */
+  branchPatterns: string[];
+  /** What artifacts to capture for UI tests */
+  artifacts: QaArtifacts;
+  /** GitHub label to skip QA (PRs with this label are excluded) */
+  skipLabel: string;
+  /** Auto-install Playwright if missing during QA run */
+  autoInstallPlaywright: boolean;
 }
 
 export type WebhookType = "slack" | "discord" | "telegram";
-export type NotificationEvent = "run_started" | "run_succeeded" | "run_failed" | "run_timeout" | "review_completed" | "pr_auto_merged" | "rate_limit_fallback";
+export type NotificationEvent = "run_started" | "run_succeeded" | "run_failed" | "run_timeout" | "review_completed" | "pr_auto_merged" | "rate_limit_fallback" | "qa_completed";
 export type MergeMethod = "squash" | "merge" | "rebase";
 
 export interface IWebhookConfig {

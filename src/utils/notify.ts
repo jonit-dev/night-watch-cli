@@ -44,6 +44,8 @@ export function getEventEmoji(event: NotificationEvent): string {
       return "\u26A0\uFE0F";
     case "pr_auto_merged":
       return "\uD83D\uDD00";
+    case "qa_completed":
+      return "\uD83E\uDDEA";
   }
 }
 
@@ -66,6 +68,8 @@ export function getEventTitle(event: NotificationEvent): string {
       return "Rate Limit Fallback";
     case "pr_auto_merged":
       return "PR Auto-Merged";
+    case "qa_completed":
+      return "QA Completed";
   }
 }
 
@@ -88,6 +92,8 @@ export function getEventColor(event: NotificationEvent): number {
       return 0xffa500;
     case "pr_auto_merged":
       return 0x9b59b6;
+    case "qa_completed":
+      return 0x2ecc71;
   }
 }
 

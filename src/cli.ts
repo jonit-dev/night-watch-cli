@@ -7,6 +7,7 @@ import { dirname, join } from 'path';
 import { initCommand } from './commands/init.js';
 import { runCommand } from './commands/run.js';
 import { reviewCommand } from './commands/review.js';
+import { qaCommand } from './commands/qa.js';
 import { installCommand } from './commands/install.js';
 import { uninstallCommand } from './commands/uninstall.js';
 import { statusCommand } from './commands/status.js';
@@ -47,6 +48,9 @@ runCommand(program);
 
 // Register review command
 reviewCommand(program);
+
+// Register qa command
+qaCommand(program);
 
 // Register Phase 5 commands
 installCommand(program);

@@ -43,6 +43,106 @@ interface IInitOptions {
   reviewer?: boolean;
 }
 
+function hasPlaywrightDependency(cwd: string): boolean {
+  const packageJsonPath = path.join(cwd, 'package.json');
+  if (!fs.existsSync(packageJsonPath)) {
+    return false;
+  }
+
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8')) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+
+    return Boolean(
+      packageJson.dependencies?.['@playwright/test']
+      || packageJson.dependencies?.playwright
+      || packageJson.devDependencies?.['@playwright/test']
+      || packageJson.devDependencies?.playwright
+    );
+  } catch {
+    return false;
+  }
+}
+
+function detectPlaywright(cwd: string): boolean {
+  if (hasPlaywrightDependency(cwd)) {
+    return true;
+  }
+
+  if (fs.existsSync(path.join(cwd, 'node_modules', '.bin', 'playwright'))) {
+    return true;
+  }
+
+  try {
+    execSync('playwright --version', {
+      cwd,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 1500,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolvePlaywrightInstallCommand(cwd: string): string {
+  if (fs.existsSync(path.join(cwd, 'pnpm-lock.yaml'))) {
+    return 'pnpm add -D @playwright/test';
+  }
+  if (fs.existsSync(path.join(cwd, 'yarn.lock'))) {
+    return 'yarn add -D @playwright/test';
+  }
+  return 'npm install -D @playwright/test';
+}
+
+function promptYesNo(question: string, defaultNo: boolean = true): Promise<boolean> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return Promise.resolve(false);
+  }
+
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+
+    const suffix = defaultNo ? ' [y/N]: ' : ' [Y/n]: ';
+    rl.question(`${question}${suffix}`, (answer) => {
+      rl.close();
+      const normalized = answer.trim().toLowerCase();
+      if (normalized === '') {
+        resolve(!defaultNo);
+        return;
+      }
+      resolve(normalized === 'y' || normalized === 'yes');
+    });
+  });
+}
+
+function installPlaywrightForQa(cwd: string): boolean {
+  try {
+    const installCmd = resolvePlaywrightInstallCommand(cwd);
+    execSync(installCmd, {
+      cwd,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    execSync('npx playwright install chromium', {
+      cwd,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Get the default branch name for the repository
  */
@@ -282,12 +382,13 @@ export function initCommand(program: Command): void {
       const cwd = process.cwd();
       const force = options.force || false;
       const prdDir = options.prdDir || DEFAULT_PRD_DIR;
+      const totalSteps = 12;
 
       console.log();
       header('Night Watch CLI - Initializing');
 
       // Step 1: Verify git repository
-      step(1, 9, 'Checking git repository...');
+      step(1, totalSteps, 'Checking git repository...');
       const gitCheck = checkGitRepo(cwd);
       if (!gitCheck.passed) {
         uiError(gitCheck.message);
@@ -297,7 +398,7 @@ export function initCommand(program: Command): void {
       success(gitCheck.message);
 
       // Step 2: Verify gh CLI
-      step(2, 9, 'Checking GitHub CLI (gh)...');
+      step(2, totalSteps, 'Checking GitHub CLI (gh)...');
       const ghCheck = checkGhCli();
       if (!ghCheck.passed) {
         uiError(ghCheck.message);
@@ -306,7 +407,7 @@ export function initCommand(program: Command): void {
       success(ghCheck.message);
 
       // Step 3: Detect AI providers
-      step(3, 10, 'Detecting AI providers...');
+      step(3, totalSteps, 'Detecting AI providers...');
       let selectedProvider: Provider;
 
       if (options.provider) {
@@ -343,6 +444,25 @@ export function initCommand(program: Command): void {
         }
       }
 
+      // Step 4: Detect test frameworks for QA bootstrap
+      step(4, totalSteps, 'Detecting test frameworks...');
+      const playwrightDetected = detectPlaywright(cwd);
+      if (playwrightDetected) {
+        info('Playwright: detected');
+      } else {
+        info('Playwright: not found');
+        const installPlaywright = await promptYesNo('Install Playwright for QA now?', true);
+        if (installPlaywright) {
+          if (installPlaywrightForQa(cwd)) {
+            success('Installed Playwright test runner and Chromium browser.');
+          } else {
+            console.warn('  Warning: Failed to install Playwright automatically. You can install it later.');
+          }
+        } else {
+          info('Skipping Playwright install. QA can auto-install during execution if enabled.');
+        }
+      }
+
       // Set reviewerEnabled from flag (default: true, --no-reviewer sets to false)
       const reviewerEnabled = options.reviewer !== false;
 
@@ -365,21 +485,21 @@ export function initCommand(program: Command): void {
         '${DEFAULT_BRANCH}': defaultBranch,
       };
 
-      // Step 4: Create PRD directory structure
-      step(4, 10, 'Creating PRD directory structure...');
+      // Step 5: Create PRD directory structure
+      step(5, totalSteps, 'Creating PRD directory structure...');
       const prdDirPath = path.join(cwd, prdDir);
       const doneDirPath = path.join(prdDirPath, 'done');
       ensureDir(doneDirPath);
       success(`Created ${prdDirPath}/`);
       success(`Created ${doneDirPath}/`);
 
-      // Step 5: Create NIGHT-WATCH-SUMMARY.md
-      step(5, 10, 'Creating NIGHT-WATCH-SUMMARY.md...');
+      // Step 6: Create NIGHT-WATCH-SUMMARY.md
+      step(6, totalSteps, 'Creating NIGHT-WATCH-SUMMARY.md...');
       const summaryPath = path.join(prdDirPath, 'NIGHT-WATCH-SUMMARY.md');
       createSummaryFile(summaryPath, force);
 
-      // Step 6: Create logs directory
-      step(6, 10, 'Creating logs directory...');
+      // Step 7: Create logs directory
+      step(7, totalSteps, 'Creating logs directory...');
       const logsPath = path.join(cwd, LOG_DIR);
       ensureDir(logsPath);
       success(`Created ${logsPath}/`);
@@ -387,8 +507,8 @@ export function initCommand(program: Command): void {
       // Add /logs/ to .gitignore
       addToGitignore(cwd);
 
-      // Step 7: Create .claude/commands directory and copy templates
-      step(7, 10, 'Creating Claude slash commands...');
+      // Step 8: Create .claude/commands directory and copy templates
+      step(8, totalSteps, 'Creating Claude slash commands...');
       const commandsDir = path.join(cwd, '.claude', 'commands');
       ensureDir(commandsDir);
       success(`Created ${commandsDir}/`);
@@ -437,8 +557,20 @@ export function initCommand(program: Command): void {
       );
       templateSources.push({ name: 'night-watch-pr-reviewer.md', source: prResult.source });
 
-      // Step 8: Create config file
-      step(8, 10, 'Creating configuration file...');
+      // Copy night-watch-qa.md template
+      const qaResolution = resolveTemplatePath('night-watch-qa.md', customTemplatesDir, TEMPLATES_DIR);
+      const qaResult = processTemplate(
+        'night-watch-qa.md',
+        path.join(commandsDir, 'night-watch-qa.md'),
+        replacements,
+        force,
+        qaResolution.path,
+        qaResolution.source
+      );
+      templateSources.push({ name: 'night-watch-qa.md', source: qaResult.source });
+
+      // Step 9: Create config file
+      step(9, totalSteps, 'Creating configuration file...');
       const configPath = path.join(cwd, CONFIG_FILE_NAME);
 
       if (fs.existsSync(configPath) && !force) {
@@ -476,8 +608,8 @@ export function initCommand(program: Command): void {
         success(`Created ${configPath}`);
       }
 
-      // Step 9: Create GitHub Project board (only when repo has a GitHub remote)
-      step(9, 11, 'Setting up GitHub Project board...');
+      // Step 10: Create GitHub Project board (only when repo has a GitHub remote)
+      step(10, totalSteps, 'Setting up GitHub Project board...');
       const existingRaw = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
       const existingBoard = existingRaw.boardProvider as { projectNumber?: number } | undefined;
       if (existingBoard?.projectNumber && !force) {
@@ -511,8 +643,8 @@ export function initCommand(program: Command): void {
         }
       }
 
-      // Step 10: Register in global registry
-      step(10, 11, 'Registering project in global registry...');
+      // Step 11: Register in global registry
+      step(11, totalSteps, 'Registering project in global registry...');
       try {
         const { registerProject } = await import('../utils/registry.js');
         const entry = registerProject(cwd);
@@ -521,8 +653,8 @@ export function initCommand(program: Command): void {
         console.warn(`  Warning: Could not register in global registry: ${regErr instanceof Error ? regErr.message : String(regErr)}`);
       }
 
-      // Step 11: Print summary
-      step(11, 11, 'Initialization complete!');
+      // Step 12: Print summary
+      step(12, totalSteps, 'Initialization complete!');
 
       // Summary with table
       header('Initialization Complete');
@@ -533,6 +665,7 @@ export function initCommand(program: Command): void {
       filesTable.push(['Slash Commands', `.claude/commands/night-watch.md (${templateSources[0].source})`]);
       filesTable.push(['', `.claude/commands/prd-executor.md (${templateSources[1].source})`]);
       filesTable.push(['', `.claude/commands/night-watch-pr-reviewer.md (${templateSources[2].source})`]);
+      filesTable.push(['', `.claude/commands/night-watch-qa.md (${templateSources[3].source})`]);
       filesTable.push(['Config File', CONFIG_FILE_NAME]);
       filesTable.push(['Global Registry', '~/.night-watch/projects.json']);
       console.log(filesTable.toString());

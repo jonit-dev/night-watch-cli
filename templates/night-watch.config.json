@@ -17,5 +17,14 @@
   "autoMerge": false,
   "autoMergeMethod": "squash",
   "fallbackOnRateLimit": false,
-  "claudeModel": "sonnet"
+  "claudeModel": "sonnet",
+  "qa": {
+    "enabled": true,
+    "schedule": "30 1,7,13,19 * * *",
+    "maxRuntime": 3600,
+    "branchPatterns": [],
+    "artifacts": "both",
+    "skipLabel": "skip-qa",
+    "autoInstallPlaywright": true
+  }
 }

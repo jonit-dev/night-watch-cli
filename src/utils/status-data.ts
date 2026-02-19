@@ -114,6 +114,13 @@ export function reviewerLockPath(projectDir: string): string {
 }
 
 /**
+ * Compute the lock file path for the QA process of a given project directory.
+ */
+export function qaLockPath(projectDir: string): string {
+  return `${LOCK_FILE_PREFIX}qa-${projectRuntimeKey(projectDir)}.lock`;
+}
+
+/**
  * Check if a process with the given PID is running
  */
 export function isProcessRunning(pid: number): boolean {
@@ -661,7 +668,7 @@ export function getLogInfo(
  * Collect log info as ILogInfo items
  */
 export function collectLogInfo(projectDir: string): ILogInfo[] {
-  const logNames = ["executor", "reviewer"];
+  const logNames = ["executor", "reviewer", "qa"];
   return logNames.map((name) => {
     // Map logical name (executor/reviewer) to actual file name (night-watch/night-watch-pr-reviewer)
     const fileName = LOG_FILE_NAMES[name] || name;
@@ -705,10 +712,12 @@ export function fetchStatusSnapshot(
 
   const executorLock = checkLockFile(executorLockPath(projectDir));
   const reviewerLock = checkLockFile(reviewerLockPath(projectDir));
+  const qaLock = checkLockFile(qaLockPath(projectDir));
 
   const processes: IProcessInfo[] = [
     { name: "executor", running: executorLock.running, pid: executorLock.pid },
     { name: "reviewer", running: reviewerLock.running, pid: reviewerLock.pid },
+    { name: "qa", running: qaLock.running, pid: qaLock.pid },
   ];
 
   const prds = collectPrdInfo(projectDir, config.prdDir, config.maxRuntime);

@@ -3,7 +3,7 @@
  */
 
 import { IBoardProviderConfig } from "./board/types.js";
-import { ClaudeModel, INotificationConfig, IRoadmapScannerConfig, MergeMethod, Provider } from "./types.js";
+import { ClaudeModel, INotificationConfig, IQaConfig, IRoadmapScannerConfig, MergeMethod, Provider, QaArtifacts } from "./types.js";
 
 // Branch Configuration (default branch)
 export const DEFAULT_DEFAULT_BRANCH = ""; // empty = auto-detect
@@ -84,6 +84,26 @@ export const DEFAULT_AUTO_MERGE = false;
 export const DEFAULT_AUTO_MERGE_METHOD: MergeMethod = "squash";
 export const VALID_MERGE_METHODS: MergeMethod[] = ["squash", "merge", "rebase"];
 
+// QA Configuration
+export const DEFAULT_QA_ENABLED = true;
+export const DEFAULT_QA_SCHEDULE = "30 1,7,13,19 * * *"; // 4x daily, offset from reviewer
+export const DEFAULT_QA_MAX_RUNTIME = 3600; // 1 hour
+export const DEFAULT_QA_ARTIFACTS: QaArtifacts = "both";
+export const DEFAULT_QA_SKIP_LABEL = "skip-qa";
+export const DEFAULT_QA_AUTO_INSTALL_PLAYWRIGHT = true;
+
+export const DEFAULT_QA: IQaConfig = {
+  enabled: DEFAULT_QA_ENABLED,
+  schedule: DEFAULT_QA_SCHEDULE,
+  maxRuntime: DEFAULT_QA_MAX_RUNTIME,
+  branchPatterns: [],
+  artifacts: DEFAULT_QA_ARTIFACTS,
+  skipLabel: DEFAULT_QA_SKIP_LABEL,
+  autoInstallPlaywright: DEFAULT_QA_AUTO_INSTALL_PLAYWRIGHT,
+};
+
+export const QA_LOG_NAME = "night-watch-qa";
+
 // Valid providers
 export const VALID_PROVIDERS: Provider[] = ["claude", "codex"];
 
@@ -107,6 +127,7 @@ export const REVIEWER_LOG_NAME = "night-watch-pr-reviewer";
 export const LOG_FILE_NAMES: Record<string, string> = {
   executor: EXECUTOR_LOG_NAME,
   reviewer: REVIEWER_LOG_NAME,
+  qa: QA_LOG_NAME,
 };
 
 // Global Registry
