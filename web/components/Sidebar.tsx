@@ -1,20 +1,21 @@
-import React, { useState } from 'react';
-import { NavLink } from 'react-router-dom';
 import {
-  Home,
-  FileText,
-  GitPullRequest,
+  Blocks,
+  Briefcase,
   Calendar,
-  Terminal,
-  Settings,
-  Map,
-  Kanban,
   ChevronLeft,
   ChevronRight,
-  Briefcase,
   ChevronsUpDown,
+  FileText,
+  GitPullRequest,
+  Home,
+  Kanban,
+  Map,
+  Settings,
+  Terminal,
   Users,
 } from 'lucide-react';
+import React, { useState } from 'react';
+import { NavLink } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 
 const Sidebar: React.FC = () => {
@@ -29,12 +30,13 @@ const Sidebar: React.FC = () => {
     { icon: Map, label: 'Roadmap', path: '/roadmap' },
     { icon: Calendar, label: 'Scheduling', path: '/scheduling' },
     { icon: Terminal, label: 'Logs', path: '/logs' },
+    { icon: Blocks, label: 'Integrations', path: '/integrations' },
     { icon: Users, label: 'Agents', path: '/agents' },
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];
 
   return (
-    <aside 
+    <aside
       className={`
         relative flex flex-col transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]
         ${collapsed ? 'w-20' : 'w-72'} h-screen flex-shrink-0 z-50
@@ -70,11 +72,11 @@ const Sidebar: React.FC = () => {
             )}
           </div>
         ) : (
-           <div className="relative group">
-              <div className="h-10 w-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold cursor-pointer shadow-lg shadow-indigo-500/20 group-hover:bg-indigo-500 transition-colors bg-gradient-to-br from-indigo-500 to-indigo-700" title="Switch Project">
-                NW
-              </div>
-           </div>
+          <div className="relative group">
+            <div className="h-10 w-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold cursor-pointer shadow-lg shadow-indigo-500/20 group-hover:bg-indigo-500 transition-colors bg-gradient-to-br from-indigo-500 to-indigo-700" title="Switch Project">
+              NW
+            </div>
+          </div>
         )}
       </div>
 
