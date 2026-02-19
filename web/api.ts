@@ -196,11 +196,11 @@ export function fetchLogs(name: string, lines?: number): Promise<LogResponse> {
 }
 
 export function fetchConfig(): Promise<INightWatchConfig> {
-  return apiFetch<NightWatchConfig>(apiPath('/api/config'));
+  return apiFetch<INightWatchConfig>(apiPath('/api/config'));
 }
 
 export function updateConfig(changes: Partial<INightWatchConfig>): Promise<INightWatchConfig> {
-  return apiFetch<NightWatchConfig>(apiPath('/api/config'), {
+  return apiFetch<INightWatchConfig>(apiPath('/api/config'), {
     method: 'PUT',
     body: JSON.stringify(changes),
   });
@@ -211,7 +211,7 @@ export function fetchDoctor(): Promise<DoctorCheck[]> {
 }
 
 export function fetchScheduleInfo(): Promise<IScheduleInfo> {
-  return apiFetch<ScheduleInfo>(apiPath('/api/schedule-info'));
+  return apiFetch<IScheduleInfo>(apiPath('/api/schedule-info'));
 }
 
 export function triggerRun(prdName?: string): Promise<ActionResult> {
@@ -343,7 +343,7 @@ export interface ScanResult {
 }
 
 export function fetchRoadmap(): Promise<IRoadmapStatus> {
-  return apiFetch<RoadmapStatus>(apiPath('/api/roadmap'));
+  return apiFetch<IRoadmapStatus>(apiPath('/api/roadmap'));
 }
 
 export function triggerRoadmapScan(): Promise<ScanResult> {
@@ -351,7 +351,7 @@ export function triggerRoadmapScan(): Promise<ScanResult> {
 }
 
 export function toggleRoadmapScanner(enabled: boolean): Promise<INightWatchConfig> {
-  return apiFetch<NightWatchConfig>(apiPath('/api/roadmap/toggle'), {
+  return apiFetch<INightWatchConfig>(apiPath('/api/roadmap/toggle'), {
     method: 'PUT',
     body: JSON.stringify({ enabled }),
   });
