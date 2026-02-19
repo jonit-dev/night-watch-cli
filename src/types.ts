@@ -137,6 +137,10 @@ export interface IQaConfig {
 
 export type WebhookType = "slack" | "discord" | "telegram";
 export type NotificationEvent = "run_started" | "run_succeeded" | "run_failed" | "run_timeout" | "review_completed" | "pr_auto_merged" | "rate_limit_fallback" | "qa_completed";
+
+/**
+ * Git merge methods for auto-merge
+ */
 export type MergeMethod = "squash" | "merge" | "rebase";
 
 export interface IWebhookConfig {

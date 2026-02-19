@@ -116,6 +116,11 @@ export const DEFAULT_SLACK_BOT_CONFIG: ISlackBotConfig = {
 // Valid providers
 export const VALID_PROVIDERS: Provider[] = ["claude", "codex"];
 
+// Auto-merge Configuration
+export const DEFAULT_AUTO_MERGE = false;
+export const DEFAULT_AUTO_MERGE_METHOD: MergeMethod = "squash";
+export const VALID_MERGE_METHODS: MergeMethod[] = ["squash", "merge", "rebase"];
+
 // Provider commands configuration
 export const PROVIDER_COMMANDS: Record<Provider, string> = {
   claude: "claude",

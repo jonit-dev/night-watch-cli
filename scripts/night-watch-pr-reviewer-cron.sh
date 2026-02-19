@@ -159,6 +159,62 @@ done < <(gh pr list --state open --json number,headRefName --jq '.[] | [.number,
 
 if [ "${NEEDS_WORK}" -eq 0 ]; then
   log "SKIP: All ${OPEN_PRS} open PR(s) have passing CI and review score >= ${MIN_REVIEW_SCORE} (or no score yet)"
+
+  # ── Auto-merge eligible PRs ───────────────────────────────
+  if [ "${NW_AUTO_MERGE:-0}" = "1" ]; then
+    AUTO_MERGE_METHOD="${NW_AUTO_MERGE_METHOD:-squash}"
+    AUTO_MERGED_COUNT=0
+
+    log "AUTO-MERGE: Checking for merge-ready PRs (method: ${AUTO_MERGE_METHOD})"
+
+    while IFS=$'\t' read -r pr_number pr_branch; do
+      [ -z "${pr_number}" ] || [ -z "${pr_branch}" ] && continue
+      printf '%s\n' "${pr_branch}" | grep -Eq "${BRANCH_REGEX}" || continue
+
+      # Check CI status
+      FAILED_CHECKS=$(gh pr checks "${pr_number}" 2>/dev/null | grep -ci 'fail' || true)
+      [ "${FAILED_CHECKS}" -gt 0 ] && continue
+
+      # Check review score
+      PR_COMMENTS=$(
+        {
+          gh pr view "${pr_number}" --json comments --jq '.comments[].body' 2>/dev/null || true
+          if [ -n "${REPO}" ]; then
+            gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
+          fi
+        } | sort -u
+      )
+      PR_SCORE=$(echo "${PR_COMMENTS}" \
+        | grep -oP 'Overall Score:\*?\*?\s*(\d+)/100' \
+        | tail -1 \
+        | grep -oP '\d+(?=/100)' || echo "")
+
+      # Skip PRs without a score or with score below threshold
+      [ -z "${PR_SCORE}" ] && continue
+      [ "${PR_SCORE}" -lt "${MIN_REVIEW_SCORE}" ] && continue
+
+      # PR is merge-ready
+      log "AUTO-MERGE: PR #${pr_number} (${pr_branch}) — score ${PR_SCORE}/100, CI passing"
+
+      # Dry-run mode: show what would be merged
+      if [ "${NW_DRY_RUN:-0}" = "1" ]; then
+        log "AUTO-MERGE (dry-run): Would queue merge for PR #${pr_number} using ${AUTO_MERGE_METHOD}"
+        continue
+      fi
+
+      if gh pr merge "${pr_number}" --"${AUTO_MERGE_METHOD}" --auto --delete-branch 2>>"${LOG_FILE}"; then
+        log "AUTO-MERGE: Successfully queued merge for PR #${pr_number}"
+        AUTO_MERGED_COUNT=$((AUTO_MERGED_COUNT + 1))
+      else
+        log "WARN: Auto-merge failed for PR #${pr_number}"
+      fi
+    done < <(gh pr list --state open --json number,headRefName --jq '.[] | [.number, .headRefName] | @tsv' 2>/dev/null || true)
+
+    if [ "${AUTO_MERGED_COUNT}" -gt 0 ]; then
+      log "AUTO-MERGE: Queued ${AUTO_MERGED_COUNT} PR(s) for merge"
+    fi
+  fi
+
   emit_result "skip_all_passing"
   exit 0
 fi
