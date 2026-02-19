@@ -14,17 +14,17 @@ import type {
 
 // Re-export API types for convenience
 export type {
-  IStatusSnapshot,
+  IStatusSnapshot as StatusSnapshot,
   PrdWithContent,
-  IPrInfo,
-  ILogInfo,
+  IPrInfo as PrInfo,
+  ILogInfo as LogInfo,
   DoctorCheck,
   ActionResult,
-  INightWatchConfig,
-  IPrdInfo,
-  IProcessInfo,
-  INotificationConfig,
-  IWebhookConfig,
+  INightWatchConfig as NightWatchConfig,
+  IPrdInfo as PrdInfo,
+  IProcessInfo as ProcessInfo,
+  INotificationConfig as NotificationConfig,
+  IWebhookConfig as WebhookConfig,
 };
 
 export enum Status {
