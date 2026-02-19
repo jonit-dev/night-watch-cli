@@ -82,6 +82,16 @@ export const LOCK_FILE_PREFIX = "/tmp/night-watch-";
 export const LOG_DIR = "logs";
 export const CLAIM_FILE_EXTENSION = ".claim";
 
+// Log file names (must match what executor/reviewer create)
+export const EXECUTOR_LOG_NAME = "night-watch";
+export const REVIEWER_LOG_NAME = "night-watch-pr-reviewer";
+
+// Mapping from logical API names to actual file names
+export const LOG_FILE_NAMES: Record<string, string> = {
+  executor: EXECUTOR_LOG_NAME,
+  reviewer: REVIEWER_LOG_NAME,
+};
+
 // Global Registry
 export const GLOBAL_CONFIG_DIR = ".night-watch";
 export const REGISTRY_FILE_NAME = "projects.json";
