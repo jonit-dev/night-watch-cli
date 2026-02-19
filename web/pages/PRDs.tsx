@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, SortAsc, LayoutList, LayoutGrid, MoreVertical, Play, AlertCircle, RotateCcw } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { LayoutList, LayoutGrid, MoreVertical, Play, AlertCircle, RotateCcw, ArrowUp, ArrowDown, ArrowUpDown, Loader2, Square } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
-import Modal from '../components/ui/Modal';
-import { useApi, fetchPrds, fetchBoardStatus, PrdWithContent, IBoardIssue, IBoardStatus, triggerRun, retryPrd, useStatusStream } from '../api';
+import { useApi, fetchPrds, fetchBoardStatus, PrdWithContent, IBoardIssue, IBoardStatus, triggerRun, retryPrd, useStatusStream, triggerCancel } from '../api';
 import { useStore } from '../store/useStore';
+
+type FilterType = 'all' | 'ready' | 'in-progress' | 'blocked' | 'pending-review' | 'done';
+type SortField = 'name' | 'status' | 'dependencies';
+type SortDirection = 'asc' | 'desc';
 
 // Map API status to UI status
 const statusMap: Record<string, string> = {
@@ -26,11 +29,17 @@ const statusVariantMap: Record<string, 'success' | 'info' | 'error' | 'warning' 
 
 const PRDs: React.FC = () => {
   const [viewMode, setViewMode] = useState<'list' | 'card'>('list');
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedPRD, setSelectedPRD] = useState<PrdWithContent | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const [optimisticStatus, setOptimisticStatus] = useState<Record<string, string>>({});
+  const [filter, setFilter] = useState<FilterType>('ready');
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [executingPrd, setExecutingPrd] = useState<string | null>(null);
+  const [cancellingPrd, setCancellingPrd] = useState<string | null>(null);
+  const [retryingPrd, setRetryingPrd] = useState<string | null>(null);
+
   const { addToast, selectedProjectId, globalModeLoading } = useStore();
   const { data: prdsData, loading, error, refetch } = useApi(fetchPrds, [selectedProjectId], { enabled: !globalModeLoading });
   const prds = prdsData ?? [];
@@ -68,6 +77,53 @@ const PRDs: React.FC = () => {
   const displayPrds = prds.map(p =>
     optimisticStatus[p.name] ? { ...p, status: optimisticStatus[p.name] as PrdWithContent['status'] } : p
   );
+
+  // Filter PRDs based on selected filter
+  const filteredPrds = useMemo(() => {
+    if (filter === 'all') return displayPrds;
+    return displayPrds.filter((prd) => prd.status === filter);
+  }, [displayPrds, filter]);
+
+  // Sort filtered PRDs
+  const sortedPrds = useMemo(() => {
+    const sorted = [...filteredPrds].sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case 'name':
+          comparison = a.name.localeCompare(b.name);
+          break;
+        case 'status': {
+          // Order: ready < blocked < in-progress < pending-review < done
+          const statusOrder: Record<string, number> = { 'ready': 0, 'blocked': 1, 'in-progress': 2, 'pending-review': 3, 'done': 4 };
+          comparison = (statusOrder[a.status] ?? 5) - (statusOrder[b.status] ?? 5);
+          break;
+        }
+        case 'dependencies':
+          comparison = a.dependencies.length - b.dependencies.length;
+          break;
+      }
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+    return sorted;
+  }, [filteredPrds, sortField, sortDirection]);
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-3 w-3 text-slate-600" />;
+    }
+    return sortDirection === 'asc'
+      ? <ArrowUp className="h-3 w-3 text-indigo-400" />
+      : <ArrowDown className="h-3 w-3 text-indigo-400" />;
+  };
 
   // Clear optimistic state when prds data arrives (server confirmed real state)
   useEffect(() => {
@@ -117,12 +173,6 @@ const PRDs: React.FC = () => {
     }
   };
 
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsModalOpen(false);
-    // Add logic here
-  };
-
   const handleExecuteNow = async () => {
     if (!selectedPRD) return;
     setIsExecuting(true);
@@ -150,6 +200,82 @@ const PRDs: React.FC = () => {
       });
     } finally {
       setIsExecuting(false);
+    }
+  };
+
+  // Row-level actions
+  const handleExecutePrd = async (prdName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExecutingPrd(prdName);
+    // Optimistic UI update
+    setOptimisticStatus(prev => ({ ...prev, [prdName]: 'in-progress' }));
+    try {
+      const result = await triggerRun(prdName);
+      addToast({
+        title: 'Executor Started',
+        message: result.pid ? `Started with PID ${result.pid}` : 'Executor started',
+        type: 'success',
+      });
+      refetch();
+    } catch (err) {
+      // Revert optimistic state on error
+      setOptimisticStatus(prev => {
+        const s = { ...prev };
+        delete s[prdName];
+        return s;
+      });
+      addToast({
+        title: 'Execute Failed',
+        message: err instanceof Error ? err.message : 'Failed to start executor',
+        type: 'error',
+      });
+    } finally {
+      setExecutingPrd(null);
+    }
+  };
+
+  const handleStopPrd = async (prdName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCancellingPrd(prdName);
+    try {
+      const result = await triggerCancel('run');
+      const allOk = result.results.every(r => r.success);
+      addToast({
+        title: allOk ? 'Process Cancelled' : 'Cancel Failed',
+        message: result.results.map(r => r.message).join('; '),
+        type: allOk ? 'success' : 'error',
+      });
+      if (allOk) refetch();
+    } catch (err) {
+      addToast({
+        title: 'Cancel Failed',
+        message: err instanceof Error ? err.message : 'Failed to cancel process',
+        type: 'error',
+      });
+    } finally {
+      setCancellingPrd(null);
+    }
+  };
+
+  const handleRetryPrd = async (prdName: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRetryingPrd(prdName);
+    try {
+      const result = await retryPrd(prdName);
+      addToast({
+        title: 'PRD Queued',
+        message: result.message,
+        type: 'success',
+      });
+      refetch();
+    } catch (err) {
+      addToast({
+        title: 'Retry Failed',
+        message: err instanceof Error ? err.message : 'Failed to retry PRD',
+        type: 'error',
+      });
+    } finally {
+      setRetryingPrd(null);
     }
   };
 
@@ -205,21 +331,68 @@ const PRDs: React.FC = () => {
             <LayoutGrid className="h-4 w-4" />
           </Button>
           <div className="h-6 w-px bg-slate-800 mx-2"></div>
-          <div className="flex space-x-1">
-             <span className="px-3 py-1 bg-slate-800 text-slate-200 rounded-full text-xs font-medium cursor-pointer border border-slate-700">All</span>
-             <span className="px-3 py-1 text-slate-500 hover:bg-slate-800 hover:text-slate-300 rounded-full text-xs font-medium cursor-pointer transition-colors">Ready</span>
-             <span className="px-3 py-1 text-slate-500 hover:bg-slate-800 hover:text-slate-300 rounded-full text-xs font-medium cursor-pointer transition-colors">In Progress</span>
+          <div className="flex flex-wrap gap-1">
+            <button
+              onClick={() => setFilter('all')}
+              className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer border transition-colors ${
+                filter === 'all'
+                  ? 'bg-slate-800 text-slate-200 border-slate-700'
+                  : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300 border-transparent'
+              }`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setFilter('ready')}
+              className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer border transition-colors ${
+                filter === 'ready'
+                  ? 'bg-green-900/50 text-green-300 border-green-800'
+                  : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300 border-transparent'
+              }`}
+            >
+              Ready
+            </button>
+            <button
+              onClick={() => setFilter('in-progress')}
+              className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer border transition-colors ${
+                filter === 'in-progress'
+                  ? 'bg-blue-900/50 text-blue-300 border-blue-800'
+                  : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300 border-transparent'
+              }`}
+            >
+              In Progress
+            </button>
+            <button
+              onClick={() => setFilter('blocked')}
+              className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer border transition-colors ${
+                filter === 'blocked'
+                  ? 'bg-red-900/50 text-red-300 border-red-800'
+                  : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300 border-transparent'
+              }`}
+            >
+              Blocked
+            </button>
+            <button
+              onClick={() => setFilter('pending-review')}
+              className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer border transition-colors ${
+                filter === 'pending-review'
+                  ? 'bg-amber-900/50 text-amber-300 border-amber-800'
+                  : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300 border-transparent'
+              }`}
+            >
+              Pending Review
+            </button>
+            <button
+              onClick={() => setFilter('done')}
+              className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer border transition-colors ${
+                filter === 'done'
+                  ? 'bg-slate-700/50 text-slate-300 border-slate-600'
+                  : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300 border-transparent'
+              }`}
+            >
+              Done
+            </button>
           </div>
-        </div>
-        <div className="flex items-center space-x-3">
-           <Button variant="outline" size="sm">
-              <SortAsc className="h-4 w-4 mr-2" />
-              Sort
-           </Button>
-           <Button onClick={() => setIsModalOpen(true)} size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              New PRD
-           </Button>
         </div>
       </div>
 
@@ -230,14 +403,41 @@ const PRDs: React.FC = () => {
             <table className="min-w-full divide-y divide-slate-800">
               <thead className="bg-slate-950/50">
                 <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Name</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Dependencies</th>
-                  <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-300"
+                    onClick={() => handleSort('name')}
+                  >
+                    <div className="flex items-center space-x-1">
+                      <span>Name</span>
+                      {getSortIcon('name')}
+                    </div>
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-300"
+                    onClick={() => handleSort('status')}
+                  >
+                    <div className="flex items-center space-x-1">
+                      <span>Status</span>
+                      {getSortIcon('status')}
+                    </div>
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:text-slate-300"
+                    onClick={() => handleSort('dependencies')}
+                  >
+                    <div className="flex items-center space-x-1">
+                      <span>Dependencies</span>
+                      {getSortIcon('dependencies')}
+                    </div>
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {displayPrds.map((prd) => (
+                {sortedPrds.map((prd) => (
                   <tr key={prd.name} className="hover:bg-slate-800/50 group cursor-pointer transition-colors" onClick={() => setSelectedPRD(prd)}>
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-2">
@@ -277,17 +477,64 @@ const PRDs: React.FC = () => {
                         <span className="text-sm text-slate-600">None</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button className="text-slate-500 hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <MoreVertical className="h-4 w-4" />
-                      </button>
+                    <td className="px-6 py-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+                      {prd.status === 'ready' || prd.status === 'blocked' ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => handleExecutePrd(prd.name, e)}
+                          disabled={executingPrd === prd.name}
+                          className="text-green-400 hover:text-green-300"
+                          title="Execute PRD"
+                        >
+                          {executingPrd === prd.name ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Play className="h-4 w-4" />
+                          )}
+                        </Button>
+                      ) : prd.status === 'in-progress' ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => handleStopPrd(prd.name, e)}
+                          disabled={cancellingPrd === prd.name}
+                          className="text-red-400 hover:text-red-300"
+                          title="Stop execution"
+                        >
+                          {cancellingPrd === prd.name ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Square className="h-4 w-4" />
+                          )}
+                        </Button>
+                      ) : prd.status === 'done' ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => handleRetryPrd(prd.name, e)}
+                          disabled={retryingPrd === prd.name}
+                          className="text-amber-400 hover:text-amber-300"
+                          title="Retry PRD"
+                        >
+                          {retryingPrd === prd.name ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <RotateCcw className="h-4 w-4" />
+                          )}
+                        </Button>
+                      ) : (
+                        <button className="text-slate-500 hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
-                {displayPrds.length === 0 && (
+                {sortedPrds.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
-                      No PRDs found. Create your first PRD to get started.
+                      {prds.length === 0 ? 'No PRDs found. Create your first PRD to get started.' : `No PRDs match the "${filter}" filter.`}
                     </td>
                   </tr>
                 )}
@@ -296,7 +543,7 @@ const PRDs: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {displayPrds.map((prd) => (
+            {sortedPrds.map((prd) => (
               <Card key={prd.name} className="p-5 flex flex-col h-full hover:border-indigo-500/50 transition-colors" onClick={() => setSelectedPRD(prd)}>
                 <div className="flex justify-between items-start mb-4">
                   <Badge variant={statusVariantMap[prd.status]}>{statusMap[prd.status]}</Badge>
@@ -339,74 +586,69 @@ const PRDs: React.FC = () => {
                     </div>
                   )}
                   {prd.unmetDependencies.length > 0 && (
-                    <div className="text-xs text-amber-400">
+                    <div className="text-xs text-amber-400 mb-3">
                       Blocked by: {prd.unmetDependencies.join(', ')}
                     </div>
                   )}
+                  {/* Card Actions */}
+                  <div className="flex justify-end pt-2" onClick={(e) => e.stopPropagation()}>
+                    {prd.status === 'ready' || prd.status === 'blocked' ? (
+                      <Button
+                        size="sm"
+                        onClick={(e) => handleExecutePrd(prd.name, e)}
+                        disabled={executingPrd === prd.name}
+                        className="text-green-400 hover:text-green-300"
+                      >
+                        {executingPrd === prd.name ? (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : (
+                          <Play className="h-4 w-4 mr-1" />
+                        )}
+                        Execute
+                      </Button>
+                    ) : prd.status === 'in-progress' ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => handleStopPrd(prd.name, e)}
+                        disabled={cancellingPrd === prd.name}
+                        className="text-red-400 hover:text-red-300"
+                      >
+                        {cancellingPrd === prd.name ? (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : (
+                          <Square className="h-4 w-4 mr-1" />
+                        )}
+                        Stop
+                      </Button>
+                    ) : prd.status === 'done' ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={(e) => handleRetryPrd(prd.name, e)}
+                        disabled={retryingPrd === prd.name}
+                        className="text-amber-400 hover:text-amber-300"
+                      >
+                        {retryingPrd === prd.name ? (
+                          <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                        ) : (
+                          <RotateCcw className="h-4 w-4 mr-1" />
+                        )}
+                        Retry
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               </Card>
             ))}
-            {displayPrds.length === 0 && (
+            {sortedPrds.length === 0 && (
               <div className="col-span-full text-center py-12 text-slate-500">
-                No PRDs found. Create your first PRD to get started.
+                {prds.length === 0 ? 'No PRDs found. Create your first PRD to get started.' : `No PRDs match the "${filter}" filter.`}
               </div>
             )}
           </div>
         )}
       </div>
-
-      {/* New PRD Modal */}
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Create New PRD">
-         <form onSubmit={handleCreate} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Name</label>
-              <input type="text" className="w-full rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-600" placeholder="e.g. User Authentication" />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Complexity</label>
-              <div className="flex items-center space-x-4">
-                 <input type="range" min="1" max="10" className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500" />
-                 <span className="text-sm font-bold text-slate-300 w-16 text-center">MED</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-               <div>
-                 <label className="block text-sm font-medium text-slate-400 mb-1">Phases</label>
-                 <input type="number" defaultValue={3} min={1} max={10} className="w-full rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-               </div>
-               <div>
-                 <label className="block text-sm font-medium text-slate-400 mb-1">Template</label>
-                 <select className="w-full rounded-md bg-slate-800 border border-slate-700 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <option>Default</option>
-                    <option>Feature</option>
-                    <option>Bugfix</option>
-                 </select>
-               </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-400 mb-1">Dependencies</label>
-              <div className="bg-slate-950/30 p-3 rounded-md border border-slate-800 max-h-32 overflow-y-auto space-y-2">
-                 {displayPrds.map(p => (
-                   <label key={p.name} className="flex items-center space-x-2 text-sm text-slate-300 cursor-pointer">
-                      <input type="checkbox" className="rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500/50 focus:ring-offset-slate-900" />
-                      <span>{p.name}</span>
-                   </label>
-                 ))}
-                 {displayPrds.length === 0 && (
-                   <p className="text-sm text-slate-600 italic">No existing PRDs</p>
-                 )}
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-4 space-x-3">
-              <Button type="button" variant="ghost" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-              <Button type="submit">Create PRD</Button>
-            </div>
-         </form>
-      </Modal>
 
       {/* Detail Slide-over */}
       {selectedPRD && (
