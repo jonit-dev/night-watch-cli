@@ -4,36 +4,36 @@
  * Supports both single-project and global (multi-project) modes
  */
 
-import { DependencyList, useEffect, useRef, useState } from 'react';
 import type {
+  ILogInfo,
   INightWatchConfig,
   INotificationConfig,
-  IWebhookConfig,
   IPrdInfo,
-  IProcessInfo,
   IPrInfo,
-  ILogInfo,
-  IStatusSnapshot,
+  IProcessInfo,
   IRoadmapItem,
-  IRoadmapStatus,
   IRoadmapScannerConfig,
+  IRoadmapStatus,
   ISlackBotConfig,
+  IStatusSnapshot,
+  IWebhookConfig,
 } from '@shared/types';
+import { DependencyList, useEffect, useRef, useState } from 'react';
 
 // Re-export shared types so consumers can import from either place
 export type {
+  ILogInfo,
   INightWatchConfig,
   INotificationConfig,
-  IWebhookConfig,
   IPrdInfo,
-  IProcessInfo,
   IPrInfo,
-  ILogInfo,
-  IStatusSnapshot,
+  IProcessInfo,
   IRoadmapItem,
-  IRoadmapStatus,
   IRoadmapScannerConfig,
+  IRoadmapStatus,
   ISlackBotConfig,
+  IStatusSnapshot,
+  IWebhookConfig,
 };
 
 /**
@@ -80,7 +80,10 @@ function encodeProjectId(id: string): string {
  */
 function apiPath(basePath: string): string {
   if (globalMode && currentProjectId) {
-    return basePath.replace('/api/', `/api/projects/${encodeProjectId(currentProjectId)}/`);
+    return basePath.replace(
+      '/api/',
+      `/api/projects/${encodeProjectId(currentProjectId)}/`,
+    );
   }
   return basePath;
 }
@@ -102,10 +105,7 @@ export function fetchProjects(): Promise<ProjectInfo[]> {
 /**
  * Generic API fetch wrapper with error handling
  */
-async function apiFetch<T>(
-  path: string,
-  options?: RequestInit
-): Promise<T> {
+async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE}${path}`;
 
   const response = await fetch(url, {
@@ -117,8 +117,12 @@ async function apiFetch<T>(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+    const error = await response
+      .json()
+      .catch(() => ({ error: 'Unknown error' }));
+    throw new Error(
+      error.error || `HTTP ${response.status}: ${response.statusText}`,
+    );
   }
 
   // Some endpoints (e.g. DELETE) intentionally return 204 with no JSON body.
@@ -201,15 +205,20 @@ export function fetchPrs(): Promise<IPrInfo[]> {
 }
 
 export function fetchLogs(name: string, lines?: number): Promise<LogResponse> {
-  const query = lines !== undefined ? `?lines=${encodeURIComponent(lines)}` : '';
-  return apiFetch<LogResponse>(apiPath(`/api/logs/${encodeURIComponent(name)}${query}`));
+  const query =
+    lines !== undefined ? `?lines=${encodeURIComponent(lines)}` : '';
+  return apiFetch<LogResponse>(
+    apiPath(`/api/logs/${encodeURIComponent(name)}${query}`),
+  );
 }
 
 export function fetchConfig(): Promise<INightWatchConfig> {
   return apiFetch<INightWatchConfig>(apiPath('/api/config'));
 }
 
-export function updateConfig(changes: Partial<INightWatchConfig>): Promise<INightWatchConfig> {
+export function updateConfig(
+  changes: Partial<INightWatchConfig>,
+): Promise<INightWatchConfig> {
   return apiFetch<INightWatchConfig>(apiPath('/api/config'), {
     method: 'PUT',
     body: JSON.stringify(changes),
@@ -260,7 +269,9 @@ export interface CancelActionResult {
   results: CancelResultItem[];
 }
 
-export function triggerCancel(type: 'run' | 'review' | 'all' = 'all'): Promise<CancelActionResult> {
+export function triggerCancel(
+  type: 'run' | 'review' | 'all' = 'all',
+): Promise<CancelActionResult> {
   return apiFetch<CancelActionResult>(apiPath('/api/actions/cancel'), {
     method: 'POST',
     body: JSON.stringify({ type }),
@@ -282,9 +293,20 @@ export function triggerClearLock(): Promise<{ cleared: boolean }> {
 
 // ==================== Board ====================
 
-export type BoardColumnName = 'Draft' | 'Ready' | 'In Progress' | 'Review' | 'Done';
+export type BoardColumnName =
+  | 'Draft'
+  | 'Ready'
+  | 'In Progress'
+  | 'Review'
+  | 'Done';
 
-export const BOARD_COLUMNS: BoardColumnName[] = ['Draft', 'Ready', 'In Progress', 'Review', 'Done'];
+export const BOARD_COLUMNS: BoardColumnName[] = [
+  'Draft',
+  'Ready',
+  'In Progress',
+  'Review',
+  'Done',
+];
 
 export interface IBoardIssue {
   id: string;
@@ -316,25 +338,39 @@ export function fetchBoardIssues(): Promise<IBoardIssue[]> {
   return apiFetch<IBoardIssue[]>(apiPath('/api/board/issues'));
 }
 
-export function createBoardIssue(input: ICreateIssueInput): Promise<IBoardIssue> {
+export function createBoardIssue(
+  input: ICreateIssueInput,
+): Promise<IBoardIssue> {
   return apiFetch<IBoardIssue>(apiPath('/api/board/issues'), {
     method: 'POST',
     body: JSON.stringify(input),
   });
 }
 
-export function moveBoardIssue(number: number, column: BoardColumnName): Promise<{ moved: boolean }> {
-  return apiFetch<{ moved: boolean }>(apiPath(`/api/board/issues/${number}/move`), {
-    method: 'PATCH',
-    body: JSON.stringify({ column }),
-  });
+export function moveBoardIssue(
+  number: number,
+  column: BoardColumnName,
+): Promise<{ moved: boolean }> {
+  return apiFetch<{ moved: boolean }>(
+    apiPath(`/api/board/issues/${number}/move`),
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ column }),
+    },
+  );
 }
 
-export function commentBoardIssue(number: number, body: string): Promise<{ commented: boolean }> {
-  return apiFetch<{ commented: boolean }>(apiPath(`/api/board/issues/${number}/comment`), {
-    method: 'POST',
-    body: JSON.stringify({ body }),
-  });
+export function commentBoardIssue(
+  number: number,
+  body: string,
+): Promise<{ commented: boolean }> {
+  return apiFetch<{ commented: boolean }>(
+    apiPath(`/api/board/issues/${number}/comment`),
+    {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    },
+  );
 }
 
 export function closeBoardIssue(number: number): Promise<{ closed: boolean }> {
@@ -360,32 +396,55 @@ export function triggerRoadmapScan(): Promise<ScanResult> {
   return apiFetch<ScanResult>(apiPath('/api/roadmap/scan'), { method: 'POST' });
 }
 
-export function toggleRoadmapScanner(enabled: boolean): Promise<INightWatchConfig> {
+export function toggleRoadmapScanner(
+  enabled: boolean,
+): Promise<INightWatchConfig> {
   return apiFetch<INightWatchConfig>(apiPath('/api/roadmap/toggle'), {
     method: 'PUT',
     body: JSON.stringify({ enabled }),
   });
 }
 
+// ==================== Slack Channels ====================
+
+export interface ISlackChannel {
+  id: string;
+  name: string;
+}
+
+export function createSlackChannel(botToken: string, name: string): Promise<string> {
+  return apiFetch<string>(apiPath('/api/slack/channels/create'), {
+    method: 'POST',
+    body: JSON.stringify({ botToken, name }),
+  });
+}
+
+export function fetchSlackChannels(botToken: string): Promise<ISlackChannel[]> {
+  return apiFetch<ISlackChannel[]>(apiPath('/api/slack/channels'), {
+    method: 'POST',
+    body: JSON.stringify({ botToken }),
+  });
+}
+
 // ==================== Agent Personas ====================
 
 import type {
+  CreateAgentPersonaInput,
+  IAgentModelConfig,
   IAgentPersona,
+  IAgentSkill,
   IAgentSoul,
   IAgentStyle,
-  IAgentSkill,
-  IAgentModelConfig,
-  CreateAgentPersonaInput,
   UpdateAgentPersonaInput,
 } from '@shared/types';
 
 export type {
+  CreateAgentPersonaInput,
+  IAgentModelConfig,
   IAgentPersona,
+  IAgentSkill,
   IAgentSoul,
   IAgentStyle,
-  IAgentSkill,
-  IAgentModelConfig,
-  CreateAgentPersonaInput,
   UpdateAgentPersonaInput,
 };
 
@@ -401,14 +460,19 @@ export function fetchAgentPrompt(id: string): Promise<{ prompt: string }> {
   return apiFetch<{ prompt: string }>(apiPath(`/api/agents/${id}/prompt`));
 }
 
-export function createAgent(input: CreateAgentPersonaInput): Promise<IAgentPersona> {
+export function createAgent(
+  input: CreateAgentPersonaInput,
+): Promise<IAgentPersona> {
   return apiFetch<IAgentPersona>(apiPath('/api/agents'), {
     method: 'POST',
     body: JSON.stringify(input),
   });
 }
 
-export function updateAgent(id: string, input: UpdateAgentPersonaInput): Promise<IAgentPersona> {
+export function updateAgent(
+  id: string,
+  input: UpdateAgentPersonaInput,
+): Promise<IAgentPersona> {
   return apiFetch<IAgentPersona>(apiPath(`/api/agents/${id}`), {
     method: 'PUT',
     body: JSON.stringify(input),
@@ -441,7 +505,7 @@ export function seedDefaultAgents(): Promise<{ message: string }> {
 export function useApi<T>(
   fetchFn: () => Promise<T>,
   deps: DependencyList = [],
-  options?: { enabled?: boolean }
+  options?: { enabled?: boolean },
 ): {
   data: T | null;
   loading: boolean;
@@ -524,10 +588,10 @@ export function useStatusStream(
   deps: DependencyList = [],
 ): void {
   useEffect(() => {
-    const url = apiPath("/api/status/events");
+    const url = apiPath('/api/status/events');
     const es = new EventSource(url);
 
-    es.addEventListener("status_changed", (e: MessageEvent) => {
+    es.addEventListener('status_changed', (e: MessageEvent) => {
       try {
         const snapshot = JSON.parse(e.data) as IStatusSnapshot;
         onSnapshot(snapshot);
@@ -536,12 +600,12 @@ export function useStatusStream(
       }
     });
 
-    es.addEventListener("executor_started", (e: MessageEvent) => {
+    es.addEventListener('executor_started', (e: MessageEvent) => {
       // This event just signals that executor started; status_changed will follow
       try {
         const data = JSON.parse(e.data);
         // Could be used for optimistic UI updates if needed
-        console.log("Executor started with PID:", data.pid);
+        console.log('Executor started with PID:', data.pid);
       } catch {
         // Silently ignore parse errors
       }
