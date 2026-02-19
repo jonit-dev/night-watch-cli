@@ -31,6 +31,16 @@ export interface INotificationConfig {
   webhooks: IWebhookConfig[];
 }
 
+// ==================== Roadmap Scanner Config ====================
+
+export interface IRoadmapScannerConfig {
+  enabled: boolean;
+  roadmapPath: string;
+  autoScanInterval: number;
+  slicerSchedule?: string;
+  slicerMaxRuntime?: number;
+}
+
 // ==================== Night Watch Config ====================
 
 /**
@@ -55,6 +65,7 @@ export interface INightWatchConfig {
   providerEnv: Record<string, string>;
   notifications: INotificationConfig;
   prdPriority: string[];
+  roadmapScanner: IRoadmapScannerConfig;
   templatesDir: string;
 }
 
