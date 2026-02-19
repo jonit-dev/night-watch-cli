@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Activity, CheckCircle, Clock, ArrowRight, AlertCircle, Calendar, XCircle } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { useApi, fetchStatus, fetchScheduleInfo, triggerCancel } from '../api';
+import { useApi, fetchStatus, fetchScheduleInfo, triggerCancel, triggerClearLock, useStatusStream } from '../api';
 import { useStore } from '../store/useStore';
+import type { IStatusSnapshot } from '@shared/types';
 
 // Map API status to UI status
 const statusMap: Record<string, string> = {
@@ -18,23 +19,40 @@ const statusMap: Record<string, string> = {
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [cancellingProcess, setCancellingProcess] = useState<'run' | 'review' | null>(null);
+  const [clearingLock, setClearingLock] = useState(false);
+  const [streamedStatus, setStreamedStatus] = useState<IStatusSnapshot | null>(null);
   const { setProjectName, addToast, selectedProjectId, globalModeLoading } = useStore();
   const { data: status, loading, error, refetch } = useApi(fetchStatus, [selectedProjectId], { enabled: !globalModeLoading });
   const { data: scheduleInfo } = useApi(fetchScheduleInfo, [selectedProjectId], { enabled: !globalModeLoading });
 
+  // Subscribe to SSE for real-time updates (primary path)
+  useStatusStream((snapshot) => {
+    setStreamedStatus(snapshot);
+  }, [selectedProjectId]);
+
+  // Use streamed status when available, fall back to polled status
+  const currentStatus = streamedStatus || status;
+
   // Update project name when status loads
   React.useEffect(() => {
-    if (status?.projectName) {
-      setProjectName(status.projectName);
+    if (currentStatus?.projectName) {
+      setProjectName(currentStatus.projectName);
     }
-  }, [status, setProjectName]);
+  }, [currentStatus, setProjectName]);
 
-  // Poll for status updates every 10 seconds
-  React.useEffect(() => {
+  // Poll for status updates as fallback (30s interval - SSE is the fast path)
+  useEffect(() => {
     const interval = setInterval(() => {
       refetch();
-    }, 10000);
+    }, 30000);
     return () => clearInterval(interval);
+  }, [refetch]);
+
+  // Refetch on window focus
+  useEffect(() => {
+    const onFocus = () => refetch();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, [refetch]);
 
   if (globalModeLoading || loading) {
@@ -56,17 +74,17 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  if (!status) {
+  if (!currentStatus) {
     return null;
   }
 
-  const readyPrds = status.prds.filter(p => p.status === 'ready').length;
-  const inProgressPrds = status.prds.filter(p => p.status === 'in-progress');
-  const openPrs = status.prs.length;
-  const needsWorkPrs = status.prs.filter(p => p.reviewScore !== null && p.reviewScore < 70).length;
+  const readyPrds = currentStatus.prds.filter(p => p.status === 'ready').length;
+  const inProgressPrds = currentStatus.prds.filter(p => p.status === 'in-progress');
+  const openPrs = currentStatus.prs.length;
+  const needsWorkPrs = currentStatus.prs.filter(p => p.reviewScore !== null && p.reviewScore < 70).length;
 
-  const executorProcess = status.processes.find(p => p.name === 'executor');
-  const reviewerProcess = status.processes.find(p => p.name === 'reviewer');
+  const executorProcess = currentStatus.processes.find(p => p.name === 'executor');
+  const reviewerProcess = currentStatus.processes.find(p => p.name === 'reviewer');
 
   const handleCancelProcess = async (type: 'run' | 'review') => {
     setCancellingProcess(type);
@@ -78,7 +96,6 @@ const Dashboard: React.FC = () => {
         message: result.results.map(r => r.message).join('; '),
         type: allOk ? 'success' : 'error',
       });
-      if (allOk) refetch();
     } catch (err) {
       addToast({
         title: 'Cancel Failed',
@@ -87,6 +104,28 @@ const Dashboard: React.FC = () => {
       });
     } finally {
       setCancellingProcess(null);
+      refetch();
+    }
+  };
+
+  const handleForceClear = async () => {
+    setClearingLock(true);
+    try {
+      await triggerClearLock();
+      addToast({
+        title: 'Lock Cleared',
+        message: 'Stale executor state removed',
+        type: 'success',
+      });
+      refetch();
+    } catch (err) {
+      addToast({
+        title: 'Clear Failed',
+        message: err instanceof Error ? err.message : 'Failed to clear lock',
+        type: 'error',
+      });
+    } finally {
+      setClearingLock(false);
     }
   };
 
@@ -122,7 +161,7 @@ const Dashboard: React.FC = () => {
               <CheckCircle className="h-5 w-5" />
             </div>
           </div>
-          <p className="text-xs text-slate-500 mt-4">of {status.prds.length} total</p>
+          <p className="text-xs text-slate-500 mt-4">of {currentStatus.prds.length} total</p>
         </Card>
 
         <Card className="p-5" onClick={() => navigate('/prds')}>
@@ -160,16 +199,16 @@ const Dashboard: React.FC = () => {
             <div>
               <p className="text-sm font-medium text-slate-500">Cron Status</p>
               <h3 className="text-3xl font-bold text-slate-100 mt-1">
-                {status.crontab.installed ? 'Active' : 'Inactive'}
+                {currentStatus.crontab.installed ? 'Active' : 'Inactive'}
               </h3>
             </div>
-            <div className={`p-2 rounded-lg ${status.crontab.installed ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-700/50 text-slate-500'}`}>
+            <div className={`p-2 rounded-lg ${currentStatus.crontab.installed ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-700/50 text-slate-500'}`}>
               <Calendar className="h-5 w-5" />
             </div>
           </div>
           <p className="text-xs text-slate-500 mt-4">
-            {status.crontab.installed
-              ? `${status.crontab.entries.length} entr${status.crontab.entries.length === 1 ? 'y' : 'ies'} installed`
+            {currentStatus.crontab.installed
+              ? `${currentStatus.crontab.entries.length} entr${currentStatus.crontab.entries.length === 1 ? 'y' : 'ies'} installed`
               : 'No crontab entries'
             }
           </p>
@@ -201,7 +240,7 @@ const Dashboard: React.FC = () => {
                     <span className="truncate">{statusMap[apiStatus]}</span>
                    </div>
                    <div className="flex-1 space-y-2 overflow-y-auto scrollbar-hide">
-                      {status.prds.filter(p => p.status === apiStatus).map(prd => (
+                      {currentStatus.prds.filter(p => p.status === apiStatus).map(prd => (
                         <Card key={prd.name} className="p-3 shadow-none bg-slate-800 border-slate-700 hover:border-slate-600 hover:shadow-md cursor-pointer transition-all active:scale-95" onClick={() => navigate('/prds')}>
                            <div className="text-xs font-medium text-slate-200 line-clamp-2">{prd.name}</div>
                            {prd.unmetDependencies.length > 0 && (
@@ -217,7 +256,7 @@ const Dashboard: React.FC = () => {
                            )}
                         </Card>
                       ))}
-                      {status.prds.filter(p => p.status === apiStatus).length === 0 && (
+                      {currentStatus.prds.filter(p => p.status === apiStatus).length === 0 && (
                         <div className="h-full border-2 border-dashed border-slate-800 rounded-lg flex items-center justify-center">
                           <span className="text-xs text-slate-600">Empty</span>
                         </div>
@@ -235,19 +274,19 @@ const Dashboard: React.FC = () => {
             <div className="p-4 space-y-4">
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase mb-1">Project</p>
-                <p className="text-sm text-slate-200">{status.projectName}</p>
+                <p className="text-sm text-slate-200">{currentStatus.projectName}</p>
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase mb-1">Provider</p>
-                <p className="text-sm text-slate-200 capitalize">{status.config.provider}</p>
+                <p className="text-sm text-slate-200 capitalize">{currentStatus.config.provider}</p>
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase mb-1">PRD Directory</p>
-                <p className="text-sm text-slate-200">{status.config.prdDir}</p>
+                <p className="text-sm text-slate-200">{currentStatus.config.prdDir}</p>
               </div>
               <div>
                 <p className="text-xs font-medium text-slate-500 uppercase mb-1">Last Updated</p>
-                <p className="text-sm text-slate-200">{new Date(status.timestamp).toLocaleString()}</p>
+                <p className="text-sm text-slate-200">{new Date(currentStatus.timestamp).toLocaleString()}</p>
               </div>
             </div>
           </Card>
@@ -268,7 +307,7 @@ const Dashboard: React.FC = () => {
                     <div className={`font-medium ${executorProcess?.running ? 'text-slate-200' : 'text-slate-400'}`}>Executor</div>
                     <div className="text-xs text-slate-500">
                       {executorProcess?.running
-                        ? `PID: ${executorProcess.pid} • Running`
+                        ? `PID: ${executorProcess.pid} • ${currentStatus.activePrd ?? 'Running'}`
                         : 'Idle'
                       }
                     </div>
@@ -279,6 +318,11 @@ const Dashboard: React.FC = () => {
                     <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300" onClick={() => handleCancelProcess('run')} disabled={cancellingProcess === 'run'}>
                       <XCircle className="h-4 w-4 mr-1" />
                       {cancellingProcess === 'run' ? 'Stopping...' : 'Stop'}
+                    </Button>
+                  )}
+                  {!executorProcess?.running && inProgressPrds.length > 0 && (
+                    <Button size="sm" variant="ghost" className="text-amber-400 hover:text-amber-300" onClick={handleForceClear} disabled={clearingLock}>
+                      {clearingLock ? 'Clearing...' : 'Force Clear'}
                     </Button>
                   )}
                   <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>

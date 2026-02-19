@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, SortAsc, LayoutList, LayoutGrid, MoreVertical, Play, AlertCircle, RotateCcw } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
-import { useApi, fetchPrds, PrdWithContent, triggerRun, retryPrd } from '../api';
+import { useApi, fetchPrds, PrdWithContent, triggerRun, retryPrd, useStatusStream } from '../api';
 import { useStore } from '../store/useStore';
 
 // Map API status to UI status
@@ -30,9 +30,40 @@ const PRDs: React.FC = () => {
   const [selectedPRD, setSelectedPRD] = useState<PrdWithContent | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [optimisticStatus, setOptimisticStatus] = useState<Record<string, string>>({});
   const { addToast, selectedProjectId, globalModeLoading } = useStore();
   const { data: prdsData, loading, error, refetch } = useApi(fetchPrds, [selectedProjectId], { enabled: !globalModeLoading });
   const prds = prdsData ?? [];
+
+  // Merge optimistic status into displayed PRD list
+  const displayPrds = prds.map(p =>
+    optimisticStatus[p.name] ? { ...p, status: optimisticStatus[p.name] as PrdWithContent['status'] } : p
+  );
+
+  // Clear optimistic state when prds data arrives (server confirmed real state)
+  useEffect(() => {
+    // Clear optimistic status for any PRDs that now have real status from server
+    if (Object.keys(optimisticStatus).length > 0) {
+      const toClear = Object.keys(optimisticStatus).filter(name =>
+        prds.some(p => p.name === name && p.status !== 'ready')
+      );
+      if (toClear.length > 0) {
+        setOptimisticStatus(prev => {
+          const s = { ...prev };
+          for (const name of toClear) {
+            delete s[name];
+          }
+          return s;
+        });
+      }
+    }
+  }, [prds, optimisticStatus]);
+
+  // Subscribe to SSE for real-time updates (primary path)
+  // When status changes, refetch PRD list to get updated statuses and content
+  useStatusStream(() => {
+    refetch();
+  }, [selectedProjectId]);
 
   const handleRetry = async () => {
     if (!selectedPRD) return;
@@ -64,15 +95,25 @@ const PRDs: React.FC = () => {
   };
 
   const handleExecuteNow = async () => {
+    if (!selectedPRD) return;
     setIsExecuting(true);
+    // Optimistic UI update: immediately mark the PRD as "in-progress"
+    setOptimisticStatus(prev => ({ ...prev, [selectedPRD.name]: 'in-progress' }));
     try {
-      const result = await triggerRun();
+      const result = await triggerRun(selectedPRD.name);
       addToast({
         title: 'Executor Started',
         message: result.pid ? `Started with PID ${result.pid}` : 'Executor started',
         type: 'success',
       });
+      refetch(); // Will confirm or correct the optimistic state
     } catch (runError) {
+      // Revert optimistic state on error
+      setOptimisticStatus(prev => {
+        const s = { ...prev };
+        delete s[selectedPRD.name];
+        return s;
+      });
       addToast({
         title: 'Executor Failed',
         message: runError instanceof Error ? runError.message : 'Failed to start executor',
@@ -82,6 +123,27 @@ const PRDs: React.FC = () => {
       setIsExecuting(false);
     }
   };
+
+  // Poll for PRDs updates as fallback (30s interval - SSE is the fast path)
+  useEffect(() => {
+    const id = setInterval(() => refetch(), 30000);
+    return () => clearInterval(id);
+  }, [refetch]);
+
+  // Refetch on window focus
+  useEffect(() => {
+    const onFocus = () => refetch();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refetch]);
+
+  // Update selectedPRD when its status changes in the displayed list (includes optimistic updates)
+  useEffect(() => {
+    if (selectedPRD) {
+      const updated = displayPrds.find(p => p.name === selectedPRD.name);
+      if (updated) setSelectedPRD(updated);
+    }
+  }, [displayPrds, selectedPRD]);
 
   if (loading) {
     return (
@@ -146,7 +208,7 @@ const PRDs: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {prds.map((prd) => (
+                {displayPrds.map((prd) => (
                   <tr key={prd.name} className="hover:bg-slate-800/50 group cursor-pointer transition-colors" onClick={() => setSelectedPRD(prd)}>
                     <td className="px-6 py-4">
                       <div className="text-sm font-medium text-slate-200">{prd.name}</div>
@@ -175,7 +237,7 @@ const PRDs: React.FC = () => {
                     </td>
                   </tr>
                 ))}
-                {prds.length === 0 && (
+                {displayPrds.length === 0 && (
                   <tr>
                     <td colSpan={4} className="px-6 py-12 text-center text-slate-500">
                       No PRDs found. Create your first PRD to get started.
@@ -187,7 +249,7 @@ const PRDs: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {prds.map((prd) => (
+            {displayPrds.map((prd) => (
               <Card key={prd.name} className="p-5 flex flex-col h-full hover:border-indigo-500/50 transition-colors" onClick={() => setSelectedPRD(prd)}>
                 <div className="flex justify-between items-start mb-4">
                   <Badge variant={statusVariantMap[prd.status]}>{statusMap[prd.status]}</Badge>
@@ -220,7 +282,7 @@ const PRDs: React.FC = () => {
                 </div>
               </Card>
             ))}
-            {prds.length === 0 && (
+            {displayPrds.length === 0 && (
               <div className="col-span-full text-center py-12 text-slate-500">
                 No PRDs found. Create your first PRD to get started.
               </div>
@@ -263,13 +325,13 @@ const PRDs: React.FC = () => {
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-1">Dependencies</label>
               <div className="bg-slate-950/30 p-3 rounded-md border border-slate-800 max-h-32 overflow-y-auto space-y-2">
-                 {prds.map(p => (
+                 {displayPrds.map(p => (
                    <label key={p.name} className="flex items-center space-x-2 text-sm text-slate-300 cursor-pointer">
                       <input type="checkbox" className="rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500/50 focus:ring-offset-slate-900" />
                       <span>{p.name}</span>
                    </label>
                  ))}
-                 {prds.length === 0 && (
+                 {displayPrds.length === 0 && (
                    <p className="text-sm text-slate-600 italic">No existing PRDs</p>
                  )}
               </div>

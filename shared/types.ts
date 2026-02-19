@@ -107,6 +107,7 @@ export interface IStatusSnapshot {
   prs: IPrInfo[];
   logs: ILogInfo[];
   crontab: { installed: boolean; entries: string[] };
+  activePrd: string | null;
   timestamp: string;
 }
 

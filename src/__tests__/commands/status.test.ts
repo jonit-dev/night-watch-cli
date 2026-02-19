@@ -190,19 +190,33 @@ describe("status command", () => {
       // Create done PRDs
       fs.writeFileSync(path.join(prdDir, "done", "phase0.md"), "# Phase 0");
 
-      const program = new Command();
-      statusCommand(program);
+      // Create executor lock file and mock process.kill to simulate running executor
+      // This is required for cross-validation of in-progress status
+      const { executorLockPath } = await import("../../utils/status-data.js");
+      const lockPath = executorLockPath(tempDir);
+      fs.writeFileSync(lockPath, "12345");
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const originalKill = process.kill;
+      (process as any).kill = vi.fn().mockReturnValue(true);
 
-      await program.parseAsync(["node", "test", "status", "--json"]);
+      try {
+        const program = new Command();
+        statusCommand(program);
 
-      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
-      expect(jsonOutput.prds.pending).toBe(1);
-      expect(jsonOutput.prds.claimed).toBe(1);
-      expect(jsonOutput.prds.done).toBe(1);
+        const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-      consoleSpy.mockRestore();
+        await program.parseAsync(["node", "test", "status", "--json"]);
+
+        const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+        expect(jsonOutput.prds.pending).toBe(1);
+        expect(jsonOutput.prds.claimed).toBe(1);
+        expect(jsonOutput.prds.done).toBe(1);
+
+        consoleSpy.mockRestore();
+      } finally {
+        (process as any).kill = originalKill;
+        try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
+      }
     });
   });
 

@@ -66,6 +66,7 @@ export interface IStatusSnapshot {
   prs: IPrInfo[];
   logs: ILogInfo[];
   crontab: { installed: boolean; entries: string[] };
+  activePrd: string | null;
   timestamp: Date;
 }
 
@@ -236,6 +237,7 @@ export function parsePrdDependencies(prdPath: string): string[] {
 
 /**
  * Collect PRD info items from the PRD directory
+ * Cross-validates claim files with executor lock to avoid stale "in-progress" status
  */
 export function collectPrdInfo(
   projectDir: string,
@@ -248,6 +250,13 @@ export function collectPrdInfo(
   if (!fs.existsSync(fullPrdPath)) {
     return prds;
   }
+
+  // Pre-check executor lock for cross-validation
+  const lockPath = executorLockPath(projectDir);
+  const executorLock = checkLockFile(lockPath);
+
+  // Track orphaned claim files to clean up
+  const orphanedClaimFiles: string[] = [];
 
   const collectInDir = (dir: string) => {
     let entries: fs.Dirent[];
@@ -289,7 +298,17 @@ export function collectPrdInfo(
             const content = fs.readFileSync(claimPath, "utf-8");
             const claimData = JSON.parse(content);
             const age = Math.floor(Date.now() / 1000) - claimData.timestamp;
-            status = age < maxRuntime ? "in-progress" : "ready";
+            if (age < maxRuntime) {
+              // Cross-check: verify executor lock exists and is running
+              if (executorLock.running) {
+                status = "in-progress";
+              } else {
+                // Claim is fresh but executor is not running - stale/orphaned claim
+                status = "ready";
+                orphanedClaimFiles.push(claimPath);
+              }
+            }
+            // else: stale claim (too old) — status stays "ready"
           } catch {
             status = "ready";
           }
@@ -308,6 +327,15 @@ export function collectPrdInfo(
   };
 
   collectInDir(fullPrdPath);
+
+  // Clean up orphaned claim files
+  for (const claimFile of orphanedClaimFiles) {
+    try {
+      fs.unlinkSync(claimFile);
+    } catch {
+      // Ignore errors during cleanup
+    }
+  }
 
   // Overlay pending-review state from ~/.night-watch/prd-states.json
   // PRD files stay in place; state is tracked separately
@@ -582,6 +610,9 @@ export function fetchStatusSnapshot(
   const logs = collectLogInfo(projectDir);
   const crontab = getCrontabInfo(projectName, projectDir);
 
+  // Find any PRD with a fresh, lock-corroborated in-progress status
+  const activePrd = prds.find((p) => p.status === "in-progress")?.name ?? null;
+
   return {
     projectName,
     projectDir,
@@ -591,6 +622,7 @@ export function fetchStatusSnapshot(
     prs,
     logs,
     crontab,
+    activePrd,
     timestamp: new Date(),
   };
 }
