@@ -17,7 +17,10 @@ export type NotificationEvent =
   | "run_succeeded"
   | "run_failed"
   | "run_timeout"
-  | "review_completed";
+  | "review_completed"
+  | "pr_auto_merged"
+  | "rate_limit_fallback"
+  | "qa_completed";
 
 export interface IWebhookConfig {
   type: WebhookType;

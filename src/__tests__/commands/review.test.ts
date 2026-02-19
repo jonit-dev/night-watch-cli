@@ -27,6 +27,7 @@ import {
   buildEnvVars,
   applyCliOverrides,
   IReviewOptions,
+  parseAutoMergedPrNumbers,
   shouldSendReviewNotification,
 } from "../../commands/review.js";
 import { INightWatchConfig } from "../../types.js";
@@ -271,6 +272,21 @@ describe("review command", () => {
       expect(shouldSendReviewNotification("success_reviewed")).toBe(true);
       expect(shouldSendReviewNotification("failure")).toBe(true);
       expect(shouldSendReviewNotification("timeout")).toBe(true);
+    });
+  });
+
+  describe("parseAutoMergedPrNumbers", () => {
+    it("parses comma-separated #PR tokens", () => {
+      expect(parseAutoMergedPrNumbers("#12,#34,#56")).toEqual([12, 34, 56]);
+    });
+
+    it("ignores invalid tokens and empty values", () => {
+      expect(parseAutoMergedPrNumbers("#12,,abc,#x,#34")).toEqual([12, 34]);
+    });
+
+    it("returns empty array when value is missing", () => {
+      expect(parseAutoMergedPrNumbers(undefined)).toEqual([]);
+      expect(parseAutoMergedPrNumbers("")).toEqual([]);
     });
   });
 });

@@ -422,18 +422,47 @@ check_rate_limited() {
 }
 
 # Send an immediate Telegram warning when the rate-limit fallback is triggered.
-# Uses NW_TELEGRAM_BOT_TOKEN and NW_TELEGRAM_CHAT_ID exported by the CLI runner.
-# Falls back silently when credentials are absent.
+# Preferred input: NW_TELEGRAM_RATE_LIMIT_WEBHOOKS (JSON array with botToken/chatId).
+# Legacy fallback: NW_TELEGRAM_BOT_TOKEN + NW_TELEGRAM_CHAT_ID.
 # Usage: send_rate_limit_fallback_warning <model> <project_name>
 send_rate_limit_fallback_warning() {
   local model="${1:-native Claude}"
   local project_name="${2:-unknown}"
+  local msg="⚠️ Rate Limit Fallback
+
+Project: ${project_name}
+Proxy quota exhausted - falling back to native Claude (${model})"
+
+  # Preferred path: iterate all opted-in Telegram webhooks.
+  if [ -n "${NW_TELEGRAM_RATE_LIMIT_WEBHOOKS:-}" ] && command -v jq >/dev/null 2>&1; then
+    local sent=0
+    local webhook_json
+    while IFS= read -r webhook_json; do
+      [ -z "${webhook_json}" ] && continue
+      local bot_token
+      local chat_id
+      bot_token=$(printf '%s' "${webhook_json}" | jq -r '.botToken // empty' 2>/dev/null || true)
+      chat_id=$(printf '%s' "${webhook_json}" | jq -r '.chatId // empty' 2>/dev/null || true)
+      if [ -n "${bot_token}" ] && [ -n "${chat_id}" ]; then
+        curl -s -X POST "https://api.telegram.org/bot${bot_token}/sendMessage" \
+          --data-urlencode "chat_id=${chat_id}" \
+          --data-urlencode "text=${msg}" > /dev/null 2>&1 || true
+        sent=1
+      fi
+    done < <(printf '%s' "${NW_TELEGRAM_RATE_LIMIT_WEBHOOKS}" | jq -c '.[]?' 2>/dev/null || true)
+
+    if [ "${sent}" -eq 1 ]; then
+      return 0
+    fi
+  fi
+
+  # Legacy single-webhook fallback.
   if [ -z "${NW_TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${NW_TELEGRAM_CHAT_ID:-}" ]; then
     return 0
   fi
-  local msg="⚠️ Rate Limit Fallback%0A%0AProject: ${project_name}%0AProxy quota exhausted — falling back to native Claude (${model})"
   curl -s -X POST "https://api.telegram.org/bot${NW_TELEGRAM_BOT_TOKEN}/sendMessage" \
-    -d "chat_id=${NW_TELEGRAM_CHAT_ID}&text=${msg}" > /dev/null 2>&1 || true
+    --data-urlencode "chat_id=${NW_TELEGRAM_CHAT_ID}" \
+    --data-urlencode "text=${msg}" > /dev/null 2>&1 || true
 }
 
 # ── Board mode issue discovery ────────────────────────────────────────────────
