@@ -26,7 +26,8 @@ const mockCwd = vi.spyOn(process, "cwd");
 import {
   buildEnvVars,
   applyCliOverrides,
-  ReviewOptions,
+  IReviewOptions,
+  shouldSendReviewNotification,
 } from "../../commands/review.js";
 import { INightWatchConfig } from "../../types.js";
 import { sendNotifications } from "../../utils/notify.js";
@@ -91,7 +92,7 @@ describe("review command", () => {
   describe("buildEnvVars", () => {
     it("should use reviewer-specific env vars", () => {
       const config = createTestConfig();
-      const options: ReviewOptions = { dryRun: false };
+      const options: IReviewOptions = { dryRun: false };
 
       const env = buildEnvVars(config, options);
 
@@ -106,7 +107,7 @@ describe("review command", () => {
 
     it("should set NW_PROVIDER_CMD for claude provider", () => {
       const config = createTestConfig();
-      const options: ReviewOptions = { dryRun: false };
+      const options: IReviewOptions = { dryRun: false };
 
       const env = buildEnvVars(config, options);
 
@@ -115,7 +116,7 @@ describe("review command", () => {
 
     it("should set NW_PROVIDER_CMD for codex provider", () => {
       const config = createTestConfig({ provider: "codex" });
-      const options: ReviewOptions = { dryRun: false };
+      const options: IReviewOptions = { dryRun: false };
 
       const env = buildEnvVars(config, options);
 
@@ -124,7 +125,7 @@ describe("review command", () => {
 
     it("should pass NW_DEFAULT_BRANCH when configured", () => {
       const config = createTestConfig({ defaultBranch: "main" });
-      const options: ReviewOptions = { dryRun: false };
+      const options: IReviewOptions = { dryRun: false };
 
       const env = buildEnvVars(config, options);
 
@@ -133,7 +134,7 @@ describe("review command", () => {
 
     it("should set NW_DRY_RUN when dryRun is true", () => {
       const config = createTestConfig();
-      const options: ReviewOptions = { dryRun: true };
+      const options: IReviewOptions = { dryRun: true };
 
       const env = buildEnvVars(config, options);
 
@@ -142,7 +143,7 @@ describe("review command", () => {
 
     it("should not set NW_DRY_RUN when dryRun is false", () => {
       const config = createTestConfig();
-      const options: ReviewOptions = { dryRun: false };
+      const options: IReviewOptions = { dryRun: false };
 
       const env = buildEnvVars(config, options);
 
@@ -151,7 +152,7 @@ describe("review command", () => {
 
     it("should not set any ANTHROPIC_* environment variables", () => {
       const config = createTestConfig();
-      const options: ReviewOptions = { dryRun: false };
+      const options: IReviewOptions = { dryRun: false };
 
       const env = buildEnvVars(config, options);
 
@@ -163,7 +164,7 @@ describe("review command", () => {
 
     it("should not set any budget-related environment variables", () => {
       const config = createTestConfig();
-      const options: ReviewOptions = { dryRun: false };
+      const options: IReviewOptions = { dryRun: false };
 
       const env = buildEnvVars(config, options);
 
@@ -176,7 +177,7 @@ describe("review command", () => {
   describe("applyCliOverrides", () => {
     it("should override reviewer timeout with --timeout flag", () => {
       const config = createTestConfig();
-      const options: ReviewOptions = { dryRun: false, timeout: "2700" };
+      const options: IReviewOptions = { dryRun: false, timeout: "2700" };
 
       const overridden = applyCliOverrides(config, options);
 
@@ -186,7 +187,7 @@ describe("review command", () => {
 
     it("should override provider with --provider flag", () => {
       const config = createTestConfig();
-      const options: ReviewOptions = { dryRun: false, provider: "codex" };
+      const options: IReviewOptions = { dryRun: false, provider: "codex" };
 
       const overridden = applyCliOverrides(config, options);
 
@@ -197,6 +198,23 @@ describe("review command", () => {
   describe("notification integration", () => {
     it("sendNotifications should be importable", () => {
       expect(typeof sendNotifications).toBe("function");
+    });
+  });
+
+  describe("shouldSendReviewNotification", () => {
+    it("should send notifications when status is absent (legacy behavior)", () => {
+      expect(shouldSendReviewNotification(undefined)).toBe(true);
+    });
+
+    it("should suppress notifications for skip statuses", () => {
+      expect(shouldSendReviewNotification("skip_no_open_prs")).toBe(false);
+      expect(shouldSendReviewNotification("skip_all_passing")).toBe(false);
+    });
+
+    it("should send notifications for actionable outcomes", () => {
+      expect(shouldSendReviewNotification("success_reviewed")).toBe(true);
+      expect(shouldSendReviewNotification("failure")).toBe(true);
+      expect(shouldSendReviewNotification("timeout")).toBe(true);
     });
   });
 });

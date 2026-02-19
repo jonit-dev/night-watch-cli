@@ -44,6 +44,16 @@ PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 # NOTE: Lock file path must match executorLockPath() in src/utils/status-data.ts
 LOCK_FILE="/tmp/night-watch-${PROJECT_RUNTIME_KEY}.lock"
 
+emit_result() {
+  local status="${1:?status required}"
+  local details="${2:-}"
+  if [ -n "${details}" ]; then
+    echo "NIGHT_WATCH_RESULT:${status}|${details}"
+  else
+    echo "NIGHT_WATCH_RESULT:${status}"
+  fi
+}
+
 # Validate provider
 if ! validate_provider "${PROVIDER_CMD}"; then
   echo "ERROR: Unknown provider: ${PROVIDER_CMD}" >&2
@@ -53,6 +63,7 @@ fi
 rotate_log
 
 if ! acquire_lock "${LOCK_FILE}"; then
+  emit_result "skip_locked"
   exit 0
 fi
 
@@ -62,6 +73,7 @@ ELIGIBLE_PRD=$(find_eligible_prd "${PRD_DIR}" "${MAX_RUNTIME}" "${PROJECT_DIR}")
 
 if [ -z "${ELIGIBLE_PRD}" ]; then
   log "SKIP: No eligible PRDs (all done, in-progress, or blocked)"
+  emit_result "skip_no_eligible_prd"
   exit 0
 fi
 
@@ -178,9 +190,11 @@ MERGED_PR_COUNT=$(count_prs_for_branch merged "${BRANCH_NAME}")
 if [ "${MERGED_PR_COUNT}" -gt 0 ]; then
   log "INFO: Found merged PR for ${BRANCH_NAME}; skipping provider run"
   if finalize_prd_done "already merged on ${BRANCH_NAME}"; then
+    emit_result "success_already_merged" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
     exit 0
   fi
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
+  emit_result "failure_finalize" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
   exit 1
 fi
 
@@ -262,26 +276,39 @@ done
 if [ ${EXIT_CODE} -eq 0 ]; then
   OPEN_PR_COUNT=$(count_prs_for_branch open "${BRANCH_NAME}")
   if [ "${OPEN_PR_COUNT}" -gt 0 ]; then
-    if ! finalize_prd_done "implemented, PR opened on ${BRANCH_NAME}"; then
+    if finalize_prd_done "implemented, PR opened on ${BRANCH_NAME}"; then
+      emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
+    else
       night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
+      emit_result "failure_finalize" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
+      EXIT_CODE=1
     fi
   else
     MERGED_PR_COUNT=$(count_prs_for_branch merged "${BRANCH_NAME}")
     if [ "${MERGED_PR_COUNT}" -gt 0 ]; then
-      if ! finalize_prd_done "already merged on ${BRANCH_NAME}"; then
+      if finalize_prd_done "already merged on ${BRANCH_NAME}"; then
+        emit_result "success_already_merged" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
+      else
         night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
+        emit_result "failure_finalize" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
+        EXIT_CODE=1
       fi
     else
       log "WARN: ${PROVIDER_CMD} exited 0 but no open/merged PR found on ${BRANCH_NAME} — recording cooldown to avoid repeated stuck runs"
       night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
+      emit_result "failure_no_pr_after_success" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
+      EXIT_CODE=1
     fi
   fi
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: Night watch killed after ${MAX_RUNTIME}s while processing ${ELIGIBLE_PRD}"
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" timeout --exit-code 124 2>/dev/null || true
+  emit_result "timeout" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
 else
   log "FAIL: Night watch exited with code ${EXIT_CODE} while processing ${ELIGIBLE_PRD}"
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code "${EXIT_CODE}" 2>/dev/null || true
+  emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
 fi
 
 cleanup_worktrees "${PROJECT_DIR}"
+exit "${EXIT_CODE}"

@@ -3,7 +3,7 @@
  * Fetches PR details using the gh CLI
  */
 
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 
 export interface IPrDetails {
   number: number;
@@ -15,6 +15,55 @@ export interface IPrDetails {
   changedFiles: number;
 }
 
+function parsePrDetails(raw: string): IPrDetails | null {
+  try {
+    const details = JSON.parse(raw) as Partial<IPrDetails>;
+    if (typeof details.number !== "number") {
+      return null;
+    }
+    return {
+      number: details.number,
+      title: details.title ?? "",
+      url: details.url ?? "",
+      body: details.body ?? "",
+      additions: details.additions ?? 0,
+      deletions: details.deletions ?? 0,
+      changedFiles: details.changedFiles ?? 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function fetchPrBySelector(selector: string, cwd: string): IPrDetails | null {
+  try {
+    const output = execFileSync(
+      "gh",
+      ["pr", "view", selector, "--json", "number,title,url,body,additions,deletions,changedFiles"],
+      { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
+    );
+    return parsePrDetails(output);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch PR details by exact branch name selector.
+ * Returns null on any failure.
+ */
+export function fetchPrDetailsForBranch(branchName: string, cwd: string): IPrDetails | null {
+  return fetchPrBySelector(branchName, cwd);
+}
+
+/**
+ * Fetch PR details by PR number selector.
+ * Returns null on any failure.
+ */
+export function fetchPrDetailsByNumber(prNumber: number, cwd: string): IPrDetails | null {
+  return fetchPrBySelector(String(prNumber), cwd);
+}
+
 /**
  * Fetch PR details for the most recently created PR matching a branch prefix.
  * Returns null if gh is unavailable, not authenticated, or no PR found.
@@ -22,8 +71,9 @@ export interface IPrDetails {
 export function fetchPrDetails(branchPrefix: string, cwd: string): IPrDetails | null {
   try {
     // Find the most recently created open PR on a matching branch
-    const listOutput = execSync(
-      `gh pr list --state open --json number,headRefName --limit 20`,
+    const listOutput = execFileSync(
+      "gh",
+      ["pr", "list", "--state", "open", "--json", "number,headRefName", "--limit", "20"],
       { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
     );
 
@@ -38,24 +88,7 @@ export function fetchPrDetails(branchPrefix: string, cwd: string): IPrDetails | 
 
     // Use the first match (most recent)
     const prNumber = matching[0].number;
-
-    // Fetch full details for this PR
-    const viewOutput = execSync(
-      `gh pr view ${prNumber} --json number,title,url,body,additions,deletions,changedFiles`,
-      { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
-    );
-
-    const details = JSON.parse(viewOutput);
-
-    return {
-      number: details.number,
-      title: details.title ?? "",
-      url: details.url ?? "",
-      body: details.body ?? "",
-      additions: details.additions ?? 0,
-      deletions: details.deletions ?? 0,
-      changedFiles: details.changedFiles ?? 0,
-    };
+    return fetchPrDetailsByNumber(prNumber, cwd);
   } catch {
     // gh CLI not available, not authenticated, or command failed
     return null;
@@ -69,8 +102,9 @@ export function fetchPrDetails(branchPrefix: string, cwd: string): IPrDetails | 
  */
 export function fetchReviewedPrDetails(branchPatterns: string[], cwd: string): IPrDetails | null {
   try {
-    const listOutput = execSync(
-      `gh pr list --state open --json number,headRefName --limit 20`,
+    const listOutput = execFileSync(
+      "gh",
+      ["pr", "list", "--state", "open", "--json", "number,headRefName", "--limit", "20"],
       { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
     );
 
@@ -87,23 +121,7 @@ export function fetchReviewedPrDetails(branchPatterns: string[], cwd: string): I
 
     // Use the first match
     const prNumber = matching[0].number;
-
-    const viewOutput = execSync(
-      `gh pr view ${prNumber} --json number,title,url,body,additions,deletions,changedFiles`,
-      { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
-    );
-
-    const details = JSON.parse(viewOutput);
-
-    return {
-      number: details.number,
-      title: details.title ?? "",
-      url: details.url ?? "",
-      body: details.body ?? "",
-      additions: details.additions ?? 0,
-      deletions: details.deletions ?? 0,
-      changedFiles: details.changedFiles ?? 0,
-    };
+    return fetchPrDetailsByNumber(prNumber, cwd);
   } catch {
     return null;
   }

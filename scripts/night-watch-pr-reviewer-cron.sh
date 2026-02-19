@@ -37,6 +37,16 @@ PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 # NOTE: Lock file path must match reviewerLockPath() in src/utils/status-data.ts
 LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_RUNTIME_KEY}.lock"
 
+emit_result() {
+  local status="${1:?status required}"
+  local details="${2:-}"
+  if [ -n "${details}" ]; then
+    echo "NIGHT_WATCH_RESULT:${status}|${details}"
+  else
+    echo "NIGHT_WATCH_RESULT:${status}"
+  fi
+}
+
 # Validate provider
 if ! validate_provider "${PROVIDER_CMD}"; then
   echo "ERROR: Unknown provider: ${PROVIDER_CMD}" >&2
@@ -46,6 +56,7 @@ fi
 rotate_log
 
 if ! acquire_lock "${LOCK_FILE}"; then
+  emit_result "skip_locked"
   exit 0
 fi
 
@@ -74,6 +85,7 @@ OPEN_PRS=$(
 
 if [ "${OPEN_PRS}" -eq 0 ]; then
   log "SKIP: No open PRs matching branch patterns (${BRANCH_PATTERNS_RAW})"
+  emit_result "skip_no_open_prs"
   exit 0
 fi
 
@@ -119,8 +131,13 @@ done < <(gh pr list --state open --json number,headRefName --jq '.[] | [.number,
 
 if [ "${NEEDS_WORK}" -eq 0 ]; then
   log "SKIP: All ${OPEN_PRS} open PR(s) have passing CI and review score >= ${MIN_REVIEW_SCORE} (or no score yet)"
+  emit_result "skip_all_passing"
   exit 0
 fi
+
+PRS_NEEDING_WORK=$(echo "${PRS_NEEDING_WORK}" \
+  | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]][[:space:]]*/ /g' -e 's/[[:space:]]*$//')
+PRS_NEEDING_WORK_CSV="${PRS_NEEDING_WORK// /,}"
 
 if [ -n "${NW_DEFAULT_BRANCH:-}" ]; then
   DEFAULT_BRANCH="${NW_DEFAULT_BRANCH}"
@@ -189,8 +206,11 @@ cleanup_worktrees "${PROJECT_DIR}"
 
 if [ ${EXIT_CODE} -eq 0 ]; then
   log "DONE: PR reviewer completed successfully"
+  emit_result "success_reviewed" "prs=${PRS_NEEDING_WORK_CSV}"
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: PR reviewer killed after ${MAX_RUNTIME}s"
+  emit_result "timeout" "prs=${PRS_NEEDING_WORK_CSV}"
 else
   log "FAIL: PR reviewer exited with code ${EXIT_CODE}"
+  emit_result "failure" "prs=${PRS_NEEDING_WORK_CSV}"
 fi
