@@ -13,5 +13,9 @@
   "minReviewScore": 80,
   "maxLogSize": 524288,
   "cronSchedule": "0 0-21 * * *",
-  "reviewerSchedule": "0 0,3,6,9,12,15,18,21 * * *"
+  "reviewerSchedule": "0 0,3,6,9,12,15,18,21 * * *",
+  "autoMerge": false,
+  "autoMergeMethod": "squash",
+  "fallbackOnRateLimit": false,
+  "claudeModel": "sonnet"
 }

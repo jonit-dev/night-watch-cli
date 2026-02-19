@@ -10,6 +10,8 @@ set -euo pipefail
 #   NW_REVIEWER_MAX_RUNTIME=3600 - Maximum runtime in seconds (1 hour)
 #   NW_PROVIDER_CMD=claude       - AI provider CLI to use (claude, codex, etc.)
 #   NW_DRY_RUN=0                 - Set to 1 for dry-run mode (prints diagnostics only)
+#   NW_AUTO_MERGE=0              - Set to 1 to enable auto-merge
+#   NW_AUTO_MERGE_METHOD=squash  - Merge method: squash, merge, or rebase
 
 PROJECT_DIR="${1:?Usage: $0 /path/to/project}"
 PROJECT_NAME=$(basename "${PROJECT_DIR}")
@@ -20,6 +22,8 @@ MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 MIN_REVIEW_SCORE="${NW_MIN_REVIEW_SCORE:-80}"
 BRANCH_PATTERNS_RAW="${NW_BRANCH_PATTERNS:-feat/,night-watch/}"
+AUTO_MERGE="${NW_AUTO_MERGE:-0}"
+AUTO_MERGE_METHOD="${NW_AUTO_MERGE_METHOD:-squash}"
 
 # Ensure NVM / Node / Claude are on PATH
 export NVM_DIR="${HOME}/.nvm"
@@ -156,6 +160,10 @@ if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   echo "Provider: ${PROVIDER_CMD}"
   echo "Branch Patterns: ${BRANCH_PATTERNS_RAW}"
   echo "Min Review Score: ${MIN_REVIEW_SCORE}"
+  echo "Auto-merge: ${AUTO_MERGE}"
+  if [ "${AUTO_MERGE}" = "1" ]; then
+    echo "Auto-merge Method: ${AUTO_MERGE_METHOD}"
+  fi
   echo "Open PRs needing work:${PRS_NEEDING_WORK}"
   echo "Default Branch: ${DEFAULT_BRANCH}"
   echo "Review Worktree: ${REVIEW_WORKTREE_DIR}"
@@ -203,6 +211,68 @@ case "${PROVIDER_CMD}" in
 esac
 
 cleanup_worktrees "${PROJECT_DIR}"
+
+# ── Auto-merge eligible PRs ─────────────────────────────────────────────────────
+# After the reviewer completes, check for PRs that are merge-ready and queue them
+# for auto-merge if enabled. Uses gh pr merge --auto to respect GitHub branch protection.
+AUTO_MERGED_PRS=""
+AUTO_MERGE_FAILED_PRS=""
+
+if [ "${AUTO_MERGE}" = "1" ] && [ ${EXIT_CODE} -eq 0 ]; then
+  log "AUTO-MERGE: Checking for merge-ready PRs..."
+
+  while IFS=$'\t' read -r pr_number pr_branch; do
+    if [ -z "${pr_number}" ] || [ -z "${pr_branch}" ]; then
+      continue
+    fi
+
+    # Only process PRs matching branch patterns
+    if ! printf '%s\n' "${pr_branch}" | grep -Eq "${BRANCH_REGEX}"; then
+      continue
+    fi
+
+    # Check CI status - must have no failures
+    FAILED_CHECKS=$(gh pr checks "${pr_number}" 2>/dev/null | grep -ci 'fail' || true)
+    if [ "${FAILED_CHECKS}" -gt 0 ]; then
+      continue
+    fi
+
+    # Check review score - must have score >= threshold
+    ALL_COMMENTS=$(
+      {
+        gh pr view "${pr_number}" --json comments --jq '.comments[].body' 2>/dev/null || true
+        if [ -n "${REPO}" ]; then
+          gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
+        fi
+      } | sort -u
+    )
+    LATEST_SCORE=$(echo "${ALL_COMMENTS}" \
+      | grep -oP 'Overall Score:\*?\*?\s*(\d+)/100' \
+      | tail -1 \
+      | grep -oP '\d+(?=/100)' || echo "")
+
+    # Skip PRs without a score
+    if [ -z "${LATEST_SCORE}" ]; then
+      continue
+    fi
+
+    # Skip PRs with score below threshold
+    if [ "${LATEST_SCORE}" -lt "${MIN_REVIEW_SCORE}" ]; then
+      continue
+    fi
+
+    # PR is merge-ready - queue for auto-merge
+    log "AUTO-MERGE: PR #${pr_number} (${pr_branch}) — score ${LATEST_SCORE}/100, CI passing"
+
+    if gh pr merge "${pr_number}" --"${AUTO_MERGE_METHOD}" --auto --delete-branch 2>>"${LOG_FILE}"; then
+      log "AUTO-MERGE: Successfully queued merge for PR #${pr_number}"
+      AUTO_MERGED_PRS="${AUTO_MERGED_PRS} #${pr_number}"
+    else
+      log "WARN: Auto-merge failed for PR #${pr_number}"
+      AUTO_MERGE_FAILED_PRS="${AUTO_MERGE_FAILED_PRS} #${pr_number}"
+    fi
+  done < <(gh pr list --state open --json number,headRefName --jq '.[] | [.number, .headRefName] | @tsv' 2>/dev/null || true)
+fi
 
 if [ ${EXIT_CODE} -eq 0 ]; then
   log "DONE: PR reviewer completed successfully"

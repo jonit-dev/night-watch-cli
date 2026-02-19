@@ -27,6 +27,8 @@ interface IStatusInfo {
   projectDir: string;
   provider: string;
   reviewerEnabled: boolean;
+  autoMerge: boolean;
+  autoMergeMethod: string;
   executor: {
     running: boolean;
     pid: number | null;
@@ -104,6 +106,8 @@ export function statusCommand(program: Command): void {
           projectDir: snapshot.projectDir,
           provider: config.provider,
           reviewerEnabled: config.reviewerEnabled,
+          autoMerge: config.autoMerge,
+          autoMergeMethod: config.autoMergeMethod,
           executor: { running: executorProc?.running ?? false, pid: executorProc?.pid ?? null },
           reviewer: { running: reviewerProc?.running ?? false, pid: reviewerProc?.pid ?? null },
           prds: { pending: pendingPrds, claimed: claimedPrds, done: donePrds },
@@ -133,6 +137,7 @@ export function statusCommand(program: Command): void {
         const configTable = createTable({ head: ["Setting", "Value"] });
         configTable.push(["Provider", status.provider]);
         configTable.push(["Reviewer", status.reviewerEnabled ? "Enabled" : "Disabled"]);
+        configTable.push(["Auto-merge", status.autoMerge ? `Enabled (${status.autoMergeMethod})` : "Disabled"]);
         console.log(configTable.toString());
 
         // Process status section with colored indicators

@@ -594,6 +594,7 @@ export function createConfigTab(): ITab {
       }
 
       pendingChanges.providerEnv = {
+        ANTHROPIC_API_KEY: apiKey,
         ANTHROPIC_AUTH_TOKEN: apiKey,
         ...GLM5_DEFAULTS,
       };

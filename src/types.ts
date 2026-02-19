@@ -10,6 +10,11 @@ import { IBoardProviderConfig } from "./board/types.js";
 export type Provider = "claude" | "codex";
 
 /**
+ * Claude model to use for native (non-proxy) execution
+ */
+export type ClaudeModel = "sonnet" | "opus";
+
+/**
  * Complete Night Watch configuration
  */
 export interface INightWatchConfig {
@@ -64,6 +69,22 @@ export interface INightWatchConfig {
   /** Extra environment variables to pass to the provider CLI (e.g. API keys, base URLs) */
   providerEnv: Record<string, string>;
 
+  /**
+   * When true, automatically fall back to native Claude (OAuth / direct Anthropic API)
+   * after the first rate-limit (429) on a proxy provider (e.g. GLM-5 via api.z.ai).
+   * A Telegram warning is sent immediately when the fallback is triggered.
+   * Default: false
+   */
+  fallbackOnRateLimit: boolean;
+
+  /**
+   * Claude model to use when running natively (i.e. when no ANTHROPIC_BASE_URL proxy
+   * is set, or when falling back from a rate-limited proxy).
+   * "sonnet" → claude-sonnet-4-6 (default)
+   * "opus"   → claude-opus-4-6
+   */
+  claudeModel: ClaudeModel;
+
   /** Notification webhook configuration */
   notifications: INotificationConfig;
 
@@ -78,10 +99,17 @@ export interface INightWatchConfig {
 
   /** Board provider configuration for PRD tracking */
   boardProvider: IBoardProviderConfig;
+
+  /** Enable automatic merging of PRs that pass CI and review score threshold */
+  autoMerge: boolean;
+
+  /** Git merge method for auto-merge */
+  autoMergeMethod: MergeMethod;
 }
 
 export type WebhookType = "slack" | "discord" | "telegram";
-export type NotificationEvent = "run_started" | "run_succeeded" | "run_failed" | "run_timeout" | "review_completed";
+export type NotificationEvent = "run_started" | "run_succeeded" | "run_failed" | "run_timeout" | "review_completed" | "pr_auto_merged" | "rate_limit_fallback";
+export type MergeMethod = "squash" | "merge" | "rebase";
 
 export interface IWebhookConfig {
   type: WebhookType;

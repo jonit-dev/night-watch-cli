@@ -40,6 +40,10 @@ export function getEventEmoji(event: NotificationEvent): string {
       return "\u23F0";
     case "review_completed":
       return "\uD83D\uDD0D";
+    case "rate_limit_fallback":
+      return "\u26A0\uFE0F";
+    case "pr_auto_merged":
+      return "\uD83D\uDD00";
   }
 }
 
@@ -58,6 +62,10 @@ export function getEventTitle(event: NotificationEvent): string {
       return "PRD Execution Timed Out";
     case "review_completed":
       return "PR Review Completed";
+    case "rate_limit_fallback":
+      return "Rate Limit Fallback";
+    case "pr_auto_merged":
+      return "PR Auto-Merged";
   }
 }
 
@@ -76,6 +84,10 @@ export function getEventColor(event: NotificationEvent): number {
       return 0xff0000;
     case "review_completed":
       return 0x0099ff;
+    case "rate_limit_fallback":
+      return 0xffa500;
+    case "pr_auto_merged":
+      return 0x9b59b6;
   }
 }
 

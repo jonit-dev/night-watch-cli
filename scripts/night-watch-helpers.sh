@@ -406,11 +406,34 @@ mark_prd_done() {
 
 # ── Rate limit detection ────────────────────────────────────────────────────
 
-# Check if the last N lines of the log contain a 429 rate limit error.
+# Check if the log contains a 429 rate limit error since a given line number.
+# Usage: check_rate_limited <log_file> [start_line]
+# When start_line is provided, only lines after that position are checked,
+# preventing false positives from 429 errors in previous runs.
 # Returns 0 if rate limited, 1 otherwise.
 check_rate_limited() {
   local log_file="${1:?log_file required}"
-  tail -20 "${log_file}" 2>/dev/null | grep -q "429"
+  local start_line="${2:-0}"
+  if [ "${start_line}" -gt 0 ] 2>/dev/null; then
+    tail -n "+$((start_line + 1))" "${log_file}" 2>/dev/null | grep -q "429"
+  else
+    tail -20 "${log_file}" 2>/dev/null | grep -q "429"
+  fi
+}
+
+# Send an immediate Telegram warning when the rate-limit fallback is triggered.
+# Uses NW_TELEGRAM_BOT_TOKEN and NW_TELEGRAM_CHAT_ID exported by the CLI runner.
+# Falls back silently when credentials are absent.
+# Usage: send_rate_limit_fallback_warning <model> <project_name>
+send_rate_limit_fallback_warning() {
+  local model="${1:-native Claude}"
+  local project_name="${2:-unknown}"
+  if [ -z "${NW_TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${NW_TELEGRAM_CHAT_ID:-}" ]; then
+    return 0
+  fi
+  local msg="⚠️ Rate Limit Fallback%0A%0AProject: ${project_name}%0AProxy quota exhausted — falling back to native Claude (${model})"
+  curl -s -X POST "https://api.telegram.org/bot${NW_TELEGRAM_BOT_TOKEN}/sendMessage" \
+    -d "chat_id=${NW_TELEGRAM_CHAT_ID}&text=${msg}" > /dev/null 2>&1 || true
 }
 
 # ── Board mode issue discovery ────────────────────────────────────────────────
