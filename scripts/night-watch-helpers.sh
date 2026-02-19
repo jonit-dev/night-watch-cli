@@ -412,3 +412,23 @@ check_rate_limited() {
   local log_file="${1:?log_file required}"
   tail -20 "${log_file}" 2>/dev/null | grep -q "429"
 }
+
+# ── Board mode issue discovery ────────────────────────────────────────────────
+
+# Get the next eligible issue from the board provider.
+# Prints the JSON of the first "Ready" issue to stdout, or nothing if none found.
+# Returns 0 on success, 1 if no issue found or CLI unavailable.
+find_eligible_board_issue() {
+  local cli_bin
+  cli_bin=$(resolve_night_watch_cli) || {
+    log "WARN: Cannot find night-watch CLI for board mode"
+    return 1
+  }
+  local result
+  result=$("${cli_bin}" board next-issue --column "Ready" --json 2>/dev/null) || true
+  if [ -z "${result}" ]; then
+    return 1
+  fi
+  printf '%s' "${result}"
+  return 0
+}

@@ -6,7 +6,11 @@ When this activates: `PRD Executor: Initializing`
 
 ## Input
 
-You will be given a path to a PRD file to implement. Read it fully before proceeding.
+You will be given either:
+- A **path to a PRD file** to implement (filesystem mode), or
+- **Inline PRD content** prefixed with "Implement the following PRD (GitHub issue #N: Title):" (board mode)
+
+In board mode, the issue body IS the full PRD. Parse it the same way as a file-based PRD.
 
 ---
 
