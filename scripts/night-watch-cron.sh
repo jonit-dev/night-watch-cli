@@ -69,19 +69,51 @@ fi
 
 cleanup_worktrees "${PROJECT_DIR}"
 
-ELIGIBLE_PRD=$(find_eligible_prd "${PRD_DIR}" "${MAX_RUNTIME}" "${PROJECT_DIR}")
+ISSUE_NUMBER=""    # board mode: GitHub issue number
+ISSUE_BODY=""      # board mode: issue body (PRD content)
+ISSUE_TITLE_RAW="" # board mode: issue title
+NW_CLI=""          # board mode: resolved night-watch CLI binary
 
-if [ -z "${ELIGIBLE_PRD}" ]; then
-  log "SKIP: No eligible PRDs (all done, in-progress, or blocked)"
-  emit_result "skip_no_eligible_prd"
-  exit 0
+if [ "${NW_BOARD_ENABLED:-}" = "true" ]; then
+  # Board mode: discover next task from GitHub Projects board
+  NW_CLI=$(resolve_night_watch_cli 2>/dev/null || true)
+  if [ -z "${NW_CLI}" ]; then
+    log "ERROR: Cannot resolve night-watch CLI for board mode"
+    exit 1
+  fi
+  ISSUE_JSON=$(find_eligible_board_issue)
+  if [ -z "${ISSUE_JSON}" ]; then
+    log "SKIP: No eligible issues in Ready column (board mode)"
+    emit_result "skip_no_eligible_prd"
+    exit 0
+  fi
+  ISSUE_NUMBER=$(printf '%s' "${ISSUE_JSON}" | jq -r '.number // empty' 2>/dev/null || true)
+  ISSUE_TITLE_RAW=$(printf '%s' "${ISSUE_JSON}" | jq -r '.title // empty' 2>/dev/null || true)
+  ISSUE_BODY=$(printf '%s' "${ISSUE_JSON}" | jq -r '.body // empty' 2>/dev/null || true)
+  if [ -z "${ISSUE_NUMBER}" ]; then
+    log "ERROR: Board mode: failed to parse issue number from JSON"
+    exit 1
+  fi
+  # Slugify title for branch naming
+  ELIGIBLE_PRD="${ISSUE_NUMBER}-$(printf '%s' "${ISSUE_TITLE_RAW}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-\|-$//g')"
+  log "BOARD: Found ready issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}"
+  # Move issue to In Progress (claim it on the board)
+  "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "In Progress" 2>>"${LOG_FILE}" || \
+    log "WARN: Failed to move issue #${ISSUE_NUMBER} to In Progress"
+  trap "rm -f '${LOCK_FILE}'" EXIT
+else
+  # Filesystem mode: scan PRD directory
+  ELIGIBLE_PRD=$(find_eligible_prd "${PRD_DIR}" "${MAX_RUNTIME}" "${PROJECT_DIR}")
+  if [ -z "${ELIGIBLE_PRD}" ]; then
+    log "SKIP: No eligible PRDs (all done, in-progress, or blocked)"
+    emit_result "skip_no_eligible_prd"
+    exit 0
+  fi
+  # Claim the PRD to prevent other runs from selecting it
+  claim_prd "${PRD_DIR}" "${ELIGIBLE_PRD}"
+  # Update EXIT trap to also release claim
+  trap "rm -f '${LOCK_FILE}'; release_claim '${PRD_DIR}' '${ELIGIBLE_PRD}'" EXIT
 fi
-
-# Claim the PRD to prevent other runs from selecting it
-claim_prd "${PRD_DIR}" "${ELIGIBLE_PRD}"
-
-# Update EXIT trap to also release claim
-trap "rm -f '${LOCK_FILE}'; release_claim '${PRD_DIR}' '${ELIGIBLE_PRD}'" EXIT
 
 PRD_NAME="${ELIGIBLE_PRD%.md}"
 BRANCH_NAME="${BRANCH_PREFIX}/${PRD_NAME}"
@@ -140,11 +172,40 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" || true
   return 1
 }
 
-PROMPT_PRD_PATH="${PRD_DIR_REL}/${ELIGIBLE_PRD}"
-
 log "START: Processing ${ELIGIBLE_PRD} on branch ${BRANCH_NAME} (worktree: ${WORKTREE_DIR})"
 
-PROMPT="Implement the PRD at ${PROMPT_PRD_PATH}
+if [ -n "${ISSUE_NUMBER}" ]; then
+  PROMPT="Implement the following PRD (GitHub issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}):
+
+${ISSUE_BODY}
+
+## Setup
+- You are already inside an isolated worktree at: ${WORKTREE_DIR}
+- Current branch is already checked out: ${BRANCH_NAME}
+- Do NOT run git checkout/switch in ${PROJECT_DIR}
+- Do NOT create or remove worktrees; the cron script manages that
+- Install dependencies if needed and implement in the current worktree only
+
+## Implementation — PRD Executor Workflow
+Read .claude/commands/prd-executor.md and follow its FULL execution pipeline:
+1. Parse the PRD into phases and extract dependencies
+2. Build a dependency graph to identify parallelism
+3. Create a task list with one task per phase
+4. Execute phases in parallel waves using agent swarms — launch ALL independent phases concurrently
+5. Run the project's verify/test command between waves to catch issues early
+6. After all phases complete, run final verification and fix any issues
+Follow all CLAUDE.md conventions (if present).
+
+## Finalize
+- Commit all changes, push, and open a PR:
+  git push -u origin ${BRANCH_NAME}
+  gh pr create --title \"feat: <short title>\" --body \"Closes #${ISSUE_NUMBER}
+
+<summary>\"
+- Do NOT process any other issues — only issue #${ISSUE_NUMBER}"
+else
+  PROMPT_PRD_PATH="${PRD_DIR_REL}/${ELIGIBLE_PRD}"
+  PROMPT="Implement the PRD at ${PROMPT_PRD_PATH}
 
 ## Setup
 - You are already inside an isolated worktree at: ${WORKTREE_DIR}
@@ -169,6 +230,7 @@ Follow all CLAUDE.md conventions (if present).
   gh pr create --title \"feat: <short title>\" --body \"<summary referencing PRD>\"
 - Do NOT move the PRD to done/ — the cron script handles that
 - Do NOT process any other PRDs — only ${ELIGIBLE_PRD}"
+fi
 
 # Dry-run mode: print diagnostics and exit
 if [ "${NW_DRY_RUN:-0}" = "1" ]; then
@@ -189,7 +251,12 @@ fi
 MERGED_PR_COUNT=$(count_prs_for_branch merged "${BRANCH_NAME}")
 if [ "${MERGED_PR_COUNT}" -gt 0 ]; then
   log "INFO: Found merged PR for ${BRANCH_NAME}; skipping provider run"
-  if finalize_prd_done "already merged on ${BRANCH_NAME}"; then
+  if [ -n "${ISSUE_NUMBER}" ]; then
+    # Board mode: move issue to Done
+    "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Done" 2>>"${LOG_FILE}" || true
+    emit_result "success_already_merged" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
+    exit 0
+  elif finalize_prd_done "already merged on ${BRANCH_NAME}"; then
     emit_result "success_already_merged" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
     exit 0
   fi
@@ -276,7 +343,16 @@ done
 if [ ${EXIT_CODE} -eq 0 ]; then
   OPEN_PR_COUNT=$(count_prs_for_branch open "${BRANCH_NAME}")
   if [ "${OPEN_PR_COUNT}" -gt 0 ]; then
-    if finalize_prd_done "implemented, PR opened on ${BRANCH_NAME}"; then
+    if [ -n "${ISSUE_NUMBER}" ]; then
+      # Board mode: move to Review and comment with PR URL
+      PR_URL=$(gh pr list --state open --json headRefName,url \
+        --jq ".[] | select(.headRefName == \"${BRANCH_NAME}\") | .url" 2>/dev/null || true)
+      "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Review" 2>>"${LOG_FILE}" || true
+      if [ -n "${PR_URL}" ]; then
+        "${NW_CLI}" board comment "${ISSUE_NUMBER}" --body "PR opened: ${PR_URL}" 2>>"${LOG_FILE}" || true
+      fi
+      emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
+    elif finalize_prd_done "implemented, PR opened on ${BRANCH_NAME}"; then
       emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
     else
       night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
@@ -286,7 +362,10 @@ if [ ${EXIT_CODE} -eq 0 ]; then
   else
     MERGED_PR_COUNT=$(count_prs_for_branch merged "${BRANCH_NAME}")
     if [ "${MERGED_PR_COUNT}" -gt 0 ]; then
-      if finalize_prd_done "already merged on ${BRANCH_NAME}"; then
+      if [ -n "${ISSUE_NUMBER}" ]; then
+        "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Done" 2>>"${LOG_FILE}" || true
+        emit_result "success_already_merged" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
+      elif finalize_prd_done "already merged on ${BRANCH_NAME}"; then
         emit_result "success_already_merged" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
       else
         night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
@@ -295,6 +374,11 @@ if [ ${EXIT_CODE} -eq 0 ]; then
       fi
     else
       log "WARN: ${PROVIDER_CMD} exited 0 but no open/merged PR found on ${BRANCH_NAME} — recording cooldown to avoid repeated stuck runs"
+      if [ -n "${ISSUE_NUMBER}" ]; then
+        "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
+        "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
+          --body "Execution completed but no PR was found. Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
+      fi
       night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
       emit_result "failure_no_pr_after_success" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
       EXIT_CODE=1
@@ -302,10 +386,20 @@ if [ ${EXIT_CODE} -eq 0 ]; then
   fi
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: Night watch killed after ${MAX_RUNTIME}s while processing ${ELIGIBLE_PRD}"
+  if [ -n "${ISSUE_NUMBER}" ]; then
+    "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
+    "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
+      --body "Execution timed out after ${MAX_RUNTIME}s. Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
+  fi
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" timeout --exit-code 124 2>/dev/null || true
   emit_result "timeout" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
 else
   log "FAIL: Night watch exited with code ${EXIT_CODE} while processing ${ELIGIBLE_PRD}"
+  if [ -n "${ISSUE_NUMBER}" ]; then
+    "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
+    "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
+      --body "Execution failed with exit code ${EXIT_CODE}. Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
+  fi
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code "${EXIT_CODE}" 2>/dev/null || true
   emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
 fi

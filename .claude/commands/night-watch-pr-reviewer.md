@@ -142,3 +142,19 @@ A PR needs attention if **either** the review score is below 80 **or** any CI jo
 6. When done, return to main: `git checkout main`
 
 Start now. Check for open PRs that need review feedback addressed or CI failures fixed.
+
+---
+
+## Board Mode (when board provider is enabled)
+
+When reviewing a PR that references a board issue (`Closes #N` in the body):
+
+1. After pushing review fixes, comment on the issue:
+   ```
+   night-watch board comment <N> --body "Review fixes pushed: <commit-sha>"
+   ```
+
+2. If review score >= threshold AND CI passes, move to Done:
+   ```
+   night-watch board move-issue <N> --column "Done"
+   ```

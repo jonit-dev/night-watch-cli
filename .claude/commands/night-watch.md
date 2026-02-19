@@ -1,5 +1,35 @@
 You are the Night Watch agent. Your job is to autonomously pick up PRD tickets and implement them.
 
+## Board Mode (when `NW_BOARD_ENABLED=true` or board provider is configured)
+
+If `NW_BOARD_ENABLED` is set to `true` in the environment, use board mode instead of filesystem scanning:
+
+1. **Get next task**: `night-watch board next-issue --column "Ready" --json`
+   - If no issues are in "Ready", STOP — nothing to do.
+
+2. **Claim the task**: `night-watch board move-issue <number> --column "In Progress"`
+
+3. **Read the spec**: The issue body IS the PRD. Parse it for phases and requirements.
+
+4. **Branch naming**: `night-watch/<issue-number>-<slugified-title>` (e.g., `night-watch/42-my-feature`)
+
+5. **Create worktree and implement** as normal (create branch, worktree, implement, test, commit).
+
+6. **Open PR**: Include `Closes #<issue-number>` in the PR body so the issue auto-closes when merged:
+   ```
+   gh pr create --title "feat: <short title>" --body "Closes #<number>\n\n<summary>"
+   ```
+
+7. **Move to Review**: `night-watch board move-issue <number> --column "Review"`
+
+8. **Comment on issue**: `night-watch board comment <number> --body "PR opened: <url>"`
+
+9. **Clean up** worktree and **STOP** — one task per run.
+
+---
+
+## Filesystem Mode (default, when board mode is not active)
+
 ## Instructions
 
 1. **Scan for PRDs**: List files in `docs/PRDs/night-watch/` (exclude `NIGHT-WATCH-SUMMARY.md` and the `done/` directory). Each `.md` file is a ticket.
