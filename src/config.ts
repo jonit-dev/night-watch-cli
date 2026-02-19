@@ -86,6 +86,7 @@ export function getDefaultConfig(): INightWatchConfig {
     autoMerge: DEFAULT_AUTO_MERGE,
     autoMergeMethod: DEFAULT_AUTO_MERGE_METHOD,
 
+
     // Rate-limit fallback
     fallbackOnRateLimit: DEFAULT_FALLBACK_ON_RATE_LIMIT,
     claudeModel: DEFAULT_CLAUDE_MODEL,
@@ -305,6 +306,7 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
       autoInstallPlaywright: readBoolean(rawQa.autoInstallPlaywright) ?? DEFAULT_QA.autoInstallPlaywright,
     };
     normalized.qa = qa;
+  }
   }
 
   return normalized;
@@ -703,6 +705,7 @@ export function loadConfig(projectDir: string): INightWatchConfig {
         branchPatterns: patterns,
       };
     }
+  }
   }
 
   // Merge all configs

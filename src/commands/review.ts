@@ -78,6 +78,12 @@ export function buildEnvVars(config: INightWatchConfig, options: IReviewOptions)
     Object.assign(env, config.providerEnv);
   }
 
+  // Auto-merge configuration
+  if (config.autoMerge) {
+    env.NW_AUTO_MERGE = "1";
+  }
+  env.NW_AUTO_MERGE_METHOD = config.autoMergeMethod;
+
   // Dry run flag
   if (options.dryRun) {
     env.NW_DRY_RUN = "1";
