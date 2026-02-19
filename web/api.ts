@@ -16,6 +16,7 @@ import type {
   IStatusSnapshot,
   IRoadmapItem,
   IRoadmapStatus,
+  IRoadmapScannerConfig,
 } from '@shared/types';
 
 // Re-export shared types so consumers can import from either place
@@ -30,6 +31,7 @@ export type {
   IStatusSnapshot,
   IRoadmapItem,
   IRoadmapStatus,
+  IRoadmapScannerConfig,
 };
 
 /**
