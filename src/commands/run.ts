@@ -4,6 +4,7 @@
 
 import { Command } from "commander";
 import { getScriptPath, loadConfig } from "../config.js";
+import { createBoardProvider } from "../board/factory.js";
 import { INightWatchConfig, NotificationEvent } from "../types.js";
 import { executeScriptWithOutput } from "../utils/shell.js";
 import { sendNotifications } from "../utils/notify.js";
@@ -98,10 +99,10 @@ export function buildEnvVars(config: INightWatchConfig, options: IRunOptions): R
     env.NW_CLI_BIN = process.argv[1];
   }
 
-  // Board provider — signal to the cron script to use board mode.
-  // Requires both enabled (default: true) AND a configured projectNumber so the
-  // cron script doesn't attempt board mode against an unconfigured board.
-  if (config.boardProvider?.enabled !== false && config.boardProvider?.projectNumber) {
+  // Board provider — signal to the cron script to use board mode whenever enabled.
+  // If projectNumber is missing, `night-watch board next-issue` auto-bootstraps
+  // a board and persists it before continuing.
+  if (config.boardProvider?.enabled !== false) {
     env.NW_BOARD_ENABLED = "true";
   }
 
@@ -228,34 +229,59 @@ export function runCommand(program: Command): void {
         configTable.push(["Branch Prefix", config.branchPrefix]);
         console.log(configTable.toString());
 
-        // Scan for PRDs
-        header("PRD Status");
-        const prdStatus = scanPrdDirectory(projectDir, config.prdDir, config.maxRuntime);
-
-        if (prdStatus.pending.length === 0) {
-          dim("  Pending: (none)");
+        if (envVars.NW_BOARD_ENABLED === "true") {
+          header("Board Status");
+          if (config.boardProvider?.projectNumber) {
+            try {
+              const provider = createBoardProvider(config.boardProvider, projectDir);
+              const readyIssues = await provider.getIssuesByColumn("Ready");
+              if (readyIssues.length === 0) {
+                dim("  Ready: (none)");
+              } else {
+                info(`Ready (${readyIssues.length}):`);
+                for (const issue of readyIssues.slice(0, 5)) {
+                  dim(`    - #${issue.number} ${issue.title}`);
+                }
+                if (readyIssues.length > 5) {
+                  dim(`    ... and ${readyIssues.length - 5} more`);
+                }
+              }
+            } catch (err) {
+              dim(`  Could not query board: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          } else {
+            dim("  No board configured yet. A board will be auto-created on first board-mode run.");
+          }
         } else {
-          const claimedItems = prdStatus.pending.filter(p => p.claimed);
-          const unclaimed = prdStatus.pending.filter(p => !p.claimed);
-          info(`Pending (${unclaimed.length} pending, ${claimedItems.length} claimed):`);
-          for (const prd of prdStatus.pending) {
-            if (prd.claimed && prd.claimInfo) {
-              dim(`    - ${prd.name} [claimed by ${prd.claimInfo.hostname}:${prd.claimInfo.pid}]`);
-            } else {
-              dim(`    - ${prd.name}`);
+          // Scan for PRDs in filesystem mode
+          header("PRD Status");
+          const prdStatus = scanPrdDirectory(projectDir, config.prdDir, config.maxRuntime);
+
+          if (prdStatus.pending.length === 0) {
+            dim("  Pending: (none)");
+          } else {
+            const claimedItems = prdStatus.pending.filter(p => p.claimed);
+            const unclaimed = prdStatus.pending.filter(p => !p.claimed);
+            info(`Pending (${unclaimed.length} pending, ${claimedItems.length} claimed):`);
+            for (const prd of prdStatus.pending) {
+              if (prd.claimed && prd.claimInfo) {
+                dim(`    - ${prd.name} [claimed by ${prd.claimInfo.hostname}:${prd.claimInfo.pid}]`);
+              } else {
+                dim(`    - ${prd.name}`);
+              }
             }
           }
-        }
 
-        if (prdStatus.completed.length === 0) {
-          dim("  Completed: (none)");
-        } else {
-          info(`Completed (${prdStatus.completed.length}):`);
-          for (const prd of prdStatus.completed.slice(0, 5)) {
-            dim(`    - ${prd}`);
-          }
-          if (prdStatus.completed.length > 5) {
-            dim(`    ... and ${prdStatus.completed.length - 5} more`);
+          if (prdStatus.completed.length === 0) {
+            dim("  Completed: (none)");
+          } else {
+            info(`Completed (${prdStatus.completed.length}):`);
+            for (const prd of prdStatus.completed.slice(0, 5)) {
+              dim(`    - ${prd}`);
+            }
+            if (prdStatus.completed.length > 5) {
+              dim(`    ... and ${prdStatus.completed.length - 5} more`);
+            }
           }
         }
 

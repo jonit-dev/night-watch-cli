@@ -22,6 +22,32 @@ function viewerLoginResponse(login = "octocat"): string {
   return gqlResponse({ viewer: { login } });
 }
 
+/** Build a repository owner lookup response. */
+function repoOwnerResponse(
+  type: "User" | "Organization" = "Organization",
+  id = "owner-node-id",
+  login = "owner",
+  repositoryId = "repo-node-id"
+): string {
+  return gqlResponse({
+    repository: {
+      id: repositoryId,
+      owner: { __typename: type, id, login },
+    },
+  });
+}
+
+/** Build a user projects list response. */
+function listUserProjectsResponse(nodes: Array<{ id: string; number: number; title: string; url: string }>): string {
+  return gqlResponse({
+    user: {
+      projectsV2: {
+        nodes,
+      },
+    },
+  });
+}
+
 /** Build a user projectV2 GraphQL response. */
 function projectV2Response(
   id = "project-node-id",
@@ -122,18 +148,16 @@ describe("GitHubProjectsProvider", () => {
   // -------------------------------------------------------------------------
 
   describe("setupBoard", () => {
-    it("creates a project and Status field with five columns", async () => {
+    it("creates a project under repo owner and links it to the repository", async () => {
       mockExecFileSync
-        // findExistingProject → no match
+        // resolve repo owner
         .mockReturnValueOnce(
-          gqlResponse({
-            viewer: { projectsV2: { nodes: [] } },
-          }) as unknown as Buffer
+          repoOwnerResponse("Organization", "owner-node-id", "owner") as unknown as Buffer
         )
-        // viewer query { viewer { id login } }
+        // findExistingProject(owner) → no match
         .mockReturnValueOnce(
           gqlResponse({
-            viewer: { id: "user-node-id", login: "octocat" },
+            organization: { projectsV2: { nodes: [] } },
           }) as unknown as Buffer
         )
         // createProjectV2 mutation
@@ -149,22 +173,21 @@ describe("GitHubProjectsProvider", () => {
             },
           }) as unknown as Buffer
         )
-        // createProjectV2Field mutation
+        // linkProjectV2ToRepository mutation
         .mockReturnValueOnce(
           gqlResponse({
-            createProjectV2Field: {
-              projectV2Field: {
-                id: "field-node-id",
-                options: [
-                  { id: "opt-draft", name: "Draft" },
-                  { id: "opt-ready", name: "Ready" },
-                  { id: "opt-wip", name: "In Progress" },
-                  { id: "opt-review", name: "Review" },
-                  { id: "opt-done", name: "Done" },
-                ],
-              },
+            linkProjectV2ToRepository: {
+              repository: { id: "repo-node-id" },
             },
           }) as unknown as Buffer
+        )
+        // fetchStatusField
+        .mockReturnValueOnce(statusFieldResponse() as unknown as Buffer)
+        // ensureStatusColumns (reads field to validate options)
+        .mockReturnValueOnce(statusFieldResponse() as unknown as Buffer)
+        // refresh status field cache
+        .mockReturnValueOnce(
+          statusFieldResponse() as unknown as Buffer
         );
 
       const provider = new GitHubProjectsProvider(mockConfig, CWD);
@@ -177,14 +200,70 @@ describe("GitHubProjectsProvider", () => {
         url: "https://github.com/orgs/owner/projects/42",
       });
 
-      // Verify the Status-field mutation was called
-      const calls = mockExecFileSync.mock.calls;
-      const mutationCall = calls.find(
+      // Verify createProject mutation targets repo owner, not viewer
+      const createCall = mockExecFileSync.mock.calls.find(
         (c) =>
           Array.isArray(c[1]) &&
-          (c[1] as string[]).some((a) => a.includes("createProjectV2Field"))
+          (c[1] as string[]).some((a) => a.includes("mutation CreateProject("))
       );
-      expect(mutationCall).toBeDefined();
+      expect(createCall).toBeDefined();
+      expect(createCall![1]).toContain("ownerId=owner-node-id");
+
+      const linkCall = mockExecFileSync.mock.calls.find(
+        (c) =>
+          Array.isArray(c[1]) &&
+          (c[1] as string[]).some((a) => a.includes("linkProjectV2ToRepository"))
+      );
+      expect(linkCall).toBeDefined();
+      expect(linkCall![1]).toContain("repositoryId=repo-node-id");
+    });
+
+    it("reuses an existing owner project and can read columns without projectNumber in config", async () => {
+      mockExecFileSync
+        // resolve repo owner
+        .mockReturnValueOnce(
+          repoOwnerResponse("User", "owner-node-id", "owner") as unknown as Buffer
+        )
+        // findExistingProject(owner) -> found
+        .mockReturnValueOnce(
+          listUserProjectsResponse([
+            {
+              id: "project-node-id",
+              number: 99,
+              title: "My Board",
+              url: "https://github.com/users/owner/projects/99",
+            },
+          ]) as unknown as Buffer
+        )
+        // link existing project to repo (idempotent)
+        .mockReturnValueOnce(
+          gqlResponse({
+            linkProjectV2ToRepository: {
+              repository: { id: "repo-node-id" },
+            },
+          }) as unknown as Buffer
+        )
+        // ensureStatusColumns read
+        .mockReturnValueOnce(statusFieldResponse() as unknown as Buffer)
+        // getColumns after setup should use cachedProjectId, no config projectNumber required
+        .mockReturnValueOnce(statusFieldResponse() as unknown as Buffer);
+
+      const provider = new GitHubProjectsProvider(
+        { enabled: true, provider: "github", repo: "owner/repo" },
+        CWD
+      );
+
+      const board = await provider.setupBoard("My Board");
+      expect(board.number).toBe(99);
+
+      const columns = await provider.getColumns();
+      expect(columns.map((c) => c.name)).toEqual([
+        "Draft",
+        "Ready",
+        "In Progress",
+        "Review",
+        "Done",
+      ]);
     });
   });
 

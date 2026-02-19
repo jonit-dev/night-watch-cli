@@ -8,6 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Command } from "commander";
+import * as path from "path";
 
 // ---------------------------------------------------------------------------
 // Mock provider — shared across all tests
@@ -150,6 +151,13 @@ describe("board commands", () => {
     consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     consoleErrSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
+    mockProvider.setupBoard.mockResolvedValue({
+      id: "PVT_auto",
+      number: 7,
+      title: "night-watch-cli Night Watch",
+      url: "https://github.com/users/alice/projects/7",
+    });
+
     // Default: loadConfig returns an enabled board provider config
     vi.mocked(loadConfig).mockReturnValue(makeConfig());
   });
@@ -158,9 +166,10 @@ describe("board commands", () => {
   // board setup
   // -------------------------------------------------------------------------
   describe("board setup", () => {
-    it("creates board and persists projectNumber extracted from URL", async () => {
+    it("creates board and persists projectNumber returned by provider", async () => {
       mockProvider.setupBoard.mockResolvedValue({
         id: "PVT_1",
+        number: 7,
         title: "Night Watch",
         url: "https://github.com/users/alice/projects/7",
       });
@@ -174,7 +183,9 @@ describe("board commands", () => {
 
       await runCommand(["board", "setup"]);
 
-      expect(mockProvider.setupBoard).toHaveBeenCalledWith("Night Watch");
+      expect(mockProvider.setupBoard).toHaveBeenCalledWith(
+        `${path.basename(process.cwd())} Night Watch`
+      );
       expect(saveConfig).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
@@ -216,6 +227,30 @@ describe("board commands", () => {
   // board create-prd
   // -------------------------------------------------------------------------
   describe("board create-prd", () => {
+    it("auto-creates and persists board when projectNumber is missing", async () => {
+      vi.mocked(loadConfig).mockReturnValue(
+        makeConfig({ boardProvider: { enabled: true, provider: "github" } })
+      );
+      mockProvider.setupBoard.mockResolvedValue({
+        id: "PVT_2",
+        number: 42,
+        title: "night-watch-cli Night Watch",
+        url: "https://github.com/users/alice/projects/42",
+      });
+      mockProvider.createIssue.mockResolvedValue(makeIssue({ number: 42, title: "Bootstrapped" }));
+
+      await runCommand(["board", "create-prd", "Bootstrapped"]);
+
+      expect(mockProvider.setupBoard).toHaveBeenCalled();
+      expect(saveConfig).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          boardProvider: expect.objectContaining({ projectNumber: 42 }),
+        })
+      );
+      expect(mockProvider.createIssue).toHaveBeenCalled();
+    });
+
     it("creates issue in Draft column by default", async () => {
       const issue = makeIssue({ number: 10, column: "Draft", title: "My PRD" });
       mockProvider.createIssue.mockResolvedValue(issue);
@@ -340,6 +375,14 @@ describe("board commands", () => {
 
       const allOutput = consoleSpy.mock.calls.flat().join(" ");
       expect(allOutput).toContain("No issues found in Draft");
+    });
+
+    it("prints no output for --json when no issue is available", async () => {
+      mockProvider.getIssuesByColumn.mockResolvedValue([]);
+
+      await runCommand(["board", "next-issue", "--json"]);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
     });
   });
 

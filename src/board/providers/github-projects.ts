@@ -22,14 +22,6 @@ interface IProjectV2Node {
   url: string;
 }
 
-interface IListProjectsData {
-  viewer: {
-    projectsV2: {
-      nodes: IProjectV2Node[];
-    };
-  };
-}
-
 interface IGetUserProjectData {
   user: { projectV2: IProjectV2Node | null } | null;
 }
@@ -49,8 +41,37 @@ interface ICreateProjectData {
   };
 }
 
-interface IViewerData {
-  viewer: { id: string; login: string };
+interface IRepositoryOwnerData {
+  repository: {
+    id: string;
+    owner: {
+      __typename: "User" | "Organization" | string;
+      id: string;
+      login: string;
+    };
+  } | null;
+}
+
+interface IRepoOwnerInfo {
+  id: string;
+  login: string;
+  type: "User" | "Organization";
+}
+
+interface IListUserProjectsData {
+  user: {
+    projectsV2: {
+      nodes: IProjectV2Node[];
+    };
+  } | null;
+}
+
+interface IListOrgProjectsData {
+  organization: {
+    projectsV2: {
+      nodes: IProjectV2Node[];
+    };
+  } | null;
 }
 
 interface IStatusFieldOption {
@@ -134,6 +155,8 @@ export class GitHubProjectsProvider implements IBoardProvider {
   private cachedProjectId: string | null = null;
   private cachedFieldId: string | null = null;
   private cachedOptionIds: Map<string, string> = new Map();
+  private cachedOwner: IRepoOwnerInfo | null = null;
+  private cachedRepositoryId: string | null = null;
 
   constructor(config: IBoardProviderConfig, cwd: string) {
     this.config = config;
@@ -146,6 +169,134 @@ export class GitHubProjectsProvider implements IBoardProvider {
 
   private getRepo(): string {
     return this.config.repo ?? getRepoNwo(this.cwd);
+  }
+
+  private getRepoParts(): { owner: string; name: string } {
+    const repo = this.getRepo();
+    const [owner, name] = repo.split("/");
+    if (!owner || !name) {
+      throw new Error(`Invalid repository slug: "${repo}". Expected "owner/repo".`);
+    }
+    return { owner, name };
+  }
+
+  private getRepoOwnerLogin(): string {
+    return this.getRepoParts().owner;
+  }
+
+  private getRepoOwner(): IRepoOwnerInfo {
+    if (this.cachedOwner && this.cachedRepositoryId) {
+      return this.cachedOwner;
+    }
+
+    const { owner, name } = this.getRepoParts();
+    const data = graphql<IRepositoryOwnerData>(
+      `query ResolveRepoOwner($owner: String!, $name: String!) {
+        repository(owner: $owner, name: $name) {
+          id
+          owner {
+            __typename
+            id
+            login
+          }
+        }
+      }`,
+      { owner, name },
+      this.cwd
+    );
+
+    if (!data.repository) {
+      throw new Error(`Repository ${owner}/${name} not found.`);
+    }
+
+    const ownerNode = data.repository.owner;
+    if (
+      !ownerNode ||
+      (ownerNode.__typename !== "User" && ownerNode.__typename !== "Organization")
+    ) {
+      throw new Error(`Failed to resolve repository owner for ${owner}/${name}.`);
+    }
+
+    this.cachedRepositoryId = data.repository.id;
+    this.cachedOwner = {
+      id: ownerNode.id,
+      login: ownerNode.login,
+      type: ownerNode.__typename,
+    };
+    return this.cachedOwner;
+  }
+
+  private getRepositoryNodeId(): string {
+    if (this.cachedRepositoryId) {
+      return this.cachedRepositoryId;
+    }
+    this.getRepoOwner();
+    if (!this.cachedRepositoryId) {
+      throw new Error(`Failed to resolve repository ID for ${this.getRepo()}.`);
+    }
+    return this.cachedRepositoryId;
+  }
+
+  private linkProjectToRepository(projectId: string): void {
+    const repositoryId = this.getRepositoryNodeId();
+    try {
+      graphql<{ linkProjectV2ToRepository: { repository: { id: string } } }>(
+        `mutation LinkProjectToRepository($projectId: ID!, $repositoryId: ID!) {
+          linkProjectV2ToRepository(input: { projectId: $projectId, repositoryId: $repositoryId }) {
+            repository {
+              id
+            }
+          }
+        }`,
+        { projectId, repositoryId },
+        this.cwd
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const normalized = message.toLowerCase();
+      if (normalized.includes("already") && normalized.includes("project")) {
+        return;
+      }
+      throw err;
+    }
+  }
+
+  private fetchStatusField(projectId: string): {
+    fieldId: string;
+    optionIds: Map<string, string>;
+  } {
+    const fieldData = graphql<IStatusFieldData>(
+      `query GetStatusField($projectId: ID!) {
+        node(id: $projectId) {
+          ... on ProjectV2 {
+            field(name: "Status") {
+              ... on ProjectV2SingleSelectField {
+                id
+                options {
+                  id
+                  name
+                }
+              }
+            }
+          }
+        }
+      }`,
+      { projectId },
+      this.cwd
+    );
+
+    const field = fieldData.node?.field;
+    if (!field) {
+      throw new Error(
+        `Status field not found on project ${projectId}. ` +
+          `Run \`night-watch board setup\` to create it.`
+      );
+    }
+
+    return {
+      fieldId: field.id,
+      optionIds: new Map(field.options.map((o) => [o.name, o.id])),
+    };
   }
 
   /**
@@ -169,6 +320,17 @@ export class GitHubProjectsProvider implements IBoardProvider {
       };
     }
 
+    if (this.cachedProjectId !== null) {
+      const statusField = this.fetchStatusField(this.cachedProjectId);
+      this.cachedFieldId = statusField.fieldId;
+      this.cachedOptionIds = statusField.optionIds;
+      return {
+        projectId: this.cachedProjectId,
+        fieldId: this.cachedFieldId,
+        optionIds: this.cachedOptionIds,
+      };
+    }
+
     const projectNumber = this.config.projectNumber;
     if (!projectNumber) {
       throw new Error(
@@ -176,48 +338,31 @@ export class GitHubProjectsProvider implements IBoardProvider {
       );
     }
 
-    const login = getViewerLogin(this.cwd);
-    const projectNode = await this.fetchProjectNode(login, projectNumber);
+    const ownerLogins = new Set<string>([this.getRepoOwnerLogin()]);
+    try {
+      ownerLogins.add(getViewerLogin(this.cwd));
+    } catch {
+      // ignore fallback if viewer lookup fails
+    }
+
+    let projectNode: IProjectV2Node | null = null;
+    for (const login of ownerLogins) {
+      projectNode = this.fetchProjectNode(login, projectNumber);
+      if (projectNode) {
+        break;
+      }
+    }
 
     if (!projectNode) {
       throw new Error(
-        `GitHub Project #${projectNumber} not found for login "${login}".`
+        `GitHub Project #${projectNumber} not found for repository owner "${this.getRepoOwnerLogin()}".`
       );
     }
 
     this.cachedProjectId = projectNode.id;
-
-    // Fetch Status field
-    const fieldData = graphql<IStatusFieldData>(
-      `query GetStatusField($projectId: ID!) {
-        node(id: $projectId) {
-          ... on ProjectV2 {
-            field(name: "Status") {
-              ... on ProjectV2SingleSelectField {
-                id
-                options {
-                  id
-                  name
-                }
-              }
-            }
-          }
-        }
-      }`,
-      { projectId: projectNode.id },
-      this.cwd
-    );
-
-    const field = fieldData.node?.field;
-    if (!field) {
-      throw new Error(
-        `Status field not found on project #${projectNumber}. ` +
-          `Run \`night-watch board setup\` to create it.`
-      );
-    }
-
-    this.cachedFieldId = field.id;
-    this.cachedOptionIds = new Map(field.options.map((o) => [o.name, o.id]));
+    const statusField = this.fetchStatusField(projectNode.id);
+    this.cachedFieldId = statusField.fieldId;
+    this.cachedOptionIds = statusField.optionIds;
 
     return {
       projectId: this.cachedProjectId,
@@ -320,23 +465,38 @@ export class GitHubProjectsProvider implements IBoardProvider {
   // -------------------------------------------------------------------------
 
   /**
-   * Find an existing project by title among the viewer's first 50 projects.
+   * Find an existing project by title among the repository owner's first 50 projects.
    * Returns null if not found.
    */
-  private findExistingProject(title: string): IProjectV2Node | null {
+  private findExistingProject(owner: IRepoOwnerInfo, title: string): IProjectV2Node | null {
     try {
-      const data = graphql<IListProjectsData>(
-        `query ListProjects {
-          viewer {
+      if (owner.type === "User") {
+        const data = graphql<IListUserProjectsData>(
+          `query ListUserProjects($login: String!) {
+            user(login: $login) {
+              projectsV2(first: 50) {
+                nodes { id number title url }
+              }
+            }
+          }`,
+          { login: owner.login },
+          this.cwd
+        );
+        return data.user?.projectsV2.nodes.find((p) => p.title === title) ?? null;
+      }
+
+      const data = graphql<IListOrgProjectsData>(
+        `query ListOrgProjects($login: String!) {
+          organization(login: $login) {
             projectsV2(first: 50) {
               nodes { id number title url }
             }
           }
         }`,
-        {},
+        { login: owner.login },
         this.cwd
       );
-      return data.viewer.projectsV2.nodes.find((p) => p.title === title) ?? null;
+      return data.organization?.projectsV2.nodes.find((p) => p.title === title) ?? null;
     } catch {
       return null;
     }
@@ -416,21 +576,16 @@ export class GitHubProjectsProvider implements IBoardProvider {
   }
 
   async setupBoard(title: string): Promise<IBoardInfo> {
+    const owner = this.getRepoOwner();
+
     // Find or create — avoid duplicating boards on re-runs
-    const existing = this.findExistingProject(title);
+    const existing = this.findExistingProject(owner, title);
     if (existing) {
       this.cachedProjectId = existing.id;
+      this.linkProjectToRepository(existing.id);
       this.ensureStatusColumns(existing.id);
       return { id: existing.id, number: existing.number, title: existing.title, url: existing.url };
     }
-
-    // Resolve the authenticated user/org node ID
-    const viewerData = graphql<IViewerData>(
-      `query { viewer { id login } }`,
-      {},
-      this.cwd
-    );
-    const ownerId = viewerData.viewer.id;
 
     // Create the project
     const createData = graphql<ICreateProjectData>(
@@ -444,43 +599,59 @@ export class GitHubProjectsProvider implements IBoardProvider {
           }
         }
       }`,
-      { ownerId, title },
+      { ownerId: owner.id, title },
       this.cwd
     );
 
     const project = createData.createProjectV2.projectV2;
     this.cachedProjectId = project.id;
+    this.linkProjectToRepository(project.id);
 
-    // Create the Status field with the five lifecycle columns
-    const createFieldData = graphql<ICreateFieldData>(
-      `mutation CreateStatusField($projectId: ID!) {
-        createProjectV2Field(input: {
-          projectId: $projectId,
-          dataType: SINGLE_SELECT,
-          name: "Status",
-          singleSelectOptions: [
-            { name: "Draft",       color: GRAY,   description: "" },
-            { name: "Ready",       color: BLUE,   description: "" },
-            { name: "In Progress", color: YELLOW, description: "" },
-            { name: "Review",      color: ORANGE, description: "" },
-            { name: "Done",        color: GREEN,  description: "" }
-          ]
-        }) {
-          projectV2Field {
-            ... on ProjectV2SingleSelectField {
-              id
-              options { id name }
+    // New projects may already have a default Status field. Reuse/update it.
+    try {
+      const statusField = this.fetchStatusField(project.id);
+      this.cachedFieldId = statusField.fieldId;
+      this.cachedOptionIds = statusField.optionIds;
+      this.ensureStatusColumns(project.id);
+      const refreshed = this.fetchStatusField(project.id);
+      this.cachedFieldId = refreshed.fieldId;
+      this.cachedOptionIds = refreshed.optionIds;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!message.includes("Status field not found")) {
+        throw err;
+      }
+
+      const createFieldData = graphql<ICreateFieldData>(
+        `mutation CreateStatusField($projectId: ID!) {
+          createProjectV2Field(input: {
+            projectId: $projectId,
+            dataType: SINGLE_SELECT,
+            name: "Status",
+            singleSelectOptions: [
+              { name: "Draft",       color: GRAY,   description: "" },
+              { name: "Ready",       color: BLUE,   description: "" },
+              { name: "In Progress", color: YELLOW, description: "" },
+              { name: "Review",      color: ORANGE, description: "" },
+              { name: "Done",        color: GREEN,  description: "" }
+            ]
+          }) {
+            projectV2Field {
+              ... on ProjectV2SingleSelectField {
+                id
+                options { id name }
+              }
             }
           }
-        }
-      }`,
-      { projectId: project.id },
-      this.cwd
-    );
+        }`,
+        { projectId: project.id },
+        this.cwd
+      );
 
-    const field = createFieldData.createProjectV2Field.projectV2Field;
-    this.cachedFieldId = field.id;
-    this.cachedOptionIds = new Map(field.options.map((o) => [o.name, o.id]));
+      const field = createFieldData.createProjectV2Field.projectV2Field;
+      this.cachedFieldId = field.id;
+      this.cachedOptionIds = new Map(field.options.map((o) => [o.name, o.id]));
+    }
 
     return { id: project.id, number: project.number, title: project.title, url: project.url };
   }
@@ -492,8 +663,20 @@ export class GitHubProjectsProvider implements IBoardProvider {
     }
 
     try {
-      const login = getViewerLogin(this.cwd);
-      const node = this.fetchProjectNode(login, projectNumber);
+      const ownerLogins = new Set<string>([this.getRepoOwnerLogin()]);
+      try {
+        ownerLogins.add(getViewerLogin(this.cwd));
+      } catch {
+        // ignore fallback if viewer lookup fails
+      }
+
+      let node: IProjectV2Node | null = null;
+      for (const login of ownerLogins) {
+        node = this.fetchProjectNode(login, projectNumber);
+        if (node) {
+          break;
+        }
+      }
       if (!node) {
         return null;
       }

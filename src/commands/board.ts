@@ -4,6 +4,7 @@
 
 import { Command } from "commander";
 import * as fs from "fs";
+import * as path from "path";
 import * as readline from "readline";
 import { loadConfig } from "@/config.js";
 import { saveConfig } from "@/utils/config-writer.js";
@@ -44,6 +45,47 @@ function getProvider(config: INightWatchConfig, cwd: string): IBoardProvider {
   return createBoardProvider(bp, cwd);
 }
 
+function defaultBoardTitle(cwd: string): string {
+  return `${path.basename(cwd)} Night Watch`;
+}
+
+/**
+ * Ensure the project has a configured board number.
+ * If missing, auto-create a board and persist projectNumber to config.
+ */
+async function ensureBoardConfigured(
+  config: INightWatchConfig,
+  cwd: string,
+  provider: IBoardProvider,
+  options?: { quiet?: boolean }
+): Promise<void> {
+  if (config.boardProvider?.projectNumber) {
+    return;
+  }
+
+  const title = defaultBoardTitle(cwd);
+  if (!options?.quiet) {
+    info(`No board configured. Creating "${title}"…`);
+  }
+  const boardInfo = await provider.setupBoard(title);
+
+  const result = saveConfig(cwd, {
+    boardProvider: {
+      ...config.boardProvider,
+      enabled: config.boardProvider?.enabled ?? true,
+      provider: config.boardProvider?.provider ?? "github",
+      projectNumber: boardInfo.number,
+    },
+  });
+  if (!result.success) {
+    throw new Error(`Failed to save config: ${result.error}`);
+  }
+
+  if (!options?.quiet) {
+    success(`Board configured (#${boardInfo.number})`);
+  }
+}
+
 /**
  * Prompt the user for a yes/no confirmation via readline.
  * Returns true when the user confirms.
@@ -73,7 +115,8 @@ export function boardCommand(program: Command): void {
   board
     .command("setup")
     .description("Create the Night Watch project board and persist its number to config")
-    .action(async () =>
+    .option("--title <title>", "Board title (default: <repo-folder> Night Watch)")
+    .action(async (options: { title?: string }) =>
       run(async () => {
         const cwd = process.cwd();
         const config = loadConfig(cwd);
@@ -91,18 +134,15 @@ export function boardCommand(program: Command): void {
           }
         }
 
-        info("Creating board…");
-        const boardInfo = await provider.setupBoard("Night Watch");
-
-        // Extract the project number from the URL.
-        const urlMatch = boardInfo.url.match(/\/projects\/(\d+)/);
-        const projectNumber = urlMatch ? parseInt(urlMatch[1], 10) : undefined;
+        const boardTitle = options.title?.trim() || defaultBoardTitle(cwd);
+        info(`Creating board "${boardTitle}"…`);
+        const boardInfo = await provider.setupBoard(boardTitle);
 
         // Persist the project number
         const result = saveConfig(cwd, {
           boardProvider: {
             ...config.boardProvider,
-            ...(projectNumber !== undefined ? { projectNumber } : {}),
+            projectNumber: boardInfo.number,
           },
         });
 
@@ -142,6 +182,7 @@ export function boardCommand(program: Command): void {
           const cwd = process.cwd();
           const config = loadConfig(cwd);
           const provider = getProvider(config, cwd);
+          await ensureBoardConfigured(config, cwd, provider);
 
           // Validate column name
           if (!BOARD_COLUMNS.includes(options.column as BoardColumnName)) {
@@ -185,6 +226,7 @@ export function boardCommand(program: Command): void {
         const cwd = process.cwd();
         const config = loadConfig(cwd);
         const provider = getProvider(config, cwd);
+        await ensureBoardConfigured(config, cwd, provider, { quiet: options.json });
 
         const issues = await provider.getAllIssues();
 
@@ -240,10 +282,14 @@ export function boardCommand(program: Command): void {
         const cwd = process.cwd();
         const config = loadConfig(cwd);
         const provider = getProvider(config, cwd);
+        await ensureBoardConfigured(config, cwd, provider, { quiet: options.json });
 
         const issues = await provider.getIssuesByColumn(options.column as BoardColumnName);
 
         if (issues.length === 0) {
+          if (options.json) {
+            return;
+          }
           console.log(`No issues found in ${options.column}`);
           return;
         }
@@ -277,6 +323,7 @@ export function boardCommand(program: Command): void {
         const cwd = process.cwd();
         const config = loadConfig(cwd);
         const provider = getProvider(config, cwd);
+        await ensureBoardConfigured(config, cwd, provider);
 
         await provider.moveIssue(parseInt(number, 10), options.column as BoardColumnName);
 
@@ -297,6 +344,7 @@ export function boardCommand(program: Command): void {
         const cwd = process.cwd();
         const config = loadConfig(cwd);
         const provider = getProvider(config, cwd);
+        await ensureBoardConfigured(config, cwd, provider);
 
         await provider.commentOnIssue(parseInt(number, 10), options.body);
 
@@ -316,6 +364,7 @@ export function boardCommand(program: Command): void {
         const cwd = process.cwd();
         const config = loadConfig(cwd);
         const provider = getProvider(config, cwd);
+        await ensureBoardConfigured(config, cwd, provider);
 
         const issueNumber = parseInt(number, 10);
         await provider.closeIssue(issueNumber);
