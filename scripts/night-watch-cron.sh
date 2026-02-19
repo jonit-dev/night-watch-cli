@@ -47,6 +47,13 @@ LOCK_FILE="/tmp/night-watch-${PROJECT_RUNTIME_KEY}.lock"
 emit_result() {
   local status="${1:?status required}"
   local details="${2:-}"
+  if [ "${RATE_LIMIT_FALLBACK_TRIGGERED:-0}" = "1" ]; then
+    if [ -n "${details}" ]; then
+      details="${details}|rate_limit_fallback=1"
+    else
+      details="rate_limit_fallback=1"
+    fi
+  fi
   if [ -n "${details}" ]; then
     echo "NIGHT_WATCH_RESULT:${status}|${details}"
   else

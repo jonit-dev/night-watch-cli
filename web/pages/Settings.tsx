@@ -265,6 +265,9 @@ const WebhookEditor: React.FC<{
     { label: 'Run Failed', value: 'run_failed' },
     { label: 'Run Timeout', value: 'run_timeout' },
     { label: 'Review Completed', value: 'review_completed' },
+    { label: 'PR Auto-Merged', value: 'pr_auto_merged' },
+    { label: 'Rate Limit Fallback', value: 'rate_limit_fallback' },
+    { label: 'QA Completed', value: 'qa_completed' },
   ];
 
   const handleAddWebhook = () => {

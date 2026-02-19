@@ -266,17 +266,25 @@ if [ "${AUTO_MERGE}" = "1" ] && [ ${EXIT_CODE} -eq 0 ]; then
 
     if gh pr merge "${pr_number}" --"${AUTO_MERGE_METHOD}" --auto --delete-branch 2>>"${LOG_FILE}"; then
       log "AUTO-MERGE: Successfully queued merge for PR #${pr_number}"
-      AUTO_MERGED_PRS="${AUTO_MERGED_PRS} #${pr_number}"
+      if [ -z "${AUTO_MERGED_PRS}" ]; then
+        AUTO_MERGED_PRS="#${pr_number}"
+      else
+        AUTO_MERGED_PRS="${AUTO_MERGED_PRS},#${pr_number}"
+      fi
     else
       log "WARN: Auto-merge failed for PR #${pr_number}"
-      AUTO_MERGE_FAILED_PRS="${AUTO_MERGE_FAILED_PRS} #${pr_number}"
+      if [ -z "${AUTO_MERGE_FAILED_PRS}" ]; then
+        AUTO_MERGE_FAILED_PRS="#${pr_number}"
+      else
+        AUTO_MERGE_FAILED_PRS="${AUTO_MERGE_FAILED_PRS},#${pr_number}"
+      fi
     fi
   done < <(gh pr list --state open --json number,headRefName --jq '.[] | [.number, .headRefName] | @tsv' 2>/dev/null || true)
 fi
 
 if [ ${EXIT_CODE} -eq 0 ]; then
   log "DONE: PR reviewer completed successfully"
-  emit_result "success_reviewed" "prs=${PRS_NEEDING_WORK_CSV}"
+  emit_result "success_reviewed" "prs=${PRS_NEEDING_WORK_CSV}|auto_merged=${AUTO_MERGED_PRS}|auto_merge_failed=${AUTO_MERGE_FAILED_PRS}"
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: PR reviewer killed after ${MAX_RUNTIME}s"
   emit_result "timeout" "prs=${PRS_NEEDING_WORK_CSV}"

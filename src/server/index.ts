@@ -1091,7 +1091,19 @@ function createProjectRouter(): Router {
   });
   router.get("/roadmap", (req, res) => handleGetRoadmap(dir(req), cfg(req), req, res));
   router.post("/roadmap/scan", (req, res) => handlePostRoadmapScan(dir(req), cfg(req), req, res));
-  router.put("/roadmap/toggle", (req, res) => handlePutRoadmapToggle(dir(req), () => cfg(req), () => {}, req, res));
+  router.put("/roadmap/toggle", (req, res) => {
+    const projectDir = dir(req);
+    let config = cfg(req);
+    handlePutRoadmapToggle(
+      projectDir,
+      () => config,
+      () => {
+        config = loadConfig(projectDir);
+      },
+      req,
+      res,
+    );
+  });
 
   // Board routes
   router.get("/board/status", (req, res) => handleGetBoardStatus(dir(req), cfg(req), req, res));

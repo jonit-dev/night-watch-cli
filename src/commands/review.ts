@@ -42,6 +42,19 @@ export function shouldSendReviewNotification(scriptStatus?: string): boolean {
 }
 
 /**
+ * Parse comma-separated PR numbers like "#12,#34" into numeric IDs.
+ */
+export function parseAutoMergedPrNumbers(raw?: string): number[] {
+  if (!raw || raw.trim().length === 0) {
+    return [];
+  }
+  return raw
+    .split(",")
+    .map((token) => parseInt(token.trim().replace(/^#/, ""), 10))
+    .filter((value) => !Number.isNaN(value));
+}
+
+/**
  * Build environment variables map from config and CLI options for reviewer
  */
 export function buildEnvVars(config: INightWatchConfig, options: IReviewOptions): Record<string, string> {
@@ -265,6 +278,25 @@ export function reviewCommand(program: Command): void {
               filesChanged: prDetails?.changedFiles,
               additions: prDetails?.additions,
               deletions: prDetails?.deletions,
+            });
+          }
+
+          const autoMergedPrNumbers = parseAutoMergedPrNumbers(scriptResult?.data.auto_merged);
+          if (autoMergedPrNumbers.length > 0) {
+            const autoMergedPrNumber = autoMergedPrNumbers[0];
+            const autoMergedPrDetails = fetchPrDetailsByNumber(autoMergedPrNumber, projectDir);
+            await sendNotifications(config, {
+              event: "pr_auto_merged",
+              projectName: path.basename(projectDir),
+              exitCode,
+              provider: config.provider,
+              prNumber: autoMergedPrDetails?.number ?? autoMergedPrNumber,
+              prUrl: autoMergedPrDetails?.url,
+              prTitle: autoMergedPrDetails?.title,
+              prBody: autoMergedPrDetails?.body,
+              filesChanged: autoMergedPrDetails?.changedFiles,
+              additions: autoMergedPrDetails?.additions,
+              deletions: autoMergedPrDetails?.deletions,
             });
           }
         }

@@ -5,7 +5,7 @@
 
 import { Command } from "commander";
 import { loadConfig } from "../config.js";
-import { IWebhookConfig } from "../types.js";
+import { IWebhookConfig, NotificationEvent } from "../types.js";
 import {
   header,
   info,
@@ -38,12 +38,15 @@ export function validateWebhook(webhook: IWebhookConfig): string[] {
   if (!webhook.events || webhook.events.length === 0) {
     issues.push("No events configured");
   } else {
-    const validEvents = [
+    const validEvents: NotificationEvent[] = [
       "run_started",
       "run_succeeded",
       "run_failed",
       "run_timeout",
       "review_completed",
+      "pr_auto_merged",
+      "rate_limit_fallback",
+      "qa_completed",
     ];
     for (const event of webhook.events) {
       if (!validEvents.includes(event)) {

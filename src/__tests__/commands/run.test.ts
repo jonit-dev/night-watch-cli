@@ -29,6 +29,8 @@ import {
   applyCliOverrides,
   IRunOptions,
   scanPrdDirectory,
+  getRateLimitFallbackTelegramWebhooks,
+  isRateLimitFallbackTriggered,
   resolveRunNotificationEvent,
 } from "../../commands/run.js";
 import { applyScheduleOffset, buildCronPathPrefix } from "../../commands/install.js";
@@ -261,6 +263,64 @@ describe("run command", () => {
 
       expect(env.NW_BOARD_ENABLED).toBeUndefined();
     });
+
+    it("exports fallback Telegram credentials only for subscribed webhooks", () => {
+      const config = createTestConfig({
+        notifications: {
+          webhooks: [
+            {
+              type: "telegram",
+              botToken: "token-disabled",
+              chatId: "chat-disabled",
+              events: ["run_failed"],
+            },
+            {
+              type: "telegram",
+              botToken: "token-enabled",
+              chatId: "chat-enabled",
+              events: ["rate_limit_fallback"],
+            },
+            {
+              type: "slack",
+              url: "https://hooks.slack.com/services/AAA/BBB/CCC",
+              events: ["rate_limit_fallback"],
+            },
+          ],
+        },
+      });
+      const options: IRunOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+      const exported = JSON.parse(env.NW_TELEGRAM_RATE_LIMIT_WEBHOOKS!);
+
+      expect(exported).toEqual([
+        { botToken: "token-enabled", chatId: "chat-enabled" },
+      ]);
+      expect(env.NW_TELEGRAM_BOT_TOKEN).toBe("token-enabled");
+      expect(env.NW_TELEGRAM_CHAT_ID).toBe("chat-enabled");
+    });
+
+    it("does not export fallback Telegram credentials when no webhook opted in", () => {
+      const config = createTestConfig({
+        notifications: {
+          webhooks: [
+            {
+              type: "telegram",
+              botToken: "token-1",
+              chatId: "chat-1",
+              events: ["run_failed"],
+            },
+          ],
+        },
+      });
+      const options: IRunOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_TELEGRAM_RATE_LIMIT_WEBHOOKS).toBeUndefined();
+      expect(env.NW_TELEGRAM_BOT_TOKEN).toBeUndefined();
+      expect(env.NW_TELEGRAM_CHAT_ID).toBeUndefined();
+    });
   });
 
   describe("applyCliOverrides", () => {
@@ -305,6 +365,39 @@ describe("run command", () => {
     it("should suppress notifications for skip/no-op statuses", () => {
       expect(resolveRunNotificationEvent(0, "skip_no_eligible_prd")).toBeNull();
       expect(resolveRunNotificationEvent(0, "success_already_merged")).toBeNull();
+    });
+  });
+
+  describe("rate-limit fallback helpers", () => {
+    it("returns only Telegram webhooks subscribed to rate_limit_fallback", () => {
+      const config = createTestConfig({
+        notifications: {
+          webhooks: [
+            {
+              type: "telegram",
+              botToken: "token-a",
+              chatId: "chat-a",
+              events: ["rate_limit_fallback"],
+            },
+            {
+              type: "telegram",
+              botToken: "token-b",
+              chatId: "chat-b",
+              events: ["run_failed"],
+            },
+          ],
+        },
+      });
+
+      expect(getRateLimitFallbackTelegramWebhooks(config)).toEqual([
+        { botToken: "token-a", chatId: "chat-a" },
+      ]);
+    });
+
+    it("detects fallback marker from script result data", () => {
+      expect(isRateLimitFallbackTriggered({ rate_limit_fallback: "1" })).toBe(true);
+      expect(isRateLimitFallbackTriggered({ rate_limit_fallback: "0" })).toBe(false);
+      expect(isRateLimitFallbackTriggered(undefined)).toBe(false);
     });
   });
 
