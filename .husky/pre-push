@@ -1,0 +1,7 @@
+echo "Running type checks..."
+yarn tsc --noEmit || exit 1
+
+echo "Running tests..."
+yarn test || exit 1
+
+echo "All checks passed!"

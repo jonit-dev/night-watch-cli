@@ -14,6 +14,7 @@
     }
   },
   "scripts": {
+    "prepare": "husky",
     "build": "yarn build:cli && yarn build:web",
     "build:web": "cd web && yarn install && yarn build",
     "build:cli": "tsc && tsc-alias",
@@ -78,6 +79,8 @@
     "@types/supertest": "^6.0.3",
     "concurrently": "^9.2.1",
     "eslint": "^10.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "supertest": "^7.2.2",
     "tsc-alias": "^1.8.16",
     "tsx": "^4.7.0",
@@ -87,5 +90,10 @@
   },
   "engines": {
     "node": ">=22.0.0"
+  },
+  "lint-staged": {
+    "src/**/*.ts": [
+      "eslint --fix"
+    ]
   }
 }
