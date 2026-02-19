@@ -1,30 +1,30 @@
 import type {
-  StatusSnapshot,
+  IStatusSnapshot,
   PrdWithContent,
-  PrInfo,
-  LogInfo,
+  IPrInfo,
+  ILogInfo,
   DoctorCheck,
   ActionResult,
-  NightWatchConfig,
-  PrdInfo,
-  ProcessInfo,
-  NotificationConfig,
-  WebhookConfig,
+  INightWatchConfig,
+  IPrdInfo,
+  IProcessInfo,
+  INotificationConfig,
+  IWebhookConfig,
 } from './api';
 
 // Re-export API types for convenience
 export type {
-  StatusSnapshot,
+  IStatusSnapshot,
   PrdWithContent,
-  PrInfo,
-  LogInfo,
+  IPrInfo,
+  ILogInfo,
   DoctorCheck,
   ActionResult,
-  NightWatchConfig,
-  PrdInfo,
-  ProcessInfo,
-  NotificationConfig,
-  WebhookConfig,
+  INightWatchConfig,
+  IPrdInfo,
+  IProcessInfo,
+  INotificationConfig,
+  IWebhookConfig,
 };
 
 export enum Status {
