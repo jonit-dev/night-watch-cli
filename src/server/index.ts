@@ -12,7 +12,7 @@ import * as path from "path";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
 
-import { CONFIG_FILE_NAME, LOG_DIR } from "../constants.js";
+import { CLAIM_FILE_EXTENSION, CONFIG_FILE_NAME, LOG_DIR } from "../constants.js";
 import { INightWatchConfig } from "../types.js";
 import { loadConfig } from "../config.js";
 import { validateWebhook } from "../commands/doctor.js";
@@ -31,6 +31,54 @@ const __dirname = dirname(__filename);
 
 // Track spawned processes
 const spawnedProcesses = new Map<number, ChildProcess>();
+
+// ==================== SSE Support ====================
+
+/**
+ * SSE client registry type
+ */
+type SseClientSet = Set<Response>;
+
+/**
+ * Broadcast an SSE event to all connected clients
+ */
+function broadcastSSE(clients: SseClientSet, event: string, data: unknown): void {
+  const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const client of clients) {
+    try {
+      client.write(msg);
+    } catch {
+      clients.delete(client);
+    }
+  }
+}
+
+/**
+ * Start the SSE status change watcher that broadcasts when snapshot changes
+ */
+function startSseStatusWatcher(
+  clients: SseClientSet,
+  projectDir: string,
+  getConfig: () => INightWatchConfig,
+): ReturnType<typeof setInterval> {
+  let lastSnapshotHash = "";
+  return setInterval(() => {
+    if (clients.size === 0) return;
+    try {
+      const snapshot = fetchStatusSnapshot(projectDir, getConfig());
+      const hash = JSON.stringify({
+        processes: snapshot.processes,
+        prds: snapshot.prds.map((p) => ({ n: p.name, s: p.status })),
+      });
+      if (hash !== lastSnapshotHash) {
+        lastSnapshotHash = hash;
+        broadcastSSE(clients, "status_changed", snapshot);
+      }
+    } catch {
+      // Silently ignore errors during status polling
+    }
+  }, 2000);
+}
 
 /**
  * Health check result interface
@@ -353,7 +401,13 @@ function handleGetDoctor(projectDir: string, config: INightWatchConfig, _req: Re
   }
 }
 
-function handleSpawnAction(projectDir: string, command: string[], _req: Request, res: Response): void {
+function handleSpawnAction(
+  projectDir: string,
+  command: string[],
+  req: Request,
+  res: Response,
+  onSpawned?: (pid: number) => void,
+): void {
   try {
     // Prevent duplicate execution: check the lock file before spawning
     const lockPath = command[0] === "run"
@@ -374,10 +428,20 @@ function handleSpawnAction(projectDir: string, command: string[], _req: Request,
       }
     }
 
+    // Extract optional prdName for priority execution (only for "run" command)
+    const prdName = command[0] === "run" ? (req.body?.prdName as string | undefined) : undefined;
+
+    // Build extra env vars for priority hint
+    const extraEnv: NodeJS.ProcessEnv = {};
+    if (prdName) {
+      extraEnv.NW_PRD_PRIORITY = prdName; // bash script respects NW_PRD_PRIORITY
+    }
+
     const child = spawn("night-watch", command, {
       detached: true,
       stdio: "ignore",
       cwd: projectDir,
+      env: { ...process.env, ...extraEnv },
     });
 
     child.unref();
@@ -394,6 +458,11 @@ function handleSpawnAction(projectDir: string, command: string[], _req: Request,
           exitCode: 0,
           provider: config.provider,
         }).catch(() => { /* silently ignore notification errors */ });
+      }
+
+      // Notify SSE clients about executor start
+      if (onSpawned) {
+        onSpawned(child.pid);
       }
 
       res.json({ started: true, pid: child.pid });
@@ -556,6 +625,74 @@ function handleRetryAction(projectDir: string, config: INightWatchConfig, req: R
   }
 }
 
+/**
+ * Handle clearing stale executor lock and orphaned claim files.
+ * Returns 409 if executor is actively running (should use Stop instead).
+ */
+function handleClearLockAction(
+  projectDir: string,
+  config: INightWatchConfig,
+  sseClients: SseClientSet,
+  _req: Request,
+  res: Response,
+): void {
+  try {
+    const lockPath = executorLockPath(projectDir);
+    const lock = checkLockFile(lockPath);
+
+    if (lock.running) {
+      res.status(409).json({ error: "Executor is actively running — use Stop instead" });
+      return;
+    }
+
+    // Remove the stale lock file if it exists
+    if (fs.existsSync(lockPath)) {
+      fs.unlinkSync(lockPath);
+    }
+
+    // Clean up any orphaned claim files
+    const prdDir = path.join(projectDir, config.prdDir);
+    if (fs.existsSync(prdDir)) {
+      cleanOrphanedClaims(prdDir);
+    }
+
+    // Broadcast updated status via SSE
+    broadcastSSE(sseClients, "status_changed", fetchStatusSnapshot(projectDir, config));
+
+    res.json({ cleared: true });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+  }
+}
+
+/**
+ * Recursively clean up orphaned claim files in the PRD directory.
+ * A claim is orphaned if the executor is not running.
+ */
+function cleanOrphanedClaims(dir: string): void {
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+
+    if (entry.isDirectory() && entry.name !== "done") {
+      cleanOrphanedClaims(fullPath);
+    } else if (entry.name.endsWith(CLAIM_FILE_EXTENSION)) {
+      // This is a claim file - remove it since executor is not running
+      try {
+        fs.unlinkSync(fullPath);
+      } catch {
+        // Ignore errors during cleanup
+      }
+    }
+  }
+}
+
 // ==================== Static Files + SPA Fallback ====================
 
 function setupStaticFiles(app: Express): void {
@@ -598,6 +735,34 @@ export function createApp(projectDir: string): Express {
     config = loadConfig(projectDir);
   };
 
+  // SSE client registry for real-time push
+  const sseClients: SseClientSet = new Set();
+
+  // SSE endpoint for real-time status updates
+  app.get("/api/status/events", (req: Request, res: Response): void => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    sseClients.add(res);
+
+    // Send current snapshot immediately on connect
+    try {
+      const snapshot = fetchStatusSnapshot(projectDir, config);
+      res.write(`event: status_changed\ndata: ${JSON.stringify(snapshot)}\n\n`);
+    } catch {
+      // Ignore errors during initial snapshot
+    }
+
+    req.on("close", () => {
+      sseClients.delete(res);
+    });
+  });
+
+  // Start the SSE status watcher (runs until process exits)
+  startSseStatusWatcher(sseClients, projectDir, () => config);
+
   // API Routes
   app.get("/api/status", (req, res) => handleGetStatus(projectDir, config, req, res));
   app.get("/api/schedule-info", (req, res) => handleGetScheduleInfo(projectDir, config, req, res));
@@ -608,12 +773,17 @@ export function createApp(projectDir: string): Express {
   app.get("/api/config", (req, res) => handleGetConfig(config, req, res));
   app.put("/api/config", (req, res) => handlePutConfig(projectDir, () => config, reloadConfig, req, res));
   app.get("/api/doctor", (req, res) => handleGetDoctor(projectDir, config, req, res));
-  app.post("/api/actions/run", (req, res) => handleSpawnAction(projectDir, ["run"], req, res));
+  app.post("/api/actions/run", (req, res) =>
+    handleSpawnAction(projectDir, ["run"], req, res, (pid) => {
+      broadcastSSE(sseClients, "executor_started", { pid });
+    }),
+  );
   app.post("/api/actions/review", (req, res) => handleSpawnAction(projectDir, ["review"], req, res));
   app.post("/api/actions/install-cron", (req, res) => handleSpawnAction(projectDir, ["install"], req, res));
   app.post("/api/actions/uninstall-cron", (req, res) => handleSpawnAction(projectDir, ["uninstall"], req, res));
   app.post("/api/actions/cancel", (req, res) => handleCancelAction(projectDir, req, res));
   app.post("/api/actions/retry", (req, res) => handleRetryAction(projectDir, config, req, res));
+  app.post("/api/actions/clear-lock", (req, res) => handleClearLockAction(projectDir, config, sseClients, req, res));
   app.get("/api/roadmap", (req, res) => handleGetRoadmap(projectDir, config, req, res));
   app.post("/api/roadmap/scan", (req, res) => handlePostRoadmapScan(projectDir, config, req, res));
   app.put("/api/roadmap/toggle", (req, res) => handlePutRoadmapToggle(projectDir, () => config, reloadConfig, req, res));
@@ -688,8 +858,51 @@ function resolveProject(req: Request, res: Response, next: NextFunction): void {
 function createProjectRouter(): Router {
   const router = Router({ mergeParams: true });
 
+  // Per-project SSE client registry and watchers
+  const projectSseClients = new Map<string, SseClientSet>();
+  const projectSseWatchers = new Map<string, ReturnType<typeof setInterval>>();
+
   const dir = (req: Request): string => req.projectDir!;
   const cfg = (req: Request): INightWatchConfig => req.projectConfig!;
+
+  // SSE endpoint for project-scoped status updates
+  router.get("/status/events", (req: Request, res: Response): void => {
+    const projectDir = dir(req);
+    const config = cfg(req);
+
+    // Initialize client set for this project if not exists
+    if (!projectSseClients.has(projectDir)) {
+      projectSseClients.set(projectDir, new Set());
+    }
+    const clients = projectSseClients.get(projectDir)!;
+
+    // Start watcher for this project if not already running
+    if (!projectSseWatchers.has(projectDir)) {
+      const watcher = startSseStatusWatcher(clients, projectDir, () =>
+        loadConfig(projectDir),
+      );
+      projectSseWatchers.set(projectDir, watcher);
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    clients.add(res);
+
+    // Send current snapshot immediately on connect
+    try {
+      const snapshot = fetchStatusSnapshot(projectDir, config);
+      res.write(`event: status_changed\ndata: ${JSON.stringify(snapshot)}\n\n`);
+    } catch {
+      // Ignore errors during initial snapshot
+    }
+
+    req.on("close", () => {
+      clients.delete(res);
+    });
+  });
 
   router.get("/status", (req, res) => handleGetStatus(dir(req), cfg(req), req, res));
   router.get("/schedule-info", (req, res) => handleGetScheduleInfo(dir(req), cfg(req), req, res));
@@ -710,12 +923,26 @@ function createProjectRouter(): Router {
     );
   });
   router.get("/doctor", (req, res) => handleGetDoctor(dir(req), cfg(req), req, res));
-  router.post("/actions/run", (req, res) => handleSpawnAction(dir(req), ["run"], req, res));
+  router.post("/actions/run", (req, res) => {
+    const projectDir = dir(req);
+    handleSpawnAction(projectDir, ["run"], req, res, (pid) => {
+      const clients = projectSseClients.get(projectDir);
+      if (clients) {
+        broadcastSSE(clients, "executor_started", { pid });
+      }
+    });
+  });
   router.post("/actions/review", (req, res) => handleSpawnAction(dir(req), ["review"], req, res));
   router.post("/actions/install-cron", (req, res) => handleSpawnAction(dir(req), ["install"], req, res));
   router.post("/actions/uninstall-cron", (req, res) => handleSpawnAction(dir(req), ["uninstall"], req, res));
   router.post("/actions/cancel", (req, res) => handleCancelAction(dir(req), req, res));
   router.post("/actions/retry", (req, res) => handleRetryAction(dir(req), cfg(req), req, res));
+  router.post("/actions/clear-lock", (req, res) => {
+    const projectDir = dir(req);
+    const config = cfg(req);
+    const clients = projectSseClients.get(projectDir);
+    handleClearLockAction(projectDir, config, clients ?? new Set(), req, res);
+  });
   router.get("/roadmap", (req, res) => handleGetRoadmap(dir(req), cfg(req), req, res));
   router.post("/roadmap/scan", (req, res) => handlePostRoadmapScan(dir(req), cfg(req), req, res));
   router.put("/roadmap/toggle", (req, res) => handlePutRoadmapToggle(dir(req), () => cfg(req), () => {}, req, res));

@@ -292,20 +292,125 @@ describe("status-data utilities", () => {
         JSON.stringify({ timestamp: Math.floor(Date.now() / 1000), hostname: "test", pid: 1234 })
       );
 
-      const result = collectPrdInfo(tempDir, "docs/PRDs/night-watch", 7200);
-      expect(result).toHaveLength(3);
+      // Create executor lock file to simulate running executor
+      const lockPath = executorLockPath(tempDir);
+      fs.writeFileSync(lockPath, "12345");
 
-      const phase0 = result.find((p) => p.name === "phase0");
-      expect(phase0).toBeDefined();
-      expect(phase0!.status).toBe("done");
+      // Mock process.kill to simulate executor running (required for cross-validation)
+      const originalKill = process.kill;
+      (process as any).kill = vi.fn().mockReturnValue(true);
 
-      const phase1 = result.find((p) => p.name === "phase1");
-      expect(phase1).toBeDefined();
-      expect(phase1!.status).toBe("in-progress");
+      try {
+        const result = collectPrdInfo(tempDir, "docs/PRDs/night-watch", 7200);
+        expect(result).toHaveLength(3);
 
-      const phase2 = result.find((p) => p.name === "phase2");
-      expect(phase2).toBeDefined();
-      expect(phase2!.status).toBe("ready");
+        const phase0 = result.find((p) => p.name === "phase0");
+        expect(phase0).toBeDefined();
+        expect(phase0!.status).toBe("done");
+
+        const phase1 = result.find((p) => p.name === "phase1");
+        expect(phase1).toBeDefined();
+        expect(phase1!.status).toBe("in-progress");
+
+        const phase2 = result.find((p) => p.name === "phase2");
+        expect(phase2).toBeDefined();
+        expect(phase2!.status).toBe("ready");
+      } finally {
+        (process as any).kill = originalKill;
+        // Clean up lock file
+        try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
+      }
+    });
+
+    it("marks PRD ready when claim exists but lock is gone", () => {
+      const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
+      fs.mkdirSync(prdDir, { recursive: true });
+
+      fs.writeFileSync(path.join(prdDir, "my-prd.md"), "# My PRD");
+
+      // Fresh claim file
+      fs.writeFileSync(
+        path.join(prdDir, "my-prd.md.claim"),
+        JSON.stringify({ timestamp: Math.floor(Date.now() / 1000), hostname: "test", pid: 1234 })
+      );
+
+      // Mock process.kill to simulate executor NOT running
+      const originalKill = process.kill;
+      (process as any).kill = vi.fn().mockImplementation(() => {
+        throw new Error("ESRCH");
+      });
+
+      try {
+        const result = collectPrdInfo(tempDir, "docs/PRDs/night-watch", 7200);
+        const myPrd = result.find((p) => p.name === "my-prd");
+        expect(myPrd).toBeDefined();
+        expect(myPrd!.status).toBe("ready");
+      } finally {
+        (process as any).kill = originalKill;
+      }
+    });
+
+    it("marks PRD in-progress when claim AND lock both exist", () => {
+      const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
+      fs.mkdirSync(prdDir, { recursive: true });
+
+      fs.writeFileSync(path.join(prdDir, "my-prd.md"), "# My PRD");
+
+      // Fresh claim file
+      fs.writeFileSync(
+        path.join(prdDir, "my-prd.md.claim"),
+        JSON.stringify({ timestamp: Math.floor(Date.now() / 1000), hostname: "test", pid: 1234 })
+      );
+
+      // Create executor lock file to simulate running executor
+      const lockPath = executorLockPath(tempDir);
+      fs.writeFileSync(lockPath, "12345");
+
+      // Mock process.kill to simulate executor running
+      const originalKill = process.kill;
+      (process as any).kill = vi.fn().mockReturnValue(true);
+
+      try {
+        const result = collectPrdInfo(tempDir, "docs/PRDs/night-watch", 7200);
+        const myPrd = result.find((p) => p.name === "my-prd");
+        expect(myPrd).toBeDefined();
+        expect(myPrd!.status).toBe("in-progress");
+      } finally {
+        (process as any).kill = originalKill;
+        // Clean up lock file
+        try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
+      }
+    });
+
+    it("deletes orphaned claim file when lock is gone", () => {
+      const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
+      fs.mkdirSync(prdDir, { recursive: true });
+
+      fs.writeFileSync(path.join(prdDir, "my-prd.md"), "# My PRD");
+
+      const claimPath = path.join(prdDir, "my-prd.md.claim");
+      fs.writeFileSync(
+        claimPath,
+        JSON.stringify({ timestamp: Math.floor(Date.now() / 1000), hostname: "test", pid: 1234 })
+      );
+
+      // Verify claim exists before calling collectPrdInfo
+      expect(fs.existsSync(claimPath)).toBe(true);
+
+      // Mock process.kill to simulate executor NOT running
+      const originalKill = process.kill;
+      (process as any).kill = vi.fn().mockImplementation(() => {
+        throw new Error("ESRCH");
+      });
+
+      try {
+        collectPrdInfo(tempDir, "docs/PRDs/night-watch", 7200);
+
+        // Claim file should have been deleted
+        expect(fs.existsSync(claimPath)).toBe(false);
+      } finally {
+        (process as any).kill = originalKill;
+      }
     });
   });
 
@@ -668,6 +773,7 @@ describe("status-data utilities", () => {
       expect(snapshot.logs).toHaveLength(2);
       expect(snapshot.crontab).toHaveProperty("installed");
       expect(snapshot.crontab).toHaveProperty("entries");
+      expect(snapshot.activePrd).toBeNull();
       expect(snapshot.timestamp).toBeInstanceOf(Date);
     });
 
@@ -730,6 +836,76 @@ describe("status-data utilities", () => {
 
       expect(snapshot.crontab.installed).toBe(true);
       expect(snapshot.crontab.entries).toHaveLength(1);
+    });
+
+    it("activePrd is set when executor running with claimed PRD", () => {
+      fs.writeFileSync(
+        path.join(tempDir, "package.json"),
+        JSON.stringify({ name: "test-project" })
+      );
+
+      const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
+      fs.mkdirSync(prdDir, { recursive: true });
+
+      fs.writeFileSync(path.join(prdDir, "my-prd.md"), "# My PRD");
+
+      // Fresh claim file
+      fs.writeFileSync(
+        path.join(prdDir, "my-prd.md.claim"),
+        JSON.stringify({ timestamp: Math.floor(Date.now() / 1000), hostname: "test", pid: 1234 })
+      );
+
+      // Create executor lock file to simulate running executor
+      const lockPath = executorLockPath(tempDir);
+      fs.writeFileSync(lockPath, "12345");
+
+      // Mock process.kill to simulate executor running
+      const originalKill = process.kill;
+      (process as any).kill = vi.fn().mockReturnValue(true);
+
+      try {
+        const config = makeConfig();
+        const snapshot = fetchStatusSnapshot(tempDir, config);
+
+        expect(snapshot.activePrd).toBe("my-prd");
+      } finally {
+        (process as any).kill = originalKill;
+        // Clean up lock file
+        try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
+      }
+    });
+
+    it("activePrd is null when executor not running", () => {
+      fs.writeFileSync(
+        path.join(tempDir, "package.json"),
+        JSON.stringify({ name: "test-project" })
+      );
+
+      const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
+      fs.mkdirSync(prdDir, { recursive: true });
+
+      fs.writeFileSync(path.join(prdDir, "my-prd.md"), "# My PRD");
+
+      // Fresh claim file (but executor is not running)
+      fs.writeFileSync(
+        path.join(prdDir, "my-prd.md.claim"),
+        JSON.stringify({ timestamp: Math.floor(Date.now() / 1000), hostname: "test", pid: 1234 })
+      );
+
+      // Mock process.kill to simulate executor NOT running
+      const originalKill = process.kill;
+      (process as any).kill = vi.fn().mockImplementation(() => {
+        throw new Error("ESRCH");
+      });
+
+      try {
+        const config = makeConfig();
+        const snapshot = fetchStatusSnapshot(tempDir, config);
+
+        expect(snapshot.activePrd).toBeNull();
+      } finally {
+        (process as any).kill = originalKill;
+      }
     });
   });
 });

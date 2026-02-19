@@ -214,9 +214,11 @@ export function fetchScheduleInfo(): Promise<IScheduleInfo> {
   return apiFetch<ScheduleInfo>(apiPath('/api/schedule-info'));
 }
 
-export function triggerRun(): Promise<ActionResult> {
+export function triggerRun(prdName?: string): Promise<ActionResult> {
   return apiFetch<ActionResult>(apiPath('/api/actions/run'), {
     method: 'POST',
+    headers: prdName ? { 'Content-Type': 'application/json' } : undefined,
+    body: prdName ? JSON.stringify({ prdName }) : undefined,
   });
 }
 
@@ -259,6 +261,12 @@ export function retryPrd(prdName: string): Promise<{ message: string }> {
   return apiFetch<{ message: string }>(apiPath('/api/actions/retry'), {
     method: 'POST',
     body: JSON.stringify({ prdName }),
+  });
+}
+
+export function triggerClearLock(): Promise<{ cleared: boolean }> {
+  return apiFetch<{ cleared: boolean }>(apiPath('/api/actions/clear-lock'), {
+    method: 'POST',
   });
 }
 
@@ -366,4 +374,54 @@ export function useApi<T>(
   }, [...deps, enabled]);
 
   return { data, loading, error, refetch: refetch.current };
+}
+
+// ==================== SSE Hook ====================
+
+/**
+ * Custom React hook for subscribing to real-time status updates via SSE.
+ * Provides sub-second updates when the server state changes.
+ * Automatically reconnects on connection errors.
+ *
+ * @param onSnapshot Callback function called with each status snapshot
+ * @param deps Dependency list (e.g., [selectedProjectId] to re-subscribe when project changes)
+ */
+export function useStatusStream(
+  onSnapshot: (snapshot: IStatusSnapshot) => void,
+  deps: DependencyList = [],
+): void {
+  useEffect(() => {
+    const url = apiPath("/api/status/events");
+    const es = new EventSource(url);
+
+    es.addEventListener("status_changed", (e: MessageEvent) => {
+      try {
+        const snapshot = JSON.parse(e.data) as IStatusSnapshot;
+        onSnapshot(snapshot);
+      } catch {
+        // Silently ignore parse errors
+      }
+    });
+
+    es.addEventListener("executor_started", (e: MessageEvent) => {
+      // This event just signals that executor started; status_changed will follow
+      try {
+        const data = JSON.parse(e.data);
+        // Could be used for optimistic UI updates if needed
+        console.log("Executor started with PID:", data.pid);
+      } catch {
+        // Silently ignore parse errors
+      }
+    });
+
+    es.onerror = () => {
+      // EventSource automatically reconnects, so we just log for debugging
+      // No action needed - reconnection is automatic
+    };
+
+    return () => {
+      es.close();
+    };
+    // deps is intentionally used to re-subscribe when project changes
+  }, deps);
 }
