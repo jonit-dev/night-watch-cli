@@ -429,6 +429,11 @@ find_eligible_board_issue() {
   if [ -z "${result}" ]; then
     return 1
   fi
+  # Require valid JSON with an issue number to avoid treating plain text output
+  # as a runnable board issue.
+  if ! printf '%s' "${result}" | jq -e '.number and (.number | type == "number")' >/dev/null 2>&1; then
+    return 1
+  fi
   printf '%s' "${result}"
   return 0
 }

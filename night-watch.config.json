@@ -47,6 +47,6 @@
   "boardProvider": {
     "enabled": true,
     "provider": "github",
-    "projectNumber": 6
+    "projectNumber": 41
   }
 }

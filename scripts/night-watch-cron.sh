@@ -74,6 +74,14 @@ ISSUE_BODY=""      # board mode: issue body (PRD content)
 ISSUE_TITLE_RAW="" # board mode: issue title
 NW_CLI=""          # board mode: resolved night-watch CLI binary
 
+restore_issue_to_ready() {
+  local reason="${1:-Execution failed before implementation started.}"
+  if [ -n "${ISSUE_NUMBER}" ] && [ -n "${NW_CLI}" ]; then
+    "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
+    "${NW_CLI}" board comment "${ISSUE_NUMBER}" --body "${reason}" 2>>"${LOG_FILE}" || true
+  fi
+}
+
 if [ "${NW_BOARD_ENABLED:-}" = "true" ]; then
   # Board mode: discover next task from GitHub Projects board
   NW_CLI=$(resolve_night_watch_cli 2>/dev/null || true)
@@ -267,6 +275,7 @@ fi
 
 if ! prepare_branch_worktree "${PROJECT_DIR}" "${WORKTREE_DIR}" "${BRANCH_NAME}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
   log "FAIL: Unable to create isolated worktree ${WORKTREE_DIR} for ${BRANCH_NAME}"
+  restore_issue_to_ready "Failed to prepare worktree for branch ${BRANCH_NAME}. Moved back to Ready for retry."
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
   exit 1
 fi

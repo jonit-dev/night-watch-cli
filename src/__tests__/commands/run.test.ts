@@ -240,7 +240,7 @@ describe("run command", () => {
       expect(env.NW_BOARD_ENABLED).toBe("true");
     });
 
-    it("does not set NW_BOARD_ENABLED when boardProvider enabled but projectNumber missing", () => {
+    it("sets NW_BOARD_ENABLED when boardProvider is enabled even without projectNumber", () => {
       const config = createTestConfig({
         boardProvider: { enabled: true, provider: "github" },
       });
@@ -248,7 +248,7 @@ describe("run command", () => {
 
       const env = buildEnvVars(config, options);
 
-      expect(env.NW_BOARD_ENABLED).toBeUndefined();
+      expect(env.NW_BOARD_ENABLED).toBe("true");
     });
 
     it("does not set NW_BOARD_ENABLED when boardProvider explicitly disabled", () => {
