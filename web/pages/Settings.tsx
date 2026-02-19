@@ -14,6 +14,7 @@ import {
   INotificationConfig,
   IWebhookConfig,
   IRoadmapScannerConfig,
+  ISlackBotConfig,
   updateConfig,
   useApi,
   toggleRoadmapScanner,
@@ -36,6 +37,15 @@ type ConfigForm = {
   prdPriority: string[];
   roadmapScanner: IRoadmapScannerConfig;
   templatesDir: string;
+  slack: ISlackBotConfig;
+};
+
+const DEFAULT_SLACK_CONFIG: ISlackBotConfig = {
+  enabled: false,
+  botToken: '',
+  channels: { eng: '', prs: '', incidents: '', releases: '' },
+  autoCreateProjectChannels: false,
+  discussionEnabled: false,
 };
 
 const toFormState = (config: INightWatchConfig): ConfigForm => ({
@@ -59,6 +69,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
     autoScanInterval: 300,
   },
   templatesDir: config.templatesDir || '.night-watch/templates',
+  slack: config.slack ?? DEFAULT_SLACK_CONFIG,
 });
 
 // Helper to check if a value looks sensitive
@@ -593,6 +604,7 @@ const Settings: React.FC = () => {
         prdPriority: form.prdPriority,
         roadmapScanner: form.roadmapScanner,
         templatesDir: form.templatesDir,
+        slack: form.slack,
       });
 
       addToast({
@@ -762,6 +774,122 @@ const Settings: React.FC = () => {
             notifications={form.notifications}
             onChange={(notifications) => updateField('notifications', notifications)}
           />
+        </Card>
+      ),
+    },
+    {
+      id: 'slack',
+      label: 'Slack Bot',
+      content: (
+        <Card className="p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium text-slate-200">Slack Bot Integration</h3>
+              <p className="text-sm text-slate-400">
+                Post notifications as agent personas using the Slack Bot API
+              </p>
+            </div>
+            <Switch
+              checked={form.slack.enabled}
+              onChange={(checked) => updateField('slack', { ...form.slack, enabled: checked })}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 pt-4 border-t border-slate-800">
+            <div className="relative">
+              <Input
+                label="Bot Token (xoxb-...)"
+                type="password"
+                value={form.slack.botToken}
+                onChange={(e) => updateField('slack', { ...form.slack, botToken: e.target.value })}
+                placeholder="xoxb-..."
+                helperText="OAuth Bot Token from your Slack App settings"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-4 pt-4 border-t border-slate-800">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-medium text-slate-300">Channel IDs</h4>
+              <button
+                type="button"
+                className="px-3 py-1.5 text-xs rounded-md bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors"
+                onClick={() => {
+                  // Coming soon: will list workspace channels
+                  alert('Coming soon: will list workspace channels');
+                }}
+              >
+                Detect Channels
+              </button>
+            </div>
+            <p className="text-xs text-slate-500">
+              Enter the Slack channel IDs (e.g. C01ABCDEF) where agent messages will be posted.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input
+                label="#eng Channel ID"
+                value={form.slack.channels.eng}
+                onChange={(e) =>
+                  updateField('slack', {
+                    ...form.slack,
+                    channels: { ...form.slack.channels, eng: e.target.value },
+                  })
+                }
+                placeholder="C01ABCDEF"
+              />
+              <Input
+                label="#prs Channel ID"
+                value={form.slack.channels.prs}
+                onChange={(e) =>
+                  updateField('slack', {
+                    ...form.slack,
+                    channels: { ...form.slack.channels, prs: e.target.value },
+                  })
+                }
+                placeholder="C01ABCDEF"
+              />
+              <Input
+                label="#incidents Channel ID"
+                value={form.slack.channels.incidents}
+                onChange={(e) =>
+                  updateField('slack', {
+                    ...form.slack,
+                    channels: { ...form.slack.channels, incidents: e.target.value },
+                  })
+                }
+                placeholder="C01ABCDEF"
+              />
+              <Input
+                label="#releases Channel ID"
+                value={form.slack.channels.releases}
+                onChange={(e) =>
+                  updateField('slack', {
+                    ...form.slack,
+                    channels: { ...form.slack.channels, releases: e.target.value },
+                  })
+                }
+                placeholder="C01ABCDEF"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-4 pt-4 border-t border-slate-800">
+            <h4 className="text-sm font-medium text-slate-300">Options</h4>
+            <Switch
+              label="Auto-create project channels"
+              checked={form.slack.autoCreateProjectChannels}
+              onChange={(checked) =>
+                updateField('slack', { ...form.slack, autoCreateProjectChannels: checked })
+              }
+            />
+            <Switch
+              label="Enable agent deliberation"
+              checked={form.slack.discussionEnabled}
+              onChange={(checked) =>
+                updateField('slack', { ...form.slack, discussionEnabled: checked })
+              }
+            />
+          </div>
         </Card>
       ),
     },

@@ -70,6 +70,7 @@ export interface INightWatchConfig {
   prdPriority: string[];
   roadmapScanner: IRoadmapScannerConfig;
   templatesDir: string;
+  slack?: ISlackBotConfig;
 }
 
 // ==================== PRD Info ====================
@@ -147,4 +148,122 @@ export interface IRoadmapStatus {
   items: IRoadmapItem[];
   lastScan?: string;
   autoScanInterval?: number;
+}
+
+// ==================== Slack Bot Config ====================
+
+export interface ISlackBotConfig {
+  enabled: boolean;
+  botToken: string;           // xoxb-...
+  appToken?: string;          // xapp-... for Socket Mode (optional)
+  channels: {
+    eng: string;              // Channel ID for #eng
+    prs: string;              // Channel ID for #prs
+    incidents: string;        // Channel ID for #incidents
+    releases: string;         // Channel ID for #releases
+  };
+  autoCreateProjectChannels: boolean;
+  discussionEnabled: boolean;
+}
+
+// ==================== Agent Personas ====================
+
+export interface IAgentModelConfig {
+  provider: 'anthropic' | 'openai' | 'custom';
+  model: string;
+  baseUrl?: string;
+  envVars?: Record<string, string>;  // Stored encrypted; never returned by API in plaintext
+  maxTokens?: number;
+  temperature?: number;
+}
+
+export interface IAgentSoul {
+  whoIAm: string;
+  worldview: string[];
+  opinions: Record<string, string[]>;
+  expertise: string[];
+  interests: string[];
+  tensions: string[];
+  boundaries: string[];
+  petPeeves: string[];
+}
+
+export interface IAgentStyle {
+  voicePrinciples: string;
+  sentenceStructure: string;
+  tone: string;
+  wordsUsed: string[];
+  wordsAvoided: string[];
+  emojiUsage: {
+    frequency: 'never' | 'rare' | 'moderate' | 'heavy';
+    favorites: string[];
+    contextRules: string;
+  };
+  quickReactions: Record<string, string>;
+  rhetoricalMoves: string[];
+  antiPatterns: Array<{ example: string; why: string }>;
+  goodExamples: string[];
+  badExamples: Array<{ example: string; why: string }>;
+}
+
+export interface IAgentSkill {
+  modes: Record<string, string>;
+  interpolationRules: string;
+  additionalInstructions: string[];
+}
+
+export interface IAgentPersona {
+  id: string;
+  name: string;
+  role: string;
+  avatarUrl: string | null;
+  soul: IAgentSoul;
+  style: IAgentStyle;
+  skill: IAgentSkill;
+  modelConfig: IAgentModelConfig | null;
+  systemPromptOverride: string | null;
+  isActive: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type CreateAgentPersonaInput = Pick<IAgentPersona, 'name' | 'role'> & {
+  avatarUrl?: string;
+  soul?: Partial<IAgentSoul>;
+  style?: Partial<IAgentStyle>;
+  skill?: Partial<IAgentSkill>;
+  modelConfig?: IAgentModelConfig | null;
+  systemPromptOverride?: string;
+};
+
+export type UpdateAgentPersonaInput = Partial<CreateAgentPersonaInput & { isActive: boolean }>;
+
+// ==================== Slack Deliberation ====================
+
+export type DiscussionStatus = 'active' | 'consensus' | 'blocked' | 'closed';
+export type ConsensusResult = 'approved' | 'changes_requested' | 'human_needed';
+export type TriggerType = 'pr_review' | 'build_failure' | 'prd_kickoff';
+
+export interface ISlackDiscussion {
+  id: string;
+  projectPath: string;
+  triggerType: TriggerType;
+  triggerRef: string;       // PR number, PRD name, etc.
+  channelId: string;
+  threadTs: string;
+  status: DiscussionStatus;
+  round: number;
+  participants: string[];   // Agent IDs that have contributed
+  consensusResult: ConsensusResult | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface IDiscussionTrigger {
+  type: TriggerType;
+  projectPath: string;
+  ref: string;             // PR number as string, PRD name, etc.
+  context: string;         // PR diff, failure message, PRD summary, etc.
+  prUrl?: string;
+  channelId?: string;      // Explicit Slack channel override (e.g., project-specific channel)
 }

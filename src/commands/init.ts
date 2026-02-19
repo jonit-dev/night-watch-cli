@@ -649,6 +649,18 @@ export function initCommand(program: Command): void {
         const { registerProject } = await import('../utils/registry.js');
         const entry = registerProject(cwd);
         success(`Registered as "${entry.name}" in global registry`);
+
+        // Non-blocking: auto-create project channel if Slack is configured
+        const currentConfig = loadConfig(cwd);
+        if (currentConfig.slack?.enabled && currentConfig.slack?.autoCreateProjectChannels) {
+          const { SlackClient } = await import('../slack/client.js');
+          const { ChannelManager } = await import('../slack/channel-manager.js');
+          const slackClient = new SlackClient(currentConfig.slack.botToken);
+          const manager = new ChannelManager(slackClient, currentConfig);
+          manager.ensureProjectChannel(entry.path, entry.name).catch(err =>
+            console.warn('Channel creation failed:', err)
+          );
+        }
       } catch (regErr) {
         console.warn(`  Warning: Could not register in global registry: ${regErr instanceof Error ? regErr.message : String(regErr)}`);
       }

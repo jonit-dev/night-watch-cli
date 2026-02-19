@@ -17,6 +17,7 @@ import type {
   IRoadmapItem,
   IRoadmapStatus,
   IRoadmapScannerConfig,
+  ISlackBotConfig,
 } from '@shared/types';
 
 // Re-export shared types so consumers can import from either place
@@ -32,6 +33,7 @@ export type {
   IRoadmapItem,
   IRoadmapStatus,
   IRoadmapScannerConfig,
+  ISlackBotConfig,
 };
 
 /**
@@ -117,6 +119,11 @@ async function apiFetch<T>(
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Unknown error' }));
     throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  // Some endpoints (e.g. DELETE) intentionally return 204 with no JSON body.
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return response.json();
@@ -357,6 +364,66 @@ export function toggleRoadmapScanner(enabled: boolean): Promise<INightWatchConfi
   return apiFetch<INightWatchConfig>(apiPath('/api/roadmap/toggle'), {
     method: 'PUT',
     body: JSON.stringify({ enabled }),
+  });
+}
+
+// ==================== Agent Personas ====================
+
+import type {
+  IAgentPersona,
+  IAgentSoul,
+  IAgentStyle,
+  IAgentSkill,
+  IAgentModelConfig,
+  CreateAgentPersonaInput,
+  UpdateAgentPersonaInput,
+} from '@shared/types';
+
+export type {
+  IAgentPersona,
+  IAgentSoul,
+  IAgentStyle,
+  IAgentSkill,
+  IAgentModelConfig,
+  CreateAgentPersonaInput,
+  UpdateAgentPersonaInput,
+};
+
+export function fetchAgents(): Promise<IAgentPersona[]> {
+  return apiFetch<IAgentPersona[]>(apiPath('/api/agents'));
+}
+
+export function fetchAgent(id: string): Promise<IAgentPersona> {
+  return apiFetch<IAgentPersona>(apiPath(`/api/agents/${id}`));
+}
+
+export function fetchAgentPrompt(id: string): Promise<{ prompt: string }> {
+  return apiFetch<{ prompt: string }>(apiPath(`/api/agents/${id}/prompt`));
+}
+
+export function createAgent(input: CreateAgentPersonaInput): Promise<IAgentPersona> {
+  return apiFetch<IAgentPersona>(apiPath('/api/agents'), {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAgent(id: string, input: UpdateAgentPersonaInput): Promise<IAgentPersona> {
+  return apiFetch<IAgentPersona>(apiPath(`/api/agents/${id}`), {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteAgent(id: string): Promise<void> {
+  return apiFetch<void>(apiPath(`/api/agents/${id}`), {
+    method: 'DELETE',
+  });
+}
+
+export function seedDefaultAgents(): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>(apiPath('/api/agents/seed-defaults'), {
+    method: 'POST',
   });
 }
 

@@ -10,6 +10,7 @@ import Scheduling from './pages/Scheduling';
 import Logs from './pages/Logs';
 import Settings from './pages/Settings';
 import Roadmap from './pages/Roadmap';
+import Agents from './pages/Agents';
 import { ToastContainer } from './components/ui/Toast';
 import { useGlobalMode } from './hooks/useGlobalMode';
 
@@ -37,6 +38,7 @@ const App: React.FC = () => {
                 <Route path="/scheduling" element={<Scheduling />} />
                 <Route path="/logs" element={<Logs />} />
                 <Route path="/roadmap" element={<Roadmap />} />
+                <Route path="/agents" element={<Agents />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

@@ -27,6 +27,8 @@ import { CronExpressionParser } from "cron-parser";
 import { sendNotifications } from "../utils/notify.js";
 import { getRoadmapStatus, scanRoadmap } from "../utils/roadmap-scanner.js";
 import { loadRoadmapState } from "../utils/roadmap-state.js";
+import { getRepositories } from "../storage/repositories/index.js";
+import { CreateAgentPersonaInput, IAgentPersona, UpdateAgentPersonaInput } from "../../shared/types.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -104,6 +106,25 @@ function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunct
  */
 function validatePrdName(name: string): boolean {
   return /^[a-zA-Z0-9_-]+(\.md)?$/.test(name) && !name.includes("..");
+}
+
+/**
+ * Mask persona model env var values before returning API payloads.
+ */
+function maskPersonaSecrets(persona: IAgentPersona): IAgentPersona {
+  const modelConfig = persona.modelConfig;
+  const envVars = modelConfig?.envVars;
+  if (!modelConfig || !envVars) return persona;
+
+  return {
+    ...persona,
+    modelConfig: {
+      ...modelConfig,
+      envVars: Object.fromEntries(
+        Object.keys(envVars).map((key) => [key, "***"]),
+      ),
+    },
+  };
 }
 
 // ==================== Extracted Route Handlers ====================
@@ -981,6 +1002,127 @@ export function createApp(projectDir: string): Express {
   app.post("/api/board/issues/:number/comment", (req, res) => handlePostBoardIssueComment(projectDir, config, req, res));
   app.delete("/api/board/issues/:number", (req, res) => handleDeleteBoardIssue(projectDir, config, req, res));
 
+  // ==================== Agent Personas ====================
+
+  app.post("/api/agents/seed-defaults", (_req, res) => {
+    try {
+      const repos = getRepositories();
+      repos.agentPersona.seedDefaults();
+      res.json({ message: 'Default personas seeded successfully' });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.get("/api/agents", (_req, res) => {
+    try {
+      const repos = getRepositories();
+      const personas = repos.agentPersona.getAll();
+      const masked = personas.map(maskPersonaSecrets);
+      res.json(masked);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.get("/api/agents/:id", (req, res) => {
+    try {
+      const repos = getRepositories();
+      const persona = repos.agentPersona.getById(req.params.id as string);
+      if (!persona) return res.status(404).json({ error: 'Agent not found' });
+      const masked = maskPersonaSecrets(persona);
+      return res.json(masked);
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.get("/api/agents/:id/prompt", async (req, res) => {
+    try {
+      const repos = getRepositories();
+      const persona = repos.agentPersona.getById(req.params.id as string);
+      if (!persona) return res.status(404).json({ error: 'Agent not found' });
+      const { compileSoul } = await import('../agents/soul-compiler.js');
+      const prompt = compileSoul(persona);
+      return res.json({ prompt });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/api/agents", (req, res) => {
+    try {
+      const repos = getRepositories();
+      const input = req.body as CreateAgentPersonaInput;
+      if (!input.name || !input.role) {
+        return res.status(400).json({ error: 'name and role are required' });
+      }
+      const persona = repos.agentPersona.create(input);
+      return res.status(201).json(maskPersonaSecrets(persona));
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.put("/api/agents/:id", (req, res) => {
+    try {
+      const repos = getRepositories();
+      const persona = repos.agentPersona.update(req.params.id as string, req.body as UpdateAgentPersonaInput);
+      res.json(maskPersonaSecrets(persona));
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (msg.includes('not found')) return res.status(404).json({ error: msg });
+      return res.status(500).json({ error: msg });
+    }
+  });
+
+  app.delete("/api/agents/:id", (req, res) => {
+    try {
+      const repos = getRepositories();
+      repos.agentPersona.delete(req.params.id as string);
+      res.status(204).send();
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.post("/api/agents/:id/avatar", (req, res) => {
+    try {
+      const repos = getRepositories();
+      const { avatarUrl } = req.body as { avatarUrl: string };
+      if (!avatarUrl) return res.status(400).json({ error: 'avatarUrl is required' });
+      const persona = repos.agentPersona.update(req.params.id as string, { avatarUrl });
+      return res.json(maskPersonaSecrets(persona));
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (msg.includes('not found')) return res.status(404).json({ error: msg });
+      return res.status(500).json({ error: msg });
+    }
+  });
+
+  // ==================== Slack Discussions ====================
+
+  app.get("/api/discussions", (_req, res) => {
+    try {
+      const repos = getRepositories();
+      const discussions = repos.slackDiscussion.getActive(projectDir);
+      res.json(discussions);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  app.get("/api/discussions/:id", (req, res) => {
+    try {
+      const repos = getRepositories();
+      const discussion = repos.slackDiscussion.getById(req.params.id as string);
+      if (!discussion) return res.status(404).json({ error: 'Discussion not found' });
+      return res.json(discussion);
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   // Auto-scan timer
   let autoScanTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -1159,6 +1301,127 @@ function createProjectRouter(): Router {
   router.patch("/board/issues/:number/move", (req, res) => handlePatchBoardIssueMove(dir(req), cfg(req), req, res));
   router.post("/board/issues/:number/comment", (req, res) => handlePostBoardIssueComment(dir(req), cfg(req), req, res));
   router.delete("/board/issues/:number", (req, res) => handleDeleteBoardIssue(dir(req), cfg(req), req, res));
+
+  // ==================== Agent Personas ====================
+
+  router.post("/agents/seed-defaults", (_req, res) => {
+    try {
+      const repos = getRepositories();
+      repos.agentPersona.seedDefaults();
+      res.json({ message: 'Default personas seeded successfully' });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  router.get("/agents", (_req, res) => {
+    try {
+      const repos = getRepositories();
+      const personas = repos.agentPersona.getAll();
+      const masked = personas.map(maskPersonaSecrets);
+      res.json(masked);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  router.get("/agents/:id", (req, res) => {
+    try {
+      const repos = getRepositories();
+      const persona = repos.agentPersona.getById(req.params.id as string);
+      if (!persona) return res.status(404).json({ error: 'Agent not found' });
+      const masked = maskPersonaSecrets(persona);
+      return res.json(masked);
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  router.get("/agents/:id/prompt", async (req, res) => {
+    try {
+      const repos = getRepositories();
+      const persona = repos.agentPersona.getById(req.params.id as string);
+      if (!persona) return res.status(404).json({ error: 'Agent not found' });
+      const { compileSoul } = await import('../agents/soul-compiler.js');
+      const prompt = compileSoul(persona);
+      return res.json({ prompt });
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  router.post("/agents", (req, res) => {
+    try {
+      const repos = getRepositories();
+      const input = req.body as CreateAgentPersonaInput;
+      if (!input.name || !input.role) {
+        return res.status(400).json({ error: 'name and role are required' });
+      }
+      const persona = repos.agentPersona.create(input);
+      return res.status(201).json(maskPersonaSecrets(persona));
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  router.put("/agents/:id", (req, res) => {
+    try {
+      const repos = getRepositories();
+      const persona = repos.agentPersona.update(req.params.id as string, req.body as UpdateAgentPersonaInput);
+      res.json(maskPersonaSecrets(persona));
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (msg.includes('not found')) return res.status(404).json({ error: msg });
+      return res.status(500).json({ error: msg });
+    }
+  });
+
+  router.delete("/agents/:id", (req, res) => {
+    try {
+      const repos = getRepositories();
+      repos.agentPersona.delete(req.params.id as string);
+      res.status(204).send();
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  router.post("/agents/:id/avatar", (req, res) => {
+    try {
+      const repos = getRepositories();
+      const { avatarUrl } = req.body as { avatarUrl: string };
+      if (!avatarUrl) return res.status(400).json({ error: 'avatarUrl is required' });
+      const persona = repos.agentPersona.update(req.params.id as string, { avatarUrl });
+      return res.json(maskPersonaSecrets(persona));
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (msg.includes('not found')) return res.status(404).json({ error: msg });
+      return res.status(500).json({ error: msg });
+    }
+  });
+
+  // ==================== Slack Discussions ====================
+
+  router.get("/discussions", (req, res) => {
+    try {
+      const repos = getRepositories();
+      const discussions = repos.slackDiscussion.getActive(dir(req));
+      res.json(discussions);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  router.get("/discussions/:id", (req, res) => {
+    try {
+      const repos = getRepositories();
+      const discussion = repos.slackDiscussion.getById(req.params.id as string);
+      if (!discussion) return res.status(404).json({ error: 'Discussion not found' });
+      return res.json(discussion);
+    } catch (err) {
+      return res.status(500).json({ error: (err as Error).message });
+    }
+  });
 
   return router;
 }

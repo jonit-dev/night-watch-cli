@@ -11,11 +11,13 @@ import Database from "better-sqlite3";
 import { runMigrations } from "../../../storage/sqlite/migrations.js";
 
 const EXPECTED_TABLES = [
+  "agent_personas",
   "execution_history",
   "prd_states",
   "projects",
   "roadmap_states",
   "schema_meta",
+  "slack_discussions",
 ];
 
 let tmpDir: string;

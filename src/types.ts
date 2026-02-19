@@ -3,6 +3,9 @@
  */
 
 import { IBoardProviderConfig } from "./board/types.js";
+import { ISlackBotConfig } from "../shared/types.js";
+
+export type { ISlackBotConfig };
 
 /**
  * Supported AI providers
@@ -108,6 +111,9 @@ export interface INightWatchConfig {
 
   /** QA process configuration */
   qa: IQaConfig;
+
+  /** Slack Bot API configuration (optional) */
+  slack?: ISlackBotConfig;
 }
 
 export type QaArtifacts = "screenshot" | "video" | "both";

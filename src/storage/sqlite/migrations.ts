@@ -53,7 +53,44 @@ export function runMigrations(db: Database.Database): void {
       key   TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS agent_personas (
+      id                    TEXT    PRIMARY KEY,
+      name                  TEXT    NOT NULL,
+      role                  TEXT    NOT NULL,
+      avatar_url            TEXT,
+      soul_json             TEXT    NOT NULL DEFAULT '{}',
+      style_json            TEXT    NOT NULL DEFAULT '{}',
+      skill_json            TEXT    NOT NULL DEFAULT '{}',
+      model_config_json     TEXT,
+      system_prompt_override TEXT,
+      is_active             INTEGER NOT NULL DEFAULT 1,
+      created_at            INTEGER NOT NULL,
+      updated_at            INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS slack_discussions (
+      id                TEXT    PRIMARY KEY,
+      project_path      TEXT    NOT NULL,
+      trigger_type      TEXT    NOT NULL,
+      trigger_ref       TEXT    NOT NULL,
+      channel_id        TEXT    NOT NULL,
+      thread_ts         TEXT    NOT NULL,
+      status            TEXT    NOT NULL DEFAULT 'active',
+      round             INTEGER NOT NULL DEFAULT 1,
+      participants_json TEXT    NOT NULL DEFAULT '[]',
+      consensus_result  TEXT,
+      created_at        INTEGER NOT NULL,
+      updated_at        INTEGER NOT NULL
+    );
   `);
+
+  // Add slack_channel_id to projects table if it doesn't exist (migration for Phase 4)
+  try {
+    db.exec(`ALTER TABLE projects ADD COLUMN slack_channel_id TEXT`);
+  } catch {
+    // Column already exists — this is expected after first run
+  }
 
   // Upsert the current schema version into schema_meta
   db.prepare(
