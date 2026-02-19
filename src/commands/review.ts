@@ -5,12 +5,13 @@
 import { Command } from "commander";
 import { getScriptPath, loadConfig } from "../config.js";
 import { INightWatchConfig } from "../types.js";
-import { executeScript } from "../utils/shell.js";
+import { executeScriptWithOutput } from "../utils/shell.js";
 import { sendNotifications } from "../utils/notify.js";
-import { type IPrDetails, fetchReviewedPrDetails } from "../utils/github.js";
+import { type IPrDetails, fetchPrDetailsByNumber, fetchReviewedPrDetails } from "../utils/github.js";
 import { PROVIDER_COMMANDS } from "../constants.js";
 import { execSync } from "child_process";
 import * as path from "path";
+import { parseScriptResult } from "../utils/script-result.js";
 import {
   createSpinner,
   createTable,
@@ -27,6 +28,16 @@ export interface IReviewOptions {
   dryRun: boolean;
   timeout?: string;
   provider?: string;
+}
+
+/**
+ * Review notifications should not fire for script-level skip/no-op outcomes.
+ */
+export function shouldSendReviewNotification(scriptStatus?: string): boolean {
+  if (!scriptStatus) {
+    return true;
+  }
+  return !scriptStatus.startsWith("skip_");
 }
 
 /**
@@ -190,34 +201,59 @@ export function reviewCommand(program: Command): void {
       spinner.start();
 
       try {
-        const exitCode = await executeScript(scriptPath, [projectDir], envVars);
+        const { exitCode, stdout, stderr } = await executeScriptWithOutput(scriptPath, [projectDir], envVars);
+        const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
+
         if (exitCode === 0) {
-          spinner.succeed("PR reviewer completed successfully");
+          if (scriptResult?.status?.startsWith("skip_")) {
+            spinner.succeed("PR reviewer completed (no PRs needed review)");
+          } else {
+            spinner.succeed("PR reviewer completed successfully");
+          }
         } else {
           spinner.fail(`PR reviewer exited with code ${exitCode}`);
         }
 
         // Send notifications (fire-and-forget, failures do not affect exit code)
         if (!options.dryRun) {
-          // Enrich with PR details (graceful — null if gh fails)
-          let prDetails: IPrDetails | null = null;
-          if (exitCode === 0) {
-            prDetails = fetchReviewedPrDetails(config.branchPatterns, projectDir);
+          const skipNotification = !shouldSendReviewNotification(scriptResult?.status);
+
+          if (skipNotification) {
+            info("Skipping review notification (no actionable review result)");
           }
 
-          await sendNotifications(config, {
-            event: "review_completed",
-            projectName: path.basename(projectDir),
-            exitCode,
-            provider: config.provider,
-            prUrl: prDetails?.url,
-            prTitle: prDetails?.title,
-            prBody: prDetails?.body,
-            prNumber: prDetails?.number,
-            filesChanged: prDetails?.changedFiles,
-            additions: prDetails?.additions,
-            deletions: prDetails?.deletions,
-          });
+          // Enrich with PR details (graceful — null if gh fails)
+          let prDetails: IPrDetails | null = null;
+          if (!skipNotification && exitCode === 0) {
+            const prsRaw = scriptResult?.data.prs;
+            const firstPrToken = prsRaw?.split(",")[0]?.trim();
+            if (firstPrToken) {
+              const parsedNumber = parseInt(firstPrToken.replace(/^#/, ""), 10);
+              if (!Number.isNaN(parsedNumber)) {
+                prDetails = fetchPrDetailsByNumber(parsedNumber, projectDir);
+              }
+            }
+
+            if (!prDetails) {
+              prDetails = fetchReviewedPrDetails(config.branchPatterns, projectDir);
+            }
+          }
+
+          if (!skipNotification) {
+            await sendNotifications(config, {
+              event: "review_completed",
+              projectName: path.basename(projectDir),
+              exitCode,
+              provider: config.provider,
+              prUrl: prDetails?.url,
+              prTitle: prDetails?.title,
+              prBody: prDetails?.body,
+              prNumber: prDetails?.number,
+              filesChanged: prDetails?.changedFiles,
+              additions: prDetails?.additions,
+              deletions: prDetails?.deletions,
+            });
+          }
         }
 
         process.exit(exitCode);

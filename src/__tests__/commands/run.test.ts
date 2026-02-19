@@ -29,6 +29,7 @@ import {
   applyCliOverrides,
   IRunOptions,
   scanPrdDirectory,
+  resolveRunNotificationEvent,
 } from "../../commands/run.js";
 import { applyScheduleOffset, buildCronPathPrefix } from "../../commands/install.js";
 import { INightWatchConfig } from "../../types.js";
@@ -252,6 +253,25 @@ describe("run command", () => {
   describe("notification integration", () => {
     it("sendNotifications should be importable", () => {
       expect(typeof sendNotifications).toBe("function");
+    });
+  });
+
+  describe("resolveRunNotificationEvent", () => {
+    it("should map timeout exit to run_timeout", () => {
+      expect(resolveRunNotificationEvent(124, "failure")).toBe("run_timeout");
+    });
+
+    it("should map non-zero exit to run_failed", () => {
+      expect(resolveRunNotificationEvent(1, "failure")).toBe("run_failed");
+    });
+
+    it("should map success_open_pr to run_succeeded", () => {
+      expect(resolveRunNotificationEvent(0, "success_open_pr")).toBe("run_succeeded");
+    });
+
+    it("should suppress notifications for skip/no-op statuses", () => {
+      expect(resolveRunNotificationEvent(0, "skip_no_eligible_prd")).toBeNull();
+      expect(resolveRunNotificationEvent(0, "success_already_merged")).toBeNull();
     });
   });
 

@@ -5,12 +5,13 @@
 import { Command } from "commander";
 import { getScriptPath, loadConfig } from "../config.js";
 import { INightWatchConfig, NotificationEvent } from "../types.js";
-import { executeScript } from "../utils/shell.js";
+import { executeScriptWithOutput } from "../utils/shell.js";
 import { sendNotifications } from "../utils/notify.js";
-import { type IPrDetails, fetchPrDetails } from "../utils/github.js";
+import { type IPrDetails, fetchPrDetails, fetchPrDetailsForBranch } from "../utils/github.js";
 import { CLAIM_FILE_EXTENSION, PROVIDER_COMMANDS } from "../constants.js";
 import * as fs from "fs";
 import * as path from "path";
+import { parseScriptResult } from "../utils/script-result.js";
 import {
   createSpinner,
   createTable,
@@ -27,6 +28,26 @@ export interface IRunOptions {
   dryRun: boolean;
   timeout?: string;
   provider?: string;
+}
+
+/**
+ * Map executor exit/result state to a notification event.
+ * Returns null when the run completed with no actionable work (skip/no-op).
+ */
+export function resolveRunNotificationEvent(
+  exitCode: number,
+  scriptStatus?: string
+): NotificationEvent | null {
+  if (exitCode === 124) {
+    return "run_timeout";
+  }
+  if (exitCode !== 0) {
+    return "run_failed";
+  }
+  if (!scriptStatus || scriptStatus === "success_open_pr") {
+    return "run_succeeded";
+  }
+  return null;
 }
 
 /**
@@ -256,38 +277,55 @@ export function runCommand(program: Command): void {
       spinner.start();
 
       try {
-        const exitCode = await executeScript(scriptPath, [projectDir], envVars);
+        const { exitCode, stdout, stderr } = await executeScriptWithOutput(scriptPath, [projectDir], envVars);
+        const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
+
         if (exitCode === 0) {
-          spinner.succeed("PRD executor completed successfully");
+          if (scriptResult?.status?.startsWith("skip_")) {
+            spinner.succeed("PRD executor completed (no eligible work)");
+          } else if (scriptResult?.status === "success_already_merged") {
+            spinner.succeed("PRD executor completed (PRD already merged)");
+          } else {
+            spinner.succeed("PRD executor completed successfully");
+          }
         } else {
           spinner.fail(`PRD executor exited with code ${exitCode}`);
         }
 
         // Send notifications (fire-and-forget, failures do not affect exit code)
         if (!options.dryRun) {
-          const event: NotificationEvent =
-            exitCode === 0 ? "run_succeeded" :
-            exitCode === 124 ? "run_timeout" : "run_failed";
+          // Backward-compatible fallback: if no marker is present, preserve previous behavior.
+          const event = resolveRunNotificationEvent(exitCode, scriptResult?.status);
 
           // Enrich with PR details on success (graceful — null if gh fails)
           let prDetails: IPrDetails | null = null;
-          if (exitCode === 0) {
-            prDetails = fetchPrDetails(config.branchPrefix, projectDir);
+          if (event === "run_succeeded") {
+            const branch = scriptResult?.data.branch;
+            if (branch) {
+              prDetails = fetchPrDetailsForBranch(branch, projectDir);
+            }
+            if (!prDetails) {
+              prDetails = fetchPrDetails(config.branchPrefix, projectDir);
+            }
           }
 
-          await sendNotifications(config, {
-            event,
-            projectName: path.basename(projectDir),
-            exitCode,
-            provider: config.provider,
-            prUrl: prDetails?.url,
-            prTitle: prDetails?.title,
-            prBody: prDetails?.body,
-            prNumber: prDetails?.number,
-            filesChanged: prDetails?.changedFiles,
-            additions: prDetails?.additions,
-            deletions: prDetails?.deletions,
-          });
+          if (event) {
+            await sendNotifications(config, {
+              event,
+              projectName: path.basename(projectDir),
+              exitCode,
+              provider: config.provider,
+              prUrl: prDetails?.url,
+              prTitle: prDetails?.title,
+              prBody: prDetails?.body,
+              prNumber: prDetails?.number,
+              filesChanged: prDetails?.changedFiles,
+              additions: prDetails?.additions,
+              deletions: prDetails?.deletions,
+            });
+          } else {
+            info("Skipping completion notification (no actionable run result)");
+          }
         }
 
         process.exit(exitCode);
