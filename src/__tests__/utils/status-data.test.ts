@@ -1200,7 +1200,7 @@ describe("status-data utilities", () => {
     it("should collect info for both executor and reviewer logs", () => {
       const logDir = path.join(tempDir, "logs");
       fs.mkdirSync(logDir, { recursive: true });
-      fs.writeFileSync(path.join(logDir, "executor.log"), "Executor line 1");
+      fs.writeFileSync(path.join(logDir, "night-watch.log"), "Executor line 1");
 
       const result = collectLogInfo(tempDir);
       expect(result).toHaveLength(2);
@@ -1213,6 +1213,26 @@ describe("status-data utilities", () => {
       const reviewerLog = result.find((l) => l.name === "reviewer");
       expect(reviewerLog).toBeDefined();
       expect(reviewerLog!.exists).toBe(false);
+    });
+
+    it("should use correct file names (night-watch.log and night-watch-pr-reviewer.log)", () => {
+      const logDir = path.join(tempDir, "logs");
+      fs.mkdirSync(logDir, { recursive: true });
+      fs.writeFileSync(path.join(logDir, "night-watch.log"), "Executor line 1");
+      fs.writeFileSync(path.join(logDir, "night-watch-pr-reviewer.log"), "Reviewer line 1");
+
+      const result = collectLogInfo(tempDir);
+      expect(result).toHaveLength(2);
+
+      const executorLog = result.find((l) => l.name === "executor");
+      expect(executorLog).toBeDefined();
+      expect(executorLog!.exists).toBe(true);
+      expect(executorLog!.path).toContain("night-watch.log");
+
+      const reviewerLog = result.find((l) => l.name === "reviewer");
+      expect(reviewerLog).toBeDefined();
+      expect(reviewerLog!.exists).toBe(true);
+      expect(reviewerLog!.path).toContain("night-watch-pr-reviewer.log");
     });
   });
 
@@ -1418,7 +1438,7 @@ describe("status-data utilities", () => {
 
       const logDir = path.join(tempDir, "logs");
       fs.mkdirSync(logDir, { recursive: true });
-      fs.writeFileSync(path.join(logDir, "executor.log"), "Log line 1\nLog line 2");
+      fs.writeFileSync(path.join(logDir, "night-watch.log"), "Log line 1\nLog line 2");
 
       const config = makeConfig();
       const snapshot = fetchStatusSnapshot(tempDir, config);

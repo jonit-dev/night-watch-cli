@@ -12,7 +12,7 @@ import * as path from "path";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
 
-import { CLAIM_FILE_EXTENSION, CONFIG_FILE_NAME, LOG_DIR } from "../constants.js";
+import { CLAIM_FILE_EXTENSION, CONFIG_FILE_NAME, LOG_DIR, LOG_FILE_NAMES } from "../constants.js";
 import { INightWatchConfig } from "../types.js";
 import { loadConfig } from "../config.js";
 import { createBoardProvider } from "../board/factory.js";
@@ -188,7 +188,9 @@ function handleGetLogs(projectDir: string, _config: INightWatchConfig, req: Requ
     const lines = typeof linesParam === "string" ? parseInt(linesParam, 10) : 200;
     const linesToRead = isNaN(lines) || lines < 1 ? 200 : Math.min(lines, 10000);
 
-    const logPath = path.join(projectDir, LOG_DIR, `${name as string}.log`);
+    // Map logical name (executor/reviewer) to actual file name (night-watch/night-watch-pr-reviewer)
+    const fileName = LOG_FILE_NAMES[name as string] || name;
+    const logPath = path.join(projectDir, LOG_DIR, `${fileName}.log`);
     const logLines = getLastLogLines(logPath, linesToRead);
 
     res.json({ name, lines: logLines });
