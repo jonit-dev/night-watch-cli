@@ -52,10 +52,22 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     maxLogSize: 524288,
     cronSchedule: "0 0-21 * * *",
     reviewerSchedule: "0 0,3,6,9,12,15,18,21 * * *",
+    cronScheduleOffset: 0,
+    maxRetries: 3,
     provider: "claude",
     reviewerEnabled: true,
     providerEnv: {},
     notifications: { webhooks: [] },
+    prdPriority: [],
+    roadmapScanner: {
+      enabled: false,
+      roadmapPath: "ROADMAP.md",
+      autoScanInterval: 3600,
+      slicerSchedule: "0 6 * * *",
+      slicerMaxRuntime: 3600,
+    },
+    templatesDir: "templates",
+    boardProvider: { enabled: true, provider: "github" },
     ...overrides,
   };
 }
@@ -538,6 +550,606 @@ describe("status-data utilities", () => {
 
       expect(result[2].ciStatus).toBe("pending");
       expect(result[2].reviewScore).toBe(null);
+    });
+  });
+
+  describe("CI status derivation edge cases", () => {
+    it("should return 'unknown' for null statusCheckRollup", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: null,
+              reviewDecision: null,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
+      expect(result[0].ciStatus).toBe("unknown");
+      expect(result[0].reviewScore).toBe(null);
+    });
+
+    it("should return 'unknown' for undefined statusCheckRollup", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              // statusCheckRollup not included
+              reviewDecision: null,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
+      expect(result[0].ciStatus).toBe("unknown");
+    });
+
+    it("should return 'unknown' for empty statusCheckRollup array", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [],
+              reviewDecision: null,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
+      expect(result[0].ciStatus).toBe("unknown");
+    });
+
+    it("should return 'fail' for ERROR conclusion", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ status: "COMPLETED", conclusion: "ERROR" }],
+              reviewDecision: null,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].ciStatus).toBe("fail");
+    });
+
+    it("should return 'fail' for CANCELLED conclusion", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ status: "COMPLETED", conclusion: "CANCELLED" }],
+              reviewDecision: null,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].ciStatus).toBe("fail");
+    });
+
+    it("should return 'fail' for TIMED_OUT conclusion", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ status: "COMPLETED", conclusion: "TIMED_OUT" }],
+              reviewDecision: null,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].ciStatus).toBe("fail");
+    });
+
+    it("should return 'fail' for ACTION_REQUIRED conclusion", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ status: "COMPLETED", conclusion: "ACTION_REQUIRED" }],
+              reviewDecision: null,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].ciStatus).toBe("fail");
+    });
+
+    it("should return 'pending' for QUEUED status", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ status: "QUEUED", conclusion: null }],
+              reviewDecision: null,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].ciStatus).toBe("pending");
+    });
+
+    it("should return 'pending' for WAITING status", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ status: "WAITING", conclusion: null }],
+              reviewDecision: null,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].ciStatus).toBe("pending");
+    });
+
+    it("should return 'pending' for REQUESTED status", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ status: "REQUESTED", conclusion: null }],
+              reviewDecision: null,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].ciStatus).toBe("pending");
+    });
+
+    it("should return 'pass' for NEUTRAL conclusion", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ status: "COMPLETED", conclusion: "NEUTRAL" }],
+              reviewDecision: null,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].ciStatus).toBe("pass");
+    });
+
+    it("should return 'pass' for SKIPPED conclusion", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SKIPPED" }],
+              reviewDecision: null,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].ciStatus).toBe("pass");
+    });
+
+    it("should handle StatusContext format with state field", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/success",
+              number: 1,
+              title: "Success PR",
+              url: "https://github.com/test/repo/pull/1",
+              // StatusContext format: state only
+              statusCheckRollup: [{ state: "SUCCESS" }],
+              reviewDecision: null,
+            },
+            {
+              headRefName: "feat/fail-state",
+              number: 2,
+              title: "Fail State PR",
+              url: "https://github.com/test/repo/pull/2",
+              statusCheckRollup: [{ state: "FAILURE" }],
+              reviewDecision: null,
+            },
+            {
+              headRefName: "feat/pending-state",
+              number: 3,
+              title: "Pending State PR",
+              url: "https://github.com/test/repo/pull/3",
+              statusCheckRollup: [{ state: "PENDING" }],
+              reviewDecision: null,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(3);
+
+      expect(result[0].ciStatus).toBe("pass");
+      expect(result[1].ciStatus).toBe("fail");
+      expect(result[2].ciStatus).toBe("pending");
+    });
+
+    it("should handle mixed CheckRun and StatusContext formats", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Mixed PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [
+                { status: "COMPLETED", conclusion: "SUCCESS" }, // CheckRun
+                { state: "SUCCESS" }, // StatusContext
+              ],
+              reviewDecision: null,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].ciStatus).toBe("pass");
+    });
+
+    it("should handle mixed success and failure checks", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Mixed Results PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [
+                { status: "COMPLETED", conclusion: "SUCCESS" },
+                { status: "COMPLETED", conclusion: "FAILURE" },
+                { status: "COMPLETED", conclusion: "SUCCESS" },
+              ],
+              reviewDecision: null,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      // Any failure means the overall status is fail
+      expect(result[0].ciStatus).toBe("fail");
+    });
+
+    it("should handle case-insensitive values", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/lower",
+              number: 1,
+              title: "Lowercase PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ status: "completed", conclusion: "success" }],
+              reviewDecision: "approved",
+            },
+            {
+              headRefName: "feat/upper",
+              number: 2,
+              title: "Uppercase PR",
+              url: "https://github.com/test/repo/pull/2",
+              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
+              reviewDecision: "APPROVED",
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].ciStatus).toBe("pass");
+      expect(result[0].reviewScore).toBe(100);
+      expect(result[1].ciStatus).toBe("pass");
+      expect(result[1].reviewScore).toBe(100);
+    });
+  });
+
+  describe("Review score derivation edge cases", () => {
+    it("should return null for empty string reviewDecision", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [],
+              reviewDecision: "",
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].reviewScore).toBe(null);
+    });
+
+    it("should return null for undefined reviewDecision", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [],
+              // reviewDecision not included
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].reviewScore).toBe(null);
+    });
+
+    it("should return 100 for APPROVED", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
+              reviewDecision: "APPROVED",
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].reviewScore).toBe(100);
+    });
+
+    it("should return 0 for CHANGES_REQUESTED", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
+              reviewDecision: "CHANGES_REQUESTED",
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].reviewScore).toBe(0);
+    });
+
+    it("should return null for REVIEW_REQUIRED", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
+              reviewDecision: "REVIEW_REQUIRED",
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].reviewScore).toBe(null);
+    });
+
+    it("should handle lowercase review decisions", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
+              reviewDecision: "approved",
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].reviewScore).toBe(100);
+    });
+
+    it("should handle mixed case review decisions", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
+              reviewDecision: "Changes_Requested",
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].reviewScore).toBe(0);
+    });
+
+    it("should return null for unknown review decision values", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
+              reviewDecision: "SOME_UNKNOWN_VALUE",
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result[0].reviewScore).toBe(null);
     });
   });
 
