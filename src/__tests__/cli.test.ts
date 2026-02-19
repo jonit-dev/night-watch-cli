@@ -232,7 +232,7 @@ describe('CLI', () => {
       expect(output).toContain('Provider');
       expect(output).toContain('Provider CLI');
       expect(output).toContain('PRD Directory');
-      expect(output).toContain('PRD Status');
+      expect(output).toContain('Board Status');
       expect(output).toContain('Provider Invocation');
       expect(output).toContain('night-watch-cron.sh');
     });
