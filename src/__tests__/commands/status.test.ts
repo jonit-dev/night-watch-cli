@@ -376,5 +376,62 @@ describe("status command", () => {
 
       consoleSpy.mockRestore();
     });
+
+    it("should include autoMerge field in JSON output", async () => {
+      const program = new Command();
+      statusCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "status", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.autoMerge).toBe(false);
+      expect(jsonOutput.autoMergeMethod).toBe("squash");
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should show auto-merge status when enabled", async () => {
+      // Update config to enable auto-merge
+      fs.writeFileSync(
+        path.join(tempDir, "night-watch.config.json"),
+        JSON.stringify({
+          projectName: "test-project",
+          defaultBranch: "main",
+          provider: "claude",
+          reviewerEnabled: true,
+          autoMerge: true,
+          autoMergeMethod: "rebase",
+          prdDirectory: "docs/PRDs/night-watch",
+          maxRuntime: 7200,
+          reviewerMaxRuntime: 3600,
+          cron: {
+            executorSchedule: "0 0-21 * * *",
+            reviewerSchedule: "0 0,3,6,9,12,15,18,21 * * *"
+          },
+          review: {
+            minScore: 80,
+            branchPatterns: ["feat/", "night-watch/"]
+          },
+          logging: {
+            maxLogSize: 524288
+          }
+        }, null, 2)
+      );
+
+      const program = new Command();
+      statusCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "status", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.autoMerge).toBe(true);
+      expect(jsonOutput.autoMergeMethod).toBe("rebase");
+
+      consoleSpy.mockRestore();
+    });
   });
 });

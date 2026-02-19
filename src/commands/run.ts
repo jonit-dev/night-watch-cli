@@ -9,7 +9,7 @@ import { INightWatchConfig, NotificationEvent } from "../types.js";
 import { executeScriptWithOutput } from "../utils/shell.js";
 import { sendNotifications } from "../utils/notify.js";
 import { type IPrDetails, fetchPrDetails, fetchPrDetailsForBranch } from "../utils/github.js";
-import { CLAIM_FILE_EXTENSION, PROVIDER_COMMANDS } from "../constants.js";
+import { CLAIM_FILE_EXTENSION, CLAUDE_MODEL_IDS, PROVIDER_COMMANDS } from "../constants.js";
 import * as fs from "fs";
 import * as path from "path";
 import { parseScriptResult } from "../utils/script-result.js";
@@ -104,6 +104,23 @@ export function buildEnvVars(config: INightWatchConfig, options: IRunOptions): R
   // a board and persists it before continuing.
   if (config.boardProvider?.enabled !== false) {
     env.NW_BOARD_ENABLED = "true";
+  }
+
+  // Rate-limit fallback: fall back to native Claude when proxy quota is exhausted
+  if (config.fallbackOnRateLimit) {
+    env.NW_FALLBACK_ON_RATE_LIMIT = "true";
+  }
+
+  // Claude model used for native / fallback execution
+  env.NW_CLAUDE_MODEL_ID = CLAUDE_MODEL_IDS[config.claudeModel ?? "sonnet"];
+
+  // Telegram credentials for in-script warnings (e.g. rate-limit fallback notification).
+  // Export the first Telegram webhook's credentials so the bash script can send
+  // immediate warnings without going through the Node.js notification pipeline.
+  const telegramWebhook = config.notifications?.webhooks?.find((wh) => wh.type === "telegram");
+  if (telegramWebhook?.botToken && telegramWebhook?.chatId) {
+    env.NW_TELEGRAM_BOT_TOKEN = telegramWebhook.botToken;
+    env.NW_TELEGRAM_CHAT_ID = telegramWebhook.chatId;
   }
 
   return env;
@@ -227,6 +244,7 @@ export function runCommand(program: Command): void {
         configTable.push(["PRD Directory", config.prdDir]);
         configTable.push(["Max Runtime", `${config.maxRuntime}s (${Math.floor(config.maxRuntime / 60)}min)`]);
         configTable.push(["Branch Prefix", config.branchPrefix]);
+        configTable.push(["Auto-merge", config.autoMerge ? `Enabled (${config.autoMergeMethod})` : "Disabled"]);
         console.log(configTable.toString());
 
         if (envVars.NW_BOARD_ENABLED === "true") {

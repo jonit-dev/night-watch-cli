@@ -4,6 +4,7 @@
   "defaultBranch": "main",
   "provider": "claude",
   "providerEnv": {
+    "ANTHROPIC_API_KEY": "efaeca456dab4ae69cb9ce1fa8d99a1a.KSTifNTWPS6NgC6L",
     "ANTHROPIC_AUTH_TOKEN": "efaeca456dab4ae69cb9ce1fa8d99a1a.KSTifNTWPS6NgC6L",
     "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
     "API_TIMEOUT_MS": "3000000",

@@ -28,7 +28,9 @@ Create `night-watch.config.json` in your project root:
   "maxLogSize": 524288,
   "cronSchedule": "0 0-15 * * *",
   "reviewerSchedule": "0 0,3,6,9,12,15 * * *",
-  "providerEnv": {}
+  "providerEnv": {},
+  "fallbackOnRateLimit": false,
+  "claudeModel": "sonnet"
 }
 ```
 
@@ -49,6 +51,8 @@ Create `night-watch.config.json` in your project root:
 | `cronSchedule` | string | `"0 0-21 * * *"` | Cron schedule for executor |
 | `reviewerSchedule` | string | `"0 0,3,6,9,12,15,18,21 * * *"` | Cron schedule for reviewer |
 | `providerEnv` | object | `{}` | Custom env vars passed to the provider CLI |
+| `fallbackOnRateLimit` | boolean | `false` | Fall back to native Claude when proxy returns 429 |
+| `claudeModel` | string | `"sonnet"` | Claude model for native execution (`"sonnet"` or `"opus"`) |
 
 ---
 
@@ -70,6 +74,8 @@ All Night Watch env vars are prefixed with `NW_`:
 | `NW_REVIEWER_SCHEDULE` | `reviewerSchedule` |
 | `NW_PROVIDER` | `provider` |
 | `NW_REVIEWER_ENABLED` | `reviewerEnabled` |
+| `NW_FALLBACK_ON_RATE_LIMIT` | `fallbackOnRateLimit` |
+| `NW_CLAUDE_MODEL` | `claudeModel` |
 
 ---
 
@@ -104,6 +110,46 @@ How it works:
 - **Dry run** — Variables are displayed under "Environment Variables" when using `--dry-run`
 
 See the [GLM-5 setup guide](../README.md#using-glm-5-or-custom-endpoints) in the README for a concrete example.
+
+---
+
+## Rate-Limit Fallback
+
+When using a third-party proxy (e.g. GLM-5 via a custom `ANTHROPIC_BASE_URL`), the proxy may exhaust its quota and start returning HTTP 429 errors. The rate-limit fallback feature detects this and automatically re-runs the same task with native Claude (Anthropic API, OAuth), bypassing the proxy entirely.
+
+### Enabling fallback
+
+```json
+{
+  "fallbackOnRateLimit": true,
+  "claudeModel": "sonnet"
+}
+```
+
+### How it works
+
+1. Night Watch detects a 429 response during a proxy execution.
+2. Instead of retrying (which would also fail), it immediately switches to native Claude.
+3. A Telegram warning is sent right away — before the fallback execution starts — so you know the proxy quota is exhausted. This uses your configured Telegram webhook credentials.
+4. The task runs to completion with native Claude using `--model <claudeModel>`.
+5. The final `run_succeeded` / `run_failed` notification reflects the actual outcome.
+
+### Claude model selection
+
+`claudeModel` controls which model is used for native (non-proxy) execution:
+
+| Value | Model ID |
+|-------|----------|
+| `"sonnet"` (default) | `claude-sonnet-4-6` |
+| `"opus"` | `claude-opus-4-6` |
+
+This applies both when `provider` is `"claude"` with no proxy configured, and when the fallback is triggered.
+
+### Requirements
+
+- `fallbackOnRateLimit` only applies to the `claude` provider.
+- A Telegram webhook must be configured to receive the instant warning. The warning is sent via direct `curl` from the bash script — it does not go through the Node.js notification pipeline, so it fires even if the Node.js runner is not available.
+- Native Claude must be authenticated (e.g. via `claude auth login`) on the machine running the cron job.
 
 ---
 
@@ -142,6 +188,8 @@ Night Watch can send notifications to Slack, Discord, or Telegram when runs comp
 | `run_failed` | PRD execution failed |
 | `run_timeout` | PRD execution exceeded `maxRuntime` |
 | `review_completed` | PR review cycle completed |
+| `rate_limit_fallback` | Proxy returned 429 and execution fell back to native Claude |
+| `pr_auto_merged` | PR was automatically merged after passing CI and review |
 
 ### Telegram Setup
 

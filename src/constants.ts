@@ -3,7 +3,7 @@
  */
 
 import { IBoardProviderConfig } from "./board/types.js";
-import { INotificationConfig, IRoadmapScannerConfig, Provider } from "./types.js";
+import { ClaudeModel, INotificationConfig, IRoadmapScannerConfig, MergeMethod, Provider } from "./types.js";
 
 // Branch Configuration (default branch)
 export const DEFAULT_DEFAULT_BRANCH = ""; // empty = auto-detect
@@ -40,6 +40,18 @@ export const DEFAULT_PROVIDER: Provider = "claude";
 export const DEFAULT_REVIEWER_ENABLED = true;
 export const DEFAULT_PROVIDER_ENV: Record<string, string> = {};
 
+// Rate-limit fallback
+export const DEFAULT_FALLBACK_ON_RATE_LIMIT = false;
+
+// Claude model selection (for native / fallback execution)
+export const DEFAULT_CLAUDE_MODEL: ClaudeModel = "sonnet";
+export const VALID_CLAUDE_MODELS: ClaudeModel[] = ["sonnet", "opus"];
+/** Full Anthropic model IDs used in the --model flag */
+export const CLAUDE_MODEL_IDS: Record<ClaudeModel, string> = {
+  sonnet: "claude-sonnet-4-6",
+  opus: "claude-opus-4-6",
+};
+
 // Notification Configuration
 export const DEFAULT_NOTIFICATIONS: INotificationConfig = { webhooks: [] };
 
@@ -66,6 +78,11 @@ export const DEFAULT_BOARD_PROVIDER: IBoardProviderConfig = {
   enabled: true,
   provider: "github" as const,
 };
+
+// Auto-Merge Configuration
+export const DEFAULT_AUTO_MERGE = false;
+export const DEFAULT_AUTO_MERGE_METHOD: MergeMethod = "squash";
+export const VALID_MERGE_METHODS: MergeMethod[] = ["squash", "merge", "rebase"];
 
 // Valid providers
 export const VALID_PROVIDERS: Provider[] = ["claude", "codex"];

@@ -7,15 +7,19 @@ import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import { BoardProviderType, IBoardProviderConfig } from "./board/types.js";
-import { INightWatchConfig, INotificationConfig, IRoadmapScannerConfig, IWebhookConfig, NotificationEvent, Provider, WebhookType } from "./types.js";
+import { ClaudeModel, INightWatchConfig, INotificationConfig, IRoadmapScannerConfig, IWebhookConfig, MergeMethod, NotificationEvent, Provider, WebhookType } from "./types.js";
 import {
   CONFIG_FILE_NAME,
+  DEFAULT_AUTO_MERGE,
+  DEFAULT_AUTO_MERGE_METHOD,
   DEFAULT_BOARD_PROVIDER,
   DEFAULT_BRANCH_PATTERNS,
   DEFAULT_BRANCH_PREFIX,
+  DEFAULT_CLAUDE_MODEL,
   DEFAULT_CRON_SCHEDULE,
   DEFAULT_CRON_SCHEDULE_OFFSET,
   DEFAULT_DEFAULT_BRANCH,
+  DEFAULT_FALLBACK_ON_RATE_LIMIT,
   DEFAULT_MAX_LOG_SIZE,
   DEFAULT_MAX_RETRIES,
   DEFAULT_MAX_RUNTIME,
@@ -30,6 +34,8 @@ import {
   DEFAULT_REVIEWER_SCHEDULE,
   DEFAULT_ROADMAP_SCANNER,
   DEFAULT_TEMPLATES_DIR,
+  VALID_CLAUDE_MODELS,
+  VALID_MERGE_METHODS,
   VALID_PROVIDERS,
 } from "./constants.js";
 
@@ -73,6 +79,14 @@ export function getDefaultConfig(): INightWatchConfig {
 
     // Board provider
     boardProvider: { ...DEFAULT_BOARD_PROVIDER },
+
+    // Auto-merge
+    autoMerge: DEFAULT_AUTO_MERGE,
+    autoMergeMethod: DEFAULT_AUTO_MERGE_METHOD,
+
+    // Rate-limit fallback
+    fallbackOnRateLimit: DEFAULT_FALLBACK_ON_RATE_LIMIT,
+    claudeModel: DEFAULT_CLAUDE_MODEL,
   };
 }
 
@@ -226,6 +240,20 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     normalized.boardProvider = bp;
   }
 
+  // Rate-limit fallback
+  normalized.fallbackOnRateLimit = readBoolean(rawConfig.fallbackOnRateLimit);
+  const claudeModelRaw = readString(rawConfig.claudeModel);
+  if (claudeModelRaw && VALID_CLAUDE_MODELS.includes(claudeModelRaw as ClaudeModel)) {
+    normalized.claudeModel = claudeModelRaw as ClaudeModel;
+  }
+
+  // Auto-Merge
+  normalized.autoMerge = readBoolean(rawConfig.autoMerge);
+  const mergeMethod = readString(rawConfig.autoMergeMethod);
+  if (mergeMethod && VALID_MERGE_METHODS.includes(mergeMethod as MergeMethod)) {
+    normalized.autoMergeMethod = mergeMethod as MergeMethod;
+  }
+
   return normalized;
 }
 
@@ -249,6 +277,16 @@ function parseBoolean(value: string): boolean | null {
 function validateProvider(value: string): Provider | null {
   if (VALID_PROVIDERS.includes(value as Provider)) {
     return value as Provider;
+  }
+  return null;
+}
+
+/**
+ * Validate and return a merge method value
+ */
+function validateMergeMethod(value: string): MergeMethod | null {
+  if (VALID_MERGE_METHODS.includes(value as MergeMethod)) {
+    return value as MergeMethod;
   }
   return null;
 }
@@ -307,6 +345,10 @@ function mergeConfigs(
     if (fileConfig.templatesDir !== undefined) merged.templatesDir = fileConfig.templatesDir;
     if (fileConfig.boardProvider !== undefined)
       merged.boardProvider = { ...merged.boardProvider, ...fileConfig.boardProvider };
+    if (fileConfig.autoMerge !== undefined) merged.autoMerge = fileConfig.autoMerge;
+    if (fileConfig.autoMergeMethod !== undefined) merged.autoMergeMethod = fileConfig.autoMergeMethod;
+    if (fileConfig.fallbackOnRateLimit !== undefined) merged.fallbackOnRateLimit = fileConfig.fallbackOnRateLimit;
+    if (fileConfig.claudeModel !== undefined) merged.claudeModel = fileConfig.claudeModel;
   }
 
   // Merge env config (takes precedence)
@@ -339,6 +381,10 @@ function mergeConfigs(
   if (envConfig.templatesDir !== undefined) merged.templatesDir = envConfig.templatesDir;
   if (envConfig.boardProvider !== undefined)
     merged.boardProvider = { ...merged.boardProvider, ...envConfig.boardProvider };
+  if (envConfig.autoMerge !== undefined) merged.autoMerge = envConfig.autoMerge;
+  if (envConfig.autoMergeMethod !== undefined) merged.autoMergeMethod = envConfig.autoMergeMethod;
+  if (envConfig.fallbackOnRateLimit !== undefined) merged.fallbackOnRateLimit = envConfig.fallbackOnRateLimit;
+  if (envConfig.claudeModel !== undefined) merged.claudeModel = envConfig.claudeModel;
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
 
@@ -496,6 +542,38 @@ export function loadConfig(projectDir: string): INightWatchConfig {
         ...(envConfig.roadmapScanner ?? DEFAULT_ROADMAP_SCANNER),
         slicerMaxRuntime,
       };
+    }
+  }
+
+  // NW_AUTO_MERGE environment variable
+  if (process.env.NW_AUTO_MERGE) {
+    const autoMerge = parseBoolean(process.env.NW_AUTO_MERGE);
+    if (autoMerge !== null) {
+      envConfig.autoMerge = autoMerge;
+    }
+  }
+
+  // NW_AUTO_MERGE_METHOD environment variable
+  if (process.env.NW_AUTO_MERGE_METHOD) {
+    const mergeMethod = validateMergeMethod(process.env.NW_AUTO_MERGE_METHOD);
+    if (mergeMethod !== null) {
+      envConfig.autoMergeMethod = mergeMethod;
+    }
+  }
+
+  // NW_FALLBACK_ON_RATE_LIMIT environment variable
+  if (process.env.NW_FALLBACK_ON_RATE_LIMIT) {
+    const fallback = parseBoolean(process.env.NW_FALLBACK_ON_RATE_LIMIT);
+    if (fallback !== null) {
+      envConfig.fallbackOnRateLimit = fallback;
+    }
+  }
+
+  // NW_CLAUDE_MODEL environment variable
+  if (process.env.NW_CLAUDE_MODEL) {
+    const model = process.env.NW_CLAUDE_MODEL;
+    if (VALID_CLAUDE_MODELS.includes(model as ClaudeModel)) {
+      envConfig.claudeModel = model as ClaudeModel;
     }
   }
 
