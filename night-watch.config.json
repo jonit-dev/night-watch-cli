@@ -43,5 +43,10 @@
     "enabled": false,
     "roadmapPath": "ROADMAP.md",
     "autoScanInterval": 300
+  },
+  "boardProvider": {
+    "enabled": true,
+    "provider": "github",
+    "projectNumber": 6
   }
 }
