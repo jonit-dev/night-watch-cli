@@ -434,7 +434,6 @@ export function useStatusStream(
     return () => {
       es.close();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, ...deps]);
 }
 
