@@ -563,6 +563,18 @@ export function initCommand(program: Command): void {
       );
       templateSources.push({ name: 'night-watch-qa.md', source: qaResult.source });
 
+      // Copy night-watch-audit.md template
+      const auditResolution = resolveTemplatePath('night-watch-audit.md', customTemplatesDir, TEMPLATES_DIR);
+      const auditResult = processTemplate(
+        'night-watch-audit.md',
+        path.join(commandsDir, 'night-watch-audit.md'),
+        replacements,
+        force,
+        auditResolution.path,
+        auditResolution.source
+      );
+      templateSources.push({ name: 'night-watch-audit.md', source: auditResult.source });
+
       // Step 9: Create config file
       step(9, totalSteps, 'Creating configuration file...');
       const configPath = path.join(cwd, CONFIG_FILE_NAME);
@@ -672,6 +684,7 @@ export function initCommand(program: Command): void {
       filesTable.push(['', `.claude/commands/prd-executor.md (${templateSources[1].source})`]);
       filesTable.push(['', `.claude/commands/night-watch-pr-reviewer.md (${templateSources[2].source})`]);
       filesTable.push(['', `.claude/commands/night-watch-qa.md (${templateSources[3].source})`]);
+      filesTable.push(['', `.claude/commands/night-watch-audit.md (${templateSources[4].source})`]);
       filesTable.push(['Config File', CONFIG_FILE_NAME]);
       filesTable.push(['Global Registry', '~/.night-watch/projects.json']);
       console.log(filesTable.toString());

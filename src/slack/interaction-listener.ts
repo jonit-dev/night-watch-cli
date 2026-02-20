@@ -28,6 +28,7 @@ const PROACTIVE_SWEEP_INTERVAL_MS = 60_000;
 const PROACTIVE_CODEWATCH_MIN_INTERVAL_MS = 3 * 60 * 60_000; // per project
 const MAX_JOB_OUTPUT_CHARS = 12_000;
 const HUMAN_REACTION_PROBABILITY = 0.65;
+const RANDOM_REACTION_PROBABILITY = 0.25;
 const REACTION_DELAY_MIN_MS = 180;
 const REACTION_DELAY_MAX_MS = 1200;
 const RESPONSE_DELAY_MIN_MS = 700;
@@ -1478,6 +1479,13 @@ export class SlackInteractionListener {
   }
 
   private _spawnCodeWatchAudit(project: IRegistryEntry, channel: string): void {
+    if (!fs.existsSync(project.path)) {
+      console.warn(
+        `[slack][codewatch] audit skipped for ${project.name}: missing project path ${project.path}`,
+      );
+      return;
+    }
+
     const invocationArgs = buildCurrentCliInvocation(['audit']);
     if (!invocationArgs) {
       console.warn(`[slack][codewatch] audit spawn failed for ${project.name}: CLI entry path unavailable`);
@@ -1488,6 +1496,7 @@ export class SlackInteractionListener {
       `[slack][codewatch] spawning audit for ${project.name} → ${channel} cmd=${formatCommandForLog(process.execPath, invocationArgs)}`,
     );
 
+    const startedAt = Date.now();
     const child = spawn(process.execPath, invocationArgs, {
       cwd: project.path,
       env: { ...process.env, NW_EXECUTION_CONTEXT: 'agent' },
@@ -1495,21 +1504,61 @@ export class SlackInteractionListener {
     });
 
     console.log(`[slack][codewatch] audit spawned for ${project.name} pid=${child.pid ?? 'unknown'}`);
-    child.stdout?.on('data', () => { /* drain */ });
-    child.stderr?.on('data', () => { /* drain */ });
+    let output = '';
+    const appendOutput = (chunk: Buffer): void => {
+      output += chunk.toString();
+      if (output.length > MAX_JOB_OUTPUT_CHARS) {
+        output = output.slice(-MAX_JOB_OUTPUT_CHARS);
+      }
+    };
 
+    child.stdout?.on('data', appendOutput);
+    child.stderr?.on('data', appendOutput);
+
+    let spawnErrored = false;
     child.on('error', (err) => {
+      spawnErrored = true;
       console.warn(`[slack][codewatch] audit spawn error for ${project.name}: ${err.message}`);
     });
 
     child.on('close', async (code) => {
       console.log(`[slack][codewatch] audit finished for ${project.name} exit=${code ?? 'unknown'}`);
+      if (spawnErrored) {
+        return;
+      }
+
+      if (code !== 0) {
+        const detail = extractLastMeaningfulLines(output);
+        if (detail) {
+          console.warn(`[slack][codewatch] audit failure detail for ${project.name}: ${detail}`);
+        }
+        return;
+      }
+
       const reportPath = path.join(project.path, 'logs', 'audit-report.md');
+      let reportStat: fs.Stats;
       let report: string;
       try {
+        reportStat = fs.statSync(reportPath);
         report = fs.readFileSync(reportPath, 'utf-8').trim();
       } catch {
-        console.log(`[slack][codewatch] no audit report found at ${reportPath}`);
+        const parsed = parseScriptResult(output);
+        if (parsed?.status?.startsWith('skip_')) {
+          console.log(`[slack][codewatch] audit skipped for ${project.name} (${parsed.status})`);
+        } else {
+          console.log(`[slack][codewatch] no audit report found at ${reportPath}`);
+        }
+        return;
+      }
+
+      // Ignore old reports when an audit exits early without producing a fresh output.
+      if (reportStat.mtimeMs + 1000 < startedAt) {
+        console.log(`[slack][codewatch] stale audit report ignored at ${reportPath}`);
+        return;
+      }
+
+      if (!report) {
+        console.log(`[slack][codewatch] empty audit report ignored at ${reportPath}`);
         return;
       }
 
@@ -1739,20 +1788,37 @@ export class SlackInteractionListener {
       }
     }
 
-    // Keep the channel alive: direct mentions and ambient greetings get a random responder.
-    const shouldAutoEngage = event.type === 'app_mention' || isAmbientTeamMessage(text);
-    if (shouldAutoEngage) {
+    // Direct bot mentions always get a reply.
+    if (event.type === 'app_mention') {
       const randomPersona = this._pickRandomPersona(personas, channel, threadTs);
       if (randomPersona) {
-        console.log(`[slack] auto-engaging via ${randomPersona.name}`);
+        console.log(`[slack] app_mention auto-engaging via ${randomPersona.name}`);
         await this._applyHumanResponseTiming(channel, ts, randomPersona);
-        console.log(`[slack] replying as ${randomPersona.name} in ${channel}`);
         const postedText = await this._engine.replyAsAgent(channel, threadTs, text, randomPersona, fullContext);
         this._markPersonaReply(channel, threadTs, randomPersona.id);
         this._rememberAdHocThreadPersona(channel, threadTs, randomPersona.id);
         await this._followAgentMentions(postedText, channel, threadTs, personas, fullContext, randomPersona.id);
         return;
       }
+    }
+
+    // Any human message: agents independently decide whether to react.
+    for (const persona of personas) {
+      if (!this._isPersonaOnCooldown(channel, threadTs, persona.id) && Math.random() < RANDOM_REACTION_PROBABILITY) {
+        void this._maybeReactToHumanMessage(channel, ts, persona);
+      }
+    }
+
+    // Guaranteed fallback reply — someone always responds.
+    const randomPersona = this._pickRandomPersona(personas, channel, threadTs);
+    if (randomPersona) {
+      console.log(`[slack] fallback engage via ${randomPersona.name}`);
+      await this._applyHumanResponseTiming(channel, ts, randomPersona);
+      const postedText = await this._engine.replyAsAgent(channel, threadTs, text, randomPersona, fullContext);
+      this._markPersonaReply(channel, threadTs, randomPersona.id);
+      this._rememberAdHocThreadPersona(channel, threadTs, randomPersona.id);
+      await this._followAgentMentions(postedText, channel, threadTs, personas, fullContext, randomPersona.id);
+      return;
     }
 
     console.log(`[slack] no active discussion found — ignoring message`);

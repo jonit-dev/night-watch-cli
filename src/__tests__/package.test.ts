@@ -130,6 +130,7 @@ describe("Package Files", () => {
     expect(fs.existsSync(path.join(templatesDir, "night-watch.md"))).toBe(true);
     expect(fs.existsSync(path.join(templatesDir, "prd-executor.md"))).toBe(true);
     expect(fs.existsSync(path.join(templatesDir, "night-watch-pr-reviewer.md"))).toBe(true);
+    expect(fs.existsSync(path.join(templatesDir, "night-watch-audit.md"))).toBe(true);
     expect(fs.existsSync(path.join(templatesDir, "night-watch.config.json"))).toBe(true);
   });
 
@@ -232,6 +233,7 @@ describe("npm pack verification", () => {
       expect(output).toMatch(/night-watch\.md/);
       expect(output).toMatch(/prd-executor\.md/);
       expect(output).toMatch(/night-watch-pr-reviewer\.md/);
+      expect(output).toMatch(/night-watch-audit\.md/);
       expect(output).toMatch(/night-watch\.config\.json/);
     } catch (error) {
       console.warn("npm pack --dry-run failed, skipping pack verification");
