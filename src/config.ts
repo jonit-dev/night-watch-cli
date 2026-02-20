@@ -715,7 +715,23 @@ export function loadConfig(projectDir: string): INightWatchConfig {
  */
 export function getScriptPath(scriptName: string): string {
   const configFilePath = fileURLToPath(import.meta.url);
-  // In development, scripts are in scripts/ relative to package root
-  // In production (after npm pack), they're still in scripts/
-  return path.join(path.dirname(configFilePath), "..", "scripts", scriptName);
+  const baseDir = path.dirname(configFilePath);
+
+  const candidates = [
+    // Dev (tsx): src/config.ts -> ../scripts
+    path.resolve(baseDir, "..", "scripts", scriptName),
+    // Built package (dist/src/config.js): ../../scripts
+    path.resolve(baseDir, "..", "..", "scripts", scriptName),
+    // Fallback for unusual launch contexts
+    path.resolve(process.cwd(), "scripts", scriptName),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  // Return primary candidate for backward compatibility even if missing.
+  return candidates[0];
 }

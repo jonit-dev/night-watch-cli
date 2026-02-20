@@ -257,13 +257,25 @@ cleanup_worktrees "${PROJECT_DIR}"
 
 if [ ${EXIT_CODE} -eq 0 ]; then
   log "DONE: QA runner completed successfully"
-  emit_result "success_qa" "prs=${PRS_NEEDING_QA_CSV}"
+  if [ -n "${REPO}" ]; then
+    emit_result "success_qa" "prs=${PRS_NEEDING_QA_CSV}|repo=${REPO}"
+  else
+    emit_result "success_qa" "prs=${PRS_NEEDING_QA_CSV}"
+  fi
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: QA runner killed after ${MAX_RUNTIME}s"
-  emit_result "timeout" "prs=${PRS_NEEDING_QA_CSV}"
+  if [ -n "${REPO}" ]; then
+    emit_result "timeout" "prs=${PRS_NEEDING_QA_CSV}|repo=${REPO}"
+  else
+    emit_result "timeout" "prs=${PRS_NEEDING_QA_CSV}"
+  fi
 else
   log "FAIL: QA runner exited with code ${EXIT_CODE}"
-  emit_result "failure" "prs=${PRS_NEEDING_QA_CSV}"
+  if [ -n "${REPO}" ]; then
+    emit_result "failure" "prs=${PRS_NEEDING_QA_CSV}|repo=${REPO}"
+  else
+    emit_result "failure" "prs=${PRS_NEEDING_QA_CSV}"
+  fi
 fi
 
 exit "${EXIT_CODE}"

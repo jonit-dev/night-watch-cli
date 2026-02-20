@@ -27,6 +27,7 @@ import {
   buildEnvVars,
   applyCliOverrides,
   IQaOptions,
+  parseQaPrNumbers,
   shouldSendQaNotification,
 } from "../../commands/qa.js";
 import { INightWatchConfig } from "../../types.js";
@@ -285,6 +286,21 @@ describe("qa command", () => {
       expect(shouldSendQaNotification("success_tested")).toBe(true);
       expect(shouldSendQaNotification("failure")).toBe(true);
       expect(shouldSendQaNotification("timeout")).toBe(true);
+    });
+  });
+
+  describe("parseQaPrNumbers", () => {
+    it("parses a comma-separated list of PR references", () => {
+      expect(parseQaPrNumbers("#25,#26,#27")).toEqual([25, 26, 27]);
+    });
+
+    it("ignores invalid and duplicate entries", () => {
+      expect(parseQaPrNumbers("#25,foo,#25, ,#30")).toEqual([25, 30]);
+    });
+
+    it("returns empty when input is missing", () => {
+      expect(parseQaPrNumbers(undefined)).toEqual([]);
+      expect(parseQaPrNumbers("")).toEqual([]);
     });
   });
 

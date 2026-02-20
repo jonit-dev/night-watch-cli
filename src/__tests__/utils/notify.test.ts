@@ -23,6 +23,7 @@ vi.mock("chalk", () => ({
 }));
 
 import {
+  buildNotificationText,
   formatSlackPayload,
   formatDiscordPayload,
   formatTelegramPayload,
@@ -71,6 +72,37 @@ describe("notification utilities", () => {
     it("should set red color for failure", () => {
       const payload = formatSlackPayload({ ...baseCtx, event: "run_failed" }) as any;
       expect(payload.attachments[0].color).toBe("#ff0000");
+    });
+  });
+
+  describe("buildNotificationText", () => {
+    it("formats QA completed as a human-style message with PR URL", () => {
+      const text = buildNotificationText({
+        ...baseCtx,
+        event: "qa_completed",
+        projectName: "night-watch-cli",
+        exitCode: 0,
+        prNumber: 25,
+        prUrl: "https://github.com/jonit-dev/night-watch-cli/pull/25",
+      });
+
+      expect(text).toContain("Finished QA on");
+      expect(text).toContain("<https://github.com/jonit-dev/night-watch-cli/pull/25|PR #25>");
+      expect(text).toContain("night-watch-cli");
+      expect(text).not.toContain("QA Completed | Project");
+    });
+
+    it("formats QA failures in a human tone", () => {
+      const text = buildNotificationText({
+        ...baseCtx,
+        event: "qa_completed",
+        projectName: "night-watch-cli",
+        exitCode: 1,
+        prNumber: 25,
+      });
+
+      expect(text).toContain("I ran QA");
+      expect(text).toContain("but it failed");
     });
   });
 
