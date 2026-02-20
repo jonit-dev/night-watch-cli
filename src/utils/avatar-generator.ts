@@ -10,34 +10,87 @@ const MAX_POLLS = 60; // 3 minutes max
 interface IReplicatePrediction {
   id: string;
   status: 'starting' | 'processing' | 'succeeded' | 'failed' | 'canceled';
-  output?: string[];
+  output?: string | string[];
   error?: string;
 }
 
-function buildAvatarPrompt(role: string): string {
+function extractOutputUrl(output: string | string[] | undefined): string | null {
+  if (!output) return null;
+  return Array.isArray(output) ? (output[0] ?? null) : output;
+}
+
+/**
+ * Persona-specific portrait descriptions.
+ * Each persona gets a distinct, memorable appearance — not a generic stock photo.
+ */
+const PERSONA_PORTRAITS: Record<string, string> = {
+  maya: [
+    'South Asian woman in her late 20s with sharp dark eyes and straight black hair pulled back in a low ponytail',
+    'wearing a dark charcoal blazer over a plain black turtleneck',
+    'expression is focused and perceptive — the look of someone who notices details others miss',
+    'minimal jewelry, small silver stud earrings',
+  ].join(', '),
+
+  carlos: [
+    'Hispanic man in his mid-30s with short dark wavy hair and a neatly trimmed beard',
+    'wearing a navy blue henley shirt with sleeves slightly pushed up',
+    'expression is calm and confident — easy authority, like someone used to making decisions',
+    'slight smile that reads more thoughtful than warm',
+  ].join(', '),
+
+  priya: [
+    'Indian woman in her early 30s with shoulder-length dark brown hair with subtle highlights',
+    'wearing a soft olive green cardigan over a white crew-neck t-shirt',
+    'expression is alert and curious — bright eyes, slight head tilt, like she just thought of something interesting',
+    'round tortoiseshell glasses',
+  ].join(', '),
+
+  dev: [
+    'East Asian man in his late 20s with short textured black hair styled casually',
+    'wearing a heather gray crewneck sweatshirt',
+    'expression is friendly and approachable — relaxed confidence, like someone in the middle of good work',
+    'clean-shaven, natural look',
+  ].join(', '),
+};
+
+function buildAvatarPrompt(personaName: string, role: string): string {
+  const nameKey = personaName.toLowerCase();
+  const personaDescription = PERSONA_PORTRAITS[nameKey];
+
+  if (personaDescription) {
+    return (
+      `Professional headshot portrait photo of a ${personaDescription}, ` +
+      `photorealistic, clean soft neutral background, natural diffused window lighting, ` +
+      `shot at f/2.8, shallow depth of field, looking directly at camera, ` +
+      `candid professional headshot style, no retouching artifacts, natural skin texture`
+    );
+  }
+
+  // Fallback for custom personas — generate based on role
   const lower = role.toLowerCase();
 
   let descriptor: string;
   if (lower.includes('security')) {
-    descriptor = 'sharp-eyed cybersecurity professional, serious and analytical expression, dark blazer';
+    descriptor = 'sharp-eyed cybersecurity professional with a serious and analytical expression, wearing a dark blazer';
   } else if (lower.includes('architect') || lower.includes('tech lead') || lower.includes('lead')) {
-    descriptor = 'confident senior software architect, composed and thoughtful expression, business casual';
+    descriptor = 'confident senior software architect with a composed and thoughtful expression, business casual attire';
   } else if (lower.includes('qa') || lower.includes('quality')) {
-    descriptor = 'meticulous quality engineer, focused and detail-oriented expression, smart casual';
+    descriptor = 'meticulous quality engineer with a focused and detail-oriented expression, smart casual attire';
   } else if (lower.includes('implement') || lower.includes('developer') || lower.includes('engineer')) {
-    descriptor = 'energetic software developer, creative and approachable expression, casual tech style';
+    descriptor = 'software developer with a creative and approachable expression, casual tech attire';
   } else if (lower.includes('product') || lower.includes('manager')) {
-    descriptor = 'product manager, strategic and empathetic expression, business professional';
+    descriptor = 'product manager with a strategic and empathetic expression, business professional attire';
   } else if (lower.includes('design')) {
-    descriptor = 'UX/UI designer, creative and innovative expression, modern stylish attire';
+    descriptor = 'UX/UI designer with a creative and innovative expression, modern stylish attire';
   } else {
-    descriptor = 'professional software team member, friendly and competent expression, smart casual';
+    descriptor = 'professional software team member with a friendly and competent expression, smart casual attire';
   }
 
   return (
     `Professional headshot portrait photo of a ${descriptor}, ` +
-    `photorealistic, clean soft light gray background, diffused studio lighting, ` +
-    `sharp focus, looking directly at camera, high quality portrait photography, cinematic`
+    `photorealistic, clean soft neutral background, natural diffused window lighting, ` +
+    `shot at f/2.8, shallow depth of field, looking directly at camera, ` +
+    `candid professional headshot style, no retouching artifacts, natural skin texture`
   );
 }
 
@@ -46,12 +99,13 @@ function sleep(ms: number): Promise<void> {
 }
 
 export async function generatePersonaAvatar(
+  personaName: string,
   personaRole: string,
   apiToken: string,
 ): Promise<string | null> {
-  const prompt = buildAvatarPrompt(personaRole);
+  const prompt = buildAvatarPrompt(personaName, personaRole);
 
-  console.log(`[avatar] Generating avatar for role: ${personaRole}`);
+  console.log(`[avatar] Generating avatar for ${personaName} (${personaRole})`);
 
   const createRes = await fetch(
     `https://api.replicate.com/v1/models/${REPLICATE_MODEL}/predictions`,
@@ -82,8 +136,8 @@ export async function generatePersonaAvatar(
 
   // If the Prefer: wait header resolved it immediately
   if (prediction.status === 'succeeded') {
-    const url = prediction.output?.[0] ?? null;
-    console.log(`[avatar] Generated: ${url}`);
+    const url = extractOutputUrl(prediction.output);
+    console.log(`[avatar] Generated for ${personaName}: ${url}`);
     return url;
   }
 
@@ -101,8 +155,8 @@ export async function generatePersonaAvatar(
     prediction = (await pollRes.json()) as IReplicatePrediction;
 
     if (prediction.status === 'succeeded') {
-      const url = prediction.output?.[0] ?? null;
-      console.log(`[avatar] Generated: ${url}`);
+      const url = extractOutputUrl(prediction.output);
+      console.log(`[avatar] Generated for ${personaName}: ${url}`);
       return url;
     }
 

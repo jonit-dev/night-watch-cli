@@ -8,6 +8,7 @@ import { INightWatchConfig } from "@/types.js";
 import { executeScriptWithOutput } from "@/utils/shell.js";
 import { sendNotifications } from "@/utils/notify.js";
 import { PROVIDER_COMMANDS } from "@/constants.js";
+import { fetchPrDetailsByNumber } from "@/utils/github.js";
 import * as path from "path";
 import { parseScriptResult } from "@/utils/script-result.js";
 import {
@@ -36,6 +37,25 @@ export function shouldSendQaNotification(scriptStatus?: string): boolean {
     return true;
   }
   return !scriptStatus.startsWith("skip_");
+}
+
+/**
+ * Parse PR numbers emitted by the QA script marker data (e.g. "#12,#34").
+ */
+export function parseQaPrNumbers(prsRaw?: string): number[] {
+  if (!prsRaw) return [];
+
+  const seen = new Set<number>();
+  const numbers: number[] = [];
+  for (const token of prsRaw.split(",")) {
+    const parsed = parseInt(token.trim().replace(/^#/, ""), 10);
+    if (Number.isNaN(parsed) || seen.has(parsed)) {
+      continue;
+    }
+    seen.add(parsed);
+    numbers.push(parsed);
+  }
+  return numbers;
 }
 
 /**
@@ -187,11 +207,29 @@ export function qaCommand(program: Command): void {
           }
 
           if (!skipNotification) {
+            const qaPrNumbers = parseQaPrNumbers(scriptResult?.data.prs);
+            const primaryQaPr = qaPrNumbers[0];
+            const prDetails = primaryQaPr
+              ? fetchPrDetailsByNumber(primaryQaPr, projectDir)
+              : null;
+            const repo = scriptResult?.data.repo;
+            const fallbackPrUrl =
+              !prDetails?.url && primaryQaPr && repo
+                ? `https://github.com/${repo}/pull/${primaryQaPr}`
+                : undefined;
+
             await sendNotifications(config, {
               event: "qa_completed",
               projectName: path.basename(projectDir),
               exitCode,
               provider: config.provider,
+              prNumber: prDetails?.number ?? primaryQaPr,
+              prUrl: prDetails?.url ?? fallbackPrUrl,
+              prTitle: prDetails?.title,
+              prBody: prDetails?.body,
+              filesChanged: prDetails?.changedFiles,
+              additions: prDetails?.additions,
+              deletions: prDetails?.deletions,
             });
           }
         }

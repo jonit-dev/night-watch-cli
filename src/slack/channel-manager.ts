@@ -61,7 +61,7 @@ export class ChannelManager {
       if (carlos && channelId) {
         await this._slackClient.postAsAgent(
           channelId,
-          `New project spinning up — ${projectName}. I'll be keeping an eye on architecture decisions here. 🏗️`,
+          `New project: ${projectName}. I'll be watching the architecture calls here.`,
           carlos,
         );
       }
@@ -94,7 +94,7 @@ export class ChannelManager {
       if (carlos) {
         await this._slackClient.postAsAgent(
           project.slackChannelId,
-          `All PRDs shipped for ${projectName}. Archiving this channel. It's been real. 🫡`,
+          `All PRDs shipped for ${projectName}. Archiving this one.`,
           carlos,
         );
         // Small delay before archiving
@@ -122,7 +122,7 @@ export class ChannelManager {
     if (!dev) return;
 
     try {
-      const text = `Shipped: ${prTitle} → ${branch} 🚀${prUrl ? `\n${prUrl}` : ''}`;
+      const text = `Shipped: ${prTitle} → ${branch}${prUrl ? `\n${prUrl}` : ''}`;
       await this._slackClient.postAsAgent(
         this._config.slack.channels.releases,
         text,

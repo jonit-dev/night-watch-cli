@@ -10,6 +10,7 @@ export interface ISlackMessage {
   ts: string;
   channel: string;
   text: string;
+  username?: string;
 }
 
 export interface ISlackChannel {
@@ -17,11 +18,39 @@ export interface ISlackChannel {
   name: string;
 }
 
+function roleAvatarColor(role: string): string {
+  const normalized = role.toLowerCase();
+  if (normalized.includes('security')) return '8b1e2f';
+  if (normalized.includes('qa') || normalized.includes('quality')) return '0f766e';
+  if (normalized.includes('lead') || normalized.includes('architect')) return '1d4ed8';
+  if (normalized.includes('implementer') || normalized.includes('developer')) return '374151';
+  return '111827';
+}
+
+export function getFallbackAvatarUrl(persona: IAgentPersona): string {
+  const background = roleAvatarColor(persona.role);
+  const name = encodeURIComponent(persona.name.trim() || 'Night Watch');
+  return `https://ui-avatars.com/api/?name=${name}&background=${background}&color=ffffff&size=128&bold=true&format=png`;
+}
+
 export class SlackClient {
   private readonly _client: WebClient;
+  private readonly _serverBaseUrl: string;
 
-  constructor(botToken: string) {
+  constructor(botToken: string, serverBaseUrl = 'http://localhost:7575') {
     this._client = new WebClient(botToken);
+    this._serverBaseUrl = serverBaseUrl.replace(/\/$/, '');
+  }
+
+  /**
+   * Resolve an avatar URL for use as Slack icon_url.
+   * Relative paths (legacy) are resolved against the server base URL.
+   * Absolute HTTP(S) URLs (e.g. GitHub raw CDN) are passed through unchanged.
+   */
+  private _resolveAvatarUrl(avatarUrl: string | null): string {
+    if (!avatarUrl || avatarUrl.startsWith('data:')) return '';
+    if (avatarUrl.startsWith('/')) return `${this._serverBaseUrl}${avatarUrl}`;
+    return avatarUrl;
   }
 
   /**
@@ -35,10 +64,8 @@ export class SlackClient {
     threadTs?: string,
   ): Promise<ISlackMessage> {
     // Slack icon_url must be a real HTTP URL — data URIs are not supported
-    const iconUrl =
-      persona.avatarUrl && !persona.avatarUrl.startsWith('data:')
-        ? persona.avatarUrl
-        : undefined;
+    const resolved = this._resolveAvatarUrl(persona.avatarUrl);
+    const iconUrl = resolved || getFallbackAvatarUrl(persona);
 
     const result = await this._client.chat.postMessage({
       channel,
@@ -62,10 +89,11 @@ export class SlackClient {
   /**
    * Post a simple message to Slack using the bot's default identity.
    */
-  async postMessage(channel: string, text: string): Promise<void> {
+  async postMessage(channel: string, text: string, threadTs?: string): Promise<void> {
     await this._client.chat.postMessage({
       channel,
       text,
+      thread_ts: threadTs,
     });
   }
 
@@ -138,6 +166,7 @@ export class SlackClient {
       ts: m.ts as string,
       channel,
       text: (m.text ?? '') as string,
+      username: (m as unknown as Record<string, unknown>)['username'] as string | undefined,
     }));
   }
 

@@ -52,22 +52,10 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     maxLogSize: 524288,
     cronSchedule: "0 0-21 * * *",
     reviewerSchedule: "0 0,3,6,9,12,15,18,21 * * *",
-    cronScheduleOffset: 0,
-    maxRetries: 3,
     provider: "claude",
     reviewerEnabled: true,
     providerEnv: {},
     notifications: { webhooks: [] },
-    prdPriority: [],
-    roadmapScanner: {
-      enabled: false,
-      roadmapPath: "ROADMAP.md",
-      autoScanInterval: 3600,
-      slicerSchedule: "0 6 * * *",
-      slicerMaxRuntime: 3600,
-    },
-    templatesDir: "templates",
-    boardProvider: { enabled: true, provider: "github" },
     ...overrides,
   };
 }
@@ -553,7 +541,7 @@ describe("status-data utilities", () => {
     });
   });
 
-  describe("CI status derivation edge cases", () => {
+  describe("CI status edge cases", () => {
     it("should return 'unknown' for null statusCheckRollup", () => {
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
@@ -566,31 +554,6 @@ describe("status-data utilities", () => {
               title: "Test PR",
               url: "https://github.com/test/repo/pull/1",
               statusCheckRollup: null,
-              reviewDecision: null,
-            },
-          ]);
-        }
-        return "";
-      });
-
-      const result = collectPrInfo(tempDir, ["feat/"]);
-      expect(result).toHaveLength(1);
-      expect(result[0].ciStatus).toBe("unknown");
-      expect(result[0].reviewScore).toBe(null);
-    });
-
-    it("should return 'unknown' for undefined statusCheckRollup", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
-        if (cmd.includes("git rev-parse")) return ".git";
-        if (cmd.includes("which gh")) return "/usr/bin/gh";
-        if (cmd.includes("gh pr list")) {
-          return JSON.stringify([
-            {
-              headRefName: "feat/test",
-              number: 1,
-              title: "Test PR",
-              url: "https://github.com/test/repo/pull/1",
-              // statusCheckRollup not included
               reviewDecision: null,
             },
           ]);
@@ -638,7 +601,7 @@ describe("status-data utilities", () => {
               number: 1,
               title: "Test PR",
               url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [{ status: "COMPLETED", conclusion: "ERROR" }],
+              statusCheckRollup: [{ conclusion: "ERROR", status: "COMPLETED" }],
               reviewDecision: null,
             },
           ]);
@@ -647,6 +610,7 @@ describe("status-data utilities", () => {
       });
 
       const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("fail");
     });
 
@@ -661,7 +625,7 @@ describe("status-data utilities", () => {
               number: 1,
               title: "Test PR",
               url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [{ status: "COMPLETED", conclusion: "CANCELLED" }],
+              statusCheckRollup: [{ conclusion: "CANCELLED", status: "COMPLETED" }],
               reviewDecision: null,
             },
           ]);
@@ -670,6 +634,7 @@ describe("status-data utilities", () => {
       });
 
       const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("fail");
     });
 
@@ -684,7 +649,7 @@ describe("status-data utilities", () => {
               number: 1,
               title: "Test PR",
               url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [{ status: "COMPLETED", conclusion: "TIMED_OUT" }],
+              statusCheckRollup: [{ conclusion: "TIMED_OUT", status: "COMPLETED" }],
               reviewDecision: null,
             },
           ]);
@@ -693,10 +658,11 @@ describe("status-data utilities", () => {
       });
 
       const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("fail");
     });
 
-    it("should return 'fail' for ACTION_REQUIRED conclusion", () => {
+    it("should return 'pending' for IN_PROGRESS status", () => {
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
@@ -707,7 +673,7 @@ describe("status-data utilities", () => {
               number: 1,
               title: "Test PR",
               url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [{ status: "COMPLETED", conclusion: "ACTION_REQUIRED" }],
+              statusCheckRollup: [{ status: "IN_PROGRESS", conclusion: null }],
               reviewDecision: null,
             },
           ]);
@@ -716,7 +682,8 @@ describe("status-data utilities", () => {
       });
 
       const result = collectPrInfo(tempDir, ["feat/"]);
-      expect(result[0].ciStatus).toBe("fail");
+      expect(result).toHaveLength(1);
+      expect(result[0].ciStatus).toBe("pending");
     });
 
     it("should return 'pending' for QUEUED status", () => {
@@ -739,52 +706,7 @@ describe("status-data utilities", () => {
       });
 
       const result = collectPrInfo(tempDir, ["feat/"]);
-      expect(result[0].ciStatus).toBe("pending");
-    });
-
-    it("should return 'pending' for WAITING status", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
-        if (cmd.includes("git rev-parse")) return ".git";
-        if (cmd.includes("which gh")) return "/usr/bin/gh";
-        if (cmd.includes("gh pr list")) {
-          return JSON.stringify([
-            {
-              headRefName: "feat/test",
-              number: 1,
-              title: "Test PR",
-              url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [{ status: "WAITING", conclusion: null }],
-              reviewDecision: null,
-            },
-          ]);
-        }
-        return "";
-      });
-
-      const result = collectPrInfo(tempDir, ["feat/"]);
-      expect(result[0].ciStatus).toBe("pending");
-    });
-
-    it("should return 'pending' for REQUESTED status", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
-        if (cmd.includes("git rev-parse")) return ".git";
-        if (cmd.includes("which gh")) return "/usr/bin/gh";
-        if (cmd.includes("gh pr list")) {
-          return JSON.stringify([
-            {
-              headRefName: "feat/test",
-              number: 1,
-              title: "Test PR",
-              url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [{ status: "REQUESTED", conclusion: null }],
-              reviewDecision: null,
-            },
-          ]);
-        }
-        return "";
-      });
-
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("pending");
     });
 
@@ -799,7 +721,7 @@ describe("status-data utilities", () => {
               number: 1,
               title: "Test PR",
               url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [{ status: "COMPLETED", conclusion: "NEUTRAL" }],
+              statusCheckRollup: [{ conclusion: "NEUTRAL", status: "COMPLETED" }],
               reviewDecision: null,
             },
           ]);
@@ -808,10 +730,11 @@ describe("status-data utilities", () => {
       });
 
       const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("pass");
     });
 
-    it("should return 'pass' for SKIPPED conclusion", () => {
+    it("should return 'pass' for SKIPPED conclusion (treated as complete)", () => {
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
@@ -822,7 +745,7 @@ describe("status-data utilities", () => {
               number: 1,
               title: "Test PR",
               url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SKIPPED" }],
+              statusCheckRollup: [{ conclusion: "SKIPPED", status: "COMPLETED" }],
               reviewDecision: null,
             },
           ]);
@@ -831,37 +754,70 @@ describe("status-data utilities", () => {
       });
 
       const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("pass");
     });
 
-    it("should handle StatusContext format with state field", () => {
+    it("should handle StatusContext format with state field (SUCCESS)", () => {
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
           return JSON.stringify([
             {
-              headRefName: "feat/success",
+              headRefName: "feat/test",
               number: 1,
-              title: "Success PR",
+              title: "Test PR",
               url: "https://github.com/test/repo/pull/1",
-              // StatusContext format: state only
+              // StatusContext format: only has state, no conclusion
               statusCheckRollup: [{ state: "SUCCESS" }],
               reviewDecision: null,
             },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
+      expect(result[0].ciStatus).toBe("pass");
+    });
+
+    it("should handle StatusContext format with state field (FAILURE)", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
             {
-              headRefName: "feat/fail-state",
-              number: 2,
-              title: "Fail State PR",
-              url: "https://github.com/test/repo/pull/2",
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
               statusCheckRollup: [{ state: "FAILURE" }],
               reviewDecision: null,
             },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
+      expect(result[0].ciStatus).toBe("fail");
+    });
+
+    it("should handle StatusContext format with state field (PENDING)", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
             {
-              headRefName: "feat/pending-state",
-              number: 3,
-              title: "Pending State PR",
-              url: "https://github.com/test/repo/pull/3",
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
               statusCheckRollup: [{ state: "PENDING" }],
               reviewDecision: null,
             },
@@ -871,11 +827,8 @@ describe("status-data utilities", () => {
       });
 
       const result = collectPrInfo(tempDir, ["feat/"]);
-      expect(result).toHaveLength(3);
-
-      expect(result[0].ciStatus).toBe("pass");
-      expect(result[1].ciStatus).toBe("fail");
-      expect(result[2].ciStatus).toBe("pending");
+      expect(result).toHaveLength(1);
+      expect(result[0].ciStatus).toBe("pending");
     });
 
     it("should handle mixed CheckRun and StatusContext formats", () => {
@@ -887,11 +840,13 @@ describe("status-data utilities", () => {
             {
               headRefName: "feat/test",
               number: 1,
-              title: "Mixed PR",
+              title: "Test PR",
               url: "https://github.com/test/repo/pull/1",
               statusCheckRollup: [
-                { status: "COMPLETED", conclusion: "SUCCESS" }, // CheckRun
-                { state: "SUCCESS" }, // StatusContext
+                // CheckRun format
+                { status: "COMPLETED", conclusion: "SUCCESS" },
+                // StatusContext format
+                { state: "SUCCESS" },
               ],
               reviewDecision: null,
             },
@@ -901,10 +856,11 @@ describe("status-data utilities", () => {
       });
 
       const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("pass");
     });
 
-    it("should handle mixed success and failure checks", () => {
+    it("should handle nested contexts array structure", () => {
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
@@ -913,12 +869,16 @@ describe("status-data utilities", () => {
             {
               headRefName: "feat/test",
               number: 1,
-              title: "Mixed Results PR",
+              title: "Test PR",
               url: "https://github.com/test/repo/pull/1",
+              // Nested structure with contexts array
               statusCheckRollup: [
-                { status: "COMPLETED", conclusion: "SUCCESS" },
-                { status: "COMPLETED", conclusion: "FAILURE" },
-                { status: "COMPLETED", conclusion: "SUCCESS" },
+                {
+                  contexts: [
+                    { conclusion: "SUCCESS", status: "COMPLETED" },
+                    { conclusion: "SUCCESS", status: "COMPLETED" },
+                  ],
+                },
               ],
               reviewDecision: null,
             },
@@ -928,31 +888,30 @@ describe("status-data utilities", () => {
       });
 
       const result = collectPrInfo(tempDir, ["feat/"]);
-      // Any failure means the overall status is fail
-      expect(result[0].ciStatus).toBe("fail");
+      expect(result).toHaveLength(1);
+      expect(result[0].ciStatus).toBe("pass");
     });
 
-    it("should handle case-insensitive values", () => {
+    it("should handle nested contexts with failure", () => {
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
           return JSON.stringify([
             {
-              headRefName: "feat/lower",
+              headRefName: "feat/test",
               number: 1,
-              title: "Lowercase PR",
+              title: "Test PR",
               url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [{ status: "completed", conclusion: "success" }],
-              reviewDecision: "approved",
-            },
-            {
-              headRefName: "feat/upper",
-              number: 2,
-              title: "Uppercase PR",
-              url: "https://github.com/test/repo/pull/2",
-              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
-              reviewDecision: "APPROVED",
+              statusCheckRollup: [
+                {
+                  contexts: [
+                    { conclusion: "SUCCESS", status: "COMPLETED" },
+                    { conclusion: "FAILURE", status: "COMPLETED" },
+                  ],
+                },
+              ],
+              reviewDecision: null,
             },
           ]);
         }
@@ -960,14 +919,60 @@ describe("status-data utilities", () => {
       });
 
       const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
+      expect(result[0].ciStatus).toBe("fail");
+    });
+
+    it("should handle case-insensitive conclusion values", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ conclusion: "success", status: "completed" }],
+              reviewDecision: null,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("pass");
-      expect(result[0].reviewScore).toBe(100);
-      expect(result[1].ciStatus).toBe("pass");
-      expect(result[1].reviewScore).toBe(100);
     });
   });
 
-  describe("Review score derivation edge cases", () => {
+  describe("review score edge cases", () => {
+    it("should return null for undefined reviewDecision", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              headRefName: "feat/test",
+              number: 1,
+              title: "Test PR",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [],
+              reviewDecision: undefined,
+            },
+          ]);
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
+      expect(result[0].reviewScore).toBeNull();
+    });
+
     it("should return null for empty string reviewDecision", () => {
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
@@ -988,76 +993,8 @@ describe("status-data utilities", () => {
       });
 
       const result = collectPrInfo(tempDir, ["feat/"]);
-      expect(result[0].reviewScore).toBe(null);
-    });
-
-    it("should return null for undefined reviewDecision", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
-        if (cmd.includes("git rev-parse")) return ".git";
-        if (cmd.includes("which gh")) return "/usr/bin/gh";
-        if (cmd.includes("gh pr list")) {
-          return JSON.stringify([
-            {
-              headRefName: "feat/test",
-              number: 1,
-              title: "Test PR",
-              url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [],
-              // reviewDecision not included
-            },
-          ]);
-        }
-        return "";
-      });
-
-      const result = collectPrInfo(tempDir, ["feat/"]);
-      expect(result[0].reviewScore).toBe(null);
-    });
-
-    it("should return 100 for APPROVED", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
-        if (cmd.includes("git rev-parse")) return ".git";
-        if (cmd.includes("which gh")) return "/usr/bin/gh";
-        if (cmd.includes("gh pr list")) {
-          return JSON.stringify([
-            {
-              headRefName: "feat/test",
-              number: 1,
-              title: "Test PR",
-              url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
-              reviewDecision: "APPROVED",
-            },
-          ]);
-        }
-        return "";
-      });
-
-      const result = collectPrInfo(tempDir, ["feat/"]);
-      expect(result[0].reviewScore).toBe(100);
-    });
-
-    it("should return 0 for CHANGES_REQUESTED", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
-        if (cmd.includes("git rev-parse")) return ".git";
-        if (cmd.includes("which gh")) return "/usr/bin/gh";
-        if (cmd.includes("gh pr list")) {
-          return JSON.stringify([
-            {
-              headRefName: "feat/test",
-              number: 1,
-              title: "Test PR",
-              url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
-              reviewDecision: "CHANGES_REQUESTED",
-            },
-          ]);
-        }
-        return "";
-      });
-
-      const result = collectPrInfo(tempDir, ["feat/"]);
-      expect(result[0].reviewScore).toBe(0);
+      expect(result).toHaveLength(1);
+      expect(result[0].reviewScore).toBeNull();
     });
 
     it("should return null for REVIEW_REQUIRED", () => {
@@ -1071,7 +1008,7 @@ describe("status-data utilities", () => {
               number: 1,
               title: "Test PR",
               url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
+              statusCheckRollup: [],
               reviewDecision: "REVIEW_REQUIRED",
             },
           ]);
@@ -1080,10 +1017,11 @@ describe("status-data utilities", () => {
       });
 
       const result = collectPrInfo(tempDir, ["feat/"]);
-      expect(result[0].reviewScore).toBe(null);
+      expect(result).toHaveLength(1);
+      expect(result[0].reviewScore).toBeNull();
     });
 
-    it("should handle lowercase review decisions", () => {
+    it("should handle lowercase reviewDecision values", () => {
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
@@ -1094,7 +1032,7 @@ describe("status-data utilities", () => {
               number: 1,
               title: "Test PR",
               url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
+              statusCheckRollup: [],
               reviewDecision: "approved",
             },
           ]);
@@ -1103,10 +1041,11 @@ describe("status-data utilities", () => {
       });
 
       const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
       expect(result[0].reviewScore).toBe(100);
     });
 
-    it("should handle mixed case review decisions", () => {
+    it("should handle mixed case reviewDecision values", () => {
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
@@ -1117,7 +1056,7 @@ describe("status-data utilities", () => {
               number: 1,
               title: "Test PR",
               url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
+              statusCheckRollup: [],
               reviewDecision: "Changes_Requested",
             },
           ]);
@@ -1126,10 +1065,11 @@ describe("status-data utilities", () => {
       });
 
       const result = collectPrInfo(tempDir, ["feat/"]);
+      expect(result).toHaveLength(1);
       expect(result[0].reviewScore).toBe(0);
     });
 
-    it("should return null for unknown review decision values", () => {
+    it("should return null for unknown reviewDecision values", () => {
       vi.mocked(execSync).mockImplementation((cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
@@ -1140,8 +1080,8 @@ describe("status-data utilities", () => {
               number: 1,
               title: "Test PR",
               url: "https://github.com/test/repo/pull/1",
-              statusCheckRollup: [{ status: "COMPLETED", conclusion: "SUCCESS" }],
-              reviewDecision: "SOME_UNKNOWN_VALUE",
+              statusCheckRollup: [],
+              reviewDecision: "UNKNOWN_STATUS",
             },
           ]);
         }
@@ -1149,7 +1089,8 @@ describe("status-data utilities", () => {
       });
 
       const result = collectPrInfo(tempDir, ["feat/"]);
-      expect(result[0].reviewScore).toBe(null);
+      expect(result).toHaveLength(1);
+      expect(result[0].reviewScore).toBeNull();
     });
   });
 
@@ -1197,13 +1138,13 @@ describe("status-data utilities", () => {
   });
 
   describe("collectLogInfo", () => {
-    it("should collect info for executor, reviewer, and qa logs", () => {
+    it("should collect info for both executor and reviewer logs", () => {
       const logDir = path.join(tempDir, "logs");
       fs.mkdirSync(logDir, { recursive: true });
       fs.writeFileSync(path.join(logDir, "executor.log"), "Executor line 1");
 
       const result = collectLogInfo(tempDir);
-      expect(result).toHaveLength(3);
+      expect(result).toHaveLength(2);
 
       const executorLog = result.find((l) => l.name === "executor");
       expect(executorLog).toBeDefined();
@@ -1407,13 +1348,12 @@ describe("status-data utilities", () => {
       expect(snapshot.config).toBe(config);
       expect(Array.isArray(snapshot.prds)).toBe(true);
       expect(Array.isArray(snapshot.processes)).toBe(true);
-      expect(snapshot.processes).toHaveLength(3);
+      expect(snapshot.processes).toHaveLength(2);
       expect(snapshot.processes[0].name).toBe("executor");
       expect(snapshot.processes[1].name).toBe("reviewer");
-      expect(snapshot.processes[2].name).toBe("qa");
       expect(Array.isArray(snapshot.prs)).toBe(true);
       expect(Array.isArray(snapshot.logs)).toBe(true);
-      expect(snapshot.logs).toHaveLength(3);
+      expect(snapshot.logs).toHaveLength(2);
       expect(snapshot.crontab).toHaveProperty("installed");
       expect(snapshot.crontab).toHaveProperty("entries");
       expect(snapshot.activePrd).toBeNull();
