@@ -18,6 +18,20 @@ import { getRoadmapStatus } from '../utils/roadmap-scanner.js';
 import { generatePersonaAvatar } from '../utils/avatar-generator.js';
 import { DeliberationEngine } from './deliberation.js';
 import { SlackClient } from './client.js';
+import { buildCurrentCliInvocation, formatCommandForLog, normalizeProjectRef, normalizeText, sleep, stripSlackUserMentions } from './utils.js';
+import {
+  resolveMentionedPersonas,
+  resolvePersonasByPlainName,
+  selectFollowUpPersona,
+} from './personas.js';
+
+// Re-export persona helpers for backwards compatibility with existing test imports
+export {
+  extractMentionHandles,
+  resolveMentionedPersonas,
+  resolvePersonasByPlainName,
+  selectFollowUpPersona,
+} from './personas.js';
 
 const MAX_PROCESSED_MESSAGE_KEYS = 2000;
 const PERSONA_REPLY_COOLDOWN_MS = 45_000;
@@ -87,10 +101,6 @@ interface IAdHocThreadState {
   expiresAt: number;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 function extractLastMeaningfulLines(output: string, maxLines = 4): string {
   const lines = output
     .split(/\r?\n/)
@@ -99,18 +109,6 @@ function extractLastMeaningfulLines(output: string, maxLines = 4): string {
   if (lines.length === 0) return '';
   return lines.slice(-maxLines).join(' | ');
 }
-
-function buildCurrentCliInvocation(args: string[]): string[] | null {
-  const cliEntry = process.argv[1];
-  if (!cliEntry) return null;
-  return [...process.execArgv, cliEntry, ...args];
-}
-
-function formatCommandForLog(bin: string, args: string[]): string {
-  return [bin, ...args].map((part) => JSON.stringify(part)).join(' ');
-}
-
-type TPersonaDomain = 'security' | 'qa' | 'lead' | 'dev' | 'general';
 
 interface IInboundSlackEvent {
   type?: string;
@@ -146,20 +144,9 @@ export function buildInboundMessageKey(
   return `${channel}:${ts}:${type ?? 'message'}`;
 }
 
-function normalizeProjectRef(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-function stripSlackUserMentions(text: string): string {
-  return text.replace(/<@[A-Z0-9]+>/g, ' ');
-}
-
+// Helper for parsing - uses normalizeText with preservePaths option
 function normalizeForParsing(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s./-]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return normalizeText(text, { preservePaths: true });
 }
 
 
@@ -292,166 +279,6 @@ export function parseSlackProviderRequest(text: string): ISlackProviderRequest |
     prompt: remainder,
     ...(projectHint ? { projectHint } : {}),
   };
-}
-
-function getPersonaDomain(persona: IAgentPersona): TPersonaDomain {
-  const role = persona.role.toLowerCase();
-  const expertise = (persona.soul?.expertise ?? []).join(' ').toLowerCase();
-  const blob = `${role} ${expertise}`;
-
-  if (/\bsecurity|auth|pentest|owasp|crypt|vuln\b/.test(blob)) return 'security';
-  if (/\bqa|quality|test|e2e\b/.test(blob)) return 'qa';
-  if (/\blead|architect|architecture|systems\b/.test(blob)) return 'lead';
-  if (/\bimplementer|developer|executor|engineer\b/.test(blob)) return 'dev';
-  return 'general';
-}
-
-export function scorePersonaForText(text: string, persona: IAgentPersona): number {
-  const normalized = normalizeForParsing(stripSlackUserMentions(text));
-  if (!normalized) return 0;
-
-  let score = 0;
-  const domain = getPersonaDomain(persona);
-
-  if (normalized.includes(persona.name.toLowerCase())) {
-    score += 12;
-  }
-
-  const securitySignal = /\b(security|auth|vuln|owasp|xss|csrf|token|permission|exploit|threat)\b/.test(normalized);
-  const qaSignal = /\b(qa|test|testing|bug|e2e|playwright|regression|flaky)\b/.test(normalized);
-  const leadSignal = /\b(architecture|architect|design|scalability|performance|tech debt|tradeoff|strategy)\b/.test(normalized);
-  const devSignal = /\b(implement|implementation|code|build|fix|patch|ship|pr)\b/.test(normalized);
-
-  if (securitySignal && domain === 'security') score += 8;
-  if (qaSignal && domain === 'qa') score += 8;
-  if (leadSignal && domain === 'lead') score += 8;
-  if (devSignal && domain === 'dev') score += 8;
-
-  const personaTokens = new Set([
-    ...persona.role.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3),
-    ...(persona.soul?.expertise ?? [])
-      .flatMap((s) => s.toLowerCase().split(/[^a-z0-9]+/))
-      .filter((t) => t.length >= 3),
-  ]);
-
-  const textTokens = normalized.split(/\s+/).filter((t) => t.length >= 3);
-  for (const token of textTokens) {
-    if (personaTokens.has(token)) {
-      score += 2;
-    }
-  }
-
-  return score;
-}
-
-export function selectFollowUpPersona(
-  preferred: IAgentPersona,
-  personas: IAgentPersona[],
-  text: string,
-): IAgentPersona {
-  if (personas.length === 0) return preferred;
-
-  const preferredScore = scorePersonaForText(text, preferred);
-  let best = preferred;
-  let bestScore = preferredScore;
-
-  for (const persona of personas) {
-    const score = scorePersonaForText(text, persona);
-    if (score > bestScore) {
-      best = persona;
-      bestScore = score;
-    }
-  }
-
-  // Default to continuity unless another persona is clearly a better fit.
-  if (best.id !== preferred.id && bestScore >= preferredScore + 4 && bestScore >= 8) {
-    return best;
-  }
-  return preferred;
-}
-
-function normalizeHandle(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-/**
- * Extract @handle mentions from raw Slack text.
- * Example: "@maya please check this" -> ["maya"]
- */
-export function extractMentionHandles(text: string): string[] {
-  const matches = text.match(/@([a-z0-9._-]{2,32})/gi) ?? [];
-  const seen = new Set<string>();
-  const handles: string[] = [];
-
-  for (const match of matches) {
-    const normalized = normalizeHandle(match.slice(1));
-    if (!normalized || seen.has(normalized)) {
-      continue;
-    }
-    seen.add(normalized);
-    handles.push(normalized);
-  }
-
-  return handles;
-}
-
-/**
- * Resolve mention handles to active personas by display name.
- * Matches @-prefixed handles in text (e.g. "@maya").
- */
-export function resolveMentionedPersonas(
-  text: string,
-  personas: IAgentPersona[],
-): IAgentPersona[] {
-  const handles = extractMentionHandles(text);
-  if (handles.length === 0) return [];
-
-  const byHandle = new Map<string, IAgentPersona>();
-  for (const persona of personas) {
-    byHandle.set(normalizeHandle(persona.name), persona);
-  }
-
-  const resolved: IAgentPersona[] = [];
-  const seenPersonaIds = new Set<string>();
-
-  for (const handle of handles) {
-    const persona = byHandle.get(handle);
-    if (!persona || seenPersonaIds.has(persona.id)) {
-      continue;
-    }
-    seenPersonaIds.add(persona.id);
-    resolved.push(persona);
-  }
-
-  return resolved;
-}
-
-/**
- * Match personas whose name appears as a word in the text (case-insensitive, no @ needed).
- * Used for app_mention events where text looks like "<@BOTID> maya check this PR".
- */
-export function resolvePersonasByPlainName(
-  text: string,
-  personas: IAgentPersona[],
-): IAgentPersona[] {
-  // Strip Slack user ID mentions like <@U12345678> to avoid false positives
-  const stripped = text.replace(/<@[A-Z0-9]+>/g, '').toLowerCase();
-
-  const resolved: IAgentPersona[] = [];
-  const seenPersonaIds = new Set<string>();
-
-  for (const persona of personas) {
-    if (seenPersonaIds.has(persona.id)) continue;
-    const nameLower = persona.name.toLowerCase();
-    // Word-boundary match: persona name as a whole word
-    const re = new RegExp(`\\b${nameLower}\\b`);
-    if (re.test(stripped)) {
-      resolved.push(persona);
-      seenPersonaIds.add(persona.id);
-    }
-  }
-
-  return resolved;
 }
 
 export function shouldIgnoreInboundSlackEvent(

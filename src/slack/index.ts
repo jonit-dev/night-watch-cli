@@ -4,7 +4,50 @@ export { ChannelManager } from './channel-manager.js';
 export { DeliberationEngine } from './deliberation.js';
 export {
   SlackInteractionListener,
-  extractMentionHandles,
-  resolveMentionedPersonas,
   shouldIgnoreInboundSlackEvent,
 } from './interaction-listener.js';
+
+// Humanizer module
+export { humanizeSlackReply, isSkipMessage, MAX_HUMANIZED_SENTENCES, MAX_HUMANIZED_CHARS } from './humanizer.js';
+export type { IHumanizeSlackReplyOptions } from './humanizer.js';
+
+// Utils module
+export {
+  sleep,
+  buildCurrentCliInvocation,
+  formatCommandForLog,
+  normalizeText,
+  extractErrorMessage,
+  normalizeProjectRef,
+  stripSlackUserMentions,
+  normalizeHandle,
+} from './utils.js';
+export type { INormalizeTextOptions } from './utils.js';
+
+// Personas module
+export {
+  extractMentionHandles,
+  findCarlos,
+  findDev,
+  findMaya,
+  findPersona,
+  findPriya,
+  getParticipatingPersonas,
+  getPersonaDomain,
+  resolveMentionedPersonas,
+  resolvePersonasByPlainName,
+  scorePersonaForText,
+  selectFollowUpPersona,
+} from './personas.js';
+
+// AI module
+export type { IResolvedAIConfig, IAnthropicTool } from './ai/index.js';
+export {
+  buildBoardTools,
+  callAIForContribution,
+  callAIWithTools,
+  executeBoardTool,
+  joinBaseUrl,
+  resolveGlobalAIConfig,
+  resolvePersonaAIConfig,
+} from './ai/index.js';
