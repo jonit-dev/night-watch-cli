@@ -74,6 +74,7 @@ All Night Watch env vars are prefixed with `NW_`:
 | `NW_REVIEWER_SCHEDULE` | `reviewerSchedule` |
 | `NW_PROVIDER` | `provider` |
 | `NW_REVIEWER_ENABLED` | `reviewerEnabled` |
+| `NW_REVIEWER_PARALLEL` | reviewer parallel fan-out (`1` enabled, `0` disabled) |
 | `NW_FALLBACK_ON_RATE_LIMIT` | `fallbackOnRateLimit` |
 | `NW_CLAUDE_MODEL` | `claudeModel` |
 
