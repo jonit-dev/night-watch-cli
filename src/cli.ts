@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import 'reflect-metadata';
 import { Command } from 'commander';
 import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';

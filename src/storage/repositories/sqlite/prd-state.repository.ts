@@ -3,7 +3,10 @@
  * Persists PRD state entries in the `prd_states` table.
  */
 
+import 'reflect-metadata';
+
 import Database from "better-sqlite3";
+import { inject, injectable } from "tsyringe";
 
 import { IPrdStateEntry } from "@/utils/prd-states.js";
 import { IPrdStateRepository } from "../interfaces.js";
@@ -16,10 +19,11 @@ interface IPrdStateRow {
   timestamp: number;
 }
 
+@injectable()
 export class SqlitePrdStateRepository implements IPrdStateRepository {
   private readonly _db: Database.Database;
 
-  constructor(db: Database.Database) {
+  constructor(@inject('Database') db: Database.Database) {
     this._db = db;
   }
 
