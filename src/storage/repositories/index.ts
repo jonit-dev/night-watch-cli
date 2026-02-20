@@ -43,6 +43,8 @@ export function getRepositories(): IRepositories {
     runMigrations(db);
     const agentPersonaRepo = new SqliteAgentPersonaRepository(db);
     agentPersonaRepo.seedDefaultsOnFirstRun();
+    // Always patch avatar URLs for built-in personas that are missing them
+    agentPersonaRepo.patchDefaultAvatarUrls();
     _initialized = true;
   }
 
