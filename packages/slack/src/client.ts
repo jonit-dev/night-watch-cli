@@ -34,12 +34,12 @@ export function getFallbackAvatarUrl(persona: IAgentPersona): string {
 }
 
 export class SlackClient {
-  private readonly _client: WebClient;
-  private readonly _serverBaseUrl: string;
+  private readonly client: WebClient;
+  private readonly serverBaseUrl: string;
 
   constructor(botToken: string, serverBaseUrl = 'http://localhost:7575') {
-    this._client = new WebClient(botToken);
-    this._serverBaseUrl = serverBaseUrl.replace(/\/$/, '');
+    this.client = new WebClient(botToken);
+    this.serverBaseUrl = serverBaseUrl.replace(/\/$/, '');
   }
 
   /**
@@ -47,9 +47,9 @@ export class SlackClient {
    * Relative paths (legacy) are resolved against the server base URL.
    * Absolute HTTP(S) URLs (e.g. GitHub raw CDN) are passed through unchanged.
    */
-  private _resolveAvatarUrl(avatarUrl: string | null): string {
+  private resolveAvatarUrl(avatarUrl: string | null): string {
     if (!avatarUrl || avatarUrl.startsWith('data:')) return '';
-    if (avatarUrl.startsWith('/')) return `${this._serverBaseUrl}${avatarUrl}`;
+    if (avatarUrl.startsWith('/')) return `${this.serverBaseUrl}${avatarUrl}`;
     return avatarUrl;
   }
 
@@ -64,10 +64,10 @@ export class SlackClient {
     threadTs?: string,
   ): Promise<ISlackMessage> {
     // Slack icon_url must be a real HTTP URL — data URIs are not supported
-    const resolved = this._resolveAvatarUrl(persona.avatarUrl);
+    const resolved = this.resolveAvatarUrl(persona.avatarUrl);
     const iconUrl = resolved || getFallbackAvatarUrl(persona);
 
-    const result = await this._client.chat.postMessage({
+    const result = await this.client.chat.postMessage({
       channel,
       text,
       username: persona.name,
@@ -90,7 +90,7 @@ export class SlackClient {
    * Post a simple message to Slack using the bot's default identity.
    */
   async postMessage(channel: string, text: string, threadTs?: string): Promise<void> {
-    await this._client.chat.postMessage({
+    await this.client.chat.postMessage({
       channel,
       text,
       thread_ts: threadTs,
@@ -101,7 +101,7 @@ export class SlackClient {
    * Resolve the bot user id for mention detection/filtering.
    */
   async getBotUserId(): Promise<string | null> {
-    const result = await this._client.auth.test();
+    const result = await this.client.auth.test();
     const userId = result.user_id;
     return typeof userId === 'string' && userId.length > 0 ? userId : null;
   }
@@ -109,12 +109,8 @@ export class SlackClient {
   /**
    * Add an emoji reaction to a message.
    */
-  async addReaction(
-    channel: string,
-    timestamp: string,
-    emoji: string,
-  ): Promise<void> {
-    await this._client.reactions.add({
+  async addReaction(channel: string, timestamp: string, emoji: string): Promise<void> {
+    await this.client.reactions.add({
       channel,
       timestamp,
       name: emoji.replace(/:/g, ''),
@@ -125,14 +121,14 @@ export class SlackClient {
    * Join an existing Slack channel by ID.
    */
   async joinChannel(channelId: string): Promise<void> {
-    await this._client.conversations.join({ channel: channelId });
+    await this.client.conversations.join({ channel: channelId });
   }
 
   /**
    * Create a new Slack channel. Returns the channel ID.
    */
   async createChannel(name: string): Promise<string> {
-    const result = await this._client.conversations.create({
+    const result = await this.client.conversations.create({
       name: name
         .toLowerCase()
         .replace(/[^a-z0-9-]/g, '-')
@@ -145,18 +141,14 @@ export class SlackClient {
    * Archive a Slack channel.
    */
   async archiveChannel(channelId: string): Promise<void> {
-    await this._client.conversations.archive({ channel: channelId });
+    await this.client.conversations.archive({ channel: channelId });
   }
 
   /**
    * Get messages in a thread.
    */
-  async getChannelHistory(
-    channel: string,
-    threadTs: string,
-    limit = 50,
-  ): Promise<ISlackMessage[]> {
-    const result = await this._client.conversations.replies({
+  async getChannelHistory(channel: string, threadTs: string, limit = 50): Promise<ISlackMessage[]> {
+    const result = await this.client.conversations.replies({
       channel,
       ts: threadTs,
       limit,
@@ -174,7 +166,7 @@ export class SlackClient {
    * List channels in the workspace.
    */
   async listChannels(): Promise<ISlackChannel[]> {
-    const result = await this._client.conversations.list({
+    const result = await this.client.conversations.list({
       types: 'public_channel',
       limit: 200,
     });
@@ -193,7 +185,7 @@ export class SlackClient {
     let cursor: string | undefined;
 
     do {
-      const result = await this._client.users.list({
+      const result = await this.client.users.list({
         limit: 200,
         ...(cursor ? { cursor } : {}),
       });
@@ -228,7 +220,7 @@ export class SlackClient {
     // Slack allows up to 1000 users per invite call.
     for (let i = 0; i < uniqueUserIds.length; i += 1000) {
       const batch = uniqueUserIds.slice(i, i + 1000);
-      await this._client.conversations.invite({
+      await this.client.conversations.invite({
         channel: channelId,
         users: batch.join(','),
       });

@@ -27,10 +27,14 @@ import { humanizeSlackReply, isSkipMessage } from './humanizer.js';
 import { findCarlos, findDev, getParticipatingPersonas } from './personas.js';
 import {
   buildBoardTools,
+  buildCodebaseQueryTool,
   callAIForContribution,
   callAIWithTools,
+  executeBoardTool,
+  executeCodebaseQuery,
   resolvePersonaAIConfig,
 } from './ai/index.js';
+import type { ToolRegistry } from './ai/index.js';
 
 // Re-export humanizeSlackReply for backwards compatibility with existing tests
 
@@ -247,17 +251,17 @@ function chooseRoundContributors(personas: IAgentPersona[], maxCount: number): I
 }
 
 export class DeliberationEngine {
-  private readonly _slackClient: SlackClient;
-  private readonly _config: INightWatchConfig;
-  private readonly _humanResumeTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private readonly _emojiCadenceCounter = new Map<string, number>();
+  private readonly slackClient: SlackClient;
+  private readonly config: INightWatchConfig;
+  private readonly humanResumeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly emojiCadenceCounter = new Map<string, number>();
 
   constructor(slackClient: SlackClient, config: INightWatchConfig) {
-    this._slackClient = slackClient;
-    this._config = config;
+    this.slackClient = slackClient;
+    this.config = config;
   }
 
-  private _resolveReplyProjectPath(channel: string, threadTs: string): string | null {
+  private resolveReplyProjectPath(channel: string, threadTs: string): string | null {
     const repos = getRepositories();
     const activeDiscussions = repos.slackDiscussion.getActive('');
     const discussion = activeDiscussions.find(
@@ -276,7 +280,7 @@ export class DeliberationEngine {
     return projects.length === 1 ? projects[0].path : null;
   }
 
-  private _resolveBoardConfig(projectPath: string): IBoardProviderConfig | null {
+  private resolveBoardConfig(projectPath: string): IBoardProviderConfig | null {
     try {
       const config = loadConfig(projectPath);
       const boardConfig = config.boardProvider;
@@ -289,15 +293,15 @@ export class DeliberationEngine {
     return null;
   }
 
-  private _humanizeForPost(
+  private humanizeForPost(
     channel: string,
     threadTs: string,
     persona: IAgentPersona,
     raw: string,
   ): string {
     const key = `${channel}:${threadTs}:${persona.id}`;
-    const count = (this._emojiCadenceCounter.get(key) ?? 0) + 1;
-    this._emojiCadenceCounter.set(key, count);
+    const count = (this.emojiCadenceCounter.get(key) ?? 0) + 1;
+    this.emojiCadenceCounter.set(key, count);
 
     // Human cadence:
     // - emoji roughly every 3rd message by same persona in same thread
@@ -324,7 +328,7 @@ export class DeliberationEngine {
       return existingInFlight;
     }
 
-    const startPromise = this._startDiscussionInternal(trigger);
+    const startPromise = this.startDiscussionInternal(trigger);
     inFlightDiscussionStarts.set(key, startPromise);
 
     try {
@@ -336,7 +340,7 @@ export class DeliberationEngine {
     }
   }
 
-  private async _startDiscussionInternal(trigger: IDiscussionTrigger): Promise<ISlackDiscussion> {
+  private async startDiscussionInternal(trigger: IDiscussionTrigger): Promise<ISlackDiscussion> {
     const repos = getRepositories();
     const latest = repos.slackDiscussion.getLatestByTrigger(
       trigger.projectPath,
@@ -371,7 +375,7 @@ export class DeliberationEngine {
         resolvedTrigger.context = `${resolvedTrigger.context}\n\n${diffExcerpt}`.slice(0, 5000);
       }
     }
-    const channel = getChannelForTrigger(resolvedTrigger, this._config);
+    const channel = getChannelForTrigger(resolvedTrigger, this.config);
 
     if (!channel) {
       throw new Error(`No Slack channel configured for trigger type: ${trigger.type}`);
@@ -385,7 +389,7 @@ export class DeliberationEngine {
 
     // Post opening message to start the thread
     const openingText = trigger.openingMessage ?? buildOpeningMessage(resolvedTrigger);
-    const openingMsg = await this._slackClient.postAsAgent(channel, openingText, devPersona);
+    const openingMsg = await this.slackClient.postAsAgent(channel, openingText, devPersona);
 
     await sleep(humanDelay());
 
@@ -405,10 +409,10 @@ export class DeliberationEngine {
     // Run first round of contributions (excluding Dev who already posted)
     const reviewers = participants.filter((p) => p.id !== devPersona.id);
 
-    await this._runContributionRound(discussion.id, reviewers, resolvedTrigger, openingText);
+    await this.runContributionRound(discussion.id, reviewers, resolvedTrigger, openingText);
 
     // Check consensus after first round
-    await this._evaluateConsensus(discussion.id, resolvedTrigger);
+    await this.evaluateConsensus(discussion.id, resolvedTrigger);
 
     return repos.slackDiscussion.getById(discussion.id)!;
   }
@@ -422,7 +426,7 @@ export class DeliberationEngine {
     if (!discussion || discussion.status !== 'active') return;
 
     // Get thread history for context
-    const history = await this._slackClient.getChannelHistory(
+    const history = await this.slackClient.getChannelHistory(
       discussion.channelId,
       discussion.threadTs,
       10,
@@ -447,14 +451,14 @@ export class DeliberationEngine {
 
     let message: string;
     try {
-      message = await callAIForContribution(persona, this._config, contributionPrompt);
+      message = await callAIForContribution(persona, this.config, contributionPrompt);
     } catch (err) {
       console.error(`[deliberation] callAIForContribution failed for ${persona.name}:`, err);
       message = `[Contribution from ${persona.name} unavailable — AI provider not configured]`;
     }
 
     if (message) {
-      const finalMessage = this._humanizeForPost(
+      const finalMessage = this.humanizeForPost(
         discussion.channelId,
         discussion.threadTs,
         persona,
@@ -463,7 +467,7 @@ export class DeliberationEngine {
       if (isSkipMessage(finalMessage)) return;
       const normalized = normalizeText(finalMessage);
       if (!normalized || historySet.has(normalized)) return;
-      await this._slackClient.postAsAgent(
+      await this.slackClient.postAsAgent(
         discussion.channelId,
         finalMessage,
         persona,
@@ -493,7 +497,7 @@ export class DeliberationEngine {
 
     if (!discussion) return;
 
-    const existingTimer = this._humanResumeTimers.get(discussion.id);
+    const existingTimer = this.humanResumeTimers.get(discussion.id);
     if (existingTimer) {
       clearTimeout(existingTimer);
     }
@@ -509,31 +513,31 @@ export class DeliberationEngine {
         const updated = innerRepos.slackDiscussion.getById(discussion.id);
         if (!updated || updated.status !== 'active') return;
 
-        await this._slackClient.postAsAgent(
+        await this.slackClient.postAsAgent(
           channel,
           'Ok, picking this back up. Let me see where we landed.',
           carlos,
           threadTs,
         );
         await sleep(humanDelay());
-        await this._evaluateConsensus(discussion.id, {
+        await this.evaluateConsensus(discussion.id, {
           type: discussion.triggerType,
           projectPath: discussion.projectPath,
           ref: discussion.triggerRef,
           context: '',
         });
       })().finally(() => {
-        this._humanResumeTimers.delete(discussion.id);
+        this.humanResumeTimers.delete(discussion.id);
       });
     }, DISCUSSION_RESUME_DELAY_MS);
 
-    this._humanResumeTimers.set(discussion.id, timer);
+    this.humanResumeTimers.set(discussion.id, timer);
   }
 
   /**
    * Run a round of contributions from the given personas.
    */
-  private async _runContributionRound(
+  private async runContributionRound(
     discussionId: string,
     personas: IAgentPersona[],
     trigger: IDiscussionTrigger,
@@ -544,7 +548,7 @@ export class DeliberationEngine {
     if (!discussion) return;
 
     // Get current thread history
-    let history = await this._slackClient.getChannelHistory(
+    let history = await this.slackClient.getChannelHistory(
       discussion.channelId,
       discussion.threadTs,
       10,
@@ -579,7 +583,7 @@ export class DeliberationEngine {
 
       let message: string;
       try {
-        message = await callAIForContribution(persona, this._config, contributionPrompt);
+        message = await callAIForContribution(persona, this.config, contributionPrompt);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn(`[deliberation] AI contribution failed for ${persona.name}: ${msg}`);
@@ -588,7 +592,7 @@ export class DeliberationEngine {
 
       if (!message || isSkipMessage(message)) continue;
 
-      const finalMessage = this._humanizeForPost(
+      const finalMessage = this.humanizeForPost(
         discussion.channelId,
         discussion.threadTs,
         persona,
@@ -599,7 +603,7 @@ export class DeliberationEngine {
       const normalized = normalizeText(finalMessage);
       if (!normalized || seenMessages.has(normalized)) continue;
 
-      await this._slackClient.postAsAgent(
+      await this.slackClient.postAsAgent(
         discussion.channelId,
         finalMessage,
         persona,
@@ -628,7 +632,7 @@ export class DeliberationEngine {
    * Lead agent (Carlos) decides: approve, request changes, or escalate.
    * Uses an iterative loop for multi-round handling (no recursion).
    */
-  private async _evaluateConsensus(
+  private async evaluateConsensus(
     discussionId: string,
     trigger: IDiscussionTrigger,
   ): Promise<void> {
@@ -648,7 +652,7 @@ export class DeliberationEngine {
       }
 
       // Get thread history and let Carlos evaluate
-      const history = await this._slackClient.getChannelHistory(
+      const history = await this.slackClient.getChannelHistory(
         discussion.channelId,
         discussion.threadTs,
         20,
@@ -681,7 +685,7 @@ Write the prefix and your message. Nothing else.`;
 
       let decision: string;
       try {
-        decision = await callAIForContribution(carlos, this._config, consensusPrompt);
+        decision = await callAIForContribution(carlos, this.config, consensusPrompt);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn(`[deliberation] AI consensus evaluation failed: ${msg}`);
@@ -694,7 +698,7 @@ Write the prefix and your message. Nothing else.`;
           { allowEmoji: false, maxSentences: 1 },
         );
         if (!isSkipMessage(message)) {
-          await this._slackClient.postAsAgent(
+          await this.slackClient.postAsAgent(
             discussion.channelId,
             message,
             carlos,
@@ -720,7 +724,7 @@ Write the prefix and your message. Nothing else.`;
           },
         );
         if (!isSkipMessage(changesMessage)) {
-          await this._slackClient.postAsAgent(
+          await this.slackClient.postAsAgent(
             discussion.channelId,
             changesMessage,
             carlos,
@@ -736,7 +740,7 @@ Write the prefix and your message. Nothing else.`;
         const participants = getParticipatingPersonas(trigger.type, personas);
         const devPersona = findDev(personas);
         const reviewers = participants.filter((p) => !devPersona || p.id !== devPersona.id);
-        await this._runContributionRound(discussionId, reviewers, trigger, changes);
+        await this.runContributionRound(discussionId, reviewers, trigger, changes);
         continue;
       }
 
@@ -749,7 +753,7 @@ Write the prefix and your message. Nothing else.`;
           { allowEmoji: false, maxSentences: 2 },
         );
         if (!isSkipMessage(summaryMessage)) {
-          await this._slackClient.postAsAgent(
+          await this.slackClient.postAsAgent(
             discussion.channelId,
             summaryMessage,
             carlos,
@@ -775,7 +779,7 @@ Write the prefix and your message. Nothing else.`;
         { allowEmoji: false, maxSentences: 1 },
       );
       if (!isSkipMessage(humanMessage)) {
-        await this._slackClient.postAsAgent(
+        await this.slackClient.postAsAgent(
           discussion.channelId,
           humanMessage,
           carlos,
@@ -804,7 +808,7 @@ Write the prefix and your message. Nothing else.`;
     const carlos = findCarlos(personas) ?? personas[0];
     const actor = carlos?.name ?? 'Night Watch';
     if (carlos) {
-      await this._slackClient.postAsAgent(
+      await this.slackClient.postAsAgent(
         discussion.channelId,
         `Sending PR #${prNumber} back through with the notes.`,
         carlos,
@@ -821,7 +825,7 @@ Write the prefix and your message. Nothing else.`;
         `[slack][job] triggerPRRefinement reviewer spawn failed via ${actor} pr=${prNumber}: CLI entry path unavailable`,
       );
       if (carlos) {
-        await this._slackClient.postAsAgent(
+        await this.slackClient.postAsAgent(
           discussion.channelId,
           `Can't start the reviewer right now — runtime issue. Will retry.`,
           carlos,
@@ -863,7 +867,7 @@ Write the prefix and your message. Nothing else.`;
   ): Promise<string> {
     let history: ISlackMessage[] = [];
     try {
-      history = await this._slackClient.getChannelHistory(channel, threadTs, 10);
+      history = await this.slackClient.getChannelHistory(channel, threadTs, 10);
     } catch {
       // Ignore — reply with just the incoming text as context
     }
@@ -888,6 +892,15 @@ Write the prefix and your message. Nothing else.`;
       ? `There are linked URLs in the context above — you have seen their title and summary. Reference what the link is actually about if relevant; don't pretend you haven't seen it.\n`
       : '';
 
+    const projectPathForTools = this.resolveReplyProjectPath(channel, threadTs);
+    const boardConfig = projectPathForTools ? this.resolveBoardConfig(projectPathForTools) : null;
+    const resolved = resolvePersonaAIConfig(persona, this.config);
+    const useTools = Boolean(projectPathForTools && resolved.provider === 'anthropic');
+
+    const codebaseGuidance = useTools
+      ? `- You have a query_codebase tool. Before pointing at any file or making a code claim, call it and read the actual output. Then drop the specific line or snippet directly into your message — like a teammate who pulled it up in their editor, not a bot filing a report. Short inline backtick or a 2-3 line block is fine.\n`
+      : `- If you make a specific code claim, back it up with a snippet from context. If you don't have it, ask for it.\n`;
+
     const prompt =
       `You are ${persona.name}, ${persona.role}.\n` +
       `Your teammates: Dev (implementer), Carlos (tech lead), Maya (security), Priya (QA).\n\n` +
@@ -900,34 +913,48 @@ Write the prefix and your message. Nothing else.`;
       `- Tag a teammate by name naturally if their domain is more relevant ("Carlos would know better", "Maya, thoughts?").\n` +
       casualGuidance +
       urlGuidance +
-      `- No markdown formatting, headings, or bullet lists.\n` +
+      codebaseGuidance +
+      `- No markdown headings or bullet lists. Inline backticks and short code blocks are fine when quoting actual code.\n` +
       `- Emojis: one max, only if it fits. Default to none.\n` +
       `- If the question is outside your domain, say so briefly and redirect.\n` +
       `- You have board tools available. If asked to open, update, or list issues, use them — don't just say you will.\n` +
       `- Only reference PR numbers, issue numbers, or URLs that appear in the context above. Never invent or guess links.\n\n` +
       `Write only your reply. No name prefix.`;
 
-    const projectPathForTools = this._resolveReplyProjectPath(channel, threadTs);
-    const boardConfig = projectPathForTools ? this._resolveBoardConfig(projectPathForTools) : null;
-    const resolved = resolvePersonaAIConfig(persona, this._config);
-    const useTools = Boolean(
-      projectPathForTools && boardConfig && resolved.provider === 'anthropic',
-    );
+    const tools = [
+      ...(useTools ? [buildCodebaseQueryTool()] : []),
+      ...(boardConfig ? buildBoardTools() : []),
+    ];
 
     let message: string;
     try {
-      if (useTools) {
-        message = await callAIWithTools(
-          persona,
-          this._config,
-          prompt,
-          buildBoardTools(),
-          boardConfig!,
-          projectPathForTools!,
-        );
+      if (useTools && tools.length > 0) {
+        const registry: ToolRegistry = new Map();
+        if (useTools) {
+          const codebaseProvider = (this.config.providerEnv?.['CODEBASE_QUERY_PROVIDER'] ??
+            'claude') as 'claude' | 'codex';
+          registry.set('query_codebase', (input) =>
+            Promise.resolve(
+              executeCodebaseQuery(
+                String(input['prompt'] ?? ''),
+                projectPathForTools!,
+                codebaseProvider,
+                this.config.providerEnv,
+              ),
+            ),
+          );
+        }
+        if (boardConfig) {
+          for (const tool of buildBoardTools()) {
+            registry.set(tool.name, (input) =>
+              executeBoardTool(tool.name, input, boardConfig, projectPathForTools!),
+            );
+          }
+        }
+        message = await callAIWithTools(persona, this.config, prompt, tools, registry);
       } else {
         // Allow up to 1024 tokens for ad-hoc replies so agents can write substantive responses
-        message = await callAIForContribution(persona, this._config, prompt, 1024);
+        message = await callAIForContribution(persona, this.config, prompt, 1024);
       }
     } catch (err) {
       console.error(`[deliberation] reply failed for ${persona.name}:`, err);
@@ -935,11 +962,11 @@ Write the prefix and your message. Nothing else.`;
     }
 
     if (message) {
-      const finalMessage = this._humanizeForPost(channel, threadTs, persona, message);
+      const finalMessage = this.humanizeForPost(channel, threadTs, persona, message);
       if (isSkipMessage(finalMessage)) return '';
       const normalized = normalizeText(finalMessage);
       if (!normalized || historySet.has(normalized)) return '';
-      await this._slackClient.postAsAgent(channel, finalMessage, persona, threadTs);
+      await this.slackClient.postAsAgent(channel, finalMessage, persona, threadTs);
       return finalMessage;
     }
     return '';
@@ -983,7 +1010,7 @@ Write the prefix and your message. Nothing else.`;
 
     let message: string;
     try {
-      message = await callAIForContribution(persona, this._config, prompt);
+      message = await callAIForContribution(persona, this.config, prompt);
     } catch {
       return; // Silently skip — proactive messages are optional
     }
@@ -993,16 +1020,16 @@ Write the prefix and your message. Nothing else.`;
     }
 
     const dummyTs = `${Date.now()}`;
-    const finalMessage = this._humanizeForPost(channel, dummyTs, persona, message);
+    const finalMessage = this.humanizeForPost(channel, dummyTs, persona, message);
     if (finalMessage) {
-      await this._slackClient.postAsAgent(channel, finalMessage, persona);
+      await this.slackClient.postAsAgent(channel, finalMessage, persona);
     }
   }
 
   /**
    * Generate a structured GitHub issue body written by the Dev persona.
    */
-  private async _generateIssueBody(
+  private async generateIssueBody(
     trigger: IDiscussionTrigger,
     devPersona: IAgentPersona,
   ): Promise<string> {
@@ -1048,7 +1075,7 @@ Keep it under ~450 words. No fluff, no greetings, no generic "future work" secti
 Context:
 ${trigger.context}`;
 
-    const raw = await callAIForContribution(devPersona, this._config, prompt);
+    const raw = await callAIForContribution(devPersona, this.config, prompt);
     return raw.trim();
   }
 
@@ -1082,7 +1109,7 @@ ${trigger.context}`;
       `Write only your message or SKIP.`;
 
     try {
-      const result = await callAIForContribution(devPersona, this._config, prompt);
+      const result = await callAIForContribution(devPersona, this.config, prompt);
       if (!result || result.trim().toUpperCase() === 'SKIP') return null;
       return humanizeSlackReply(result, { allowEmoji: false, maxSentences: 2 });
     } catch {
@@ -1122,7 +1149,7 @@ ${trigger.context}`;
 
     let triage: string;
     try {
-      triage = await callAIForContribution(devPersona, this._config, triagePrompt, 256);
+      triage = await callAIForContribution(devPersona, this.config, triagePrompt, 256);
     } catch {
       return;
     }
@@ -1147,12 +1174,12 @@ ${trigger.context}`;
       .replace(/[.!?]+$/, '')
       .replace(/^(found|noticed|flagging|caught)\s+/i, '')
       .slice(0, 80)}`;
-    const issueBody = await this._generateIssueBody(fakeTrigger, devPersona).catch(() =>
+    const issueBody = await this.generateIssueBody(fakeTrigger, devPersona).catch(() =>
       report.slice(0, 1200),
     );
 
     // Step 3: Create GitHub issue (if board is configured for this project)
-    const boardConfig = this._resolveBoardConfig(projectPath);
+    const boardConfig = this.resolveBoardConfig(projectPath);
     let issueUrl: string | null = null;
     if (boardConfig) {
       try {
@@ -1177,7 +1204,7 @@ ${trigger.context}`;
       : humanizeSlackReply(slackOneliner, { allowEmoji: false, maxSentences: 2 });
 
     try {
-      await this._slackClient.postAsAgent(channel, slackMsg, devPersona);
+      await this.slackClient.postAsAgent(channel, slackMsg, devPersona);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[deliberation][audit] failed to post Slack notification: ${msg}`);
@@ -1197,7 +1224,7 @@ ${trigger.context}`;
     if (!devPersona) return;
 
     // Acknowledge before doing async work
-    await this._slackClient.postAsAgent(
+    await this.slackClient.postAsAgent(
       discussion.channelId,
       'Agreed. Writing up an issue for this.',
       devPersona,
@@ -1205,9 +1232,9 @@ ${trigger.context}`;
     );
 
     const title = buildIssueTitleFromTrigger(trigger);
-    const body = await this._generateIssueBody(trigger, devPersona);
+    const body = await this.generateIssueBody(trigger, devPersona);
 
-    const boardConfig = this._resolveBoardConfig(trigger.projectPath);
+    const boardConfig = this.resolveBoardConfig(trigger.projectPath);
     if (boardConfig) {
       try {
         const provider = createBoardProvider(boardConfig, trigger.projectPath);
@@ -1215,7 +1242,7 @@ ${trigger.context}`;
         if (issue.column !== 'In Progress') {
           await provider.moveIssue(issue.number, 'In Progress').catch(() => undefined);
         }
-        await this._slackClient.postAsAgent(
+        await this.slackClient.postAsAgent(
           discussion.channelId,
           `Opened #${issue.number}: ${issue.title} — ${issue.url}\nTaking first pass now. It's in In Progress.`,
           devPersona,
@@ -1223,7 +1250,7 @@ ${trigger.context}`;
         );
       } catch (err) {
         console.warn('[issue_opener] board createIssue failed:', err);
-        await this._slackClient.postAsAgent(
+        await this.slackClient.postAsAgent(
           discussion.channelId,
           `Couldn't open the issue automatically — board might not be configured. Here's the writeup:\n\n${body.slice(0, 600)}`,
           devPersona,
@@ -1232,7 +1259,7 @@ ${trigger.context}`;
       }
     } else {
       // No board configured — post the writeup in thread so it's not lost
-      await this._slackClient.postAsAgent(
+      await this.slackClient.postAsAgent(
         discussion.channelId,
         `No board configured, dropping the writeup here:\n\n${body.slice(0, 600)}`,
         devPersona,
