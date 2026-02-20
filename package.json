@@ -13,7 +13,10 @@
     "dev:web": "concurrently --names \"api,vite\" --prefix-colors \"cyan,magenta\" \"node packages/cli/bin/night-watch.mjs serve\" \"yarn --cwd web dev\"",
     "prepublishOnly": "yarn build && yarn test",
     "lint": "eslint packages/",
-    "local": "yarn build && yarn link"
+    "format": "prettier --write 'packages/**/*.{ts,tsx,js,mjs,json}'",
+    "format:check": "prettier --check 'packages/**/*.{ts,tsx,js,mjs,json}'",
+    "local": "yarn build && yarn link",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -21,6 +24,9 @@
     "@vitest/coverage-v8": "^4.0.0",
     "concurrently": "^9.2.1",
     "eslint": "^10.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.8.1",
     "tsc-alias": "^1.8.16",
     "tsx": "^4.7.0",
     "turbo": "^2.8.10",
@@ -30,6 +36,15 @@
   },
   "engines": {
     "node": ">=22.0.0"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
   },
   "packageManager": "yarn@1.22.22"
 }
