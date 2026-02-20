@@ -14,6 +14,7 @@ import { getRepositories } from '../storage/repositories/index.js';
 import { INightWatchConfig } from '../types.js';
 import type { IRegistryEntry } from '../utils/registry.js';
 import { parseScriptResult } from '../utils/script-result.js';
+import { getRoadmapStatus } from '../utils/roadmap-scanner.js';
 import { generatePersonaAvatar } from '../utils/avatar-generator.js';
 import { DeliberationEngine } from './deliberation.js';
 import { SlackClient } from './client.js';
@@ -700,7 +701,7 @@ export class SlackInteractionListener {
       if (!currentPersona.avatarUrl && slack.replicateApiToken) {
         try {
           console.log(`[slack] Generating avatar for ${persona.name}…`);
-          const avatarUrl = await generatePersonaAvatar(persona.role, slack.replicateApiToken);
+          const avatarUrl = await generatePersonaAvatar(persona.name, persona.role, slack.replicateApiToken);
           if (avatarUrl) {
             currentPersona = repos.agentPersona.update(persona.id, { avatarUrl });
             console.log(`[slack] Avatar set for ${persona.name}: ${avatarUrl}`);
@@ -878,6 +879,36 @@ export class SlackInteractionListener {
     return `Registered projects: ${names}.`;
   }
 
+  private _buildRoadmapContext(channel: string, projects: IRegistryEntry[]): string {
+    if (projects.length === 0) return '';
+
+    const parts: string[] = [];
+    for (const project of projects) {
+      try {
+        const status = getRoadmapStatus(project.path, this._config);
+        if (!status.found || status.items.length === 0) continue;
+
+        const pending = status.items.filter((i) => !i.processed && !i.checked);
+        const done = status.items.filter((i) => i.processed);
+        const total = status.items.length;
+
+        let summary = `${project.name}: ${done.length}/${total} roadmap items done`;
+        if (pending.length > 0) {
+          const nextItems = pending.slice(0, 3).map((i) => i.title);
+          summary += `. Next up: ${nextItems.join(', ')}`;
+        }
+        if (done.length === total) {
+          summary += ' (all complete)';
+        }
+        parts.push(summary);
+      } catch {
+        // Skip projects where roadmap can't be read
+      }
+    }
+
+    return parts.join('\n');
+  }
+
   private _resolveProjectByHint(
     projects: IRegistryEntry[],
     hint: string,
@@ -986,7 +1017,7 @@ export class SlackInteractionListener {
       );
       await this._slackClient.postAsAgent(
         channel,
-        `I couldn't start that ${job} right now. I'm checking the runtime setup.`,
+        `Can't start that ${job} right now — runtime issue. Checking it.`,
         persona,
         threadTs,
       );
@@ -1045,7 +1076,7 @@ export class SlackInteractionListener {
       );
       await this._slackClient.postAsAgent(
         channel,
-        `I couldn't kick off that ${job}. I logged the error on the server and I'm checking it.`,
+        `Couldn't kick off that ${job}. Error logged — looking into it.`,
         persona,
         threadTs,
       );
@@ -1065,10 +1096,10 @@ export class SlackInteractionListener {
       if (code === 0) {
         const doneMessage =
           job === 'review'
-            ? `Done. Review finished${prRef ? ` for${prRef}` : ''}.`
+            ? `Review done${prRef ? ` on${prRef}` : ''}.`
             : job === 'qa'
-              ? `Done. QA finished${prRef ? ` for${prRef}` : ''}.`
-              : `Done. Executor run finished${prRef ? ` for${prRef}` : ''}.`;
+              ? `QA pass done${prRef ? ` on${prRef}` : ''}.`
+              : `Run finished${prRef ? ` for${prRef}` : ''}.`;
         await this._slackClient.postAsAgent(
           channel,
           doneMessage,
@@ -1081,7 +1112,7 @@ export class SlackInteractionListener {
         }
         await this._slackClient.postAsAgent(
           channel,
-          `I hit an issue while running ${job}${prRef ? ` for${prRef}` : ''}. I logged details on the server and I'm fixing it.`,
+          `Hit a snag running ${job}${prRef ? ` on${prRef}` : ''}. Logged the details — looking into it.`,
           persona,
           threadTs,
         );
@@ -1136,7 +1167,7 @@ export class SlackInteractionListener {
       const projectNames = projects.map((p) => p.name).join(', ') || '(none registered)';
       await this._slackClient.postAsAgent(
         channel,
-        `I can run that, but I need the project name. Registered: ${projectNames}.`,
+        `Which project? Registered: ${projectNames}.`,
         persona,
         threadTs,
       );
@@ -1151,10 +1182,10 @@ export class SlackInteractionListener {
 
     const planLine =
       request.job === 'review'
-        ? `Ok, I'll take a look${request.prNumber ? ` at PR #${request.prNumber}` : ''}${request.fixConflicts ? ' and handle the conflicts' : ''}.`
+        ? `On it${request.prNumber ? ` — PR #${request.prNumber}` : ''}${request.fixConflicts ? ', including the conflicts' : ''}.`
         : request.job === 'qa'
-          ? `Ok, I'll run QA${request.prNumber ? ` on PR #${request.prNumber}` : ''}.`
-          : `Ok, I'll run the executor${request.prNumber ? ` for PR #${request.prNumber}` : ''}.`;
+          ? `Running QA${request.prNumber ? ` on #${request.prNumber}` : ''}.`
+          : `Starting the run${request.prNumber ? ` for #${request.prNumber}` : ''}.`;
 
     await this._applyHumanResponseTiming(channel, messageTs, persona);
 
@@ -1284,12 +1315,13 @@ export class SlackInteractionListener {
       if (!persona) continue;
 
       const projectContext = this._buildProjectContext(channel, projects);
-      const text = `Quiet check-in. If you want, I can kick off \`run\`, \`review\`, or \`qa\` right here.${projectContext ? ` ${projectContext}` : ''}`;
+      const roadmapContext = this._buildRoadmapContext(channel, projects);
 
       try {
-        await this._slackClient.postAsAgent(channel, text, persona);
+        await this._engine.postProactiveMessage(channel, persona, projectContext, roadmapContext);
         this._lastProactiveAt.set(channel, now);
         this._markChannelActivity(channel);
+        console.log(`[slack] proactive message posted by ${persona.name} in ${channel}`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn(`Slack proactive message failed: ${msg}`);

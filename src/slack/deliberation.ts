@@ -199,13 +199,13 @@ function resolvePersonaAIConfig(persona: IAgentPersona, config: INightWatchConfi
 function buildOpeningMessage(trigger: IDiscussionTrigger): string {
   switch (trigger.type) {
     case 'pr_review':
-      return `Just opened a PR — ${trigger.ref}${trigger.prUrl ? ` ${trigger.prUrl}` : ''}. Ready for review. 🔨`;
+      return `Opened ${trigger.ref}${trigger.prUrl ? ` — ${trigger.prUrl}` : ''}. Ready for eyes.`;
     case 'build_failure':
-      return `Build failure on ${trigger.ref}. Looking into it now 🔍\n\n${trigger.context.slice(0, 500)}`;
+      return `Build broke on ${trigger.ref}. Looking into it.\n\n${trigger.context.slice(0, 500)}`;
     case 'prd_kickoff':
-      return `Picking up PRD: ${trigger.ref}. Starting implementation. 🚀`;
+      return `Picking up ${trigger.ref}. Going to start carving out the implementation.`;
     case 'code_watch':
-      return `Spotted something odd during a proactive scan. Can you sanity-check this with me?\n\n${trigger.context.slice(0, 600)}`;
+      return `Something caught my eye during a scan — want to get a second opinion on this.\n\n${trigger.context.slice(0, 600)}`;
     default:
       return trigger.context.slice(0, 500);
   }
@@ -221,31 +221,36 @@ function buildContributionPrompt(
   threadHistory: string,
   round: number,
 ): string {
-  return `You are ${persona.name}, ${persona.role}, participating in a Slack thread with your team.
+  const isFirstRound = round === 1;
+  const isFinalRound = round >= MAX_ROUNDS;
 
-## Thread Context
+  return `You are ${persona.name}, ${persona.role}.
+You're in a Slack thread with your teammates — Dev (implementer), Carlos (tech lead), Maya (security), and Priya (QA). This is a real conversation, not a report.
+
 Trigger: ${trigger.type} — ${trigger.ref}
-Round: ${round} of ${MAX_ROUNDS}
+Round: ${round}/${MAX_ROUNDS}${isFinalRound ? ' (final round — wrap up)' : ''}
 
 ## Context
 ${trigger.context.slice(0, 2000)}
 
 ## Thread So Far
-${threadHistory || '(No messages yet)'}
+${threadHistory || '(Thread just started)'}
 
-## Your Task
-Review the above from your specific expertise angle. Post a SHORT Slack message (1-2 sentences max).
-- This is Slack chat, not a document. Be concise.
-- Sound like a teammate talking in-thread, not a general-purpose assistant.
-- Speak only to your domain — don't repeat what others said.
-- You can refer to teammates by name when handing off (e.g., "Maya should sanity-check auth").
-- Emojis are optional; default to none. If used, use at most one.
-- If everything looks fine from your angle, just say so briefly.
-- If you have a concern, state it clearly with a specific fix suggestion.
-- If you have no concerns and others seem satisfied, you can just react positively.
-- No headings, bullet lists, or canned phrases like "Great question" / "I hope this helps".
+## How to respond
+Write a short Slack message — 1 to 2 sentences. This is chat, not documentation.
+${isFirstRound ? '- First round: give your initial take from your angle. Be specific.' : '- Follow-up round: respond to what others said. Agree, push back, or add something new.'}
+- Talk like a teammate, not an assistant. No pleasantries, no filler.
+- Stay in your lane — only comment on your domain unless something crosses into it.
+- You can name-drop teammates when handing off ("Maya should look at the auth here").
+- If nothing concerns you, a brief "nothing from me" or a short acknowledgment is fine.
+- If you have a concern, name it specifically and suggest a direction.
+- No markdown formatting. No bullet lists. No headings. Just a message.
+- Emojis: use one only if it genuinely fits. Default to none.
+- Never start with "Great question", "Of course", "I hope this helps", or similar.
+- Never say "as an AI" or break character.
+${isFinalRound ? '- Final round: be decisive. State your position clearly.' : ''}
 
-Write ONLY your message, nothing else. Do not include your name or any prefix.`;
+Write ONLY your message. No name prefix, no labels.`;
 }
 
 /**
@@ -635,7 +640,7 @@ export class DeliberationEngine {
 
         await this._slackClient.postAsAgent(
           channel,
-          "Picking back up — let me summarize where we are and continue. 🏗️",
+          "Ok, picking this back up. Let me see where we landed.",
           carlos,
           threadTs,
         );
@@ -745,19 +750,21 @@ export class DeliberationEngine {
       );
       const historyText = history.map(m => m.text).join('\n---\n');
 
-      const consensusPrompt = `You are ${carlos.name}, ${carlos.role}.
-
-Review this discussion thread and decide: are we ready to ship, do we need another round of review, or do we need a human?
+      const consensusPrompt = `You are ${carlos.name}, ${carlos.role}. You're wrapping up a team discussion.
 
 Thread:
 ${historyText}
 
-Round: ${discussion.round} of ${MAX_ROUNDS}
+Round: ${discussion.round}/${MAX_ROUNDS}
 
-Respond with ONLY one of:
-- APPROVE: [your short closing message, e.g., "LGTM 👍 Ship it 🚀"]
-- CHANGES: [summary of what still needs to change — be specific]
-- HUMAN: [why you need a human decision]`;
+Make the call. Are we done, do we need another pass, or does a human need to weigh in?
+
+Respond with EXACTLY one of these formats (include the prefix):
+- APPROVE: [short closing message in your voice — e.g., "Clean. Let's ship it."]
+- CHANGES: [what specifically still needs work — be concrete, not vague]
+- HUMAN: [why this needs a human decision — be specific about what's ambiguous]
+
+Write the prefix and your message. Nothing else.`;
 
       let decision: string;
       try {
@@ -767,7 +774,7 @@ Respond with ONLY one of:
       }
 
       if (decision.startsWith('APPROVE')) {
-        const message = decision.replace(/^APPROVE:\s*/, '').trim() || 'Ship it 🚀';
+        const message = decision.replace(/^APPROVE:\s*/, '').trim() || 'Clean. Ship it.';
         await this._slackClient.postAsAgent(discussion.channelId, message, carlos, discussion.threadTs);
         repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'approved');
         return;
@@ -777,7 +784,7 @@ Respond with ONLY one of:
         const changes = decision.replace(/^CHANGES:\s*/, '').trim();
         await this._slackClient.postAsAgent(
           discussion.channelId,
-          `One more pass needed:\n${changes}`,
+          changes,
           carlos,
           discussion.threadTs,
         );
@@ -799,7 +806,7 @@ Respond with ONLY one of:
         const changesSummary = decision.replace(/^CHANGES:\s*/, '').trim();
         await this._slackClient.postAsAgent(
           discussion.channelId,
-          "3 rounds in — shipping what we have. Ship it 🚀",
+          `We've been at this for ${MAX_ROUNDS} rounds. Sending it through with the remaining notes — Dev can address them in the next pass.`,
           carlos,
           discussion.threadTs,
         );
@@ -814,9 +821,12 @@ Respond with ONLY one of:
       }
 
       // HUMAN or fallback
+      const humanReason = decision.replace(/^HUMAN:\s*/, '').trim();
       await this._slackClient.postAsAgent(
         discussion.channelId,
-        "This one needs a human call. Flagging for review. 🚩",
+        humanReason
+          ? `Need a human on this one — ${humanReason}`
+          : 'This needs a human call. Flagging it.',
         carlos,
         discussion.threadTs,
       );
@@ -844,7 +854,7 @@ Respond with ONLY one of:
     if (carlos) {
       await this._slackClient.postAsAgent(
         discussion.channelId,
-        `Got it. I'll send this back through review for PR #${prNumber}.`,
+        `Sending PR #${prNumber} back through with the notes.`,
         carlos,
         discussion.threadTs,
       );
@@ -861,7 +871,7 @@ Respond with ONLY one of:
       if (carlos) {
         await this._slackClient.postAsAgent(
           discussion.channelId,
-          `I couldn't start the reviewer process right now. I'll fix that and rerun it.`,
+          `Can't start the reviewer right now — runtime issue. Will retry.`,
           carlos,
           discussion.threadTs,
         );
@@ -908,14 +918,18 @@ Respond with ONLY one of:
 
     const prompt =
       `You are ${persona.name}, ${persona.role}.\n` +
-      (persona.soul?.whoIAm ? `About you: ${persona.soul.whoIAm}\n\n` : '') +
-      (projectContext ? `Project context:\n${projectContext}\n\n` : '') +
-      (historyText ? `Thread context:\n${historyText}\n\n` : '') +
-      `Someone just said: "${incomingText}"\n\n` +
-      `Reply concisely in your own voice. Keep it to 1-2 sentences unless detail is clearly needed. ` +
-      `You can refer to teammates by name if a handoff helps. ` +
-      `Sound like a real teammate in chat, not an assistant. Avoid canned phrases like "Great question", ` +
-      `"Of course", or "I hope this helps". No headings or bullet lists. Emojis are optional; use at most one.`;
+      `Your teammates: Dev (implementer), Carlos (tech lead), Maya (security), Priya (QA).\n\n` +
+      (projectContext ? `Project context: ${projectContext}\n\n` : '') +
+      (historyText ? `Thread so far:\n${historyText}\n\n` : '') +
+      `Latest message: "${incomingText}"\n\n` +
+      `Respond in your own voice. This is Slack — keep it to 1-2 sentences.\n` +
+      `- Talk like a colleague, not a bot. No "Great question", "Of course", or "I hope this helps".\n` +
+      `- You can tag teammates by name if someone else should weigh in.\n` +
+      `- No markdown formatting, headings, or bullet lists.\n` +
+      `- Emojis: one max, only if it fits naturally. Default to none.\n` +
+      `- If the question is outside your domain, say so briefly and point to the right person.\n` +
+      `- If you disagree, say why in one line. If you agree, keep it short.\n\n` +
+      `Write only your reply. No name prefix.`;
 
     let message: string;
     try {
@@ -931,6 +945,59 @@ Respond with ONLY one of:
         persona,
         threadTs,
       );
+    }
+  }
+
+  /**
+   * Generate and post a proactive message from a persona.
+   * Used by the interaction listener when a channel has been idle.
+   * The persona shares an observation, question, or suggestion based on
+   * project context and roadmap state — in their own voice.
+   */
+  async postProactiveMessage(
+    channel: string,
+    persona: IAgentPersona,
+    projectContext: string,
+    roadmapContext: string,
+  ): Promise<void> {
+    const prompt =
+      `You are ${persona.name}, ${persona.role}.\n` +
+      `Your teammates: Dev (implementer), Carlos (tech lead), Maya (security), Priya (QA).\n\n` +
+      `You're posting an unprompted message in the team's Slack channel. ` +
+      `The channel has been quiet — you want to share something useful, not just fill silence.\n\n` +
+      (projectContext ? `Project context: ${projectContext}\n\n` : '') +
+      (roadmapContext ? `Roadmap/PRD status:\n${roadmapContext}\n\n` : '') +
+      `Write a SHORT proactive message (1-2 sentences) that does ONE of these:\n` +
+      `- Question a roadmap priority or ask if something should be reordered\n` +
+      `- Flag something you've been thinking about from your domain (security concern, test gap, architectural question, implementation idea)\n` +
+      `- Suggest an improvement or raise a "have we thought about..." question\n` +
+      `- Share a concrete observation about the current state of the project\n` +
+      `- Offer to kick off a task: "I can run a review on X if nobody's on it"\n\n` +
+      `Rules:\n` +
+      `- Stay in your lane. Only bring up things relevant to your expertise.\n` +
+      `- Be specific — name the feature, file, or concern. No vague "we should think about things."\n` +
+      `- Sound like a teammate dropping a thought in chat, not making an announcement.\n` +
+      `- No markdown, headings, bullets. Just a message.\n` +
+      `- No "Great question", "Just checking in", or "Hope everyone is doing well."\n` +
+      `- Emojis: one max, only if natural. Default to none.\n` +
+      `- If you genuinely have nothing useful to say, write exactly: SKIP\n\n` +
+      `Write only your message. No name prefix.`;
+
+    let message: string;
+    try {
+      message = await callAIForContribution(persona, this._config, prompt);
+    } catch {
+      return; // Silently skip — proactive messages are optional
+    }
+
+    if (!message || message.trim().toUpperCase() === 'SKIP') {
+      return;
+    }
+
+    const dummyTs = `${Date.now()}`;
+    const finalMessage = this._humanizeForPost(channel, dummyTs, persona, message);
+    if (finalMessage) {
+      await this._slackClient.postAsAgent(channel, finalMessage, persona);
     }
   }
 }
