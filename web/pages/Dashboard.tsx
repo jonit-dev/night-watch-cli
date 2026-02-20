@@ -32,7 +32,7 @@ const Dashboard: React.FC = () => {
   // Subscribe to SSE for real-time updates (primary path)
   useStatusStream((snapshot) => {
     setStreamedStatus(snapshot);
-  }, [selectedProjectId]);
+  }, [selectedProjectId, globalModeLoading], { enabled: !globalModeLoading });
 
   // Use streamed status when available, fall back to polled status
   const currentStatus = streamedStatus || status;

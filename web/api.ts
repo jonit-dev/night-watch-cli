@@ -596,8 +596,11 @@ export function useApi<T>(
 export function useStatusStream(
   onSnapshot: (snapshot: IStatusSnapshot) => void,
   deps: DependencyList = [],
+  options?: { enabled?: boolean },
 ): void {
   useEffect(() => {
+    if (options?.enabled === false) return;
+
     const url = apiPath('/api/status/events');
     const es = new EventSource(url);
 
