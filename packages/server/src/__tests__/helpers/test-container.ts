@@ -10,8 +10,6 @@
  *   const svc = c.resolve(NotificationService);
  */
 
-import 'reflect-metadata';
-
 import { container, DependencyContainer } from 'tsyringe';
 
 import type { IAgentPersonaRepository } from '@night-watch/core/storage/repositories/interfaces.js';

@@ -1,5 +1,3 @@
-import 'reflect-metadata';
-
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';

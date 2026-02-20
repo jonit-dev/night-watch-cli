@@ -3,8 +3,6 @@
  * Persists agent persona entities with JSON-serialized soul/style/skill/modelConfig.
  */
 
-import 'reflect-metadata';
-
 import Database from "better-sqlite3";
 import { inject, injectable } from "tsyringe";
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "crypto";

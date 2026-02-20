@@ -3,8 +3,6 @@
  * Persists PRD state entries in the `prd_states` table.
  */
 
-import 'reflect-metadata';
-
 import Database from "better-sqlite3";
 import { inject, injectable } from "tsyringe";
 

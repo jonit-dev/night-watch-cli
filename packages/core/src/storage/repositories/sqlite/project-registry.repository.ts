@@ -3,8 +3,6 @@
  * Persists project registry entries in the `projects` table.
  */
 
-import 'reflect-metadata';
-
 import Database from "better-sqlite3";
 import { inject, injectable } from "tsyringe";
 

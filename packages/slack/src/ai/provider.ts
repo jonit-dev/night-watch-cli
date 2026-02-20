@@ -34,7 +34,7 @@ export function resolveGlobalAIConfig(config: INightWatchConfig): IResolvedAICon
       model: config.claudeModel === 'opus' ? 'claude-opus-4-6' : 'claude-sonnet-4-6',
       baseUrl: globalEnv.ANTHROPIC_BASE_URL ?? process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com',
       envVars: globalEnv,
-      maxTokens: 256,
+      maxTokens: 512,
       temperature: 0.8,
     };
   }
@@ -44,7 +44,7 @@ export function resolveGlobalAIConfig(config: INightWatchConfig): IResolvedAICon
     model: globalEnv.OPENAI_MODEL ?? process.env.OPENAI_MODEL ?? 'gpt-4o',
     baseUrl: globalEnv.OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com',
     envVars: globalEnv,
-    maxTokens: 256,
+    maxTokens: 512,
     temperature: 0.8,
   };
 }
@@ -69,7 +69,7 @@ export function resolvePersonaAIConfig(persona: IAgentPersona, config: INightWat
       ? modelConfig.baseUrl ?? globalEnv.ANTHROPIC_BASE_URL ?? process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com'
       : modelConfig.baseUrl ?? globalEnv.OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com',
     envVars,
-    maxTokens: modelConfig.maxTokens ?? 256,
+    maxTokens: modelConfig.maxTokens ?? 512,
     temperature: modelConfig.temperature ?? 0.8,
   };
 }

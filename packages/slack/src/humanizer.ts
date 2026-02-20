@@ -5,13 +5,14 @@
 
 import { normalizeText } from './utils.js';
 
-export const MAX_HUMANIZED_SENTENCES = 2;
-export const MAX_HUMANIZED_CHARS = 220;
+export const MAX_HUMANIZED_SENTENCES = 3;
+export const MAX_HUMANIZED_CHARS = 400;
 
 export interface IHumanizeSlackReplyOptions {
   allowEmoji?: boolean;
   allowNonFacialEmoji?: boolean;
   maxSentences?: number;
+  maxChars?: number;
 }
 
 const CANNED_PHRASE_PREFIXES = [
@@ -120,6 +121,7 @@ export function humanizeSlackReply(raw: string, options: IHumanizeSlackReplyOpti
     allowEmoji = true,
     allowNonFacialEmoji = true,
     maxSentences = MAX_HUMANIZED_SENTENCES,
+    maxChars = MAX_HUMANIZED_CHARS,
   } = options;
 
   let text = raw.trim();
@@ -144,8 +146,8 @@ export function humanizeSlackReply(raw: string, options: IHumanizeSlackReplyOpti
   text = limitEmojiCount(text, 1);
   text = trimToSentences(text, maxSentences);
 
-  if (text.length > MAX_HUMANIZED_CHARS) {
-    text = `${text.slice(0, MAX_HUMANIZED_CHARS - 3).trimEnd()}...`;
+  if (text.length > maxChars) {
+    text = `${text.slice(0, maxChars - 3).trimEnd()}...`;
   }
 
   return text;

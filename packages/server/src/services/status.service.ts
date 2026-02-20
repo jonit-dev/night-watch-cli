@@ -5,7 +5,6 @@
  * The original utils/status-data.ts functions continue to work as-is.
  */
 
-import 'reflect-metadata';
 import { injectable } from 'tsyringe';
 
 import { INightWatchConfig } from '@night-watch/core/types.js';

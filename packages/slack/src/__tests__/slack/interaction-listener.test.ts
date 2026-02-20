@@ -419,7 +419,7 @@ describe('Slack interaction listener lifecycle', () => {
       }),
     };
 
-    const listener = new SlackInteractionListener({} as any);
+    const listener = new SlackInteractionListener({} as any, {} as any, {} as any);
     (listener as unknown as { _socketClient: typeof fakeSocket | null })._socketClient =
       fakeSocket;
 

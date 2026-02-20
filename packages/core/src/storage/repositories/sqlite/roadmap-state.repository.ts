@@ -3,8 +3,6 @@
  * Persists roadmap state in the `roadmap_states` table, keyed by prd_dir.
  */
 
-import 'reflect-metadata';
-
 import Database from "better-sqlite3";
 import { inject, injectable } from "tsyringe";
 
