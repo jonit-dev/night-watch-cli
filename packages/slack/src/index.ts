@@ -4,13 +4,39 @@ export { ChannelManager } from './channel-manager.js';
 export { DeliberationEngine } from './deliberation.js';
 export { createSlackStack } from './factory.js';
 export type { ISlackStack } from './factory.js';
-export {
-  SlackInteractionListener,
-  shouldIgnoreInboundSlackEvent,
-} from './interaction-listener.js';
+export { SlackInteractionListener } from './interaction-listener.js';
+
+// Message parsing module
+export { MessageParser } from './message-parser.js';
+export type {
+  IAdHocThreadState,
+  IEventsApiPayload,
+  IInboundSlackEvent,
+  ISlackIssuePickupRequest,
+  ISlackJobRequest,
+  ISlackProviderRequest,
+  TSlackJobName,
+  TSlackProviderName,
+} from './message-parser.js';
+
+// Context fetching module
+export { ContextFetcher } from './context-fetcher.js';
+
+// Job spawner module
+export { JobSpawner } from './job-spawner.js';
+export type { IJobSpawnerCallbacks } from './job-spawner.js';
+
+// Proactive loop module
+export { ProactiveLoop } from './proactive-loop.js';
+export type { IProactiveLoopCallbacks } from './proactive-loop.js';
 
 // Humanizer module
-export { humanizeSlackReply, isSkipMessage, MAX_HUMANIZED_SENTENCES, MAX_HUMANIZED_CHARS } from './humanizer.js';
+export {
+  humanizeSlackReply,
+  isSkipMessage,
+  MAX_HUMANIZED_SENTENCES,
+  MAX_HUMANIZED_CHARS,
+} from './humanizer.js';
 export type { IHumanizeSlackReplyOptions } from './humanizer.js';
 
 // Utils module

@@ -3,11 +3,11 @@
  * Persists PRD state entries in the `prd_states` table.
  */
 
-import Database from "better-sqlite3";
-import { inject, injectable } from "tsyringe";
+import Database from 'better-sqlite3';
+import { inject, injectable } from 'tsyringe';
 
-import { IPrdStateEntry } from "@/utils/prd-states.js";
-import { IPrdStateRepository } from "../interfaces.js";
+import { IPrdStateEntry } from '@/utils/prd-states.js';
+import { IPrdStateRepository } from '../interfaces.js';
 
 interface IPrdStateRow {
   project_path: string;
@@ -19,18 +19,18 @@ interface IPrdStateRow {
 
 @injectable()
 export class SqlitePrdStateRepository implements IPrdStateRepository {
-  private readonly _db: Database.Database;
+  private readonly db: Database.Database;
 
   constructor(@inject('Database') db: Database.Database) {
-    this._db = db;
+    this.db = db;
   }
 
   get(projectPath: string, prdName: string): IPrdStateEntry | null {
-    const row = this._db
+    const row = this.db
       .prepare<[string, string], IPrdStateRow>(
         `SELECT status, branch, timestamp
          FROM prd_states
-         WHERE project_path = ? AND prd_name = ?`
+         WHERE project_path = ? AND prd_name = ?`,
       )
       .get(projectPath, prdName);
 
@@ -39,25 +39,25 @@ export class SqlitePrdStateRepository implements IPrdStateRepository {
     }
 
     return {
-      status: row.status as IPrdStateEntry["status"],
+      status: row.status as IPrdStateEntry['status'],
       branch: row.branch,
       timestamp: row.timestamp,
     };
   }
 
   getAll(projectPath: string): Record<string, IPrdStateEntry> {
-    const rows = this._db
+    const rows = this.db
       .prepare<[string], IPrdStateRow>(
         `SELECT prd_name, status, branch, timestamp
          FROM prd_states
-         WHERE project_path = ?`
+         WHERE project_path = ?`,
       )
       .all(projectPath);
 
     const result: Record<string, IPrdStateEntry> = {};
     for (const row of rows) {
       result[row.prd_name] = {
-        status: row.status as IPrdStateEntry["status"],
+        status: row.status as IPrdStateEntry['status'],
         branch: row.branch,
         timestamp: row.timestamp,
       };
@@ -66,10 +66,11 @@ export class SqlitePrdStateRepository implements IPrdStateRepository {
   }
 
   readAll(): Record<string, Record<string, IPrdStateEntry>> {
-    const rows = this._db
-      .prepare<[], IPrdStateRow>(
-        "SELECT project_path, prd_name, status, branch, timestamp FROM prd_states"
-      )
+    const rows = this.db
+      .prepare<
+        [],
+        IPrdStateRow
+      >('SELECT project_path, prd_name, status, branch, timestamp FROM prd_states')
       .all();
 
     const result: Record<string, Record<string, IPrdStateEntry>> = {};
@@ -78,7 +79,7 @@ export class SqlitePrdStateRepository implements IPrdStateRepository {
         result[row.project_path] = {};
       }
       result[row.project_path][row.prd_name] = {
-        status: row.status as IPrdStateEntry["status"],
+        status: row.status as IPrdStateEntry['status'],
         branch: row.branch,
         timestamp: row.timestamp,
       };
@@ -87,23 +88,21 @@ export class SqlitePrdStateRepository implements IPrdStateRepository {
   }
 
   set(projectPath: string, prdName: string, entry: IPrdStateEntry): void {
-    this._db
+    this.db
       .prepare<[string, string, string, string, number]>(
         `INSERT INTO prd_states (project_path, prd_name, status, branch, timestamp)
          VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(project_path, prd_name)
          DO UPDATE SET status = excluded.status,
                        branch = excluded.branch,
-                       timestamp = excluded.timestamp`
+                       timestamp = excluded.timestamp`,
       )
       .run(projectPath, prdName, entry.status, entry.branch, entry.timestamp);
   }
 
   delete(projectPath: string, prdName: string): void {
-    this._db
-      .prepare<[string, string]>(
-        `DELETE FROM prd_states WHERE project_path = ? AND prd_name = ?`
-      )
+    this.db
+      .prepare<[string, string]>(`DELETE FROM prd_states WHERE project_path = ? AND prd_name = ?`)
       .run(projectPath, prdName);
   }
 }

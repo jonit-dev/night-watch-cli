@@ -1,10 +1,16 @@
 import eslint from '@eslint/js';
+import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
+    languageOptions: {
+      globals: {
+        ...globals.node,
+      },
+    },
     rules: {
       // Flexible defaults — avoid noisy rules
       '@typescript-eslint/no-explicit-any': 'warn',
@@ -34,6 +40,10 @@ export default tseslint.config(
       'prefer-const': 'warn',
       'preserve-caught-error': 'off',
       'sort-imports': ['error', { ignoreDeclarationSort: true }],
+
+      // SRP: flag god files (warn only — don't break CI on existing code)
+      'max-lines': ['warn', { max: 500, skipBlankLines: true, skipComments: true }],
+
       'no-restricted-imports': [
         'warn',
         {

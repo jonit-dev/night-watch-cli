@@ -13,12 +13,12 @@ import type { IRegistryEntry } from '@night-watch/core/utils/registry.js';
 import { getRoadmapStatus } from '@night-watch/core/utils/roadmap-scanner.js';
 import { SocketModeClient } from '@slack/socket-mode';
 import { execFileSync } from 'child_process';
-import * as fs from 'fs';
 import { SlackClient } from './client.js';
 import { ContextFetcher } from './context-fetcher.js';
 import { DeliberationEngine } from './deliberation.js';
 import { JobSpawner } from './job-spawner.js';
 import type { IJobSpawnerCallbacks } from './job-spawner.js';
+import { ProactiveLoop } from './proactive-loop.js';
 import { MessageParser } from './message-parser.js';
 import type { IAdHocThreadState, IEventsApiPayload, IInboundSlackEvent } from './message-parser.js';
 import {
@@ -36,10 +36,6 @@ import {
 const MAX_PROCESSED_MESSAGE_KEYS = 2000;
 const PERSONA_REPLY_COOLDOWN_MS = 45_000;
 const AD_HOC_THREAD_MEMORY_MS = 60 * 60_000; // 1h
-const PROACTIVE_IDLE_MS = 20 * 60_000; // 20 min
-const PROACTIVE_MIN_INTERVAL_MS = 90 * 60_000; // per channel
-const PROACTIVE_SWEEP_INTERVAL_MS = 60_000;
-const PROACTIVE_CODEWATCH_MIN_INTERVAL_MS = 3 * 60 * 60_000; // per project
 const HUMAN_REACTION_PROBABILITY = 0.65;
 const RANDOM_REACTION_PROBABILITY = 0.25;
 const REACTION_DELAY_MIN_MS = 180;
@@ -60,6 +56,7 @@ export class SlackInteractionListener {
   private readonly contextFetcher = new ContextFetcher();
   private readonly jobSpawner: JobSpawner;
   private readonly jobCallbacks: IJobSpawnerCallbacks;
+  private readonly proactiveLoop: ProactiveLoop;
   private socketClient: SocketModeClient | null = null;
   private botUserId: string | null = null;
   private readonly processedMessageKeys = new Set<string>();
@@ -67,9 +64,6 @@ export class SlackInteractionListener {
   private readonly lastPersonaReplyAt = new Map<string, number>();
   private readonly adHocThreadState = new Map<string, IAdHocThreadState>();
   private readonly lastChannelActivityAt = new Map<string, number>();
-  private readonly lastProactiveAt = new Map<string, number>();
-  private readonly lastCodeWatchAt = new Map<string, number>();
-  private proactiveTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(slackClient: SlackClient, engine: DeliberationEngine, config: INightWatchConfig) {
     this.slackClient = slackClient;
@@ -80,6 +74,18 @@ export class SlackInteractionListener {
       markChannelActivity: (ch) => this.markChannelActivity(ch),
       markPersonaReply: (ch, ts, pid) => this.markPersonaReply(ch, ts, pid),
     };
+    this.proactiveLoop = new ProactiveLoop(
+      config,
+      engine,
+      this.jobSpawner,
+      this.jobCallbacks,
+      this.lastChannelActivityAt,
+      {
+        markChannelActivity: (ch) => this.markChannelActivity(ch),
+        buildProjectContext: (ch, p) => this.buildProjectContext(ch, p),
+        buildRoadmapContext: (ch, p) => this.buildRoadmapContext(ch, p),
+      },
+    );
   }
 
   async start(): Promise<void> {
@@ -123,12 +129,12 @@ export class SlackInteractionListener {
     await socket.start();
     this.socketClient = socket;
     console.log('Slack interaction listener started (Socket Mode)');
-    this.startProactiveLoop();
+    this.proactiveLoop.start();
     void this.postPersonaIntros();
   }
 
   async stop(): Promise<void> {
-    this.stopProactiveLoop();
+    this.proactiveLoop.stop();
 
     if (!this.socketClient) {
       return;
@@ -900,84 +906,6 @@ export class SlackInteractionListener {
       this.jobCallbacks,
     );
     return true;
-  }
-
-  private resolveProactiveChannelForProject(project: IRegistryEntry): string | null {
-    const slack = this.config.slack;
-    if (!slack) return null;
-    return project.slackChannelId || slack.channels.eng || null;
-  }
-
-  private async runProactiveCodeWatch(projects: IRegistryEntry[], now: number): Promise<void> {
-    for (const project of projects) {
-      if (!fs.existsSync(project.path)) continue;
-
-      const channel = this.resolveProactiveChannelForProject(project);
-      if (!channel) continue;
-
-      const lastScan = this.lastCodeWatchAt.get(project.path) ?? 0;
-      if (now - lastScan < PROACTIVE_CODEWATCH_MIN_INTERVAL_MS) {
-        continue;
-      }
-      this.lastCodeWatchAt.set(project.path, now);
-
-      this.jobSpawner.spawnCodeWatchAudit(project, channel, this.jobCallbacks);
-    }
-  }
-
-  private startProactiveLoop(): void {
-    if (this.proactiveTimer) return;
-
-    this.proactiveTimer = setInterval(() => {
-      void this.sendProactiveMessages();
-    }, PROACTIVE_SWEEP_INTERVAL_MS);
-
-    this.proactiveTimer.unref?.();
-  }
-
-  private stopProactiveLoop(): void {
-    if (!this.proactiveTimer) return;
-    clearInterval(this.proactiveTimer);
-    this.proactiveTimer = null;
-  }
-
-  private async sendProactiveMessages(): Promise<void> {
-    const slack = this.config.slack;
-    if (!slack?.enabled || !slack.discussionEnabled) return;
-
-    const channelIds = Object.values(slack.channels ?? {}).filter(Boolean);
-    if (channelIds.length === 0) return;
-
-    const repos = getRepositories();
-    const personas = repos.agentPersona.getActive();
-    if (personas.length === 0) return;
-
-    const now = Date.now();
-    const projects = repos.projectRegistry.getAll();
-    await this.runProactiveCodeWatch(projects, now);
-
-    for (const channel of channelIds) {
-      const lastActivity = this.lastChannelActivityAt.get(channel) ?? now;
-      const lastProactive = this.lastProactiveAt.get(channel) ?? 0;
-      if (now - lastActivity < PROACTIVE_IDLE_MS) continue;
-      if (now - lastProactive < PROACTIVE_MIN_INTERVAL_MS) continue;
-
-      const persona = this.pickRandomPersona(personas, channel, `${now}`) ?? personas[0];
-      if (!persona) continue;
-
-      const projectContext = this.buildProjectContext(channel, projects);
-      const roadmapContext = this.buildRoadmapContext(channel, projects);
-
-      try {
-        await this.engine.postProactiveMessage(channel, persona, projectContext, roadmapContext);
-        this.lastProactiveAt.set(channel, now);
-        this.markChannelActivity(channel);
-        console.log(`[slack] proactive message posted by ${persona.name} in ${channel}`);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`Slack proactive message failed: ${msg}`);
-      }
-    }
   }
 
   private async handleInboundMessage(event: IInboundSlackEvent): Promise<void> {

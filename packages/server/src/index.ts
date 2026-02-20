@@ -27,12 +27,19 @@ import { createActionRoutes, createProjectActionRoutes } from './routes/action.r
 import { createAgentRoutes } from './routes/agent.routes.js';
 import { createBoardRoutes, createProjectBoardRoutes } from './routes/board.routes.js';
 import { createConfigRoutes, createProjectConfigRoutes } from './routes/config.routes.js';
-import { createDiscussionRoutes, createProjectDiscussionRoutes } from './routes/discussion.routes.js';
+import {
+  createDiscussionRoutes,
+  createProjectDiscussionRoutes,
+} from './routes/discussion.routes.js';
 import { createDoctorRoutes, createProjectDoctorRoutes } from './routes/doctor.routes.js';
 import { createLogRoutes, createProjectLogRoutes } from './routes/log.routes.js';
 import { createPrdRoutes, createProjectPrdRoutes } from './routes/prd.routes.js';
 import { createProjectRoadmapRoutes, createRoadmapRoutes } from './routes/roadmap.routes.js';
-import { createProjectSseRoutes, createScheduleInfoRoutes, createStatusRoutes } from './routes/status.routes.js';
+import {
+  createProjectSseRoutes,
+  createScheduleInfoRoutes,
+  createStatusRoutes,
+} from './routes/status.routes.js';
 import { createSlackRoutes } from './routes/slack.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -78,7 +85,9 @@ export function createApp(projectDir: string): Express {
   app.use(express.json());
 
   let config = loadConfig(projectDir);
-  const reloadConfig = (): void => { config = loadConfig(projectDir); };
+  const reloadConfig = (): void => {
+    config = loadConfig(projectDir);
+  };
   const sseClients: SseClientSet = new Set();
 
   startSseStatusWatcher(sseClients, projectDir, () => config);
@@ -92,7 +101,10 @@ export function createApp(projectDir: string): Express {
   app.use('/api/slack', createSlackRoutes());
   app.use('/api/discussions', createDiscussionRoutes({ projectDir }));
   app.use('/api/actions', createActionRoutes({ projectDir, getConfig: () => config, sseClients }));
-  app.use('/api/roadmap', createRoadmapRoutes({ projectDir, getConfig: () => config, reloadConfig }));
+  app.use(
+    '/api/roadmap',
+    createRoadmapRoutes({ projectDir, getConfig: () => config, reloadConfig }),
+  );
   app.use('/api/logs', createLogRoutes({ projectDir }));
   app.use('/api/doctor', createDoctorRoutes({ projectDir, getConfig: () => config }));
 
@@ -107,7 +119,10 @@ export function createApp(projectDir: string): Express {
   // Auto-scan timer for roadmap
   let autoScanTimer: ReturnType<typeof setInterval> | null = null;
   const startAutoScan = (): void => {
-    if (autoScanTimer) { clearInterval(autoScanTimer); autoScanTimer = null; }
+    if (autoScanTimer) {
+      clearInterval(autoScanTimer);
+      autoScanTimer = null;
+    }
     const cfg = loadConfig(projectDir);
     if (!cfg.roadmapScanner.enabled) return;
     autoScanTimer = setInterval(() => {
@@ -115,7 +130,9 @@ export function createApp(projectDir: string): Express {
       if (!c.roadmapScanner.enabled) return;
       const status = getRoadmapStatus(projectDir, c);
       if (status.status === 'complete' || status.status === 'no-roadmap') return;
-      scanRoadmap(projectDir, c).catch(() => { /* silently ignore */ });
+      scanRoadmap(projectDir, c).catch(() => {
+        /* silently ignore */
+      });
     }, cfg.roadmapScanner.autoScanInterval * 1000);
   };
   if (config.roadmapScanner.enabled) startAutoScan();
@@ -165,7 +182,9 @@ export function createGlobalApp(): Express {
       const entries = loadRegistry();
       const { invalid } = validateRegistry();
       const invalidPaths = new Set(invalid.map((e) => e.path));
-      res.json(entries.map((e) => ({ name: e.name, path: e.path, valid: !invalidPaths.has(e.path) })));
+      res.json(
+        entries.map((e) => ({ name: e.name, path: e.path, valid: !invalidPaths.has(e.path) })),
+      );
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
@@ -191,7 +210,11 @@ export function startServer(projectDir: string, port: number): void {
     console.log(`Provider        ${config.provider}`);
     const slack = config.slack;
     if (slack?.enabled && slack.botToken) {
-      console.log(`Slack           enabled — channels: ${Object.entries(slack.channels ?? {}).map(([k, v]) => `#${k}=${v}`).join(', ')}`);
+      console.log(
+        `Slack           enabled — channels: ${Object.entries(slack.channels ?? {})
+          .map(([k, v]) => `#${k}=${v}`)
+          .join(', ')}`,
+      );
       if (slack.replicateApiToken) console.log(`Avatar gen      Replicate Flux enabled`);
     } else {
       console.log(`Slack           not configured`);
@@ -200,10 +223,14 @@ export function startServer(projectDir: string, port: number): void {
   });
 
   void listener.start().catch((err: unknown) => {
-    console.warn(`Slack interaction listener failed to start: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn(
+      `Slack interaction listener failed to start: ${err instanceof Error ? err.message : String(err)}`,
+    );
   });
 
-  setupGracefulShutdown(server, async () => { await listener.stop(); });
+  setupGracefulShutdown(server, async () => {
+    await listener.stop();
+  });
 }
 
 export function startGlobalServer(port: number): void {
@@ -216,7 +243,9 @@ export function startGlobalServer(port: number): void {
 
   const { valid, invalid } = validateRegistry();
   if (invalid.length > 0) {
-    console.warn(`Warning: ${invalid.length} registered project(s) have invalid paths and will be skipped.`);
+    console.warn(
+      `Warning: ${invalid.length} registered project(s) have invalid paths and will be skipped.`,
+    );
   }
 
   console.log(`\nNight Watch Global UI`);
@@ -247,7 +276,9 @@ export function startGlobalServer(port: number): void {
 
   for (const { listener } of stacks) {
     void listener.start().catch((err: unknown) => {
-      console.warn(`Slack interaction listener failed to start: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(
+        `Slack interaction listener failed to start: ${err instanceof Error ? err.message : String(err)}`,
+      );
     });
   }
 
