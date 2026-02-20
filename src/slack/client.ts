@@ -17,6 +17,21 @@ export interface ISlackChannel {
   name: string;
 }
 
+function roleAvatarColor(role: string): string {
+  const normalized = role.toLowerCase();
+  if (normalized.includes('security')) return '8b1e2f';
+  if (normalized.includes('qa') || normalized.includes('quality')) return '0f766e';
+  if (normalized.includes('lead') || normalized.includes('architect')) return '1d4ed8';
+  if (normalized.includes('implementer') || normalized.includes('developer')) return '374151';
+  return '111827';
+}
+
+export function getFallbackAvatarUrl(persona: IAgentPersona): string {
+  const background = roleAvatarColor(persona.role);
+  const name = encodeURIComponent(persona.name.trim() || 'Night Watch');
+  return `https://ui-avatars.com/api/?name=${name}&background=${background}&color=ffffff&size=128&bold=true&format=png`;
+}
+
 export class SlackClient {
   private readonly _client: WebClient;
 
@@ -38,7 +53,7 @@ export class SlackClient {
     const iconUrl =
       persona.avatarUrl && !persona.avatarUrl.startsWith('data:')
         ? persona.avatarUrl
-        : undefined;
+        : getFallbackAvatarUrl(persona);
 
     const result = await this._client.chat.postMessage({
       channel,
@@ -62,10 +77,11 @@ export class SlackClient {
   /**
    * Post a simple message to Slack using the bot's default identity.
    */
-  async postMessage(channel: string, text: string): Promise<void> {
+  async postMessage(channel: string, text: string, threadTs?: string): Promise<void> {
     await this._client.chat.postMessage({
       channel,
       text,
+      thread_ts: threadTs,
     });
   }
 

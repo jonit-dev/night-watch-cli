@@ -14,6 +14,13 @@ const MAX_ROUNDS = 3;
 const MESSAGE_DELAY_MS = 1500; // Rate limit: 1.5s between posts
 const DISCUSSION_RESUME_DELAY_MS = 60_000;
 const DISCUSSION_REPLAY_GUARD_MS = 30 * 60_000;
+const MAX_HUMANIZED_SENTENCES = 2;
+
+interface IHumanizeSlackReplyOptions {
+  allowEmoji?: boolean;
+  allowNonFacialEmoji?: boolean;
+  maxSentences?: number;
+}
 
 const inFlightDiscussionStarts = new Map<string, Promise<ISlackDiscussion>>();
 
@@ -217,13 +224,16 @@ ${trigger.context.slice(0, 2000)}
 ${threadHistory || '(No messages yet)'}
 
 ## Your Task
-Review the above from your specific expertise angle. Post a SHORT Slack message (2-3 sentences max).
+Review the above from your specific expertise angle. Post a SHORT Slack message (1-2 sentences max).
 - This is Slack chat, not a document. Be concise.
+- Sound like a teammate talking in-thread, not a general-purpose assistant.
 - Speak only to your domain — don't repeat what others said.
-- Use your natural emoji style.
+- You can refer to teammates by name when handing off (e.g., "Maya should sanity-check auth").
+- Emojis are optional; default to none. If used, use at most one.
 - If everything looks fine from your angle, just say so briefly.
 - If you have a concern, state it clearly with a specific fix suggestion.
 - If you have no concerns and others seem satisfied, you can just react positively.
+- No headings, bullet lists, or canned phrases like "Great question" / "I hope this helps".
 
 Write ONLY your message, nothing else. Do not include your name or any prefix.`;
 }
@@ -299,14 +309,135 @@ async function callAIForContribution(
   return `[${persona.name}: No AI provider configured]`;
 }
 
+const CANNED_PHRASE_PREFIXES = [
+  /^great question[,.! ]*/i,
+  /^of course[,.! ]*/i,
+  /^certainly[,.! ]*/i,
+  /^you['’]re absolutely right[,.! ]*/i,
+  /^i hope this helps[,.! ]*/i,
+];
+
+function limitEmojiCount(text: string, maxEmojis: number): string {
+  let seen = 0;
+  return text.replace(/[\p{Extended_Pictographic}]/gu, (m) => {
+    seen += 1;
+    return seen <= maxEmojis ? m : '';
+  });
+}
+
+function isFacialEmoji(char: string): boolean {
+  return /[\u{1F600}-\u{1F64F}\u{1F910}-\u{1F92F}\u{1F970}-\u{1F97A}]/u.test(char);
+}
+
+function applyEmojiPolicy(
+  text: string,
+  allowEmoji: boolean,
+  allowNonFacialEmoji: boolean,
+): string {
+  if (!allowEmoji) {
+    return text.replace(/[\p{Extended_Pictographic}]/gu, '');
+  }
+
+  const emojis = Array.from(text.matchAll(/[\p{Extended_Pictographic}]/gu)).map((m) => m[0]);
+  if (emojis.length === 0) return text;
+
+  const chosenFacial = emojis.find((e) => isFacialEmoji(e));
+  const chosen = chosenFacial ?? (allowNonFacialEmoji ? emojis[0] : null);
+  if (!chosen) {
+    return text.replace(/[\p{Extended_Pictographic}]/gu, '');
+  }
+
+  let kept = false;
+  return text.replace(/[\p{Extended_Pictographic}]/gu, (e) => {
+    if (!kept && e === chosen) {
+      kept = true;
+      return e;
+    }
+    return '';
+  });
+}
+
+function trimToSentences(text: string, maxSentences: number): string {
+  const parts = text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (parts.length <= maxSentences) return text.trim();
+  return parts.slice(0, maxSentences).join(' ').trim();
+}
+
+export function humanizeSlackReply(raw: string, options: IHumanizeSlackReplyOptions = {}): string {
+  const {
+    allowEmoji = true,
+    allowNonFacialEmoji = true,
+    maxSentences = MAX_HUMANIZED_SENTENCES,
+  } = options;
+
+  let text = raw.trim();
+  if (!text) return text;
+
+  // Remove markdown formatting artifacts that look templated in chat.
+  text = text
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*[-*]\s+/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Strip common assistant-y openers.
+  for (const pattern of CANNED_PHRASE_PREFIXES) {
+    text = text.replace(pattern, '').trim();
+  }
+
+  text = applyEmojiPolicy(text, allowEmoji, allowNonFacialEmoji);
+  text = limitEmojiCount(text, 1);
+  text = trimToSentences(text, maxSentences);
+
+  if (text.length > 260) {
+    text = `${text.slice(0, 257).trimEnd()}...`;
+  }
+
+  return text;
+}
+
+function buildCurrentCliInvocation(args: string[]): string[] | null {
+  const cliEntry = process.argv[1];
+  if (!cliEntry) return null;
+  return [...process.execArgv, cliEntry, ...args];
+}
+
+function formatCommandForLog(bin: string, args: string[]): string {
+  return [bin, ...args].map((part) => JSON.stringify(part)).join(' ');
+}
+
 export class DeliberationEngine {
   private readonly _slackClient: SlackClient;
   private readonly _config: INightWatchConfig;
   private readonly _humanResumeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly _emojiCadenceCounter = new Map<string, number>();
 
   constructor(slackClient: SlackClient, config: INightWatchConfig) {
     this._slackClient = slackClient;
     this._config = config;
+  }
+
+  private _humanizeForPost(
+    channel: string,
+    threadTs: string,
+    persona: IAgentPersona,
+    raw: string,
+  ): string {
+    const key = `${channel}:${threadTs}:${persona.id}`;
+    const count = (this._emojiCadenceCounter.get(key) ?? 0) + 1;
+    this._emojiCadenceCounter.set(key, count);
+
+    // Human cadence:
+    // - emoji roughly every 3rd message by same persona in same thread
+    // - non-facial emoji much rarer (roughly every 9th message)
+    const allowEmoji = count % 3 === 0;
+    const allowNonFacialEmoji = count % 9 === 0;
+
+    return humanizeSlackReply(raw, { allowEmoji, allowNonFacialEmoji, maxSentences: 2 });
   }
 
   /**
@@ -440,9 +571,15 @@ export class DeliberationEngine {
     }
 
     if (message) {
+      const finalMessage = this._humanizeForPost(
+        discussion.channelId,
+        discussion.threadTs,
+        persona,
+        message,
+      );
       await this._slackClient.postAsAgent(
         discussion.channelId,
-        message,
+        finalMessage,
         persona,
         discussion.threadTs,
       );
@@ -547,14 +684,20 @@ export class DeliberationEngine {
       }
 
       if (message) {
+        const finalMessage = this._humanizeForPost(
+          discussion.channelId,
+          discussion.threadTs,
+          persona,
+          message,
+        );
         await this._slackClient.postAsAgent(
           discussion.channelId,
-          message,
+          finalMessage,
           persona,
           discussion.threadTs,
         );
         repos.slackDiscussion.addParticipant(discussionId, persona.id);
-        historyText = historyText ? `${historyText}\n---\n${message}` : message;
+        historyText = historyText ? `${historyText}\n---\n${finalMessage}` : finalMessage;
         await sleep(MESSAGE_DELAY_MS);
       }
     }
@@ -687,12 +830,11 @@ Respond with ONLY one of:
 
     const personas = repos.agentPersona.getActive();
     const carlos = findCarlos(personas) ?? personas[0];
-    const dev = findDev(personas) ?? personas[0];
-
+    const actor = carlos?.name ?? 'Night Watch';
     if (carlos) {
       await this._slackClient.postAsAgent(
         discussion.channelId,
-        `Sending feedback to the reviewer agent. Changes needed:\n${changesSummary}`,
+        `Got it. I'll send this back through review for PR #${prNumber}.`,
         carlos,
         discussion.threadTs,
       );
@@ -701,29 +843,37 @@ Respond with ONLY one of:
 
     // Set NW_SLACK_FEEDBACK and trigger reviewer
     const feedback = JSON.stringify({ discussionId, prNumber, changes: changesSummary });
+    const invocationArgs = buildCurrentCliInvocation(['review']);
+    if (!invocationArgs) {
+      console.warn(
+        `[slack][job] triggerPRRefinement reviewer spawn failed via ${actor} pr=${prNumber}: CLI entry path unavailable`,
+      );
+      if (carlos) {
+        await this._slackClient.postAsAgent(
+          discussion.channelId,
+          `I couldn't start the reviewer process right now. I'll fix that and rerun it.`,
+          carlos,
+          discussion.threadTs,
+        );
+      }
+      return;
+    }
+    console.log(
+      `[slack][job] triggerPRRefinement reviewer spawn via ${actor} pr=${prNumber} cmd=${formatCommandForLog(process.execPath, invocationArgs)}`,
+    );
 
     // Spawn the reviewer as a detached process
     const { spawn } = await import('child_process');
     const reviewer = spawn(
       process.execPath,
-      [process.argv[1], 'review', '--pr', prNumber],
+      invocationArgs,
       {
         detached: true,
         stdio: 'ignore',
-        env: { ...process.env, NW_SLACK_FEEDBACK: feedback },
+        env: { ...process.env, NW_SLACK_FEEDBACK: feedback, NW_TARGET_PR: prNumber },
       }
     );
     reviewer.unref();
-
-    // Post update
-    if (dev) {
-      await this._slackClient.postAsAgent(
-        discussion.channelId,
-        `Reviewer agent kicked off for PR #${prNumber} 🔨 Will post back when done.`,
-        dev,
-        discussion.threadTs,
-      );
-    }
   }
 
   /**
@@ -735,6 +885,7 @@ Respond with ONLY one of:
     threadTs: string,
     incomingText: string,
     persona: IAgentPersona,
+    projectContext?: string,
   ): Promise<void> {
     let history: { text: string }[] = [];
     try {
@@ -748,9 +899,13 @@ Respond with ONLY one of:
     const prompt =
       `You are ${persona.name}, ${persona.role}.\n` +
       (persona.soul?.whoIAm ? `About you: ${persona.soul.whoIAm}\n\n` : '') +
+      (projectContext ? `Project context:\n${projectContext}\n\n` : '') +
       (historyText ? `Thread context:\n${historyText}\n\n` : '') +
       `Someone just said: "${incomingText}"\n\n` +
-      `Reply concisely in your own voice. Keep it under 3 sentences unless detail is clearly needed.`;
+      `Reply concisely in your own voice. Keep it to 1-2 sentences unless detail is clearly needed. ` +
+      `You can refer to teammates by name if a handoff helps. ` +
+      `Sound like a real teammate in chat, not an assistant. Avoid canned phrases like "Great question", ` +
+      `"Of course", or "I hope this helps". No headings or bullet lists. Emojis are optional; use at most one.`;
 
     let message: string;
     try {
@@ -760,7 +915,12 @@ Respond with ONLY one of:
     }
 
     if (message) {
-      await this._slackClient.postAsAgent(channel, message, persona, threadTs);
+      await this._slackClient.postAsAgent(
+        channel,
+        this._humanizeForPost(channel, threadTs, persona, message),
+        persona,
+        threadTs,
+      );
     }
   }
 }

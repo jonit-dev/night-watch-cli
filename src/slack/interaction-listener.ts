@@ -5,16 +5,93 @@
  */
 
 import { SocketModeClient } from '@slack/socket-mode';
+import { spawn } from 'child_process';
 import { IAgentPersona } from '../../shared/types.js';
 import { getDb } from '../storage/sqlite/client.js';
 import { getRepositories } from '../storage/repositories/index.js';
 import { INightWatchConfig } from '../types.js';
+import type { IRegistryEntry } from '../utils/registry.js';
+import { parseScriptResult } from '../utils/script-result.js';
 import { generatePersonaAvatar } from '../utils/avatar-generator.js';
 import { DeliberationEngine } from './deliberation.js';
 import { SlackClient } from './client.js';
 
 const MAX_PROCESSED_MESSAGE_KEYS = 2000;
 const PERSONA_REPLY_COOLDOWN_MS = 45_000;
+const AD_HOC_THREAD_MEMORY_MS = 60 * 60_000; // 1h
+const PROACTIVE_IDLE_MS = 20 * 60_000; // 20 min
+const PROACTIVE_MIN_INTERVAL_MS = 90 * 60_000; // per channel
+const PROACTIVE_SWEEP_INTERVAL_MS = 60_000;
+const MAX_JOB_OUTPUT_CHARS = 12_000;
+const HUMAN_REACTION_PROBABILITY = 0.65;
+const REACTION_DELAY_MIN_MS = 180;
+const REACTION_DELAY_MAX_MS = 1200;
+const RESPONSE_DELAY_MIN_MS = 700;
+const RESPONSE_DELAY_MAX_MS = 3400;
+
+const JOB_STOPWORDS = new Set([
+  'and',
+  'or',
+  'for',
+  'on',
+  'of',
+  'please',
+  'now',
+  'it',
+  'this',
+  'these',
+  'those',
+  'the',
+  'a',
+  'an',
+  'pr',
+  'pull',
+  'that',
+  'thanks',
+  'thank',
+  'again',
+  'job',
+  'pipeline',
+]);
+
+type TSlackJobName = 'run' | 'review' | 'qa';
+
+interface ISlackJobRequest {
+  job: TSlackJobName;
+  projectHint?: string;
+  prNumber?: string;
+  fixConflicts?: boolean;
+}
+
+interface IAdHocThreadState {
+  personaId: string;
+  expiresAt: number;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function extractLastMeaningfulLines(output: string, maxLines = 4): string {
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return '';
+  return lines.slice(-maxLines).join(' | ');
+}
+
+function buildCurrentCliInvocation(args: string[]): string[] | null {
+  const cliEntry = process.argv[1];
+  if (!cliEntry) return null;
+  return [...process.execArgv, cliEntry, ...args];
+}
+
+function formatCommandForLog(bin: string, args: string[]): string {
+  return [bin, ...args].map((part) => JSON.stringify(part)).join(' ');
+}
+
+type TPersonaDomain = 'security' | 'qa' | 'lead' | 'dev' | 'general';
 
 interface IInboundSlackEvent {
   type?: string;
@@ -40,6 +117,158 @@ interface IEventsApiPayload {
 
 function extractInboundEvent(payload: IEventsApiPayload): IInboundSlackEvent | null {
   return payload.event ?? payload.body?.event ?? payload.payload?.event ?? null;
+}
+
+export function buildInboundMessageKey(
+  channel: string,
+  ts: string,
+  type: string | undefined,
+): string {
+  return `${channel}:${ts}:${type ?? 'message'}`;
+}
+
+function normalizeProjectRef(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function stripSlackUserMentions(text: string): string {
+  return text.replace(/<@[A-Z0-9]+>/g, ' ');
+}
+
+function normalizeForParsing(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s./-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function isAmbientTeamMessage(text: string): boolean {
+  const normalized = normalizeForParsing(stripSlackUserMentions(text));
+  if (!normalized) return false;
+
+  if (/^(hey|hi|hello|yo|sup)\b/.test(normalized) && /\b(guys|team|everyone|folks)\b/.test(normalized)) {
+    return true;
+  }
+
+  if (/^(hey|hi|hello|yo|sup)\b/.test(normalized) && normalized.split(' ').length <= 6) {
+    return true;
+  }
+
+  return false;
+}
+
+export function parseSlackJobRequest(text: string): ISlackJobRequest | null {
+  const withoutMentions = stripSlackUserMentions(text);
+  const normalized = normalizeForParsing(withoutMentions);
+  if (!normalized) return null;
+
+  // Be tolerant of wrapped/copied URLs where whitespace/newlines split segments.
+  const compactForUrl = withoutMentions.replace(/\s+/g, '');
+  const prUrlMatch = compactForUrl.match(/https?:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/i);
+  const prPathMatch = compactForUrl.match(/\/pull\/(\d+)(?:[/?#]|$)/i);
+  const prHashMatch = withoutMentions.match(/(?:^|\s)#(\d+)(?:\s|$)/);
+  const conflictSignal = /\b(conflict|conflicts|merge conflict|merge issues?|rebase)\b/i.test(normalized);
+  const requestSignal = /\b(can someone|someone|anyone|please|need|look at|take a look|fix|review|check)\b/i.test(normalized);
+
+  const match = normalized.match(/\b(run|review|qa)\b(?:\s+(?:for|on)?\s*([a-z0-9./_-]+))?/i);
+  if (!match && !prUrlMatch && !prHashMatch) return null;
+
+  const explicitJob = match?.[1]?.toLowerCase() as TSlackJobName | undefined;
+  const hasPrReference = Boolean(prUrlMatch?.[3] ?? prPathMatch?.[1] ?? prHashMatch?.[1]);
+  const inferredReviewJob = conflictSignal || (hasPrReference && requestSignal);
+  const job: TSlackJobName | undefined = explicitJob ?? (inferredReviewJob ? 'review' : undefined);
+  if (!job || !['run', 'review', 'qa'].includes(job)) return null;
+
+  const prNumber = prUrlMatch?.[3] ?? prPathMatch?.[1] ?? prHashMatch?.[1];
+  const repoHintFromUrl = prUrlMatch?.[2]?.toLowerCase();
+  const candidates = [match?.[2]?.toLowerCase(), repoHintFromUrl].filter(
+    (value): value is string => Boolean(value && !JOB_STOPWORDS.has(value)),
+  );
+  const projectHint = candidates[0];
+
+  const request: ISlackJobRequest = { job };
+  if (projectHint) request.projectHint = projectHint;
+  if (prNumber) request.prNumber = prNumber;
+  if (job === 'review' && conflictSignal) request.fixConflicts = true;
+
+  return request;
+}
+
+function getPersonaDomain(persona: IAgentPersona): TPersonaDomain {
+  const role = persona.role.toLowerCase();
+  const expertise = (persona.soul?.expertise ?? []).join(' ').toLowerCase();
+  const blob = `${role} ${expertise}`;
+
+  if (/\bsecurity|auth|pentest|owasp|crypt|vuln\b/.test(blob)) return 'security';
+  if (/\bqa|quality|test|e2e\b/.test(blob)) return 'qa';
+  if (/\blead|architect|architecture|systems\b/.test(blob)) return 'lead';
+  if (/\bimplementer|developer|executor|engineer\b/.test(blob)) return 'dev';
+  return 'general';
+}
+
+export function scorePersonaForText(text: string, persona: IAgentPersona): number {
+  const normalized = normalizeForParsing(stripSlackUserMentions(text));
+  if (!normalized) return 0;
+
+  let score = 0;
+  const domain = getPersonaDomain(persona);
+
+  if (normalized.includes(persona.name.toLowerCase())) {
+    score += 12;
+  }
+
+  const securitySignal = /\b(security|auth|vuln|owasp|xss|csrf|token|permission|exploit|threat)\b/.test(normalized);
+  const qaSignal = /\b(qa|test|testing|bug|e2e|playwright|regression|flaky)\b/.test(normalized);
+  const leadSignal = /\b(architecture|architect|design|scalability|performance|tech debt|tradeoff|strategy)\b/.test(normalized);
+  const devSignal = /\b(implement|implementation|code|build|fix|patch|ship|pr)\b/.test(normalized);
+
+  if (securitySignal && domain === 'security') score += 8;
+  if (qaSignal && domain === 'qa') score += 8;
+  if (leadSignal && domain === 'lead') score += 8;
+  if (devSignal && domain === 'dev') score += 8;
+
+  const personaTokens = new Set([
+    ...persona.role.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3),
+    ...(persona.soul?.expertise ?? [])
+      .flatMap((s) => s.toLowerCase().split(/[^a-z0-9]+/))
+      .filter((t) => t.length >= 3),
+  ]);
+
+  const textTokens = normalized.split(/\s+/).filter((t) => t.length >= 3);
+  for (const token of textTokens) {
+    if (personaTokens.has(token)) {
+      score += 2;
+    }
+  }
+
+  return score;
+}
+
+export function selectFollowUpPersona(
+  preferred: IAgentPersona,
+  personas: IAgentPersona[],
+  text: string,
+): IAgentPersona {
+  if (personas.length === 0) return preferred;
+
+  const preferredScore = scorePersonaForText(text, preferred);
+  let best = preferred;
+  let bestScore = preferredScore;
+
+  for (const persona of personas) {
+    const score = scorePersonaForText(text, persona);
+    if (score > bestScore) {
+      best = persona;
+      bestScore = score;
+    }
+  }
+
+  // Default to continuity unless another persona is clearly a better fit.
+  if (best.id !== preferred.id && bestScore >= preferredScore + 4 && bestScore >= 8) {
+    return best;
+  }
+  return preferred;
 }
 
 function normalizeHandle(value: string): string {
@@ -147,6 +376,10 @@ export class SlackInteractionListener {
   private readonly _processedMessageKeys = new Set<string>();
   private readonly _processedMessageOrder: string[] = [];
   private readonly _lastPersonaReplyAt = new Map<string, number>();
+  private readonly _adHocThreadState = new Map<string, IAdHocThreadState>();
+  private readonly _lastChannelActivityAt = new Map<string, number>();
+  private readonly _lastProactiveAt = new Map<string, number>();
+  private _proactiveTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(config: INightWatchConfig) {
     this._config = config;
@@ -201,10 +434,13 @@ export class SlackInteractionListener {
     await socket.start();
     this._socketClient = socket;
     console.log('Slack interaction listener started (Socket Mode)');
+    this._startProactiveLoop();
     void this._postPersonaIntros();
   }
 
   async stop(): Promise<void> {
+    this._stopProactiveLoop();
+
     if (!this._socketClient) {
       return;
     }
@@ -232,6 +468,11 @@ export class SlackInteractionListener {
 
     // Join all configured channels so the bot receives messages in them
     const channelIds = Object.values(slack.channels ?? {}).filter(Boolean);
+    const now = Date.now();
+    for (const channelId of channelIds) {
+      this._lastChannelActivityAt.set(channelId, now);
+    }
+
     for (const channelId of channelIds) {
       try {
         await this._slackClient.joinChannel(channelId);
@@ -315,10 +556,30 @@ export class SlackInteractionListener {
     const event = extractInboundEvent(payload);
     if (!event) return;
 
-    // Log every event so we can debug what's arriving
-    console.log(`[slack] event type=${event.type ?? '?'} subtype=${event.subtype ?? '-'} channel=${event.channel ?? '-'} user=${event.user ?? '-'} bot_id=${event.bot_id ?? '-'} text=${(event.text ?? '').slice(0, 80)}`);
-
     if (event.type !== 'message' && event.type !== 'app_mention') return;
+
+    const ignored = shouldIgnoreInboundSlackEvent(event, this._botUserId);
+    if (ignored) {
+      console.log(
+        `[slack] ignored self/system event type=${event.type ?? '?'} subtype=${event.subtype ?? '-'} channel=${event.channel ?? '-'} user=${event.user ?? '-'} bot_id=${event.bot_id ?? '-'}`,
+      );
+      return;
+    }
+
+    console.log(
+      `[slack] inbound human event type=${event.type ?? '?'} channel=${event.channel ?? '-'} user=${event.user ?? '-'} text=${(event.text ?? '').slice(0, 80)}`,
+    );
+
+    // Direct bot mentions arrive as app_mention; ignore the mirrored message event
+    // to avoid duplicate or out-of-order handling on the same Slack message ts.
+    if (
+      event.type === 'message'
+      && this._botUserId
+      && (event.text ?? '').includes(`<@${this._botUserId}>`)
+    ) {
+      console.log('[slack] ignoring mirrored message event for direct bot mention');
+      return;
+    }
 
     try {
       await this._handleInboundMessage(event);
@@ -366,6 +627,423 @@ export class SlackInteractionListener {
     this._lastPersonaReplyAt.set(key, Date.now());
   }
 
+  private _threadKey(channel: string, threadTs: string): string {
+    return `${channel}:${threadTs}`;
+  }
+
+  private _markChannelActivity(channel: string): void {
+    this._lastChannelActivityAt.set(channel, Date.now());
+  }
+
+  private _rememberAdHocThreadPersona(
+    channel: string,
+    threadTs: string,
+    personaId: string,
+  ): void {
+    this._adHocThreadState.set(this._threadKey(channel, threadTs), {
+      personaId,
+      expiresAt: Date.now() + AD_HOC_THREAD_MEMORY_MS,
+    });
+  }
+
+  private _getRememberedAdHocPersona(
+    channel: string,
+    threadTs: string,
+    personas: IAgentPersona[],
+  ): IAgentPersona | null {
+    const key = this._threadKey(channel, threadTs);
+    const remembered = this._adHocThreadState.get(key);
+    if (!remembered) return null;
+    if (Date.now() > remembered.expiresAt) {
+      this._adHocThreadState.delete(key);
+      return null;
+    }
+    return personas.find((p) => p.id === remembered.personaId) ?? null;
+  }
+
+  private _pickRandomPersona(
+    personas: IAgentPersona[],
+    channel: string,
+    threadTs: string,
+  ): IAgentPersona | null {
+    if (personas.length === 0) return null;
+    const available = personas.filter((p) => !this._isPersonaOnCooldown(channel, threadTs, p.id));
+    const pool = available.length > 0 ? available : personas;
+    return pool[Math.floor(Math.random() * pool.length)] ?? null;
+  }
+
+  private _findPersonaByName(personas: IAgentPersona[], name: string): IAgentPersona | null {
+    const target = name.toLowerCase();
+    return personas.find((p) => p.name.toLowerCase() === target) ?? null;
+  }
+
+  private _buildProjectContext(channel: string, projects: IRegistryEntry[]): string {
+    if (projects.length === 0) return '';
+    const inChannel = projects.find((p) => p.slackChannelId === channel);
+    const names = projects.map((p) => p.name).join(', ');
+    if (inChannel) {
+      return `Current channel project: ${inChannel.name}. Registered projects: ${names}.`;
+    }
+    return `Registered projects: ${names}.`;
+  }
+
+  private _resolveProjectByHint(
+    projects: IRegistryEntry[],
+    hint: string,
+  ): IRegistryEntry | null {
+    const normalizedHint = normalizeProjectRef(hint);
+    if (!normalizedHint) return null;
+
+    const byNameExact = projects.find(
+      (p) => normalizeProjectRef(p.name) === normalizedHint,
+    );
+    if (byNameExact) return byNameExact;
+
+    const byPathExact = projects.find((p) => {
+      const base = p.path.split('/').pop() ?? '';
+      return normalizeProjectRef(base) === normalizedHint;
+    });
+    if (byPathExact) return byPathExact;
+
+    const byNameContains = projects.find((p) =>
+      normalizeProjectRef(p.name).includes(normalizedHint),
+    );
+    if (byNameContains) return byNameContains;
+
+    return projects.find((p) => {
+      const base = p.path.split('/').pop() ?? '';
+      return normalizeProjectRef(base).includes(normalizedHint);
+    }) ?? null;
+  }
+
+  private _resolveTargetProject(
+    channel: string,
+    projects: IRegistryEntry[],
+    projectHint?: string,
+  ): IRegistryEntry | null {
+    if (projectHint) {
+      return this._resolveProjectByHint(projects, projectHint);
+    }
+    const byChannel = projects.find((p) => p.slackChannelId === channel);
+    if (byChannel) return byChannel;
+    if (projects.length === 1) return projects[0];
+    return null;
+  }
+
+  private _isMessageAddressedToBot(event: IInboundSlackEvent): boolean {
+    if (event.type === 'app_mention') return true;
+    const text = normalizeForParsing(stripSlackUserMentions(event.text ?? ''));
+    return /^night[-\s]?watch\b/.test(text) || /^nw\b/.test(text);
+  }
+
+  private _randomInt(min: number, max: number): number {
+    if (max <= min) return min;
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  private _reactionCandidatesForPersona(persona: IAgentPersona): string[] {
+    const role = persona.role.toLowerCase();
+    if (role.includes('security')) return ['eyes', 'thinking_face', 'shield', 'thumbsup'];
+    if (role.includes('qa') || role.includes('quality')) return ['test_tube', 'mag', 'thinking_face', 'thumbsup'];
+    if (role.includes('lead') || role.includes('architect')) return ['thinking_face', 'thumbsup', 'memo', 'eyes'];
+    if (role.includes('implementer') || role.includes('developer')) return ['wrench', 'hammer_and_wrench', 'thumbsup', 'eyes'];
+    return ['eyes', 'thinking_face', 'thumbsup', 'wave'];
+  }
+
+  private async _maybeReactToHumanMessage(
+    channel: string,
+    messageTs: string,
+    persona: IAgentPersona,
+  ): Promise<void> {
+    if (Math.random() > HUMAN_REACTION_PROBABILITY) {
+      return;
+    }
+
+    const candidates = this._reactionCandidatesForPersona(persona);
+    const reaction = candidates[this._randomInt(0, candidates.length - 1)];
+
+    await sleep(this._randomInt(REACTION_DELAY_MIN_MS, REACTION_DELAY_MAX_MS));
+    try {
+      await this._slackClient.addReaction(channel, messageTs, reaction);
+    } catch {
+      // Ignore reaction failures (permissions, already reacted, etc.)
+    }
+  }
+
+  private async _applyHumanResponseTiming(
+    channel: string,
+    messageTs: string,
+    persona: IAgentPersona,
+  ): Promise<void> {
+    await this._maybeReactToHumanMessage(channel, messageTs, persona);
+    await sleep(this._randomInt(RESPONSE_DELAY_MIN_MS, RESPONSE_DELAY_MAX_MS));
+  }
+
+  private async _spawnNightWatchJob(
+    job: TSlackJobName,
+    project: IRegistryEntry,
+    channel: string,
+    threadTs: string,
+    persona: IAgentPersona,
+    opts?: { prNumber?: string; fixConflicts?: boolean },
+  ): Promise<void> {
+    const invocationArgs = buildCurrentCliInvocation([job]);
+    const prRef = opts?.prNumber ? ` PR #${opts.prNumber}` : '';
+    if (!invocationArgs) {
+      console.warn(
+        `[slack][job] ${persona.name} cannot start ${job} for ${project.name}${prRef ? ` (${prRef.trim()})` : ''}: CLI entry path unavailable`,
+      );
+      await this._slackClient.postAsAgent(
+        channel,
+        `I couldn't start that ${job} right now. I'm checking the runtime setup.`,
+        persona,
+        threadTs,
+      );
+      this._markChannelActivity(channel);
+      this._markPersonaReply(channel, threadTs, persona.id);
+      return;
+    }
+
+    console.log(
+      `[slack][job] persona=${persona.name} project=${project.name}${opts?.prNumber ? ` pr=${opts.prNumber}` : ''} spawn=${formatCommandForLog(process.execPath, invocationArgs)}`,
+    );
+
+    const child = spawn(
+      process.execPath,
+      invocationArgs,
+      {
+        cwd: project.path,
+        env: {
+          ...process.env,
+          NW_EXECUTION_CONTEXT: 'agent',
+          ...(opts?.prNumber ? { NW_TARGET_PR: opts.prNumber } : {}),
+          ...(opts?.fixConflicts
+            ? {
+              NW_SLACK_FEEDBACK: JSON.stringify({
+                source: 'slack',
+                kind: 'merge_conflict_resolution',
+                prNumber: opts.prNumber ?? '',
+                changes: 'Resolve merge conflicts and stabilize the PR for re-review.',
+              }),
+            }
+            : {}),
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+    console.log(
+      `[slack][job] ${persona.name} spawned ${job} for ${project.name}${opts?.prNumber ? ` (PR #${opts.prNumber})` : ''} pid=${child.pid ?? 'unknown'}`,
+    );
+
+    let output = '';
+    let errored = false;
+    const appendOutput = (chunk: Buffer): void => {
+      output += chunk.toString();
+      if (output.length > MAX_JOB_OUTPUT_CHARS) {
+        output = output.slice(-MAX_JOB_OUTPUT_CHARS);
+      }
+    };
+
+    child.stdout?.on('data', appendOutput);
+    child.stderr?.on('data', appendOutput);
+
+    child.on('error', async (err) => {
+      errored = true;
+      console.warn(
+        `[slack][job] ${persona.name} ${job} spawn error for ${project.name}${opts?.prNumber ? ` (PR #${opts.prNumber})` : ''}: ${err.message}`,
+      );
+      await this._slackClient.postAsAgent(
+        channel,
+        `I couldn't kick off that ${job}. I logged the error on the server and I'm checking it.`,
+        persona,
+        threadTs,
+      );
+      this._markChannelActivity(channel);
+      this._markPersonaReply(channel, threadTs, persona.id);
+    });
+
+    child.on('close', async (code) => {
+      if (errored) return;
+      console.log(
+        `[slack][job] ${persona.name} ${job} finished for ${project.name}${opts?.prNumber ? ` (PR #${opts.prNumber})` : ''} exit=${code ?? 'unknown'}`,
+      );
+      const parsed = parseScriptResult(output);
+      const status = parsed?.status ? ` (${parsed.status})` : '';
+      const detail = extractLastMeaningfulLines(output);
+
+      if (code === 0) {
+        const doneMessage =
+          job === 'review'
+            ? `Done. Review finished${prRef ? ` for${prRef}` : ''}.`
+            : job === 'qa'
+              ? `Done. QA finished${prRef ? ` for${prRef}` : ''}.`
+              : `Done. Executor run finished${prRef ? ` for${prRef}` : ''}.`;
+        await this._slackClient.postAsAgent(
+          channel,
+          doneMessage,
+          persona,
+          threadTs,
+        );
+      } else {
+        if (detail) {
+          console.warn(`[slack][job] ${persona.name} ${job} failure detail: ${detail}`);
+        }
+        await this._slackClient.postAsAgent(
+          channel,
+          `I hit an issue while running ${job}${prRef ? ` for${prRef}` : ''}. I logged details on the server and I'm fixing it.`,
+          persona,
+          threadTs,
+        );
+      }
+      if (code !== 0 && status) {
+        console.warn(`[slack][job] ${persona.name} ${job} status=${status.replace(/[()]/g, '')}`);
+      }
+      this._markChannelActivity(channel);
+      this._markPersonaReply(channel, threadTs, persona.id);
+    });
+  }
+
+  private async _triggerSlackJobIfRequested(
+    event: IInboundSlackEvent,
+    channel: string,
+    threadTs: string,
+    messageTs: string,
+    personas: IAgentPersona[],
+  ): Promise<boolean> {
+    const request = parseSlackJobRequest(event.text ?? '');
+    if (!request) return false;
+
+    const addressedToBot = this._isMessageAddressedToBot(event);
+    const normalized = normalizeForParsing(stripSlackUserMentions(event.text ?? ''));
+    const teamRequestLanguage = /\b(can someone|someone|anyone|please|need)\b/i.test(normalized);
+    const startsWithCommand = /^(run|review|qa)\b/i.test(normalized);
+
+    if (
+      !addressedToBot
+      && !request.prNumber
+      && !request.fixConflicts
+      && !teamRequestLanguage
+      && !startsWithCommand
+    ) {
+      return false;
+    }
+
+    const repos = getRepositories();
+    const projects = repos.projectRegistry.getAll();
+
+    const persona =
+      (request.job === 'run' ? this._findPersonaByName(personas, 'Dev') : null)
+      ?? (request.job === 'qa' ? this._findPersonaByName(personas, 'Priya') : null)
+      ?? (request.job === 'review' ? this._findPersonaByName(personas, 'Carlos') : null)
+      ?? this._pickRandomPersona(personas, channel, threadTs)
+      ?? personas[0];
+
+    if (!persona) return false;
+
+    const targetProject = this._resolveTargetProject(channel, projects, request.projectHint);
+    if (!targetProject) {
+      const projectNames = projects.map((p) => p.name).join(', ') || '(none registered)';
+      await this._slackClient.postAsAgent(
+        channel,
+        `I can run that, but I need the project name. Registered: ${projectNames}.`,
+        persona,
+        threadTs,
+      );
+      this._markChannelActivity(channel);
+      this._markPersonaReply(channel, threadTs, persona.id);
+      return true;
+    }
+
+    console.log(
+      `[slack][job] routing job=${request.job} to persona=${persona.name} project=${targetProject.name}${request.prNumber ? ` pr=${request.prNumber}` : ''}${request.fixConflicts ? ' fix_conflicts=true' : ''}`,
+    );
+
+    const planLine =
+      request.job === 'review'
+        ? `Ok, I'll take a look${request.prNumber ? ` at PR #${request.prNumber}` : ''}${request.fixConflicts ? ' and handle the conflicts' : ''}.`
+        : request.job === 'qa'
+          ? `Ok, I'll run QA${request.prNumber ? ` on PR #${request.prNumber}` : ''}.`
+          : `Ok, I'll run the executor${request.prNumber ? ` for PR #${request.prNumber}` : ''}.`;
+
+    await this._applyHumanResponseTiming(channel, messageTs, persona);
+
+    await this._slackClient.postAsAgent(
+      channel,
+      `${planLine}`,
+      persona,
+      threadTs,
+    );
+    console.log(
+      `[slack][job] ${persona.name} accepted job=${request.job} project=${targetProject.name}${request.prNumber ? ` pr=${request.prNumber}` : ''}`,
+    );
+    this._markChannelActivity(channel);
+    this._markPersonaReply(channel, threadTs, persona.id);
+    this._rememberAdHocThreadPersona(channel, threadTs, persona.id);
+
+    await this._spawnNightWatchJob(
+      request.job,
+      targetProject,
+      channel,
+      threadTs,
+      persona,
+      { prNumber: request.prNumber, fixConflicts: request.fixConflicts },
+    );
+    return true;
+  }
+
+  private _startProactiveLoop(): void {
+    if (this._proactiveTimer) return;
+
+    this._proactiveTimer = setInterval(() => {
+      void this._sendProactiveMessages();
+    }, PROACTIVE_SWEEP_INTERVAL_MS);
+
+    this._proactiveTimer.unref?.();
+  }
+
+  private _stopProactiveLoop(): void {
+    if (!this._proactiveTimer) return;
+    clearInterval(this._proactiveTimer);
+    this._proactiveTimer = null;
+  }
+
+  private async _sendProactiveMessages(): Promise<void> {
+    const slack = this._config.slack;
+    if (!slack?.enabled || !slack.discussionEnabled) return;
+
+    const channelIds = Object.values(slack.channels ?? {}).filter(Boolean);
+    if (channelIds.length === 0) return;
+
+    const repos = getRepositories();
+    const personas = repos.agentPersona.getActive();
+    if (personas.length === 0) return;
+
+    const now = Date.now();
+    const projects = repos.projectRegistry.getAll();
+
+    for (const channel of channelIds) {
+      const lastActivity = this._lastChannelActivityAt.get(channel) ?? now;
+      const lastProactive = this._lastProactiveAt.get(channel) ?? 0;
+      if (now - lastActivity < PROACTIVE_IDLE_MS) continue;
+      if (now - lastProactive < PROACTIVE_MIN_INTERVAL_MS) continue;
+
+      const persona = this._pickRandomPersona(personas, channel, `${now}`) ?? personas[0];
+      if (!persona) continue;
+
+      const projectContext = this._buildProjectContext(channel, projects);
+      const text = `Quiet check-in. If you want, I can kick off \`run\`, \`review\`, or \`qa\` right here.${projectContext ? ` ${projectContext}` : ''}`;
+
+      try {
+        await this._slackClient.postAsAgent(channel, text, persona);
+        this._lastProactiveAt.set(channel, now);
+        this._markChannelActivity(channel);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`Slack proactive message failed: ${msg}`);
+      }
+    }
+  }
+
   private async _handleInboundMessage(event: IInboundSlackEvent): Promise<void> {
     if (shouldIgnoreInboundSlackEvent(event, this._botUserId)) {
       console.log(`[slack] ignoring event — failed shouldIgnore check (user=${event.user}, bot_id=${event.bot_id ?? '-'}, subtype=${event.subtype ?? '-'})`);
@@ -376,7 +1054,8 @@ export class SlackInteractionListener {
     const ts = event.ts as string;
     const threadTs = event.thread_ts ?? ts;
     const text = event.text ?? '';
-    const messageKey = `${channel}:${ts}`;
+    const messageKey = buildInboundMessageKey(channel, ts, event.type);
+    this._markChannelActivity(channel);
 
     // Deduplicate retried/replayed events to prevent response loops.
     if (!this._rememberMessageKey(messageKey)) {
@@ -386,16 +1065,22 @@ export class SlackInteractionListener {
 
     const repos = getRepositories();
     const personas = repos.agentPersona.getActive();
+    const projects = repos.projectRegistry.getAll();
+    const projectContext = this._buildProjectContext(channel, projects);
+
+    if (await this._triggerSlackJobIfRequested(event, channel, threadTs, ts, personas)) {
+      return;
+    }
 
     // @mention matching: "@maya ..."
     let mentionedPersonas = resolveMentionedPersonas(text, personas);
 
-    // For app_mention events (bot was @-tagged by Slack), also try plain-name matching.
-    // Text arrives as "<@UBOTID> maya check this" — the @-regex won't find "maya".
-    if (mentionedPersonas.length === 0 && event.type === 'app_mention') {
+    // Also try plain-name matching (e.g. "Carlos, are you there?").
+    // For app_mention text like "<@UBOTID> maya check this", the @-regex won't find "maya".
+    if (mentionedPersonas.length === 0) {
       mentionedPersonas = resolvePersonasByPlainName(text, personas);
       if (mentionedPersonas.length > 0) {
-        console.log(`[slack] plain-name match in app_mention: ${mentionedPersonas.map((p) => p.name).join(', ')}`);
+        console.log(`[slack] plain-name match: ${mentionedPersonas.map((p) => p.name).join(', ')}`);
       }
     }
 
@@ -412,12 +1097,17 @@ export class SlackInteractionListener {
           console.log(`[slack] ${persona.name} is on cooldown — skipping`);
           continue;
         }
+        await this._applyHumanResponseTiming(channel, ts, persona);
         if (discussion) {
           await this._engine.contributeAsAgent(discussion.id, persona);
         } else {
-          await this._engine.replyAsAgent(channel, threadTs, text, persona);
+          await this._engine.replyAsAgent(channel, threadTs, text, persona, projectContext);
         }
         this._markPersonaReply(channel, threadTs, persona.id);
+      }
+
+      if (!discussion && mentionedPersonas[0]) {
+        this._rememberAdHocThreadPersona(channel, threadTs, mentionedPersonas[0].id);
       }
       return;
     }
@@ -430,16 +1120,58 @@ export class SlackInteractionListener {
       .getActive('')
       .find((d) => d.channelId === channel && d.threadTs === threadTs);
 
-    if (!discussion) {
-      console.log(`[slack] no active discussion found — ignoring message`);
+    if (discussion) {
+      await this._engine.handleHumanMessage(
+        channel,
+        threadTs,
+        text,
+        event.user as string,
+      );
       return;
     }
 
-    await this._engine.handleHumanMessage(
-      channel,
-      threadTs,
-      text,
-      event.user as string,
-    );
+    // Continue ad-hoc threads even without a persisted discussion.
+    const rememberedPersona = this._getRememberedAdHocPersona(channel, threadTs, personas);
+    if (rememberedPersona) {
+      const followUpPersona = selectFollowUpPersona(rememberedPersona, personas, text);
+      if (followUpPersona.id !== rememberedPersona.id) {
+        console.log(`[slack] handing off ad-hoc thread from ${rememberedPersona.name} to ${followUpPersona.name} based on topic`);
+      } else {
+        console.log(`[slack] continuing ad-hoc thread with ${rememberedPersona.name}`);
+      }
+      await this._applyHumanResponseTiming(channel, ts, followUpPersona);
+      await this._engine.replyAsAgent(
+        channel,
+        threadTs,
+        text,
+        followUpPersona,
+        projectContext,
+      );
+      this._markPersonaReply(channel, threadTs, followUpPersona.id);
+      this._rememberAdHocThreadPersona(channel, threadTs, followUpPersona.id);
+      return;
+    }
+
+    // Keep the channel alive: direct mentions and ambient greetings get a random responder.
+    const shouldAutoEngage = event.type === 'app_mention' || isAmbientTeamMessage(text);
+    if (shouldAutoEngage) {
+      const randomPersona = this._pickRandomPersona(personas, channel, threadTs);
+      if (randomPersona) {
+        console.log(`[slack] auto-engaging via ${randomPersona.name}`);
+        await this._applyHumanResponseTiming(channel, ts, randomPersona);
+        await this._engine.replyAsAgent(
+          channel,
+          threadTs,
+          text,
+          randomPersona,
+          projectContext,
+        );
+        this._markPersonaReply(channel, threadTs, randomPersona.id);
+        this._rememberAdHocThreadPersona(channel, threadTs, randomPersona.id);
+        return;
+      }
+    }
+
+    console.log(`[slack] no active discussion found — ignoring message`);
   }
 }

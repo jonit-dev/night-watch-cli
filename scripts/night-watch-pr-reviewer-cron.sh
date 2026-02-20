@@ -24,6 +24,7 @@ MIN_REVIEW_SCORE="${NW_MIN_REVIEW_SCORE:-80}"
 BRANCH_PATTERNS_RAW="${NW_BRANCH_PATTERNS:-feat/,night-watch/}"
 AUTO_MERGE="${NW_AUTO_MERGE:-0}"
 AUTO_MERGE_METHOD="${NW_AUTO_MERGE_METHOD:-squash}"
+TARGET_PR="${NW_TARGET_PR:-}"
 
 # Ensure NVM / Node / Claude are on PATH
 export NVM_DIR="${HOME}/.nvm"
@@ -80,12 +81,22 @@ if [ -z "${BRANCH_REGEX}" ]; then
   BRANCH_REGEX='^(feat/|night-watch/)'
 fi
 
-OPEN_PRS=$(
-  { gh pr list --state open --json headRefName --jq '.[].headRefName' 2>/dev/null || true; } \
-    | { grep -E "${BRANCH_REGEX}" || true; } \
-    | wc -l \
-    | tr -d '[:space:]'
-)
+if [ -n "${TARGET_PR}" ]; then
+  OPEN_PRS=$(
+    if gh pr view "${TARGET_PR}" --json number >/dev/null 2>&1; then
+      echo "1"
+    else
+      echo "0"
+    fi
+  )
+else
+  OPEN_PRS=$(
+    { gh pr list --state open --json headRefName --jq '.[].headRefName' 2>/dev/null || true; } \
+      | { grep -E "${BRANCH_REGEX}" || true; } \
+      | wc -l \
+      | tr -d '[:space:]'
+  )
+fi
 
 if [ "${OPEN_PRS}" -eq 0 ]; then
   log "SKIP: No open PRs matching branch patterns (${BRANCH_PATTERNS_RAW})"
@@ -102,7 +113,20 @@ while IFS=$'\t' read -r pr_number pr_branch; do
     continue
   fi
 
-  if ! printf '%s\n' "${pr_branch}" | grep -Eq "${BRANCH_REGEX}"; then
+  if [ -n "${TARGET_PR}" ] && [ "${pr_number}" != "${TARGET_PR}" ]; then
+    continue
+  fi
+
+  if [ -z "${TARGET_PR}" ] && ! printf '%s\n' "${pr_branch}" | grep -Eq "${BRANCH_REGEX}"; then
+    continue
+  fi
+
+  # Merge-conflict signal: this PR needs action even if CI and score look fine.
+  MERGE_STATE=$(gh pr view "${pr_number}" --json mergeStateStatus --jq '.mergeStateStatus' 2>/dev/null || echo "")
+  if [ "${MERGE_STATE}" = "DIRTY" ] || [ "${MERGE_STATE}" = "CONFLICTING" ]; then
+    log "INFO: PR #${pr_number} (${pr_branch}) has merge conflicts (${MERGE_STATE})"
+    NEEDS_WORK=1
+    PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
     continue
   fi
 
@@ -226,8 +250,12 @@ if [ "${AUTO_MERGE}" = "1" ] && [ ${EXIT_CODE} -eq 0 ]; then
       continue
     fi
 
+    if [ -n "${TARGET_PR}" ] && [ "${pr_number}" != "${TARGET_PR}" ]; then
+      continue
+    fi
+
     # Only process PRs matching branch patterns
-    if ! printf '%s\n' "${pr_branch}" | grep -Eq "${BRANCH_REGEX}"; then
+    if [ -z "${TARGET_PR}" ] && ! printf '%s\n' "${pr_branch}" | grep -Eq "${BRANCH_REGEX}"; then
       continue
     fi
 

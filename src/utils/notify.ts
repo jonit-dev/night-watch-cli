@@ -253,7 +253,23 @@ export function formatTelegramPayload(ctx: INotificationContext): {
 /**
  * Build a one-line notification text for Slack Bot API posts
  */
-function buildNotificationText(ctx: INotificationContext): string {
+function buildQaNotificationText(ctx: INotificationContext): string {
+  const prLabel = ctx.prNumber !== undefined ? `PR #${ctx.prNumber}` : "the latest PR";
+  const prRef = ctx.prUrl ? `<${ctx.prUrl}|${prLabel}>` : prLabel;
+  const project = ctx.projectName;
+
+  if (ctx.exitCode === 0) {
+    return `Finished QA on ${prRef} for ${project}.`;
+  }
+
+  return `I ran QA on ${prRef} for ${project}, but it failed. I'll check the logs.`;
+}
+
+export function buildNotificationText(ctx: INotificationContext): string {
+  if (ctx.event === "qa_completed") {
+    return buildQaNotificationText(ctx);
+  }
+
   const emoji = getEventEmoji(ctx.event);
   const title = getEventTitle(ctx.event);
   const parts: string[] = [`${emoji} *${title}*`, `Project: ${ctx.projectName}`];
