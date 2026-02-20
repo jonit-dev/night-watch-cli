@@ -5,6 +5,7 @@
 import type { BoardColumnName } from '@night-watch/core/board/types.js';
 import type { IBoardProviderConfig } from '@night-watch/core/board/types.js';
 import { createBoardProvider } from '@night-watch/core/board/factory.js';
+import { CATEGORY_LABELS, HORIZON_LABELS, PRIORITY_LABELS, isValidCategory, isValidHorizon, isValidPriority } from '@night-watch/core/board/labels.js';
 
 export interface IAnthropicTool {
   name: string;
@@ -20,15 +21,18 @@ export function buildBoardTools(): IAnthropicTool[] {
   return [
     {
       name: "open_github_issue",
-      description: "Create a new GitHub issue on the project board.",
+      description: "Create a new GitHub issue on the project board. Always infer and set priority, category, and horizon based on the issue content and context.",
       input_schema: {
         type: "object",
         properties: {
           title: { type: "string", description: "Short, descriptive issue title." },
           body: { type: "string", description: "Detailed issue description in Markdown." },
           column: { type: "string", enum: columnEnum, description: "Board column to place the issue in. Defaults to 'Ready'." },
+          priority: { type: "string", enum: [...PRIORITY_LABELS], description: "Priority label: P0 (Critical), P1 (High), P2 (Normal). Infer from urgency and impact." },
+          category: { type: "string", enum: [...CATEGORY_LABELS], description: "Category label aligned with roadmap theme (e.g. reliability, quality, product, ux, provider, team, platform, intelligence, ecosystem)." },
+          horizon: { type: "string", enum: [...HORIZON_LABELS], description: "Delivery horizon: short-term (0-6w), medium-term (6w-4m), long-term (4-12m)." },
         },
-        required: ["title", "body"],
+        required: ["title", "body", "priority", "category", "horizon"],
       },
     },
     {
@@ -92,12 +96,20 @@ export async function executeBoardTool(
 
   switch (name) {
     case "open_github_issue": {
+      const labels: string[] = [];
+      const priority = String(input.priority ?? '');
+      const category = String(input.category ?? '');
+      const horizon = String(input.horizon ?? '');
+      if (isValidPriority(priority)) labels.push(priority);
+      if (isValidCategory(category)) labels.push(category);
+      if (isValidHorizon(horizon)) labels.push(horizon);
       const issue = await provider.createIssue({
         title: String(input.title ?? ''),
         body: String(input.body ?? ''),
         column: (input.column as BoardColumnName | undefined) ?? 'Ready',
+        labels: labels.length > 0 ? labels : undefined,
       });
-      return JSON.stringify({ number: issue.number, url: issue.url, title: issue.title });
+      return JSON.stringify({ number: issue.number, url: issue.url, title: issue.title, labels });
     }
     case "list_issues": {
       const issues = input.column

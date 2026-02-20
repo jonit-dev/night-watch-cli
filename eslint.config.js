@@ -58,6 +58,9 @@ export default tseslint.config(
       "web/",
       "**/*.test.ts",
       "**/__tests__/**",
+      // Compiled TypeScript output files that live alongside source in src/
+      "packages/**/src/**/*.js",
+      "packages/**/src/**/*.d.ts",
     ],
   }
 );

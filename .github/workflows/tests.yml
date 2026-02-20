@@ -40,4 +40,4 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Run core flow smoke tests
-        run: yarn vitest run src/__tests__/scripts/core-flow-smoke.test.ts
+        run: yarn vitest run packages/cli/src/__tests__/scripts/core-flow-smoke.test.ts
