@@ -30,6 +30,7 @@ export {
   extractMentionHandles,
   resolveMentionedPersonas,
   resolvePersonasByPlainName,
+  scorePersonaForText,
   selectFollowUpPersona,
 } from './personas.js';
 
