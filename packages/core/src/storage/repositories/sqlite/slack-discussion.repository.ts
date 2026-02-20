@@ -3,8 +3,6 @@
  * Persists Slack discussion records in the `slack_discussions` table.
  */
 
-import 'reflect-metadata';
-
 import Database from "better-sqlite3";
 import { randomUUID } from "crypto";
 import { inject, injectable } from "tsyringe";

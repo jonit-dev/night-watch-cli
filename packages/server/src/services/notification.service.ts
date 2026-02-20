@@ -7,7 +7,6 @@
  * is the DI-friendly entry point for the server layer.
  */
 
-import 'reflect-metadata';
 import { injectable } from 'tsyringe';
 
 import { INightWatchConfig } from '@night-watch/core/types.js';

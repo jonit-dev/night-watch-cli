@@ -9,7 +9,7 @@ describe('humanizeSlackReply', () => {
 
     expect(result.startsWith('Great question')).toBe(false);
     expect(result.startsWith('Of course')).toBe(false);
-    expect(result.split(/(?<=[.!?])\s+/).length).toBeLessThanOrEqual(2);
+    expect(result.split(/(?<=[.!?])\s+/).length).toBeLessThanOrEqual(3);
   });
 
   it('limits emoji spam to at most one emoji', () => {

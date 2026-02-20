@@ -3,8 +3,6 @@
  * Persists execution records in the `execution_history` table.
  */
 
-import 'reflect-metadata';
-
 import Database from "better-sqlite3";
 import { inject, injectable } from "tsyringe";
 

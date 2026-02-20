@@ -13,7 +13,7 @@ import cors from 'cors';
 import express, { Express, NextFunction, Request, Response } from 'express';
 
 import { loadConfig } from '@night-watch/core/config.js';
-import { SlackInteractionListener } from '@night-watch/slack/interaction-listener.js';
+import { createSlackStack, type ISlackStack } from '@night-watch/slack/factory.js';
 import { collectPrInfo } from '@night-watch/core/utils/status-data.js';
 import { loadRegistry, validateRegistry } from '@night-watch/core/utils/registry.js';
 import { getRoadmapStatus, scanRoadmap } from '@night-watch/core/utils/roadmap-scanner.js';
@@ -183,7 +183,7 @@ export function createGlobalApp(): Express {
 export function startServer(projectDir: string, port: number): void {
   const config = loadConfig(projectDir);
   const app = createApp(projectDir);
-  const listener = new SlackInteractionListener(config);
+  const { listener } = createSlackStack(config);
 
   const server = app.listen(port, () => {
     console.log(`\nNight Watch UI  http://localhost:${port}`);
@@ -229,29 +229,29 @@ export function startGlobalServer(port: number): void {
   }
 
   const app = createGlobalApp();
-  const listenersBySlackToken = new Map<string, SlackInteractionListener>();
+  const listenersBySlackToken = new Map<string, ISlackStack>();
   for (const project of valid) {
     const cfg = loadConfig(project.path);
     const slack = cfg.slack;
     if (!slack?.enabled || !slack.discussionEnabled || !slack.botToken || !slack.appToken) continue;
     const key = `${slack.botToken}:${slack.appToken}`;
     if (!listenersBySlackToken.has(key)) {
-      listenersBySlackToken.set(key, new SlackInteractionListener(cfg));
+      listenersBySlackToken.set(key, createSlackStack(cfg));
     }
   }
-  const listeners = Array.from(listenersBySlackToken.values());
+  const stacks = Array.from(listenersBySlackToken.values());
 
   const server = app.listen(port, () => {
     console.log(`Night Watch Global UI running at http://localhost:${port}`);
   });
 
-  for (const listener of listeners) {
+  for (const { listener } of stacks) {
     void listener.start().catch((err: unknown) => {
       console.warn(`Slack interaction listener failed to start: ${err instanceof Error ? err.message : String(err)}`);
     });
   }
 
   setupGracefulShutdown(server, async () => {
-    await Promise.allSettled(listeners.map((l) => l.stop()));
+    await Promise.allSettled(stacks.map(({ listener }) => listener.stop()));
   });
 }

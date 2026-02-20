@@ -53,6 +53,10 @@ const REACTION_DELAY_MAX_MS = 1200;
 const RESPONSE_DELAY_MIN_MS = 700;
 const RESPONSE_DELAY_MAX_MS = 3400;
 const SOCKET_DISCONNECT_TIMEOUT_MS = 5_000;
+// Chance a second persona spontaneously chimes in after the first replies
+const PIGGYBACK_REPLY_PROBABILITY = 0.40;
+const PIGGYBACK_DELAY_MIN_MS = 4_000;
+const PIGGYBACK_DELAY_MAX_MS = 15_000;
 
 const JOB_STOPWORDS = new Set([
   'and',
@@ -307,6 +311,64 @@ export function extractGitHubIssueUrls(text: string): string[] {
 }
 
 /**
+ * Extract non-GitHub HTTP(S) URLs from a message (Slack angle-bracket format or plain).
+ */
+export function extractGenericUrls(text: string): string[] {
+  // Slack wraps URLs in angle brackets: <https://example.com>
+  const bracketUrls = [...text.matchAll(/<(https?:\/\/[^|>\s]+)(?:\|[^>]*)?>/g)].map((m) => m[1]);
+  // Also match plain URLs not already captured
+  const plainUrls = (text.match(/https?:\/\/[^\s<>]+/g) ?? []).filter(
+    (u) => !bracketUrls.includes(u),
+  );
+  const all = [...new Set([...bracketUrls, ...plainUrls])];
+  // Exclude GitHub URLs (those are handled by fetchGitHubIssueContext)
+  return all.filter((u) => !u.includes('github.com'));
+}
+
+/**
+ * Fetch title and meta description from generic URLs for agent context.
+ * Returns a formatted string, or '' on failure.
+ */
+async function fetchUrlSummaries(urls: string[]): Promise<string> {
+  if (urls.length === 0) return '';
+
+  const parts: string[] = [];
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5_000);
+
+  try {
+    for (const url of urls.slice(0, 2)) {
+      try {
+        const res = await fetch(url, {
+          signal: controller.signal,
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NightWatch/1.0)' },
+          redirect: 'follow',
+        });
+        if (!res.ok) continue;
+        const html = await res.text();
+        const titleMatch = html.match(/<title[^>]*>([^<]{1,200})<\/title>/i);
+        const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']{1,300})["']/i)
+          ?? html.match(/<meta[^>]*content=["']([^"']{1,300})["'][^>]*name=["']description["']/i);
+        const title = titleMatch?.[1]?.trim() ?? '';
+        const desc = descMatch?.[1]?.trim() ?? '';
+        if (title || desc) {
+          const lines = [`Link: ${url}`];
+          if (title) lines.push(`Title: ${title}`);
+          if (desc) lines.push(`Summary: ${desc}`);
+          parts.push(lines.join('\n'));
+        }
+      } catch {
+        // Network error or timeout for individual URL — skip
+      }
+    }
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  return parts.join('\n\n');
+}
+
+/**
  * Fetch GitHub issue/PR content via `gh api` for agent context.
  * Returns a formatted string, or '' on failure.
  */
@@ -344,7 +406,6 @@ async function fetchGitHubIssueContext(urls: string[]): Promise<string> {
   return parts.join('\n\n---\n\n');
 }
 
-@injectable()
 export class SlackInteractionListener {
   private readonly _config: INightWatchConfig;
   private readonly _slackClient: SlackClient;
@@ -360,12 +421,10 @@ export class SlackInteractionListener {
   private readonly _lastCodeWatchAt = new Map<string, number>();
   private _proactiveTimer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(config: INightWatchConfig) {
+  constructor(slackClient: SlackClient, engine: DeliberationEngine, config: INightWatchConfig) {
+    this._slackClient = slackClient;
+    this._engine = engine;
     this._config = config;
-    const token = config.slack?.botToken ?? '';
-    const serverBaseUrl = config.slack?.serverBaseUrl ?? 'http://localhost:7575';
-    this._slackClient = new SlackClient(token, serverBaseUrl);
-    this._engine = new DeliberationEngine(this._slackClient, config);
   }
 
   async start(): Promise<void> {
@@ -662,6 +721,76 @@ export class SlackInteractionListener {
       await this._engine.replyAsAgent(channel, threadTs, postedText, persona, projectContext);
       this._markPersonaReply(channel, threadTs, persona.id);
       this._rememberAdHocThreadPersona(channel, threadTs, persona.id);
+    }
+  }
+
+  /**
+   * After a persona replies, spontaneously trigger a second persona to chime in.
+   * Simulates the organic team dynamics where a teammate jumps in unprompted.
+   * Fire-and-forget: call with `void` to avoid blocking the main reply path.
+   */
+  private async _maybePiggybackReply(
+    channel: string,
+    threadTs: string,
+    text: string,
+    personas: IAgentPersona[],
+    projectContext: string,
+    excludePersonaId: string,
+  ): Promise<void> {
+    if (Math.random() > PIGGYBACK_REPLY_PROBABILITY) return;
+
+    const others = personas.filter(
+      (p) => p.id !== excludePersonaId && !this._isPersonaOnCooldown(channel, threadTs, p.id),
+    );
+    if (others.length === 0) return;
+
+    const persona = others[Math.floor(Math.random() * others.length)];
+    await sleep(this._randomInt(PIGGYBACK_DELAY_MIN_MS, PIGGYBACK_DELAY_MAX_MS));
+
+    const postedText = await this._engine.replyAsAgent(channel, threadTs, text, persona, projectContext);
+    this._markPersonaReply(channel, threadTs, persona.id);
+    this._rememberAdHocThreadPersona(channel, threadTs, persona.id);
+    if (postedText) {
+      await this._followAgentMentions(postedText, channel, threadTs, personas, projectContext, persona.id);
+    }
+  }
+
+  /**
+   * Engage multiple personas for ambient team messages ("hey guys", "happy friday", etc.)
+   * Picks 2-3 personas and has them reply with staggered natural delays.
+   */
+  private async _engageMultiplePersonas(
+    channel: string,
+    threadTs: string,
+    messageTs: string,
+    text: string,
+    personas: IAgentPersona[],
+    projectContext: string,
+  ): Promise<void> {
+    const available = personas.filter((p) => !this._isPersonaOnCooldown(channel, threadTs, p.id));
+    if (available.length === 0) return;
+
+    // Shuffle and pick 2-3 personas
+    const shuffled = [...available].sort(() => Math.random() - 0.5);
+    const count = Math.min(shuffled.length, this._randomInt(2, 3));
+    const participants = shuffled.slice(0, count);
+
+    let firstPostedPersonaId = '';
+    for (let i = 0; i < participants.length; i++) {
+      const persona = participants[i];
+      if (i > 0) {
+        // Stagger subsequent replies
+        await sleep(this._randomInt(PIGGYBACK_DELAY_MIN_MS, PIGGYBACK_DELAY_MAX_MS));
+      } else {
+        await this._applyHumanResponseTiming(channel, messageTs, persona);
+      }
+      const postedText = await this._engine.replyAsAgent(channel, threadTs, text, persona, projectContext);
+      this._markPersonaReply(channel, threadTs, persona.id);
+      this._rememberAdHocThreadPersona(channel, threadTs, persona.id);
+      if (i === 0) firstPostedPersonaId = persona.id;
+      if (postedText && i === participants.length - 1 && firstPostedPersonaId) {
+        await this._followAgentMentions(postedText, channel, threadTs, personas, projectContext, persona.id);
+      }
     }
   }
 
@@ -1511,9 +1640,13 @@ export class SlackInteractionListener {
 
     // Fetch GitHub issue/PR content from URLs in the message so agents can inspect them.
     const githubUrls = extractGitHubIssueUrls(text);
-    console.log(`[slack] processing message channel=${channel} thread=${threadTs} urls=${githubUrls.length}`);
+    const genericUrls = extractGenericUrls(text);
+    console.log(`[slack] processing message channel=${channel} thread=${threadTs} github_urls=${githubUrls.length} generic_urls=${genericUrls.length}`);
     const githubContext = githubUrls.length > 0 ? await fetchGitHubIssueContext(githubUrls) : '';
-    const fullContext = githubContext ? `${projectContext}\n\nReferenced GitHub content:\n${githubContext}` : projectContext;
+    const urlContext = genericUrls.length > 0 ? await fetchUrlSummaries(genericUrls) : '';
+    let fullContext = projectContext;
+    if (githubContext) fullContext += `\n\nReferenced GitHub content:\n${githubContext}`;
+    if (urlContext) fullContext += `\n\nReferenced links:\n${urlContext}`;
 
     if (await this._triggerDirectProviderIfRequested(event, channel, threadTs, ts, personas)) {
       return;
@@ -1609,6 +1742,7 @@ export class SlackInteractionListener {
       this._markPersonaReply(channel, threadTs, followUpPersona.id);
       this._rememberAdHocThreadPersona(channel, threadTs, followUpPersona.id);
       await this._followAgentMentions(postedText, channel, threadTs, personas, fullContext, followUpPersona.id);
+      void this._maybePiggybackReply(channel, threadTs, text, personas, fullContext, followUpPersona.id);
       return;
     }
 
@@ -1624,8 +1758,16 @@ export class SlackInteractionListener {
         this._markPersonaReply(channel, threadTs, followUpPersona.id);
         this._rememberAdHocThreadPersona(channel, threadTs, followUpPersona.id);
         await this._followAgentMentions(postedText, channel, threadTs, personas, fullContext, followUpPersona.id);
+        void this._maybePiggybackReply(channel, threadTs, text, personas, fullContext, followUpPersona.id);
         return;
       }
+    }
+
+    // Ambient team messages ("hey guys", "happy friday", "are you all alive?") get multiple replies.
+    if (isAmbientTeamMessage(text)) {
+      console.log(`[slack] ambient team message detected — engaging multiple personas`);
+      await this._engageMultiplePersonas(channel, threadTs, ts, text, personas, fullContext);
+      return;
     }
 
     // Direct bot mentions always get a reply.
@@ -1638,6 +1780,8 @@ export class SlackInteractionListener {
         this._markPersonaReply(channel, threadTs, randomPersona.id);
         this._rememberAdHocThreadPersona(channel, threadTs, randomPersona.id);
         await this._followAgentMentions(postedText, channel, threadTs, personas, fullContext, randomPersona.id);
+        // Spontaneous second voice
+        void this._maybePiggybackReply(channel, threadTs, text, personas, fullContext, randomPersona.id);
         return;
       }
     }
@@ -1658,6 +1802,8 @@ export class SlackInteractionListener {
       this._markPersonaReply(channel, threadTs, randomPersona.id);
       this._rememberAdHocThreadPersona(channel, threadTs, randomPersona.id);
       await this._followAgentMentions(postedText, channel, threadTs, personas, fullContext, randomPersona.id);
+      // Spontaneous second voice
+      void this._maybePiggybackReply(channel, threadTs, text, personas, fullContext, randomPersona.id);
       return;
     }
 

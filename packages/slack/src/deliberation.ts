@@ -4,10 +4,6 @@
  * Agents discuss in threads, reach consensus, and drive PR actions.
  */
 
-import 'reflect-metadata';
-
-import { injectable } from 'tsyringe';
-
 import { IAgentPersona, IDiscussionTrigger, ISlackDiscussion } from "@night-watch/core/shared/types.js";
 import { type ISlackMessage, SlackClient } from "./client.js";
 import { getRepositories } from "@night-watch/core/storage/repositories/index.js";
@@ -243,7 +239,6 @@ function chooseRoundContributors(personas: IAgentPersona[], maxCount: number): I
   return candidates.slice(0, maxCount);
 }
 
-@injectable()
 export class DeliberationEngine {
   private readonly _slackClient: SlackClient;
   private readonly _config: INightWatchConfig;
@@ -303,7 +298,12 @@ export class DeliberationEngine {
     const allowEmoji = count % 3 === 0;
     const allowNonFacialEmoji = count % 9 === 0;
 
-    return humanizeSlackReply(raw, { allowEmoji, allowNonFacialEmoji, maxSentences: 2 });
+    // Vary sentence length naturally — some messages are punchy (1-2), others fuller (3)
+    const maxSentences = Math.random() < 0.35 ? 1 : Math.random() < 0.6 ? 2 : 3;
+    // Vary char ceiling so messages don't all end at the exact same cutoff
+    const maxChars = 280 + Math.floor(Math.random() * 160); // 280-440
+
+    return humanizeSlackReply(raw, { allowEmoji, allowNonFacialEmoji, maxSentences, maxChars });
   }
 
   /**
@@ -851,21 +851,33 @@ Write the prefix and your message. Nothing else.`;
     const historyText = formatThreadHistory(history);
     const historySet = new Set(history.map((m) => normalizeText(m.text)).filter(Boolean));
 
+    // Detect if this is a casual/social message or a technical one
+    const isCasual = /\b(hey|hi|hello|yo|sup|happy|morning|afternoon|evening|friday|weekend|alive|there|guys|team|everyone|folks)\b/i.test(incomingText)
+      && !/\b(bug|error|crash|fail|test|pr|code|build|deploy|security|auth|token|vuln|diff|commit|review|issue|impl)\b/i.test(incomingText);
+
+    const casualGuidance = isCasual
+      ? `This is a casual social message — respond like a real colleague, not a bot. Be warm, brief, maybe crack a light comment about work or the day. Don't force a work topic. It's fine to just say hey back, ask how things are going, or make a quick joke. 1-2 sentences.\n`
+      : `If the message is technical:\n- Base opinions on concrete evidence from context (file path, symbol, diff, or log detail).\n- If there's no concrete evidence and the question is technical, ask for the file/diff before opining.\n`;
+
+    const urlGuidance = projectContext?.includes('Referenced links:')
+      ? `There are linked URLs in the context above — you have seen their title and summary. Reference what the link is actually about if relevant; don't pretend you haven't seen it.\n`
+      : '';
+
     const prompt =
       `You are ${persona.name}, ${persona.role}.\n` +
       `Your teammates: Dev (implementer), Carlos (tech lead), Maya (security), Priya (QA).\n\n` +
-      (projectContext ? `Project context: ${projectContext}\n\n` : '') +
+      (projectContext ? `Project context:\n${projectContext}\n\n` : '') +
       (historyText ? `Thread so far:\n${historyText}\n\n` : '') +
       `Latest message: "${incomingText}"\n\n` +
-      `Respond in your own voice. This is Slack — keep it to 1-2 sentences.\n` +
-      `- Talk like a colleague, not a bot. No "Great question", "Of course", or "I hope this helps".\n` +
-      `- You can tag teammates by name if someone else should weigh in.\n` +
+      `Respond in your own voice. This is Slack — keep it conversational, 1-3 sentences max.\n` +
+      `- Talk like a colleague who actually gives a damn, not a bot. No "Great question", "Of course", or "I hope this helps".\n` +
+      `- Engage with the thread — if teammates said something you agree or disagree with, react to it directly.\n` +
+      `- Tag a teammate by name naturally if their domain is more relevant ("Carlos would know better", "Maya, thoughts?").\n` +
+      casualGuidance +
+      urlGuidance +
       `- No markdown formatting, headings, or bullet lists.\n` +
-      `- Emojis: one max, only if it fits naturally. Default to none.\n` +
-      `- If the question is outside your domain, say so briefly and point to the right person.\n` +
-      `- If you disagree, say why in one line. If you agree, keep it short.\n` +
-      `- Base opinions on concrete code evidence from context (file path, symbol, diff, or stack/log detail).\n` +
-      `- If there is no concrete code evidence, ask for the exact file/diff before giving an opinion.\n` +
+      `- Emojis: one max, only if it fits. Default to none.\n` +
+      `- If the question is outside your domain, say so briefly and redirect.\n` +
       `- You have board tools available. If asked to open, update, or list issues, use them — don't just say you will.\n` +
       `- Only reference PR numbers, issue numbers, or URLs that appear in the context above. Never invent or guess links.\n\n` +
       `Write only your reply. No name prefix.`;

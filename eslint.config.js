@@ -26,6 +26,22 @@ export default tseslint.config(
       "preserve-caught-error": "off",
       "sort-imports": ["error", { ignoreDeclarationSort: true }],
       "no-restricted-imports": ["warn", {
+        paths: [{
+          name: "reflect-metadata",
+          message: "Only import reflect-metadata in entrypoints (cli.ts, di/container.ts) or test files.",
+        }],
+        patterns: [{
+          regex: "^\\.\\./\\.\\.[\\/]",
+          message: "Avoid deep relative imports (../../). Use @/* path aliases instead.",
+        }],
+      }],
+    },
+  },
+  // Allow reflect-metadata in entrypoints and test files
+  {
+    files: ["**/cli.ts", "**/di/container.ts", "**/__tests__/**"],
+    rules: {
+      "no-restricted-imports": ["warn", {
         patterns: [{
           regex: "^\\.\\./\\.\\.[\\/]",
           message: "Avoid deep relative imports (../../). Use @/* path aliases instead.",
