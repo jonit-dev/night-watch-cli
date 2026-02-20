@@ -9,6 +9,7 @@ import { IAgentPersona } from '../../shared/types.js';
 import { getDb } from '../storage/sqlite/client.js';
 import { getRepositories } from '../storage/repositories/index.js';
 import { INightWatchConfig } from '../types.js';
+import { generatePersonaAvatar } from '../utils/avatar-generator.js';
 import { DeliberationEngine } from './deliberation.js';
 import { SlackClient } from './client.js';
 
@@ -176,8 +177,8 @@ export class SlackInteractionListener {
   }
 
   /**
-   * Join all configured channels and post a one-time team roster to #eng.
-   * The roster explains how to address each agent by name in messages.
+   * Join all configured channels, generate avatars for personas that need them,
+   * and post a one-time personality-driven intro for each new persona.
    */
   private async _postPersonaIntros(): Promise<void> {
     const slack = this._config.slack;
@@ -188,6 +189,7 @@ export class SlackInteractionListener {
     for (const channelId of channelIds) {
       try {
         await this._slackClient.joinChannel(channelId);
+        console.log(`[slack] Joined channel ${channelId}`);
       } catch {
         // Ignore — channel may already be joined or private
       }
@@ -198,7 +200,7 @@ export class SlackInteractionListener {
 
     const db = getDb();
     const metaRow = db
-      .prepare(`SELECT value FROM schema_meta WHERE key = 'slack_persona_intros_v2'`)
+      .prepare(`SELECT value FROM schema_meta WHERE key = 'slack_persona_intros_v3'`)
       .get() as { value: string } | undefined;
     const introduced = new Set<string>(
       metaRow ? (JSON.parse(metaRow.value) as string[]) : [],
@@ -207,27 +209,47 @@ export class SlackInteractionListener {
     const repos = getRepositories();
     const personas = repos.agentPersona.getActive();
     const newPersonas = personas.filter((p) => !introduced.has(p.id));
-    if (newPersonas.length === 0) return;
+    if (newPersonas.length === 0) {
+      console.log('[slack] All personas already introduced — skipping intros');
+      return;
+    }
 
-    // Post individual intros for new personas, explaining how to mention them
+    console.log(`[slack] Introducing ${newPersonas.length} persona(s) to #eng`);
+
     for (const persona of newPersonas) {
-      const whoIAm = persona.soul?.whoIAm?.trim() ?? '';
-      const intro = [
-        `👋 Hey! I'm *${persona.name}*, ${persona.role}.`,
-        whoIAm || 'Ready to collaborate!',
-        `\n> To talk to me, type \`@${persona.name}\` anywhere in a message in this channel.`,
-      ].join(' ');
+      // Generate avatar if missing and Replicate token is configured
+      let currentPersona = persona;
+      if (!currentPersona.avatarUrl && slack.replicateApiToken) {
+        try {
+          console.log(`[slack] Generating avatar for ${persona.name}…`);
+          const avatarUrl = await generatePersonaAvatar(persona.role, slack.replicateApiToken);
+          if (avatarUrl) {
+            currentPersona = repos.agentPersona.update(persona.id, { avatarUrl });
+            console.log(`[slack] Avatar set for ${persona.name}: ${avatarUrl}`);
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.warn(`[slack] Avatar generation failed for ${persona.name}: ${msg}`);
+        }
+      }
+
+      // Personality-driven intro — persona's own voice, no canned boilerplate
+      const whoIAm = currentPersona.soul?.whoIAm?.trim() ?? '';
+      const intro = whoIAm
+        ? `${whoIAm}\n\nType \`@${currentPersona.name}\` in any channel message to get my take.`
+        : `*${currentPersona.name}* — ${currentPersona.role}.\n\nType \`@${currentPersona.name}\` in any channel message to get my take.`;
 
       try {
-        await this._slackClient.postAsAgent(engChannelId, intro, persona);
+        await this._slackClient.postAsAgent(engChannelId, intro, currentPersona);
         introduced.add(persona.id);
         db.prepare(
-          `INSERT INTO schema_meta (key, value) VALUES ('slack_persona_intros_v2', ?)
+          `INSERT INTO schema_meta (key, value) VALUES ('slack_persona_intros_v3', ?)
            ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
         ).run(JSON.stringify(Array.from(introduced)));
+        console.log(`[slack] Intro posted for ${persona.name}`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`Slack persona intro failed for ${persona.name}: ${msg}`);
+        console.warn(`[slack] Persona intro failed for ${persona.name}: ${msg}`);
       }
     }
   }
@@ -306,6 +328,34 @@ export class SlackInteractionListener {
     }
 
     const repos = getRepositories();
+    const personas = repos.agentPersona.getActive();
+    const mentionedPersonas = resolveMentionedPersonas(text, personas);
+
+    // Explicit @persona mention → respond regardless of whether a formal discussion exists.
+    if (mentionedPersonas.length > 0) {
+      console.log(`[slack] @mention detected in ${channel}: ${mentionedPersonas.map((p) => p.name).join(', ')}`);
+      const discussion = repos
+        .slackDiscussion
+        .getActive('')
+        .find((d) => d.channelId === channel && d.threadTs === threadTs);
+
+      for (const persona of mentionedPersonas) {
+        if (this._isPersonaOnCooldown(channel, threadTs, persona.id)) {
+          console.log(`[slack] ${persona.name} is on cooldown — skipping`);
+          continue;
+        }
+        if (discussion) {
+          await this._engine.contributeAsAgent(discussion.id, persona);
+        } else {
+          // No formal discussion — ad-hoc reply in the thread
+          await this._engine.replyAsAgent(channel, threadTs, text, persona);
+        }
+        this._markPersonaReply(channel, threadTs, persona.id);
+      }
+      return;
+    }
+
+    // No @mention — only handle within an existing Night Watch discussion thread.
     const discussion = repos
       .slackDiscussion
       .getActive('')
@@ -315,22 +365,6 @@ export class SlackInteractionListener {
       return;
     }
 
-    const personas = repos.agentPersona.getActive();
-    const mentionedPersonas = resolveMentionedPersonas(text, personas);
-
-    // Explicit @persona mention -> only those persona(s) respond.
-    if (mentionedPersonas.length > 0) {
-      for (const persona of mentionedPersonas) {
-        if (this._isPersonaOnCooldown(channel, threadTs, persona.id)) {
-          continue;
-        }
-        await this._engine.contributeAsAgent(discussion.id, persona);
-        this._markPersonaReply(channel, threadTs, persona.id);
-      }
-      return;
-    }
-
-    // No explicit persona mention -> treat as generic human input for the discussion.
     await this._engine.handleHumanMessage(
       channel,
       threadTs,
