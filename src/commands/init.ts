@@ -30,6 +30,7 @@ import {
   detectProviders,
 } from '../utils/checks.js';
 import { loadConfig } from '../config.js';
+import { getProjectName } from '../utils/status-data.js';
 
 // Get templates directory path
 const __filename = fileURLToPath(import.meta.url);
@@ -211,13 +212,6 @@ export function getDefaultBranch(cwd: string): string {
   } catch {
     return 'main';
   }
-}
-
-/**
- * Get the project name from the directory
- */
-function getProjectName(cwd: string): string {
-  return path.basename(cwd);
 }
 
 /**

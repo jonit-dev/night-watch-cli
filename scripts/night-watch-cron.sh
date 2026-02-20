@@ -21,7 +21,7 @@ else
   PRD_DIR="${PROJECT_DIR}/${PRD_DIR_REL}"
 fi
 LOG_DIR="${PROJECT_DIR}/logs"
-LOG_FILE="${LOG_DIR}/night-watch.log"
+LOG_FILE="${LOG_DIR}/executor.log"
 MAX_RUNTIME="${NW_MAX_RUNTIME:-7200}"  # 2 hours
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
