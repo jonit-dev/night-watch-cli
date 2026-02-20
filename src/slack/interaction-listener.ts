@@ -28,8 +28,18 @@ interface IInboundSlackEvent {
 }
 
 interface IEventsApiPayload {
-  ack: () => Promise<void>;
-  event: IInboundSlackEvent;
+  ack?: () => Promise<void>;
+  event?: IInboundSlackEvent;
+  body?: {
+    event?: IInboundSlackEvent;
+  };
+  payload?: {
+    event?: IInboundSlackEvent;
+  };
+}
+
+function extractInboundEvent(payload: IEventsApiPayload): IInboundSlackEvent | null {
+  return payload.event ?? payload.body?.event ?? payload.payload?.event ?? null;
 }
 
 function normalizeHandle(value: string): string {
@@ -172,9 +182,16 @@ export class SlackInteractionListener {
       appToken: slack.appToken,
     });
 
-    socket.on('events_api', (payload: IEventsApiPayload) => {
+    const onInboundEvent = (payload: IEventsApiPayload) => {
       void this._handleEventsApi(payload);
-    });
+    };
+
+    // Socket Mode emits concrete event types (e.g. "app_mention", "message")
+    // for Events API payloads in current SDK versions.
+    socket.on('app_mention', onInboundEvent);
+    socket.on('message', onInboundEvent);
+    // Keep compatibility with alternate wrappers/older payload routing.
+    socket.on('events_api', onInboundEvent);
 
     socket.on('error', (err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
@@ -287,13 +304,15 @@ export class SlackInteractionListener {
   }
 
   private async _handleEventsApi(payload: IEventsApiPayload): Promise<void> {
-    try {
-      await payload.ack();
-    } catch {
-      // Ignore ack races/timeouts; processing can continue.
+    if (payload.ack) {
+      try {
+        await payload.ack();
+      } catch {
+        // Ignore ack races/timeouts; processing can continue.
+      }
     }
 
-    const event = payload.event;
+    const event = extractInboundEvent(payload);
     if (!event) return;
 
     // Log every event so we can debug what's arriving
