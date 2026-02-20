@@ -51,10 +51,10 @@ function buildPersona(): IAgentPersona {
 describe('compileSoul', () => {
   it('includes humanized writing guardrails', () => {
     const prompt = compileSoul(buildPersona());
-    expect(prompt).toContain('## Humanized Writing Guardrails');
-    expect(prompt).toContain('Sound like a real teammate in Slack');
-    expect(prompt).toContain('Never use canned opener/closer phrases');
-    expect(prompt).toContain('Avoid AI-ish filler words');
+    expect(prompt).toContain('## How to Sound Human');
+    expect(prompt).toContain('You are a teammate in Slack');
+    expect(prompt).toContain('Never use these chatbot tells');
+    expect(prompt).toContain('Avoid AI filler words');
   });
 
   it('includes extended voice fields for personality fidelity', () => {
