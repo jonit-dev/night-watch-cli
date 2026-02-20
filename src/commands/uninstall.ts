@@ -18,30 +18,10 @@ import {
   error as uiError,
   warn,
 } from "../utils/ui.js";
+import { getProjectName } from "../utils/status-data.js";
 
 export interface IUninstallOptions {
   keepLogs?: boolean;
-}
-
-/**
- * Get the project name from directory or package.json
- */
-function getProjectName(projectDir: string): string {
-  // Try to get name from package.json
-  const packageJsonPath = path.join(projectDir, "package.json");
-  if (fs.existsSync(packageJsonPath)) {
-    try {
-      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
-      if (packageJson.name) {
-        return packageJson.name;
-      }
-    } catch {
-      // Ignore parse errors
-    }
-  }
-
-  // Fall back to directory name
-  return path.basename(projectDir);
 }
 
 export interface IUninstallResult {
