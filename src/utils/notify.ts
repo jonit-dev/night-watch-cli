@@ -4,9 +4,11 @@
  */
 
 import { INightWatchConfig, ISlackBotConfig, IWebhookConfig, NotificationEvent } from "../types.js";
+import { IDiscussionTrigger } from "../../shared/types.js";
 import { info, warn } from "./ui.js";
 import { extractSummary } from "./github.js";
 import { SlackClient } from "../slack/client.js";
+import { DeliberationEngine } from "../slack/deliberation.js";
 import { getRepositories } from "../storage/repositories/index.js";
 
 export interface INotificationContext {
@@ -349,6 +351,25 @@ export async function sendWebhook(webhook: IWebhookConfig, ctx: INotificationCon
 }
 
 /**
+ * Build a discussion trigger from a notification context, if the event warrants deliberation.
+ * Returns null when deliberation should not be triggered.
+ */
+function buildDiscussionTrigger(ctx: INotificationContext, projectPath: string): IDiscussionTrigger | null {
+  if (ctx.event === "run_succeeded" && ctx.prNumber) {
+    return {
+      type: "pr_review",
+      projectPath,
+      ref: String(ctx.prNumber),
+      context: ctx.prBody
+        ? ctx.prBody.slice(0, 2000)
+        : `PR #${ctx.prNumber}: ${ctx.prTitle ?? ctx.projectName}`,
+      prUrl: ctx.prUrl,
+    };
+  }
+  return null;
+}
+
+/**
  * Send notifications to all configured webhooks and (if configured) to Slack via Bot API.
  */
 export async function sendNotifications(
@@ -360,10 +381,12 @@ export async function sendNotifications(
   // Slack Bot API path — additive, controlled by config.slack?.enabled
   if (config.slack?.enabled && config.slack?.botToken) {
     const slackConfig = config.slack;
+    const slackClient = new SlackClient(slackConfig.botToken);
+
+    // Notification post
     tasks.push(
       (async () => {
         try {
-          const slackClient = new SlackClient(slackConfig.botToken);
           const repos = getRepositories();
           const personas = repos.agentPersona.getActive();
           const personaName = getPersonaNameForEvent(ctx.event);
@@ -382,6 +405,24 @@ export async function sendNotifications(
         }
       })()
     );
+
+    // Deliberation — fire-and-forget, gated by discussionEnabled
+    if (slackConfig.discussionEnabled) {
+      const trigger = buildDiscussionTrigger(ctx, process.cwd());
+      if (trigger) {
+        tasks.push(
+          (async () => {
+            try {
+              const engine = new DeliberationEngine(slackClient, config);
+              await engine.startDiscussion(trigger);
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              warn(`Slack deliberation failed: ${message}`);
+            }
+          })()
+        );
+      }
+    }
   }
 
   // Legacy webhook path — backward compatible

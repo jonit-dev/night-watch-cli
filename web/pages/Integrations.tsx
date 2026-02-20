@@ -107,9 +107,24 @@ export default function Integrations() {
         const newChannels = [...channels];
         for (const missing of missingToCreate) {
           try {
-            const newChannelId = await createSlackChannel(botToken, missing.name);
+            const createResult = await createSlackChannel(botToken, missing.name);
+            const newChannelId = createResult.channelId;
             missing.setter(newChannelId);
             newChannels.push({ id: newChannelId, name: missing.name });
+
+            if (createResult.inviteWarning) {
+              addToast({
+                title: 'Channel Created with Warning',
+                message: `#${missing.name}: ${createResult.inviteWarning}`,
+                type: 'warning',
+              });
+            } else if (!createResult.welcomeMessagePosted) {
+              addToast({
+                title: 'Channel Created',
+                message: `#${missing.name} was created, but welcome message failed to post.`,
+                type: 'warning',
+              });
+            }
           } catch (createErr: any) {
             console.error('Failed to create channel:', missing.name, createErr);
             // It might fail if we lack scopes, keep going
@@ -159,11 +174,12 @@ export default function Integrations() {
         "reactions:write",
         "reactions:read",
         "app_mentions:read",
-        "channels:history"
+        "channels:history",
+        "users:read"
       ]
     }
   }
-}`;
+} `;
 
   if (!config) {
     return <div className="animate-pulse flex space-x-4">Loading...</div>;
