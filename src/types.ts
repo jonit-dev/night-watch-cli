@@ -112,6 +112,9 @@ export interface INightWatchConfig {
   /** QA process configuration */
   qa: IQaConfig;
 
+  /** Code audit configuration */
+  audit: IAuditConfig;
+
   /** Slack Bot API configuration (optional) */
   slack?: ISlackBotConfig;
 }
@@ -133,6 +136,15 @@ export interface IQaConfig {
   skipLabel: string;
   /** Auto-install Playwright if missing during QA run */
   autoInstallPlaywright: boolean;
+}
+
+export interface IAuditConfig {
+  /** Whether the audit process is enabled */
+  enabled: boolean;
+  /** Cron schedule for audit execution */
+  schedule: string;
+  /** Maximum runtime in seconds for the audit */
+  maxRuntime: number;
 }
 
 export type WebhookType = "slack" | "discord" | "telegram";

@@ -3,7 +3,7 @@
  */
 
 import { IBoardProviderConfig } from "./board/types.js";
-import { ClaudeModel, INotificationConfig, IQaConfig, IRoadmapScannerConfig, ISlackBotConfig, MergeMethod, Provider, QaArtifacts } from "./types.js";
+import { ClaudeModel, IAuditConfig, INotificationConfig, IQaConfig, IRoadmapScannerConfig, ISlackBotConfig, MergeMethod, Provider, QaArtifacts } from "./types.js";
 
 // Branch Configuration (default branch)
 export const DEFAULT_DEFAULT_BRANCH = ""; // empty = auto-detect
@@ -103,6 +103,19 @@ export const DEFAULT_QA: IQaConfig = {
 };
 
 export const QA_LOG_NAME = "night-watch-qa";
+
+// Audit Configuration
+export const DEFAULT_AUDIT_ENABLED = true;
+export const DEFAULT_AUDIT_SCHEDULE = "0 3 * * *"; // daily at 3am
+export const DEFAULT_AUDIT_MAX_RUNTIME = 1800; // 30 minutes
+
+export const DEFAULT_AUDIT: IAuditConfig = {
+  enabled: DEFAULT_AUDIT_ENABLED,
+  schedule: DEFAULT_AUDIT_SCHEDULE,
+  maxRuntime: DEFAULT_AUDIT_MAX_RUNTIME,
+};
+
+export const AUDIT_LOG_NAME = "audit";
 
 // Slack Bot Configuration
 export const DEFAULT_SLACK_BOT_CONFIG: ISlackBotConfig = {

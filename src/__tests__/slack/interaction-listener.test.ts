@@ -4,9 +4,9 @@ import {
   SlackInteractionListener,
   buildInboundMessageKey,
   extractMentionHandles,
-  findCodeWatchSignal,
   isAmbientTeamMessage,
   parseSlackJobRequest,
+  parseSlackProviderRequest,
   resolveMentionedPersonas,
   resolvePersonasByPlainName,
   selectFollowUpPersona,
@@ -244,6 +244,40 @@ describe('Slack interaction listener helpers', () => {
     });
   });
 
+  describe('parseSlackProviderRequest', () => {
+    it('parses direct claude invocation with prompt', () => {
+      expect(parseSlackProviderRequest('<@UBOT> claude investigate flaky playwright tests')).toEqual({
+        provider: 'claude',
+        prompt: 'investigate flaky playwright tests',
+      });
+    });
+
+    it('parses explicit run + project-scoped codex invocation', () => {
+      expect(parseSlackProviderRequest('run codex on night-watch-cli: review CI failure logs')).toEqual({
+        provider: 'codex',
+        projectHint: 'night-watch-cli',
+        prompt: 'review CI failure logs',
+      });
+    });
+
+    it('parses conversational run request syntax', () => {
+      expect(parseSlackProviderRequest('can you run claude on night-watch-cli fix the flaky e2e checks?')).toEqual({
+        provider: 'claude',
+        projectHint: 'night-watch-cli',
+        prompt: 'fix the flaky e2e checks?',
+      });
+    });
+
+    it('returns null when provider is mentioned without a prompt', () => {
+      expect(parseSlackProviderRequest('claude')).toBeNull();
+      expect(parseSlackProviderRequest('run codex on night-watch-cli')).toBeNull();
+    });
+
+    it('returns null for non-provider job requests', () => {
+      expect(parseSlackProviderRequest('please run night-watch-cli now')).toBeNull();
+    });
+  });
+
   describe('isAmbientTeamMessage', () => {
     it('detects casual team greetings', () => {
       expect(isAmbientTeamMessage('Hey guys')).toBe(true);
@@ -254,37 +288,6 @@ describe('Slack interaction listener helpers', () => {
     it('ignores non-greeting chatter', () => {
       expect(isAmbientTeamMessage('Cool')).toBe(false);
       expect(isAmbientTeamMessage('ship it')).toBe(false);
-    });
-  });
-
-  describe('findCodeWatchSignal', () => {
-    it('detects empty catch blocks', () => {
-      const signal = findCodeWatchSignal(`
-        async function run() {
-          try {
-            await work();
-          } catch (err) {
-          }
-        }
-      `);
-      expect(signal?.type).toBe('empty_catch');
-    });
-
-    it('detects critical TODO markers', () => {
-      const signal = findCodeWatchSignal(`
-        // TODO security bug: tighten token validation before ship
-        export const ok = true;
-      `);
-      expect(signal?.type).toBe('critical_todo');
-    });
-
-    it('returns null when no suspicious signal is present', () => {
-      const signal = findCodeWatchSignal(`
-        export function sum(a: number, b: number): number {
-          return a + b;
-        }
-      `);
-      expect(signal).toBeNull();
     });
   });
 

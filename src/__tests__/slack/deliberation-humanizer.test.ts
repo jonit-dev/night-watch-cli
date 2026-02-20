@@ -34,4 +34,14 @@ describe('humanizeSlackReply', () => {
     const result = humanizeSlackReply('- item one\n- item two');
     expect(result).not.toContain('- ');
   });
+
+  it('passes through SKIP sentinel unchanged', () => {
+    const result = humanizeSlackReply('SKIP');
+    expect(result).toBe('SKIP');
+  });
+
+  it('removes repeated duplicate sentences', () => {
+    const result = humanizeSlackReply('Fix parse error. Fix parse error.');
+    expect(result).toBe('Fix parse error.');
+  });
 });
