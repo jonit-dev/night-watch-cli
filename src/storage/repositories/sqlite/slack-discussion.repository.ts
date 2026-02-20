@@ -3,14 +3,17 @@
  * Persists Slack discussion records in the `slack_discussions` table.
  */
 
+import 'reflect-metadata';
+
 import Database from "better-sqlite3";
 import { randomUUID } from "crypto";
+import { inject, injectable } from "tsyringe";
 import {
   ConsensusResult,
   DiscussionStatus,
   ISlackDiscussion,
   TriggerType,
-} from "../../../../shared/types.js";
+} from "@shared/types.js";
 import { ISlackDiscussionRepository } from "../interfaces.js";
 
 interface ISlackDiscussionRow {
@@ -45,10 +48,11 @@ function rowToDiscussion(row: ISlackDiscussionRow): ISlackDiscussion {
   };
 }
 
+@injectable()
 export class SqliteSlackDiscussionRepository implements ISlackDiscussionRepository {
   private readonly _db: Database.Database;
 
-  constructor(db: Database.Database) {
+  constructor(@inject('Database') db: Database.Database) {
     this._db = db;
   }
 

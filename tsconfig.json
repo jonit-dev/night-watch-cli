@@ -7,7 +7,8 @@
     "rootDirs": ["./src", "./shared"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@shared/*": ["./shared/*"]
     },
     "strict": true,
     "esModuleInterop": true,
@@ -16,7 +17,9 @@
     "declarationMap": true,
     "sourceMap": true,
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
   },
   "include": ["src/**/*", "shared/**/*"],
   "exclude": ["node_modules", "dist", "src/__tests__/**/*"]

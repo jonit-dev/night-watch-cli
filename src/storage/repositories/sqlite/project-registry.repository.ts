@@ -3,7 +3,10 @@
  * Persists project registry entries in the `projects` table.
  */
 
+import 'reflect-metadata';
+
 import Database from "better-sqlite3";
+import { inject, injectable } from "tsyringe";
 
 import { IRegistryEntry } from "@/utils/registry.js";
 import { IProjectRegistryRepository } from "../interfaces.js";
@@ -15,12 +18,13 @@ interface IProjectRow {
   slack_channel_id?: string | null;
 }
 
+@injectable()
 export class SqliteProjectRegistryRepository
   implements IProjectRegistryRepository
 {
   private readonly _db: Database.Database;
 
-  constructor(db: Database.Database) {
+  constructor(@inject('Database') db: Database.Database) {
     this._db = db;
   }
 

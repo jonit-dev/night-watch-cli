@@ -3,6 +3,10 @@
  * Uses the official @slack/web-api SDK for type-safe API calls.
  */
 
+import 'reflect-metadata';
+
+import { injectable } from 'tsyringe';
+
 import { WebClient } from '@slack/web-api';
 import { IAgentPersona } from '../../shared/types.js';
 
@@ -33,6 +37,7 @@ export function getFallbackAvatarUrl(persona: IAgentPersona): string {
   return `https://ui-avatars.com/api/?name=${name}&background=${background}&color=ffffff&size=128&bold=true&format=png`;
 }
 
+@injectable()
 export class SlackClient {
   private readonly _client: WebClient;
   private readonly _serverBaseUrl: string;

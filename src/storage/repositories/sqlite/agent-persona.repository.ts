@@ -3,7 +3,10 @@
  * Persists agent persona entities with JSON-serialized soul/style/skill/modelConfig.
  */
 
+import 'reflect-metadata';
+
 import Database from "better-sqlite3";
+import { inject, injectable } from "tsyringe";
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from "crypto";
 import {
   CreateAgentPersonaInput,
@@ -13,7 +16,7 @@ import {
   IAgentSoul,
   IAgentStyle,
   UpdateAgentPersonaInput,
-} from "../../../../shared/types.js";
+} from "@shared/types.js";
 import { IAgentPersonaRepository } from "../interfaces.js";
 
 interface IAgentPersonaRow {
@@ -556,10 +559,11 @@ const DEFAULT_PERSONAS: CreateAgentPersonaInput[] = [
   },
 ];
 
+@injectable()
 export class SqliteAgentPersonaRepository implements IAgentPersonaRepository {
   private readonly _db: Database.Database;
 
-  constructor(db: Database.Database) {
+  constructor(@inject('Database') db: Database.Database) {
     this._db = db;
   }
 

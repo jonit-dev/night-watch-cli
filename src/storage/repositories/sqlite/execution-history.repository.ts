@@ -3,7 +3,10 @@
  * Persists execution records in the `execution_history` table.
  */
 
+import 'reflect-metadata';
+
 import Database from "better-sqlite3";
+import { inject, injectable } from "tsyringe";
 
 import { IExecutionRecord } from "@/utils/execution-history.js";
 import { IExecutionHistoryRepository } from "../interfaces.js";
@@ -17,12 +20,13 @@ interface IExecutionHistoryRow {
   attempt: number;
 }
 
+@injectable()
 export class SqliteExecutionHistoryRepository
   implements IExecutionHistoryRepository
 {
   private readonly _db: Database.Database;
 
-  constructor(db: Database.Database) {
+  constructor(@inject('Database') db: Database.Database) {
     this._db = db;
   }
 

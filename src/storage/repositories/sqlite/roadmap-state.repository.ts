@@ -3,7 +3,10 @@
  * Persists roadmap state in the `roadmap_states` table, keyed by prd_dir.
  */
 
+import 'reflect-metadata';
+
 import Database from "better-sqlite3";
+import { inject, injectable } from "tsyringe";
 
 import { IRoadmapState } from "@/utils/roadmap-state.js";
 import { IRoadmapStateRepository } from "../interfaces.js";
@@ -15,10 +18,11 @@ interface IRoadmapStateRow {
   items_json: string;
 }
 
+@injectable()
 export class SqliteRoadmapStateRepository implements IRoadmapStateRepository {
   private readonly _db: Database.Database;
 
-  constructor(db: Database.Database) {
+  constructor(@inject('Database') db: Database.Database) {
     this._db = db;
   }
 

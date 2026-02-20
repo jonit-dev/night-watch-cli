@@ -56,3 +56,17 @@ export function closeDb(): void {
     _db = null;
   }
 }
+
+/**
+ * Create (or open) a Database instance at `<projectDir>/state.db`.
+ * Applies WAL journal mode and busy_timeout pragmas.
+ * Unlike `getDb()`, this does NOT manage a singleton — callers own the instance.
+ */
+export function createDbForDir(projectDir: string): Database.Database {
+  fs.mkdirSync(projectDir, { recursive: true });
+  const dbPath = path.join(projectDir, STATE_DB_FILE_NAME);
+  const db = new Database(dbPath);
+  db.pragma("journal_mode = WAL");
+  db.pragma("busy_timeout = 5000");
+  return db;
+}

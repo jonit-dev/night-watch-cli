@@ -4,6 +4,10 @@
  * and applies loop-protection safeguards.
  */
 
+import 'reflect-metadata';
+
+import { injectable } from 'tsyringe';
+
 import { SocketModeClient } from '@slack/socket-mode';
 import { execFileSync, spawn } from 'child_process';
 import * as fs from 'fs';
@@ -340,6 +344,7 @@ async function fetchGitHubIssueContext(urls: string[]): Promise<string> {
   return parts.join('\n\n---\n\n');
 }
 
+@injectable()
 export class SlackInteractionListener {
   private readonly _config: INightWatchConfig;
   private readonly _slackClient: SlackClient;

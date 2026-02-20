@@ -4,6 +4,10 @@
  * Agents discuss in threads, reach consensus, and drive PR actions.
  */
 
+import 'reflect-metadata';
+
+import { injectable } from 'tsyringe';
+
 import { IAgentPersona, IDiscussionTrigger, ISlackDiscussion } from "../../shared/types.js";
 import { type ISlackMessage, SlackClient } from "./client.js";
 import { getRepositories } from "../storage/repositories/index.js";
@@ -18,6 +22,7 @@ import { findCarlos, findDev, getParticipatingPersonas } from "./personas.js";
 import { buildBoardTools, callAIForContribution, callAIWithTools, resolvePersonaAIConfig } from "./ai/index.js";
 
 // Re-export humanizeSlackReply for backwards compatibility with existing tests
+
 export { humanizeSlackReply } from "./humanizer.js";
 
 const MAX_ROUNDS = 2;
@@ -238,6 +243,7 @@ function chooseRoundContributors(personas: IAgentPersona[], maxCount: number): I
   return candidates.slice(0, maxCount);
 }
 
+@injectable()
 export class DeliberationEngine {
   private readonly _slackClient: SlackClient;
   private readonly _config: INightWatchConfig;
