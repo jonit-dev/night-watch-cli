@@ -473,6 +473,145 @@ describe("config", () => {
     });
   });
 
+  describe("autoMerge config", () => {
+    it("should default autoMerge to false", () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMerge).toBe(false);
+    });
+
+    it("should default autoMergeMethod to squash", () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMergeMethod).toBe("squash");
+    });
+
+    it("should load autoMerge from config file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          autoMerge: true,
+        })
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMerge).toBe(true);
+    });
+
+    it("should load autoMergeMethod from config file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          autoMergeMethod: "merge",
+        })
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMergeMethod).toBe("merge");
+    });
+
+    it("should handle NW_AUTO_MERGE env var with true", () => {
+      process.env.NW_AUTO_MERGE = "true";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMerge).toBe(true);
+    });
+
+    it("should handle NW_AUTO_MERGE env var with 1", () => {
+      process.env.NW_AUTO_MERGE = "1";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMerge).toBe(true);
+    });
+
+    it("should handle NW_AUTO_MERGE env var with false", () => {
+      // First set autoMerge to true in config file
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          autoMerge: true,
+        })
+      );
+
+      process.env.NW_AUTO_MERGE = "false";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMerge).toBe(false);
+    });
+
+    it("should handle NW_AUTO_MERGE_METHOD env var with valid values", () => {
+      process.env.NW_AUTO_MERGE_METHOD = "rebase";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMergeMethod).toBe("rebase");
+    });
+
+    it("should reject invalid merge method from env var", () => {
+      process.env.NW_AUTO_MERGE_METHOD = "invalid";
+
+      const config = loadConfig(tempDir);
+
+      // Should fallback to default
+      expect(config.autoMergeMethod).toBe("squash");
+    });
+
+    it("should reject invalid merge method from config file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          autoMergeMethod: "invalid",
+        })
+      );
+
+      const config = loadConfig(tempDir);
+
+      // Should fallback to default
+      expect(config.autoMergeMethod).toBe("squash");
+    });
+
+    it("should let NW_AUTO_MERGE env var override config file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          autoMerge: false,
+        })
+      );
+
+      process.env.NW_AUTO_MERGE = "true";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMerge).toBe(true);
+    });
+
+    it("should let NW_AUTO_MERGE_METHOD env var override config file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          autoMergeMethod: "merge",
+        })
+      );
+
+      process.env.NW_AUTO_MERGE_METHOD = "rebase";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMergeMethod).toBe("rebase");
+    });
+  });
+
   describe("notifications config", () => {
     it("should load notifications from config file", () => {
       const configPath = path.join(tempDir, "night-watch.config.json");

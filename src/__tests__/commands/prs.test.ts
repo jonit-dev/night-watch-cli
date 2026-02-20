@@ -501,6 +501,266 @@ describe("prs command", () => {
 
       consoleSpy.mockRestore();
     });
+
+    it("should return null for REVIEW_REQUIRED review decision", async () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) {
+          return ".git";
+        }
+        if (cmd.includes("which gh")) {
+          return "/usr/bin/gh";
+        }
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              number: 1,
+              title: "Review Required PR",
+              headRefName: "feat/test",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [],
+              reviewDecision: "REVIEW_REQUIRED"
+            }
+          ]);
+        }
+        return "";
+      });
+
+      const program = new Command();
+      prsCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "prs", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.prs[0].reviewScore).toBeNull();
+
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe("CI status edge cases", () => {
+    it("should report unknown when statusCheckRollup is null", async () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) {
+          return ".git";
+        }
+        if (cmd.includes("which gh")) {
+          return "/usr/bin/gh";
+        }
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              number: 1,
+              title: "Null Checks PR",
+              headRefName: "feat/test",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: null,
+              reviewDecision: null
+            }
+          ]);
+        }
+        return "";
+      });
+
+      const program = new Command();
+      prsCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "prs", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.prs[0].ciStatus).toBe("unknown");
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should report pass for NEUTRAL conclusion", async () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) {
+          return ".git";
+        }
+        if (cmd.includes("which gh")) {
+          return "/usr/bin/gh";
+        }
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              number: 1,
+              title: "Neutral PR",
+              headRefName: "feat/test",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ conclusion: "NEUTRAL", status: "COMPLETED" }],
+              reviewDecision: null
+            }
+          ]);
+        }
+        return "";
+      });
+
+      const program = new Command();
+      prsCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "prs", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.prs[0].ciStatus).toBe("pass");
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should handle nested contexts array structure", async () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) {
+          return ".git";
+        }
+        if (cmd.includes("which gh")) {
+          return "/usr/bin/gh";
+        }
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              number: 1,
+              title: "Nested Contexts PR",
+              headRefName: "feat/test",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [
+                {
+                  contexts: [
+                    { conclusion: "SUCCESS", status: "COMPLETED" }
+                  ]
+                }
+              ],
+              reviewDecision: null
+            }
+          ]);
+        }
+        return "";
+      });
+
+      const program = new Command();
+      prsCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "prs", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.prs[0].ciStatus).toBe("pass");
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should handle StatusContext state field", async () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) {
+          return ".git";
+        }
+        if (cmd.includes("which gh")) {
+          return "/usr/bin/gh";
+        }
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              number: 1,
+              title: "StatusContext PR",
+              headRefName: "feat/test",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ state: "SUCCESS" }],
+              reviewDecision: null
+            }
+          ]);
+        }
+        return "";
+      });
+
+      const program = new Command();
+      prsCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "prs", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.prs[0].ciStatus).toBe("pass");
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should report fail for ERROR conclusion", async () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) {
+          return ".git";
+        }
+        if (cmd.includes("which gh")) {
+          return "/usr/bin/gh";
+        }
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              number: 1,
+              title: "Error PR",
+              headRefName: "feat/test",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ conclusion: "ERROR", status: "COMPLETED" }],
+              reviewDecision: null
+            }
+          ]);
+        }
+        return "";
+      });
+
+      const program = new Command();
+      prsCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "prs", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.prs[0].ciStatus).toBe("fail");
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should report fail for TIMED_OUT conclusion", async () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) {
+          return ".git";
+        }
+        if (cmd.includes("which gh")) {
+          return "/usr/bin/gh";
+        }
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            {
+              number: 1,
+              title: "Timed Out PR",
+              headRefName: "feat/test",
+              url: "https://github.com/test/repo/pull/1",
+              statusCheckRollup: [{ conclusion: "TIMED_OUT", status: "COMPLETED" }],
+              reviewDecision: null
+            }
+          ]);
+        }
+        return "";
+      });
+
+      const program = new Command();
+      prsCommand(program);
+
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await program.parseAsync(["node", "test", "prs", "--json"]);
+
+      const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
+      expect(jsonOutput.prs[0].ciStatus).toBe("fail");
+
+      consoleSpy.mockRestore();
+    });
   });
 
   describe("error handling", () => {

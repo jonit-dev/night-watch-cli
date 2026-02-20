@@ -305,17 +305,25 @@ find_eligible_prd() {
 }
 
 # ── Clean up worktrees ───────────────────────────────────────────────────────
-# Removes any worktrees with "-nw-" in the path (night-watch worktrees).
+# Removes night-watch worktrees for this project.
+# Optional second argument narrows cleanup to worktrees containing that token.
+# This prevents parallel reviewer workers from deleting each other's worktrees.
 
 cleanup_worktrees() {
   local project_dir="${1:?project_dir required}"
+  local scope="${2:-}"
   local project_name
   project_name=$(basename "${project_dir}")
+
+  local match_token="${project_name}-nw"
+  if [ -n "${scope}" ]; then
+    match_token="${scope}"
+  fi
 
   git -C "${project_dir}" worktree list --porcelain 2>/dev/null \
     | grep '^worktree ' \
     | awk '{print $2}' \
-    | grep "${project_name}-nw" \
+    | grep -F "${match_token}" \
     | while read -r wt; do
         log "CLEANUP: Removing leftover worktree ${wt}"
         git -C "${project_dir}" worktree remove --force "${wt}" 2>/dev/null || true
