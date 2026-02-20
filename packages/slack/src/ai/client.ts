@@ -4,11 +4,9 @@
 
 import type { IAgentPersona } from '@night-watch/core/shared/types.js';
 import type { INightWatchConfig } from '@night-watch/core/types.js';
-import type { IBoardProviderConfig } from '@night-watch/core/board/types.js';
 import { compileSoul } from '@night-watch/core/agents/soul-compiler.js';
 import { joinBaseUrl, resolvePersonaAIConfig } from './provider.js';
-import type { IAnthropicTool } from './tools.js';
-import { executeBoardTool } from './tools.js';
+import type { IAnthropicTool, ToolRegistry } from './tools.js';
 
 /**
  * Call the AI provider to generate an agent contribution.
@@ -26,11 +24,12 @@ export async function callAIForContribution(
   const maxTokens = maxTokensOverride ?? resolved.maxTokens;
 
   if (resolved.provider === 'anthropic') {
-    const apiKey = resolved.envVars['ANTHROPIC_API_KEY']
-      ?? resolved.envVars['ANTHROPIC_AUTH_TOKEN']
-      ?? process.env.ANTHROPIC_API_KEY
-      ?? process.env.ANTHROPIC_AUTH_TOKEN
-      ?? '';
+    const apiKey =
+      resolved.envVars['ANTHROPIC_API_KEY'] ??
+      resolved.envVars['ANTHROPIC_AUTH_TOKEN'] ??
+      process.env.ANTHROPIC_API_KEY ??
+      process.env.ANTHROPIC_AUTH_TOKEN ??
+      '';
 
     const response = await fetch(joinBaseUrl(resolved.baseUrl, '/v1/messages'), {
       method: 'POST',
@@ -52,9 +51,8 @@ export async function callAIForContribution(
       throw new Error(`Anthropic API error: ${response.status} ${error}`);
     }
 
-    const data = await response.json() as { content: Array<{ type: string; text: string }> };
+    const data = (await response.json()) as { content: Array<{ type: string; text: string }> };
     return data.content[0]?.text?.trim() ?? '';
-
   } else if (resolved.provider === 'openai') {
     const apiKey = resolved.envVars['OPENAI_API_KEY'] ?? process.env.OPENAI_API_KEY ?? '';
 
@@ -62,7 +60,7 @@ export async function callAIForContribution(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: resolved.model,
@@ -80,7 +78,7 @@ export async function callAIForContribution(
       throw new Error(`OpenAI API error: ${response.status} ${error}`);
     }
 
-    const data = await response.json() as { choices: Array<{ message: { content: string } }> };
+    const data = (await response.json()) as { choices: Array<{ message: { content: string } }> };
     return data.choices[0]?.message?.content?.trim() ?? '';
   }
 
@@ -90,28 +88,32 @@ export async function callAIForContribution(
 /**
  * Agentic loop for Anthropic with tool use.
  * Calls the AI, executes any tool_use blocks, and loops until a final text reply is produced.
+ * Tool execution is delegated to `registry` — a Map of tool name → handler function.
  */
 export async function callAIWithTools(
   persona: IAgentPersona,
   config: INightWatchConfig,
   prompt: string,
   tools: IAnthropicTool[],
-  boardConfig: IBoardProviderConfig,
-  projectPath: string,
+  registry: ToolRegistry,
 ): Promise<string> {
   const soulPrompt = compileSoul(persona);
   const resolved = resolvePersonaAIConfig(persona, config);
 
-  const apiKey = resolved.envVars['ANTHROPIC_API_KEY']
-    ?? resolved.envVars['ANTHROPIC_AUTH_TOKEN']
-    ?? process.env.ANTHROPIC_API_KEY
-    ?? process.env.ANTHROPIC_AUTH_TOKEN
-    ?? '';
+  const apiKey =
+    resolved.envVars['ANTHROPIC_API_KEY'] ??
+    resolved.envVars['ANTHROPIC_AUTH_TOKEN'] ??
+    process.env.ANTHROPIC_API_KEY ??
+    process.env.ANTHROPIC_AUTH_TOKEN ??
+    '';
 
-  interface IAnthropicMessage { role: 'user' | 'assistant'; content: unknown }
+  interface IAnthropicMessage {
+    role: 'user' | 'assistant';
+    content: unknown;
+  }
   const messages: IAnthropicMessage[] = [{ role: 'user', content: prompt }];
 
-  const MAX_TOOL_ITERATIONS = 3;
+  const MAX_TOOL_ITERATIONS = 5;
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
     const response = await fetch(joinBaseUrl(resolved.baseUrl, '/v1/messages'), {
       method: 'POST',
@@ -137,25 +139,33 @@ export async function callAIWithTools(
     type AnthropicContent =
       | { type: 'text'; text: string }
       | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> };
-    const data = await response.json() as {
+    const data = (await response.json()) as {
       stop_reason: string;
       content: AnthropicContent[];
     };
 
     if (data.stop_reason !== 'tool_use') {
       // Final reply — extract text
-      const textBlock = data.content.find(b => b.type === 'text') as { type: 'text'; text: string } | undefined;
+      const textBlock = data.content.find((b) => b.type === 'text') as
+        | { type: 'text'; text: string }
+        | undefined;
       return textBlock?.text?.trim() ?? '';
     }
 
     // Execute all tool_use blocks
-    const toolUseBlocks = data.content.filter(b => b.type === 'tool_use') as Array<{ type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }>;
+    const toolUseBlocks = data.content.filter((b) => b.type === 'tool_use') as Array<{
+      type: 'tool_use';
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+    }>;
     const toolResults: Array<{ type: 'tool_result'; tool_use_id: string; content: string }> = [];
 
     for (const block of toolUseBlocks) {
       let result: string;
       try {
-        result = await executeBoardTool(block.name, block.input, boardConfig, projectPath);
+        const handler = registry.get(block.name);
+        result = handler ? await handler(block.input) : `Unknown tool: ${block.name}`;
       } catch (err) {
         result = `Error: ${String(err)}`;
       }

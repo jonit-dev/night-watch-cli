@@ -3,9 +3,9 @@
  * Auto-creates and archives project channels based on project lifecycle events.
  */
 
-import { INightWatchConfig } from "@night-watch/core/types.js";
-import { SlackClient } from "./client.js";
-import { getRepositories } from "@night-watch/core/storage/repositories/index.js";
+import { INightWatchConfig } from '@night-watch/core/types.js';
+import { SlackClient } from './client.js';
+import { getRepositories } from '@night-watch/core/storage/repositories/index.js';
 
 /**
  * Slugify a project name for use as a Slack channel name.
@@ -20,12 +20,12 @@ function slugify(name: string): string {
 }
 
 export class ChannelManager {
-  private readonly _slackClient: SlackClient;
-  private readonly _config: INightWatchConfig;
+  private readonly slackClient: SlackClient;
+  private readonly config: INightWatchConfig;
 
   constructor(slackClient: SlackClient, config: INightWatchConfig) {
-    this._slackClient = slackClient;
-    this._config = config;
+    this.slackClient = slackClient;
+    this.config = config;
   }
 
   /**
@@ -34,13 +34,13 @@ export class ChannelManager {
    * Posts an intro message from Carlos.
    */
   async ensureProjectChannel(projectPath: string, projectName: string): Promise<string | null> {
-    if (!this._config.slack?.enabled || !this._config.slack?.autoCreateProjectChannels) {
+    if (!this.config.slack?.enabled || !this.config.slack?.autoCreateProjectChannels) {
       return null;
     }
 
     const repos = getRepositories();
     const projects = repos.projectRegistry.getAll();
-    const project = projects.find(p => p.path === projectPath);
+    const project = projects.find((p) => p.path === projectPath);
 
     // If channel already exists, return it
     if (project?.slackChannelId) {
@@ -49,17 +49,17 @@ export class ChannelManager {
 
     try {
       const channelName = `proj-${slugify(projectName)}`;
-      const channelId = await this._slackClient.createChannel(channelName);
+      const channelId = await this.slackClient.createChannel(channelName);
 
       // Store channel ID
       repos.projectRegistry.updateSlackChannel(projectPath, channelId);
 
       // Post intro message from Carlos
       const personas = repos.agentPersona.getActive();
-      const carlos = personas.find(p => p.name === 'Carlos') ?? personas[0];
+      const carlos = personas.find((p) => p.name === 'Carlos') ?? personas[0];
 
       if (carlos && channelId) {
-        await this._slackClient.postAsAgent(
+        await this.slackClient.postAsAgent(
           channelId,
           `New project: ${projectName}. I'll be watching the architecture calls here.`,
           carlos,
@@ -79,29 +79,29 @@ export class ChannelManager {
    * Posts a farewell message from Carlos before archiving.
    */
   async archiveProjectChannel(projectPath: string, projectName: string): Promise<void> {
-    if (!this._config.slack?.enabled) return;
+    if (!this.config.slack?.enabled) return;
 
     const repos = getRepositories();
     const projects = repos.projectRegistry.getAll();
-    const project = projects.find(p => p.path === projectPath);
+    const project = projects.find((p) => p.path === projectPath);
 
     if (!project?.slackChannelId) return;
 
     try {
       const personas = repos.agentPersona.getActive();
-      const carlos = personas.find(p => p.name === 'Carlos') ?? personas[0];
+      const carlos = personas.find((p) => p.name === 'Carlos') ?? personas[0];
 
       if (carlos) {
-        await this._slackClient.postAsAgent(
+        await this.slackClient.postAsAgent(
           project.slackChannelId,
           `All PRDs shipped for ${projectName}. Archiving this one.`,
           carlos,
         );
         // Small delay before archiving
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
 
-      await this._slackClient.archiveChannel(project.slackChannelId);
+      await this.slackClient.archiveChannel(project.slackChannelId);
       repos.projectRegistry.updateSlackChannel(projectPath, '');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -113,21 +113,17 @@ export class ChannelManager {
    * Post a release announcement to #releases when a PR is auto-merged.
    */
   async postReleaseAnnouncement(prTitle: string, branch: string, prUrl?: string): Promise<void> {
-    if (!this._config.slack?.enabled || !this._config.slack?.channels?.releases) return;
+    if (!this.config.slack?.enabled || !this.config.slack?.channels?.releases) return;
 
     const repos = getRepositories();
     const personas = repos.agentPersona.getActive();
-    const dev = personas.find(p => p.name === 'Dev') ?? personas[0];
+    const dev = personas.find((p) => p.name === 'Dev') ?? personas[0];
 
     if (!dev) return;
 
     try {
       const text = `Shipped: ${prTitle} → ${branch}${prUrl ? `\n${prUrl}` : ''}`;
-      await this._slackClient.postAsAgent(
-        this._config.slack.channels.releases,
-        text,
-        dev,
-      );
+      await this.slackClient.postAsAgent(this.config.slack.channels.releases, text, dev);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.warn(`Failed to post release announcement: ${message}`);
@@ -139,20 +135,16 @@ export class ChannelManager {
    * Used for weekly summaries or important team updates.
    */
   async postEngAnnouncement(message: string, personaName = 'Carlos'): Promise<void> {
-    if (!this._config.slack?.enabled || !this._config.slack?.channels?.eng) return;
+    if (!this.config.slack?.enabled || !this.config.slack?.channels?.eng) return;
 
     const repos = getRepositories();
     const personas = repos.agentPersona.getActive();
-    const persona = personas.find(p => p.name === personaName) ?? personas[0];
+    const persona = personas.find((p) => p.name === personaName) ?? personas[0];
 
     if (!persona) return;
 
     try {
-      await this._slackClient.postAsAgent(
-        this._config.slack.channels.eng,
-        message,
-        persona,
-      );
+      await this.slackClient.postAsAgent(this.config.slack.channels.eng, message, persona);
     } catch (err) {
       const message2 = err instanceof Error ? err.message : String(err);
       console.warn(`Failed to post #eng announcement: ${message2}`);

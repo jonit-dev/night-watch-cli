@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { IAgentPersona, IDiscussionTrigger, ISlackDiscussion } from '@night-watch/core/shared/types.js';
+import type {
+  IAgentPersona,
+  IDiscussionTrigger,
+  ISlackDiscussion,
+} from '@night-watch/core/shared/types.js';
 import type { INightWatchConfig } from '@night-watch/core/types.js';
 
 const { mockLoadConfig, mockCreateBoardProvider, mockGetRepositories } = vi.hoisted(() => ({
@@ -137,7 +141,7 @@ describe('DeliberationEngine board routing', () => {
     } as INightWatchConfig;
 
     const engine = new DeliberationEngine(slackClient, globalConfig);
-    vi.spyOn(engine as any, '_generateIssueBody').mockResolvedValue('Issue details');
+    vi.spyOn(engine as any, 'generateIssueBody').mockResolvedValue('Issue details');
 
     await engine.triggerIssueOpener('disc-1', buildTrigger(targetProjectPath));
 
@@ -180,12 +184,14 @@ describe('DeliberationEngine board routing', () => {
     } as INightWatchConfig;
 
     const engine = new DeliberationEngine(slackClient, globalConfig);
-    vi.spyOn(engine as any, '_generateIssueBody').mockResolvedValue('Issue details');
+    vi.spyOn(engine as any, 'generateIssueBody').mockResolvedValue('Issue details');
 
     await engine.triggerIssueOpener('disc-1', buildTrigger(targetProjectPath));
 
     expect(mockCreateBoardProvider).not.toHaveBeenCalled();
-    const postedMessages = slackClient.postAsAgent.mock.calls.map((call: unknown[]) => String(call[1]));
+    const postedMessages = slackClient.postAsAgent.mock.calls.map((call: unknown[]) =>
+      String(call[1]),
+    );
     expect(postedMessages.some((msg: string) => msg.includes('No board configured'))).toBe(true);
   });
 });

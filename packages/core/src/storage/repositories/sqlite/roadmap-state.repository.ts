@@ -3,11 +3,11 @@
  * Persists roadmap state in the `roadmap_states` table, keyed by prd_dir.
  */
 
-import Database from "better-sqlite3";
-import { inject, injectable } from "tsyringe";
+import Database from 'better-sqlite3';
+import { inject, injectable } from 'tsyringe';
 
-import { IRoadmapState } from "@/utils/roadmap-state.js";
-import { IRoadmapStateRepository } from "../interfaces.js";
+import { IRoadmapState } from '@/utils/roadmap-state.js';
+import { IRoadmapStateRepository } from '../interfaces.js';
 
 interface IRoadmapStateRow {
   prd_dir: string;
@@ -18,18 +18,18 @@ interface IRoadmapStateRow {
 
 @injectable()
 export class SqliteRoadmapStateRepository implements IRoadmapStateRepository {
-  private readonly _db: Database.Database;
+  private readonly db: Database.Database;
 
   constructor(@inject('Database') db: Database.Database) {
-    this._db = db;
+    this.db = db;
   }
 
   load(prdDir: string): IRoadmapState | null {
-    const row = this._db
+    const row = this.db
       .prepare<[string], IRoadmapStateRow>(
         `SELECT version, last_scan, items_json
          FROM roadmap_states
-         WHERE prd_dir = ?`
+         WHERE prd_dir = ?`,
       )
       .get(prdDir);
 
@@ -37,11 +37,11 @@ export class SqliteRoadmapStateRepository implements IRoadmapStateRepository {
       return null;
     }
 
-    let items: IRoadmapState["items"] = {};
+    let items: IRoadmapState['items'] = {};
     try {
       const parsed: unknown = JSON.parse(row.items_json);
-      if (typeof parsed === "object" && parsed !== null) {
-        items = parsed as IRoadmapState["items"];
+      if (typeof parsed === 'object' && parsed !== null) {
+        items = parsed as IRoadmapState['items'];
       }
     } catch {
       items = {};
@@ -57,14 +57,14 @@ export class SqliteRoadmapStateRepository implements IRoadmapStateRepository {
   save(prdDir: string, state: IRoadmapState): void {
     const itemsJson = JSON.stringify(state.items);
 
-    this._db
+    this.db
       .prepare<[string, number, string, string]>(
         `INSERT INTO roadmap_states (prd_dir, version, last_scan, items_json)
          VALUES (?, ?, ?, ?)
          ON CONFLICT(prd_dir)
          DO UPDATE SET version    = excluded.version,
                        last_scan  = excluded.last_scan,
-                       items_json = excluded.items_json`
+                       items_json = excluded.items_json`,
       )
       .run(prdDir, state.version, state.lastScan, itemsJson);
   }

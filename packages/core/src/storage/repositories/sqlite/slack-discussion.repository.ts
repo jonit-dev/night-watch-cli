@@ -3,16 +3,16 @@
  * Persists Slack discussion records in the `slack_discussions` table.
  */
 
-import Database from "better-sqlite3";
-import { randomUUID } from "crypto";
-import { inject, injectable } from "tsyringe";
+import Database from 'better-sqlite3';
+import { randomUUID } from 'crypto';
+import { inject, injectable } from 'tsyringe';
 import {
   ConsensusResult,
   DiscussionStatus,
   ISlackDiscussion,
   TriggerType,
-} from "@/shared/types.js";
-import { ISlackDiscussionRepository } from "../interfaces.js";
+} from '@/shared/types.js';
+import { ISlackDiscussionRepository } from '../interfaces.js';
 
 interface ISlackDiscussionRow {
   id: string;
@@ -48,14 +48,14 @@ function rowToDiscussion(row: ISlackDiscussionRow): ISlackDiscussion {
 
 @injectable()
 export class SqliteSlackDiscussionRepository implements ISlackDiscussionRepository {
-  private readonly _db: Database.Database;
+  private readonly db: Database.Database;
 
   constructor(@inject('Database') db: Database.Database) {
-    this._db = db;
+    this.db = db;
   }
 
   getById(id: string): ISlackDiscussion | null {
-    const row = this._db
+    const row = this.db
       .prepare<[string], ISlackDiscussionRow>('SELECT * FROM slack_discussions WHERE id = ?')
       .get(id);
     return row ? rowToDiscussion(row) : null;
@@ -63,16 +63,18 @@ export class SqliteSlackDiscussionRepository implements ISlackDiscussionReposito
 
   getActive(projectPath: string): ISlackDiscussion[] {
     const rows = projectPath
-      ? this._db
-        .prepare<[string], ISlackDiscussionRow>(
-          "SELECT * FROM slack_discussions WHERE project_path = ? AND status = 'active' ORDER BY created_at DESC"
-        )
-        .all(projectPath)
-      : this._db
-        .prepare<[], ISlackDiscussionRow>(
-          "SELECT * FROM slack_discussions WHERE status = 'active' ORDER BY created_at DESC"
-        )
-        .all();
+      ? this.db
+          .prepare<
+            [string],
+            ISlackDiscussionRow
+          >("SELECT * FROM slack_discussions WHERE project_path = ? AND status = 'active' ORDER BY created_at DESC")
+          .all(projectPath)
+      : this.db
+          .prepare<
+            [],
+            ISlackDiscussionRow
+          >("SELECT * FROM slack_discussions WHERE status = 'active' ORDER BY created_at DESC")
+          .all();
     return rows.map(rowToDiscussion);
   }
 
@@ -81,13 +83,13 @@ export class SqliteSlackDiscussionRepository implements ISlackDiscussionReposito
     triggerType: TriggerType,
     triggerRef: string,
   ): ISlackDiscussion | null {
-    const row = this._db
+    const row = this.db
       .prepare<[string, string, string], ISlackDiscussionRow>(
         `SELECT *
          FROM slack_discussions
          WHERE project_path = ? AND trigger_type = ? AND trigger_ref = ?
          ORDER BY created_at DESC
-         LIMIT 1`
+         LIMIT 1`,
       )
       .get(projectPath, triggerType, triggerRef);
     return row ? rowToDiscussion(row) : null;
@@ -97,11 +99,26 @@ export class SqliteSlackDiscussionRepository implements ISlackDiscussionReposito
     const id = randomUUID();
     const now = Date.now();
 
-    this._db
-      .prepare<[string, string, string, string, string, string, string, number, string, string | null, number, number]>(
+    this.db
+      .prepare<
+        [
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+          number,
+          string,
+          string | null,
+          number,
+          number,
+        ]
+      >(
         `INSERT INTO slack_discussions
          (id, project_path, trigger_type, trigger_ref, channel_id, thread_ts, status, round, participants_json, consensus_result, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -122,18 +139,18 @@ export class SqliteSlackDiscussionRepository implements ISlackDiscussionReposito
   }
 
   updateStatus(id: string, status: DiscussionStatus, consensusResult?: ConsensusResult): void {
-    this._db
-      .prepare<[string, string | null, number, string]>(
-        'UPDATE slack_discussions SET status = ?, consensus_result = ?, updated_at = ? WHERE id = ?'
-      )
+    this.db
+      .prepare<
+        [string, string | null, number, string]
+      >('UPDATE slack_discussions SET status = ?, consensus_result = ?, updated_at = ? WHERE id = ?')
       .run(status, consensusResult ?? null, Date.now(), id);
   }
 
   updateRound(id: string, round: number): void {
-    this._db
-      .prepare<[number, number, string]>(
-        'UPDATE slack_discussions SET round = ?, updated_at = ? WHERE id = ?'
-      )
+    this.db
+      .prepare<
+        [number, number, string]
+      >('UPDATE slack_discussions SET round = ?, updated_at = ? WHERE id = ?')
       .run(round, Date.now(), id);
   }
 
@@ -142,10 +159,10 @@ export class SqliteSlackDiscussionRepository implements ISlackDiscussionReposito
     if (!discussion) return;
     if (!discussion.participants.includes(agentId)) {
       discussion.participants.push(agentId);
-      this._db
-        .prepare<[string, number, string]>(
-          'UPDATE slack_discussions SET participants_json = ?, updated_at = ? WHERE id = ?'
-        )
+      this.db
+        .prepare<
+          [string, number, string]
+        >('UPDATE slack_discussions SET participants_json = ?, updated_at = ? WHERE id = ?')
         .run(JSON.stringify(discussion.participants), Date.now(), id);
     }
   }

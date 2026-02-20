@@ -1,18 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { IAgentPersona } from '@night-watch/core/shared/types.js';
+import { SlackInteractionListener } from '../../interaction-listener.js';
+import { MessageParser } from '../../message-parser.js';
 import {
-  SlackInteractionListener,
-  buildInboundMessageKey,
   extractMentionHandles,
-  isAmbientTeamMessage,
-  parseSlackIssuePickupRequest,
-  parseSlackJobRequest,
-  parseSlackProviderRequest,
   resolveMentionedPersonas,
   resolvePersonasByPlainName,
   selectFollowUpPersona,
-  shouldIgnoreInboundSlackEvent,
-} from '../../interaction-listener.js';
+} from '../../personas.js';
+
+const parser = new MessageParser();
 
 function buildPersona(id: string, name: string): IAgentPersona {
   return {
@@ -83,10 +80,7 @@ describe('Slack interaction listener helpers', () => {
         buildPersona('3', 'Priya'),
       ];
 
-      const resolved = resolveMentionedPersonas(
-        'hey @maya and @carlos please review',
-        personas,
-      );
+      const resolved = resolveMentionedPersonas('hey @maya and @carlos please review', personas);
 
       expect(resolved.map((p) => p.name)).toEqual(['Maya', 'Carlos']);
     });
@@ -100,10 +94,7 @@ describe('Slack interaction listener helpers', () => {
 
   describe('resolvePersonasByPlainName', () => {
     it('matches plain persona names without @ mention', () => {
-      const personas = [
-        buildPersona('1', 'Maya'),
-        buildPersona('2', 'Carlos'),
-      ];
+      const personas = [buildPersona('1', 'Maya'), buildPersona('2', 'Carlos')];
       const resolved = resolvePersonasByPlainName('Carlos, are you there?', personas);
       expect(resolved.map((p) => p.name)).toEqual(['Carlos']);
     });
@@ -112,7 +103,7 @@ describe('Slack interaction listener helpers', () => {
   describe('shouldIgnoreInboundSlackEvent', () => {
     it('ignores bot and subtype events', () => {
       expect(
-        shouldIgnoreInboundSlackEvent(
+        parser.shouldIgnoreInboundSlackEvent(
           {
             type: 'message',
             subtype: 'message_changed',
@@ -125,7 +116,7 @@ describe('Slack interaction listener helpers', () => {
       ).toBe(true);
 
       expect(
-        shouldIgnoreInboundSlackEvent(
+        parser.shouldIgnoreInboundSlackEvent(
           {
             type: 'message',
             bot_id: 'B123',
@@ -140,7 +131,7 @@ describe('Slack interaction listener helpers', () => {
 
     it('ignores messages from the bot user id', () => {
       expect(
-        shouldIgnoreInboundSlackEvent(
+        parser.shouldIgnoreInboundSlackEvent(
           {
             type: 'message',
             user: 'U_BOT',
@@ -154,7 +145,7 @@ describe('Slack interaction listener helpers', () => {
 
     it('accepts normal human text messages', () => {
       expect(
-        shouldIgnoreInboundSlackEvent(
+        parser.shouldIgnoreInboundSlackEvent(
           {
             type: 'message',
             user: 'U123',
@@ -170,8 +161,8 @@ describe('Slack interaction listener helpers', () => {
 
   describe('buildInboundMessageKey', () => {
     it('includes event type so message and app_mention do not collide', () => {
-      const messageKey = buildInboundMessageKey('C123', '1700000000.126', 'message');
-      const mentionKey = buildInboundMessageKey('C123', '1700000000.126', 'app_mention');
+      const messageKey = parser.buildInboundMessageKey('C123', '1700000000.126', 'message');
+      const mentionKey = parser.buildInboundMessageKey('C123', '1700000000.126', 'app_mention');
 
       expect(messageKey).not.toBe(mentionKey);
       expect(messageKey).toBe('C123:1700000000.126:message');
@@ -181,19 +172,21 @@ describe('Slack interaction listener helpers', () => {
 
   describe('parseSlackJobRequest', () => {
     it('parses a job command with project hint', () => {
-      expect(parseSlackJobRequest('<@UBOT> please run night-watch-cli now')).toEqual({
+      expect(parser.parseSlackJobRequest('<@UBOT> please run night-watch-cli now')).toEqual({
         job: 'run',
         projectHint: 'night-watch-cli',
       });
     });
 
     it('parses a job command without project hint', () => {
-      expect(parseSlackJobRequest('hey can you review?')).toEqual({ job: 'review' });
+      expect(parser.parseSlackJobRequest('hey can you review?')).toEqual({ job: 'review' });
     });
 
     it('parses PR URL for targeted review', () => {
       expect(
-        parseSlackJobRequest('review and fix conflicts of this PR https://github.com/jonit-dev/night-watch-cli/pull/26'),
+        parser.parseSlackJobRequest(
+          'review and fix conflicts of this PR https://github.com/jonit-dev/night-watch-cli/pull/26',
+        ),
       ).toEqual({
         job: 'review',
         projectHint: 'night-watch-cli',
@@ -204,7 +197,7 @@ describe('Slack interaction listener helpers', () => {
 
     it('parses wrapped PR URL with whitespace/newline artifacts', () => {
       expect(
-        parseSlackJobRequest(
+        parser.parseSlackJobRequest(
           'review and fix conflicts of this PR https://github.com/jonit-dev/night-watch-\n    cli/pull/261',
         ),
       ).toEqual({
@@ -217,7 +210,7 @@ describe('Slack interaction listener helpers', () => {
 
     it('infers review job from broken PR request language without explicit "review"', () => {
       expect(
-        parseSlackJobRequest(
+        parser.parseSlackJobRequest(
           'need someone to take a look on this broken PR https://github.com/jonit-dev/night-watch-cli/pull/26',
         ),
       ).toEqual({
@@ -229,7 +222,7 @@ describe('Slack interaction listener helpers', () => {
 
     it('infers review job from merge-issues request language', () => {
       expect(
-        parseSlackJobRequest(
+        parser.parseSlackJobRequest(
           'Can someone fix these merge issues? https://github.com/jonit-dev/night-watch-cli/pull/25',
         ),
       ).toEqual({
@@ -241,20 +234,24 @@ describe('Slack interaction listener helpers', () => {
     });
 
     it('returns null when no supported job command exists', () => {
-      expect(parseSlackJobRequest('what is your specialty')).toBeNull();
+      expect(parser.parseSlackJobRequest('what is your specialty')).toBeNull();
     });
   });
 
   describe('parseSlackProviderRequest', () => {
     it('parses direct claude invocation with prompt', () => {
-      expect(parseSlackProviderRequest('<@UBOT> claude investigate flaky playwright tests')).toEqual({
+      expect(
+        parser.parseSlackProviderRequest('<@UBOT> claude investigate flaky playwright tests'),
+      ).toEqual({
         provider: 'claude',
         prompt: 'investigate flaky playwright tests',
       });
     });
 
     it('parses explicit run + project-scoped codex invocation', () => {
-      expect(parseSlackProviderRequest('run codex on night-watch-cli: review CI failure logs')).toEqual({
+      expect(
+        parser.parseSlackProviderRequest('run codex on night-watch-cli: review CI failure logs'),
+      ).toEqual({
         provider: 'codex',
         projectHint: 'night-watch-cli',
         prompt: 'review CI failure logs',
@@ -262,7 +259,11 @@ describe('Slack interaction listener helpers', () => {
     });
 
     it('parses conversational run request syntax', () => {
-      expect(parseSlackProviderRequest('can you run claude on night-watch-cli fix the flaky e2e checks?')).toEqual({
+      expect(
+        parser.parseSlackProviderRequest(
+          'can you run claude on night-watch-cli fix the flaky e2e checks?',
+        ),
+      ).toEqual({
         provider: 'claude',
         projectHint: 'night-watch-cli',
         prompt: 'fix the flaky e2e checks?',
@@ -270,12 +271,12 @@ describe('Slack interaction listener helpers', () => {
     });
 
     it('returns null when provider is mentioned without a prompt', () => {
-      expect(parseSlackProviderRequest('claude')).toBeNull();
-      expect(parseSlackProviderRequest('run codex on night-watch-cli')).toBeNull();
+      expect(parser.parseSlackProviderRequest('claude')).toBeNull();
+      expect(parser.parseSlackProviderRequest('run codex on night-watch-cli')).toBeNull();
     });
 
     it('returns null for non-provider job requests', () => {
-      expect(parseSlackProviderRequest('please run night-watch-cli now')).toBeNull();
+      expect(parser.parseSlackProviderRequest('please run night-watch-cli now')).toBeNull();
     });
   });
 
@@ -283,7 +284,7 @@ describe('Slack interaction listener helpers', () => {
     const issueUrl = 'https://github.com/jonit-dev/night-watch-cli/issues/42';
 
     it('parses pickup request with "pick up" + issue URL', () => {
-      expect(parseSlackIssuePickupRequest(`please pick up ${issueUrl}`)).toEqual({
+      expect(parser.parseSlackIssuePickupRequest(`please pick up ${issueUrl}`)).toEqual({
         issueNumber: '42',
         issueUrl,
         repoHint: 'night-watch-cli',
@@ -291,7 +292,7 @@ describe('Slack interaction listener helpers', () => {
     });
 
     it('parses "work on" + issue URL', () => {
-      expect(parseSlackIssuePickupRequest(`can someone work on ${issueUrl}`)).toEqual({
+      expect(parser.parseSlackIssuePickupRequest(`can someone work on ${issueUrl}`)).toEqual({
         issueNumber: '42',
         issueUrl,
         repoHint: 'night-watch-cli',
@@ -299,7 +300,7 @@ describe('Slack interaction listener helpers', () => {
     });
 
     it('parses "implement" + issue URL', () => {
-      expect(parseSlackIssuePickupRequest(`Dev, implement ${issueUrl}`)).toEqual({
+      expect(parser.parseSlackIssuePickupRequest(`Dev, implement ${issueUrl}`)).toEqual({
         issueNumber: '42',
         issueUrl,
         repoHint: 'night-watch-cli',
@@ -307,7 +308,7 @@ describe('Slack interaction listener helpers', () => {
     });
 
     it('parses "tackle" + issue URL', () => {
-      expect(parseSlackIssuePickupRequest(`please tackle ${issueUrl}`)).toEqual({
+      expect(parser.parseSlackIssuePickupRequest(`please tackle ${issueUrl}`)).toEqual({
         issueNumber: '42',
         issueUrl,
         repoHint: 'night-watch-cli',
@@ -316,21 +317,23 @@ describe('Slack interaction listener helpers', () => {
 
     it('returns null for PR URLs (not issues)', () => {
       expect(
-        parseSlackIssuePickupRequest('please pick up https://github.com/jonit-dev/night-watch-cli/pull/42'),
+        parser.parseSlackIssuePickupRequest(
+          'please pick up https://github.com/jonit-dev/night-watch-cli/pull/42',
+        ),
       ).toBeNull();
     });
 
     it('returns null without pickup-intent language', () => {
-      expect(parseSlackIssuePickupRequest(`check out ${issueUrl}`)).toBeNull();
+      expect(parser.parseSlackIssuePickupRequest(`check out ${issueUrl}`)).toBeNull();
     });
 
     it('returns null without a GitHub issue URL', () => {
-      expect(parseSlackIssuePickupRequest('please pick up issue #42')).toBeNull();
+      expect(parser.parseSlackIssuePickupRequest('please pick up issue #42')).toBeNull();
     });
 
     it('matches "this issue" + request language', () => {
       expect(
-        parseSlackIssuePickupRequest(`can someone please work on this issue ${issueUrl}`),
+        parser.parseSlackIssuePickupRequest(`can someone please work on this issue ${issueUrl}`),
       ).toEqual({
         issueNumber: '42',
         issueUrl,
@@ -339,8 +342,11 @@ describe('Slack interaction listener helpers', () => {
     });
 
     it('parses GitHub project board URL with URL-encoded issue param', () => {
-      const boardUrl = 'https://github.com/users/jonit-dev/projects/41/views/2?pane=issue&itemId=158295510&issue=jonit-dev%7Cnight-watch-cli%7C12';
-      const result = parseSlackIssuePickupRequest(`Someone, please pickup this issue: ${boardUrl}`);
+      const boardUrl =
+        'https://github.com/users/jonit-dev/projects/41/views/2?pane=issue&itemId=158295510&issue=jonit-dev%7Cnight-watch-cli%7C12';
+      const result = parser.parseSlackIssuePickupRequest(
+        `Someone, please pickup this issue: ${boardUrl}`,
+      );
       expect(result).toEqual({
         issueNumber: '12',
         issueUrl: boardUrl,
@@ -349,7 +355,7 @@ describe('Slack interaction listener helpers', () => {
     });
 
     it('parses "pickup" (one word) as pickup intent', () => {
-      expect(parseSlackIssuePickupRequest(`please pickup ${issueUrl}`)).toEqual({
+      expect(parser.parseSlackIssuePickupRequest(`please pickup ${issueUrl}`)).toEqual({
         issueNumber: '42',
         issueUrl,
         repoHint: 'night-watch-cli',
@@ -359,14 +365,14 @@ describe('Slack interaction listener helpers', () => {
 
   describe('isAmbientTeamMessage', () => {
     it('detects casual team greetings', () => {
-      expect(isAmbientTeamMessage('Hey guys')).toBe(true);
-      expect(isAmbientTeamMessage('hello team')).toBe(true);
-      expect(isAmbientTeamMessage('Yo')).toBe(true);
+      expect(parser.isAmbientTeamMessage('Hey guys')).toBe(true);
+      expect(parser.isAmbientTeamMessage('hello team')).toBe(true);
+      expect(parser.isAmbientTeamMessage('Yo')).toBe(true);
     });
 
     it('ignores non-greeting chatter', () => {
-      expect(isAmbientTeamMessage('Cool')).toBe(false);
-      expect(isAmbientTeamMessage('ship it')).toBe(false);
+      expect(parser.isAmbientTeamMessage('Cool')).toBe(false);
+      expect(parser.isAmbientTeamMessage('ship it')).toBe(false);
     });
   });
 
@@ -379,11 +385,7 @@ describe('Slack interaction listener helpers', () => {
       carlos.role = 'Tech Lead / Architect';
       carlos.soul.expertise = ['architecture'];
 
-      const selected = selectFollowUpPersona(
-        preferred,
-        [preferred, carlos],
-        'cool, what else?',
-      );
+      const selected = selectFollowUpPersona(preferred, [preferred, carlos], 'cool, what else?');
 
       expect(selected.name).toBe('Maya');
     });
@@ -420,8 +422,7 @@ describe('Slack interaction listener lifecycle', () => {
     };
 
     const listener = new SlackInteractionListener({} as any, {} as any, {} as any);
-    (listener as unknown as { _socketClient: typeof fakeSocket | null })._socketClient =
-      fakeSocket;
+    (listener as unknown as { socketClient: typeof fakeSocket | null }).socketClient = fakeSocket;
 
     await listener.stop();
 
