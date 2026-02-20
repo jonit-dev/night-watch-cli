@@ -138,22 +138,6 @@ async function apiFetch<T>(
 // StatusSnapshot, NightWatchConfig, NotificationConfig, WebhookConfig,
 // PrdInfo, ProcessInfo, PrInfo, and LogInfo are imported from @night-watch/types above.
 
-// ==================== PRD with Content ====================
-
-export interface PrdWithContent {
-  name: string;
-  status: 'ready' | 'blocked' | 'in-progress' | 'pending-review' | 'done';
-  dependencies: string[];
-  unmetDependencies: string[];
-  content?: string;
-  path?: string;
-}
-
-export interface PrdContent {
-  name: string;
-  content: string;
-}
-
 // ==================== Log Response ====================
 
 export interface LogResponse {
@@ -190,14 +174,6 @@ export interface ActionResult {
 
 export function fetchStatus(): Promise<IStatusSnapshot> {
   return apiFetch<IStatusSnapshot>(apiPath('/api/status'));
-}
-
-export function fetchPrds(): Promise<PrdWithContent[]> {
-  return apiFetch<PrdWithContent[]>(apiPath('/api/prds'));
-}
-
-export function fetchPrdContent(name: string): Promise<PrdContent> {
-  return apiFetch<PrdContent>(apiPath(`/api/prds/${encodeURIComponent(name)}`));
 }
 
 export function fetchPrs(): Promise<IPrInfo[]> {
@@ -266,13 +242,6 @@ export function triggerCancel(type: 'run' | 'review' | 'all' = 'all'): Promise<C
   return apiFetch<CancelActionResult>(apiPath('/api/actions/cancel'), {
     method: 'POST',
     body: JSON.stringify({ type }),
-  });
-}
-
-export function retryPrd(prdName: string): Promise<{ message: string }> {
-  return apiFetch<{ message: string }>(apiPath('/api/actions/retry'), {
-    method: 'POST',
-    body: JSON.stringify({ prdName }),
   });
 }
 

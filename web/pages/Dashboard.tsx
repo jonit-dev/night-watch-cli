@@ -82,10 +82,12 @@ const Dashboard: React.FC = () => {
     return null;
   }
 
-  const readyPrds = currentStatus.prds.filter(p => p.status === 'ready').length;
-  const inProgressPrds = currentStatus.prds.filter(p => p.status === 'in-progress');
   const openPrs = currentStatus.prs.length;
   const needsWorkPrs = currentStatus.prs.filter(p => p.reviewScore !== null && p.reviewScore < 70).length;
+
+  // Board-derived stats
+  const boardReadyCount = boardStatus?.columns['Ready']?.length ?? 0;
+  const boardInProgressCount = boardStatus?.columns['In Progress']?.length ?? 0;
 
   const executorProcess = currentStatus.processes.find(p => p.name === 'executor');
   const reviewerProcess = currentStatus.processes.find(p => p.name === 'reviewer');
@@ -156,32 +158,30 @@ const Dashboard: React.FC = () => {
     <div className="space-y-6">
       {/* Top Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-5" onClick={() => navigate('/prds')}>
+        <Card className="p-5" onClick={() => navigate('/board')}>
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-sm font-medium text-slate-500">PRDs Ready</p>
-              <h3 className="text-3xl font-bold text-slate-100 mt-1">{readyPrds}</h3>
+              <p className="text-sm font-medium text-slate-500">Board Ready</p>
+              <h3 className="text-3xl font-bold text-slate-100 mt-1">{boardReadyCount}</h3>
             </div>
             <div className="p-2 bg-green-500/10 rounded-lg text-green-400">
               <CheckCircle className="h-5 w-5" />
             </div>
           </div>
-          <p className="text-xs text-slate-500 mt-4">of {currentStatus.prds.length} total</p>
+          <p className="text-xs text-slate-500 mt-4">issues ready to start</p>
         </Card>
 
-        <Card className="p-5" onClick={() => navigate('/prds')}>
+        <Card className="p-5" onClick={() => navigate('/board')}>
           <div className="flex justify-between items-start">
             <div>
               <p className="text-sm font-medium text-slate-500">In Progress</p>
-              <h3 className="text-3xl font-bold text-slate-100 mt-1">{inProgressPrds.length}</h3>
+              <h3 className="text-3xl font-bold text-slate-100 mt-1">{boardInProgressCount}</h3>
             </div>
             <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400">
               <Activity className="h-5 w-5" />
             </div>
           </div>
-          <p className="text-xs text-slate-500 mt-4 truncate">
-            {inProgressPrds.length === 1 ? inProgressPrds[0].name : `${inProgressPrds.length} active`}
-          </p>
+          <p className="text-xs text-slate-500 mt-4">issues in progress</p>
         </Card>
 
         <Card className="p-5" onClick={() => navigate('/prs')}>
@@ -223,7 +223,7 @@ const Dashboard: React.FC = () => {
       {/* System Status */}
       <Card className="p-6">
         <h2 className="text-base font-semibold text-slate-200 mb-4">System Status</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <div>
             <p className="text-xs font-medium text-slate-500 uppercase mb-1">Project</p>
             <p className="text-sm text-slate-200">{currentStatus.projectName}</p>
@@ -231,10 +231,6 @@ const Dashboard: React.FC = () => {
           <div>
             <p className="text-xs font-medium text-slate-500 uppercase mb-1">Provider</p>
             <p className="text-sm text-slate-200 capitalize">{currentStatus.config.provider}</p>
-          </div>
-          <div>
-            <p className="text-xs font-medium text-slate-500 uppercase mb-1">PRD Directory</p>
-            <p className="text-sm text-slate-200">{currentStatus.config.prdDir}</p>
           </div>
           <div>
             <p className="text-xs font-medium text-slate-500 uppercase mb-1">Last Updated</p>
@@ -270,7 +266,7 @@ const Dashboard: React.FC = () => {
                       {cancellingProcess === 'run' ? 'Stopping...' : 'Stop'}
                     </Button>
                   )}
-                  {!executorProcess?.running && inProgressPrds.length > 0 && (
+                  {!executorProcess?.running && currentStatus.activePrd && (
                     <Button size="sm" variant="ghost" className="text-amber-400 hover:text-amber-300" onClick={handleForceClear} disabled={clearingLock}>
                       {clearingLock ? 'Clearing...' : 'Force Clear'}
                     </Button>

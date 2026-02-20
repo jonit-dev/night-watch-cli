@@ -9,7 +9,6 @@ import Board from './pages/Board';
 import Dashboard from './pages/Dashboard';
 import Integrations from './pages/Integrations';
 import Logs from './pages/Logs';
-import PRDs from './pages/PRDs';
 import PRs from './pages/PRs';
 import Roadmap from './pages/Roadmap';
 import Scheduling from './pages/Scheduling';
@@ -33,7 +32,6 @@ const App: React.FC = () => {
             <div className="max-w-7xl mx-auto w-full">
               <Routes>
                 <Route path="/" element={<Dashboard />} />
-                <Route path="/prds" element={<PRDs />} />
                 <Route path="/prs" element={<PRs />} />
                 <Route path="/board" element={<Board />} />
                 <Route path="/scheduling" element={<Scheduling />} />
