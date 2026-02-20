@@ -243,7 +243,7 @@ export type UpdateAgentPersonaInput = Partial<CreateAgentPersonaInput & { isActi
 
 export type DiscussionStatus = 'active' | 'consensus' | 'blocked' | 'closed';
 export type ConsensusResult = 'approved' | 'changes_requested' | 'human_needed';
-export type TriggerType = 'pr_review' | 'build_failure' | 'prd_kickoff';
+export type TriggerType = 'pr_review' | 'build_failure' | 'prd_kickoff' | 'code_watch';
 
 export interface ISlackDiscussion {
   id: string;

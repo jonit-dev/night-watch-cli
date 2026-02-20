@@ -52,6 +52,8 @@ function getChannelForTrigger(trigger: IDiscussionTrigger, config: INightWatchCo
       return slack.channels.incidents;
     case 'prd_kickoff':
       return slack.channels.eng; // Callers should populate trigger.channelId with proj channel
+    case 'code_watch':
+      return slack.channels.eng;
     default:
       return slack.channels.eng;
   }
@@ -113,6 +115,12 @@ function getParticipatingPersonas(triggerType: string, personas: IAgentPersona[]
     case 'prd_kickoff':
       add(dev);
       add(carlos);
+      break;
+    case 'code_watch':
+      add(dev);
+      add(carlos);
+      add(maya);
+      add(priya);
       break;
     default:
       add(carlos);
@@ -196,6 +204,8 @@ function buildOpeningMessage(trigger: IDiscussionTrigger): string {
       return `Build failure on ${trigger.ref}. Looking into it now 🔍\n\n${trigger.context.slice(0, 500)}`;
     case 'prd_kickoff':
       return `Picking up PRD: ${trigger.ref}. Starting implementation. 🚀`;
+    case 'code_watch':
+      return `Spotted something odd during a proactive scan. Can you sanity-check this with me?\n\n${trigger.context.slice(0, 600)}`;
     default:
       return trigger.context.slice(0, 500);
   }
