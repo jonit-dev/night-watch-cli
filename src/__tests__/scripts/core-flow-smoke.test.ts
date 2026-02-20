@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { execSync, spawnSync } from "child_process";
+import { execSync, spawn, spawnSync } from "child_process";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -28,6 +28,35 @@ function runScript(scriptPath: string, projectDir: string, env: NodeJS.ProcessEn
       ...env,
     },
     encoding: "utf-8",
+  });
+}
+
+function runScriptAsync(scriptPath: string, projectDir: string, env: NodeJS.ProcessEnv = {}): Promise<{
+  status: number | null;
+  stdout: string;
+  stderr: string;
+}> {
+  return new Promise((resolve) => {
+    const child = spawn("bash", [scriptPath, projectDir], {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        ...env,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("close", (status) => {
+      resolve({ status, stdout, stderr });
+    });
   });
 }
 
@@ -237,5 +266,69 @@ describe("core flow smoke tests (bash scripts)", () => {
 
     expect(result.status).toBe(42);
     expect(result.stdout).toContain("NIGHT_WATCH_RESULT:failure");
+  });
+
+  it("reviewer worker mode should allow concurrent runs for different target PRs", async () => {
+    const projectDir = mkTempDir("nw-smoke-reviewer-worker-parallel-");
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, "logs"), { recursive: true });
+
+    const fakeBin = mkTempDir("nw-smoke-reviewer-worker-bin-");
+
+    fs.writeFileSync(
+      path.join(fakeBin, "claude"),
+      "#!/usr/bin/env bash\nsleep 1\nexit 0\n",
+      { encoding: "utf-8", mode: 0o755 }
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, "gh"),
+      "#!/usr/bin/env bash\n" +
+      "args=\"$*\"\n" +
+      "if [[ \"$1\" == \"repo\" && \"$2\" == \"view\" ]]; then\n" +
+      "  echo 'owner/repo'\n" +
+      "  exit 0\n" +
+      "fi\n" +
+      "if [[ \"$1\" == \"pr\" && \"$2\" == \"view\" ]]; then\n" +
+      "  if [[ \"$args\" == *\"mergeStateStatus\"* ]]; then\n" +
+      "    echo 'DIRTY'\n" +
+      "  else\n" +
+      "    echo '{\"number\":1}'\n" +
+      "  fi\n" +
+      "  exit 0\n" +
+      "fi\n" +
+      "if [[ \"$1\" == \"pr\" && \"$2\" == \"list\" ]]; then\n" +
+      "  if [[ \"$args\" == *\"number,headRefName\"* ]]; then\n" +
+      "    echo -e '25\\tnight-watch/alpha\\n26\\tnight-watch/beta'\n" +
+      "  else\n" +
+      "    echo -e 'night-watch/alpha\\nnight-watch/beta'\n" +
+      "  fi\n" +
+      "  exit 0\n" +
+      "fi\n" +
+      "exit 0\n",
+      { encoding: "utf-8", mode: 0o755 }
+    );
+
+    const baseEnv = {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: "claude",
+      NW_DEFAULT_BRANCH: "main",
+      NW_BRANCH_PATTERNS: "night-watch/",
+      NW_AUTO_MERGE: "0",
+      NW_REVIEWER_WORKER_MODE: "1",
+      NW_REVIEWER_PARALLEL: "0",
+    };
+
+    const [worker25, worker26] = await Promise.all([
+      runScriptAsync(reviewerScript, projectDir, { ...baseEnv, NW_TARGET_PR: "25" }),
+      runScriptAsync(reviewerScript, projectDir, { ...baseEnv, NW_TARGET_PR: "26" }),
+    ]);
+
+    expect(worker25.status).toBe(0);
+    expect(worker26.status).toBe(0);
+    expect(worker25.stdout).toContain("NIGHT_WATCH_RESULT:success_reviewed");
+    expect(worker26.stdout).toContain("NIGHT_WATCH_RESULT:success_reviewed");
+    expect(worker25.stdout).not.toContain("NIGHT_WATCH_RESULT:skip_locked");
+    expect(worker26.stdout).not.toContain("NIGHT_WATCH_RESULT:skip_locked");
   });
 });
