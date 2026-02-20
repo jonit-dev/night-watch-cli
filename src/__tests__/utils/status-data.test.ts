@@ -1144,7 +1144,7 @@ describe("status-data utilities", () => {
       fs.writeFileSync(path.join(logDir, "executor.log"), "Executor line 1");
 
       const result = collectLogInfo(tempDir);
-      expect(result).toHaveLength(2);
+      expect(result).toHaveLength(3);
 
       const executorLog = result.find((l) => l.name === "executor");
       expect(executorLog).toBeDefined();
@@ -1353,7 +1353,7 @@ describe("status-data utilities", () => {
       expect(snapshot.processes[1].name).toBe("reviewer");
       expect(Array.isArray(snapshot.prs)).toBe(true);
       expect(Array.isArray(snapshot.logs)).toBe(true);
-      expect(snapshot.logs).toHaveLength(2);
+      expect(snapshot.logs).toHaveLength(3);
       expect(snapshot.crontab).toHaveProperty("installed");
       expect(snapshot.crontab).toHaveProperty("entries");
       expect(snapshot.activePrd).toBeNull();
