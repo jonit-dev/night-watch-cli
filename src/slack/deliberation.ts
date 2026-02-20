@@ -6,13 +6,19 @@
 
 import { IAgentPersona, IDiscussionTrigger, ISlackDiscussion } from "../../shared/types.js";
 import { type ISlackMessage, SlackClient } from "./client.js";
-import { compileSoul } from "../agents/soul-compiler.js";
 import { getRepositories } from "../storage/repositories/index.js";
 import { INightWatchConfig } from "../types.js";
 import { loadConfig } from "@/config.js";
 import { createBoardProvider } from "@/board/factory.js";
-import { BoardColumnName, IBoardProviderConfig } from "@/board/types.js";
+import { IBoardProviderConfig } from "@/board/types.js";
 import { execFileSync } from "node:child_process";
+import { buildCurrentCliInvocation, formatCommandForLog, normalizeText, sleep } from "./utils.js";
+import { humanizeSlackReply, isSkipMessage } from "./humanizer.js";
+import { findCarlos, findDev, getParticipatingPersonas } from "./personas.js";
+import { buildBoardTools, callAIForContribution, callAIWithTools, resolvePersonaAIConfig } from "./ai/index.js";
+
+// Re-export humanizeSlackReply for backwards compatibility with existing tests
+export { humanizeSlackReply } from "./humanizer.js";
 
 const MAX_ROUNDS = 2;
 const MAX_CONTRIBUTIONS_PER_ROUND = 2;
@@ -21,32 +27,11 @@ const HUMAN_DELAY_MIN_MS = 20_000; // Minimum pause between agent replies (20s)
 const HUMAN_DELAY_MAX_MS = 60_000; // Maximum pause between agent replies (60s)
 const DISCUSSION_RESUME_DELAY_MS = 60_000;
 const DISCUSSION_REPLAY_GUARD_MS = 30 * 60_000;
-const MAX_HUMANIZED_SENTENCES = 2;
-const MAX_HUMANIZED_CHARS = 220;
-
-interface IHumanizeSlackReplyOptions {
-  allowEmoji?: boolean;
-  allowNonFacialEmoji?: boolean;
-  maxSentences?: number;
-}
-
-interface IAnthropicTool {
-  name: string;
-  description: string;
-  input_schema: Record<string, unknown>;
-}
 
 const inFlightDiscussionStarts = new Map<string, Promise<ISlackDiscussion>>();
 
 function discussionStartKey(trigger: IDiscussionTrigger): string {
   return `${trigger.projectPath}:${trigger.type}:${trigger.ref}`;
-}
-
-/**
- * Wait for the specified milliseconds
- */
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
@@ -79,140 +64,6 @@ function getChannelForTrigger(trigger: IDiscussionTrigger, config: INightWatchCo
     default:
       return slack.channels.eng;
   }
-}
-
-/**
- * Find a persona by explicit name first, then by role keyword.
- */
-function findPersona(
-  personas: IAgentPersona[],
-  names: string[],
-  roleKeywords: string[],
-): IAgentPersona | null {
-  const byName = personas.find((p) => names.some((name) => p.name.toLowerCase() === name.toLowerCase()));
-  if (byName) return byName;
-
-  return (
-    personas.find((p) => {
-      const role = p.role.toLowerCase();
-      return roleKeywords.some((keyword) => role.includes(keyword.toLowerCase()));
-    }) ?? null
-  );
-}
-
-function findDev(personas: IAgentPersona[]): IAgentPersona | null {
-  return findPersona(personas, ["Dev"], ["implementer", "executor", "developer"]);
-}
-
-function findCarlos(personas: IAgentPersona[]): IAgentPersona | null {
-  return findPersona(personas, ["Carlos"], ["tech lead", "architect", "lead"]);
-}
-
-/**
- * Determine which personas should participate based on trigger type.
- * Uses role-based fallback so renamed personas still participate.
- */
-function getParticipatingPersonas(triggerType: string, personas: IAgentPersona[]): IAgentPersona[] {
-  const dev = findDev(personas);
-  const carlos = findCarlos(personas);
-  const maya = findPersona(personas, ["Maya"], ["security reviewer", "security"]);
-  const priya = findPersona(personas, ["Priya"], ["qa", "quality assurance", "test"]);
-
-  const set = new Map<string, IAgentPersona>();
-  const add = (persona: IAgentPersona | null): void => {
-    if (persona) set.set(persona.id, persona);
-  };
-
-  switch (triggerType) {
-    case 'pr_review':
-      add(dev);
-      add(carlos);
-      add(maya);
-      add(priya);
-      break;
-    case 'build_failure':
-      add(dev);
-      add(carlos);
-      break;
-    case 'prd_kickoff':
-      add(dev);
-      add(carlos);
-      break;
-    case 'code_watch':
-      add(dev);
-      add(carlos);
-      add(maya);
-      add(priya);
-      break;
-    default:
-      add(carlos);
-      break;
-  }
-
-  if (set.size === 0 && personas[0]) {
-    set.set(personas[0].id, personas[0]);
-  }
-
-  return Array.from(set.values());
-}
-
-interface IResolvedAIConfig {
-  provider: 'anthropic' | 'openai';
-  model: string;
-  baseUrl: string;
-  envVars: Record<string, string>;
-  maxTokens: number;
-  temperature: number;
-}
-
-function joinBaseUrl(baseUrl: string, route: string): string {
-  return `${baseUrl.replace(/\/+$/, '')}${route}`;
-}
-
-function resolveGlobalAIConfig(config: INightWatchConfig): IResolvedAIConfig {
-  const globalEnv = config.providerEnv ?? {};
-
-  if (config.provider === 'claude') {
-    return {
-      provider: 'anthropic',
-      model: config.claudeModel === 'opus' ? 'claude-opus-4-6' : 'claude-sonnet-4-6',
-      baseUrl: globalEnv.ANTHROPIC_BASE_URL ?? process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com',
-      envVars: globalEnv,
-      maxTokens: 256,
-      temperature: 0.8,
-    };
-  }
-
-  return {
-    provider: 'openai',
-    model: globalEnv.OPENAI_MODEL ?? process.env.OPENAI_MODEL ?? 'gpt-4o',
-    baseUrl: globalEnv.OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com',
-    envVars: globalEnv,
-    maxTokens: 256,
-    temperature: 0.8,
-  };
-}
-
-function resolvePersonaAIConfig(persona: IAgentPersona, config: INightWatchConfig): IResolvedAIConfig {
-  const modelConfig = persona.modelConfig;
-  if (!modelConfig) {
-    return resolveGlobalAIConfig(config);
-  }
-
-  const globalEnv = config.providerEnv ?? {};
-  const envVars = { ...globalEnv, ...(modelConfig.envVars ?? {}) };
-  const isAnthropic = modelConfig.provider === 'anthropic';
-
-  return {
-    provider: isAnthropic ? 'anthropic' : 'openai',
-    model: modelConfig.model,
-    baseUrl: isAnthropic
-      ? modelConfig.baseUrl ?? globalEnv.ANTHROPIC_BASE_URL ?? process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com'
-      : modelConfig.baseUrl ?? globalEnv.OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com',
-    envVars,
-    maxTokens: modelConfig.maxTokens ?? 256,
-    temperature: modelConfig.temperature ?? 0.8,
-  };
 }
 
 /**
@@ -350,296 +201,6 @@ ${isFinalRound ? '- Final round: be decisive. State your position clearly.' : ''
 Write ONLY your message. No name prefix, no labels.`;
 }
 
-/**
- * Call the AI provider to generate an agent contribution.
- * Uses the persona's model config or falls back to global config.
- * Returns the generated text.
- */
-async function callAIForContribution(
-  persona: IAgentPersona,
-  config: INightWatchConfig,
-  contributionPrompt: string,
-  maxTokensOverride?: number,
-): Promise<string> {
-  const soulPrompt = compileSoul(persona);
-  const resolved = resolvePersonaAIConfig(persona, config);
-  const maxTokens = maxTokensOverride ?? resolved.maxTokens;
-
-  if (resolved.provider === 'anthropic') {
-    const apiKey = resolved.envVars['ANTHROPIC_API_KEY']
-      ?? resolved.envVars['ANTHROPIC_AUTH_TOKEN']
-      ?? process.env.ANTHROPIC_API_KEY
-      ?? process.env.ANTHROPIC_AUTH_TOKEN
-      ?? '';
-
-    const response = await fetch(joinBaseUrl(resolved.baseUrl, '/v1/messages'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: resolved.model,
-        max_tokens: maxTokens,
-        system: soulPrompt,
-        messages: [{ role: 'user', content: contributionPrompt }],
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Anthropic API error: ${response.status} ${error}`);
-    }
-
-    const data = await response.json() as { content: Array<{ type: string; text: string }> };
-    return data.content[0]?.text?.trim() ?? '';
-
-  } else if (resolved.provider === 'openai') {
-    const apiKey = resolved.envVars['OPENAI_API_KEY'] ?? process.env.OPENAI_API_KEY ?? '';
-
-    const response = await fetch(joinBaseUrl(resolved.baseUrl, '/v1/chat/completions'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: resolved.model,
-        max_tokens: maxTokens,
-        temperature: resolved.temperature,
-        messages: [
-          { role: 'system', content: soulPrompt },
-          { role: 'user', content: contributionPrompt },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`OpenAI API error: ${response.status} ${error}`);
-    }
-
-    const data = await response.json() as { choices: Array<{ message: { content: string } }> };
-    return data.choices[0]?.message?.content?.trim() ?? '';
-  }
-
-  return `[${persona.name}: No AI provider configured]`;
-}
-
-/**
- * Returns Anthropic tool definitions for board operations.
- */
-function buildBoardTools(): IAnthropicTool[] {
-  const columnEnum = ["Draft", "Ready", "In Progress", "Review", "Done"];
-  return [
-    {
-      name: "open_github_issue",
-      description: "Create a new GitHub issue on the project board.",
-      input_schema: {
-        type: "object",
-        properties: {
-          title: { type: "string", description: "Short, descriptive issue title." },
-          body: { type: "string", description: "Detailed issue description in Markdown." },
-          column: { type: "string", enum: columnEnum, description: "Board column to place the issue in. Defaults to 'Ready'." },
-        },
-        required: ["title", "body"],
-      },
-    },
-    {
-      name: "list_issues",
-      description: "List issues on the project board, optionally filtered by column.",
-      input_schema: {
-        type: "object",
-        properties: {
-          column: { type: "string", enum: columnEnum, description: "Filter by column. Omit to list all issues." },
-        },
-      },
-    },
-    {
-      name: "move_issue",
-      description: "Move a GitHub issue to a different column on the board.",
-      input_schema: {
-        type: "object",
-        properties: {
-          issue_number: { type: "number", description: "The GitHub issue number." },
-          column: { type: "string", enum: columnEnum, description: "Target column." },
-        },
-        required: ["issue_number", "column"],
-      },
-    },
-    {
-      name: "comment_on_issue",
-      description: "Add a comment to an existing GitHub issue.",
-      input_schema: {
-        type: "object",
-        properties: {
-          issue_number: { type: "number", description: "The GitHub issue number." },
-          body: { type: "string", description: "Comment text in Markdown." },
-        },
-        required: ["issue_number", "body"],
-      },
-    },
-    {
-      name: "close_issue",
-      description: "Close a GitHub issue.",
-      input_schema: {
-        type: "object",
-        properties: {
-          issue_number: { type: "number", description: "The GitHub issue number." },
-        },
-        required: ["issue_number"],
-      },
-    },
-  ];
-}
-
-/**
- * Execute a single board tool call and return a human-readable result string.
- */
-async function executeBoardTool(
-  name: string,
-  input: Record<string, unknown>,
-  boardConfig: IBoardProviderConfig,
-  projectPath: string,
-): Promise<string> {
-  const provider = createBoardProvider(boardConfig, projectPath);
-
-  switch (name) {
-    case "open_github_issue": {
-      const issue = await provider.createIssue({
-        title: String(input.title ?? ''),
-        body: String(input.body ?? ''),
-        column: (input.column as BoardColumnName | undefined) ?? 'Ready',
-      });
-      return JSON.stringify({ number: issue.number, url: issue.url, title: issue.title });
-    }
-    case "list_issues": {
-      const issues = input.column
-        ? await provider.getIssuesByColumn(input.column as BoardColumnName)
-        : await provider.getAllIssues();
-      return JSON.stringify(issues.map(i => ({ number: i.number, title: i.title, column: i.column, url: i.url })));
-    }
-    case "move_issue": {
-      await provider.moveIssue(Number(input.issue_number), input.column as BoardColumnName);
-      return `Issue #${input.issue_number} moved to ${String(input.column)}.`;
-    }
-    case "comment_on_issue": {
-      await provider.commentOnIssue(Number(input.issue_number), String(input.body ?? ''));
-      return `Comment added to issue #${input.issue_number}.`;
-    }
-    case "close_issue": {
-      await provider.closeIssue(Number(input.issue_number));
-      return `Issue #${input.issue_number} closed.`;
-    }
-    default:
-      return `Unknown tool: ${name}`;
-  }
-}
-
-/**
- * Agentic loop for Anthropic with tool use.
- * Calls the AI, executes any tool_use blocks, and loops until a final text reply is produced.
- */
-async function callAIWithTools(
-  persona: IAgentPersona,
-  config: INightWatchConfig,
-  prompt: string,
-  tools: IAnthropicTool[],
-  boardConfig: IBoardProviderConfig,
-  projectPath: string,
-): Promise<string> {
-  const soulPrompt = compileSoul(persona);
-  const resolved = resolvePersonaAIConfig(persona, config);
-
-  const apiKey = resolved.envVars['ANTHROPIC_API_KEY']
-    ?? resolved.envVars['ANTHROPIC_AUTH_TOKEN']
-    ?? process.env.ANTHROPIC_API_KEY
-    ?? process.env.ANTHROPIC_AUTH_TOKEN
-    ?? '';
-
-  interface IAnthropicMessage { role: 'user' | 'assistant'; content: unknown }
-  const messages: IAnthropicMessage[] = [{ role: 'user', content: prompt }];
-
-  const MAX_TOOL_ITERATIONS = 3;
-  for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-    const response = await fetch(joinBaseUrl(resolved.baseUrl, '/v1/messages'), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: resolved.model,
-        max_tokens: 1024,
-        system: soulPrompt,
-        tools,
-        messages,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Anthropic API error: ${response.status} ${error}`);
-    }
-
-    type AnthropicContent =
-      | { type: 'text'; text: string }
-      | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> };
-    const data = await response.json() as {
-      stop_reason: string;
-      content: AnthropicContent[];
-    };
-
-    if (data.stop_reason !== 'tool_use') {
-      // Final reply — extract text
-      const textBlock = data.content.find(b => b.type === 'text') as { type: 'text'; text: string } | undefined;
-      return textBlock?.text?.trim() ?? '';
-    }
-
-    // Execute all tool_use blocks
-    const toolUseBlocks = data.content.filter(b => b.type === 'tool_use') as Array<{ type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }>;
-    const toolResults: Array<{ type: 'tool_result'; tool_use_id: string; content: string }> = [];
-
-    for (const block of toolUseBlocks) {
-      let result: string;
-      try {
-        result = await executeBoardTool(block.name, block.input, boardConfig, projectPath);
-      } catch (err) {
-        result = `Error: ${String(err)}`;
-      }
-      toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
-    }
-
-    // Append assistant turn and tool results to message history
-    messages.push({ role: 'assistant', content: data.content });
-    messages.push({ role: 'user', content: toolResults });
-  }
-
-  return `[${persona.name}: tool loop exceeded max iterations]`;
-}
-
-const CANNED_PHRASE_PREFIXES = [
-  /^great question[,.! ]*/i,
-  /^of course[,.! ]*/i,
-  /^certainly[,.! ]*/i,
-  /^you['’]re absolutely right[,.! ]*/i,
-  /^i hope this helps[,.! ]*/i,
-];
-
-function isSkipMessage(text: string): boolean {
-  return text.trim().toUpperCase() === 'SKIP';
-}
-
-function normalizeForComparison(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 function formatThreadHistory(messages: ISlackMessage[]): string {
   return messages
     .map((message) => {
@@ -665,119 +226,6 @@ function chooseRoundContributors(personas: IAgentPersona[], maxCount: number): I
   const nonLead = personas.filter((persona) => persona.id !== lead.id);
   const candidates = nonLead.length >= 2 ? nonLead : personas;
   return candidates.slice(0, maxCount);
-}
-
-function dedupeRepeatedSentences(text: string): string {
-  const parts = text
-    .split(/(?<=[.!?])\s+/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  if (parts.length <= 1) return text;
-
-  const unique: string[] = [];
-  const seen = new Set<string>();
-  for (const part of parts) {
-    const normalized = normalizeForComparison(part);
-    if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
-    unique.push(part);
-  }
-  return unique.join(' ');
-}
-
-function limitEmojiCount(text: string, maxEmojis: number): string {
-  let seen = 0;
-  return text.replace(/[\p{Extended_Pictographic}]/gu, (m) => {
-    seen += 1;
-    return seen <= maxEmojis ? m : '';
-  });
-}
-
-function isFacialEmoji(char: string): boolean {
-  return /[\u{1F600}-\u{1F64F}\u{1F910}-\u{1F92F}\u{1F970}-\u{1F97A}]/u.test(char);
-}
-
-function applyEmojiPolicy(
-  text: string,
-  allowEmoji: boolean,
-  allowNonFacialEmoji: boolean,
-): string {
-  if (!allowEmoji) {
-    return text.replace(/[\p{Extended_Pictographic}]/gu, '');
-  }
-
-  const emojis = Array.from(text.matchAll(/[\p{Extended_Pictographic}]/gu)).map((m) => m[0]);
-  if (emojis.length === 0) return text;
-
-  const chosenFacial = emojis.find((e) => isFacialEmoji(e));
-  const chosen = chosenFacial ?? (allowNonFacialEmoji ? emojis[0] : null);
-  if (!chosen) {
-    return text.replace(/[\p{Extended_Pictographic}]/gu, '');
-  }
-
-  let kept = false;
-  return text.replace(/[\p{Extended_Pictographic}]/gu, (e) => {
-    if (!kept && e === chosen) {
-      kept = true;
-      return e;
-    }
-    return '';
-  });
-}
-
-function trimToSentences(text: string, maxSentences: number): string {
-  const parts = text
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  if (parts.length <= maxSentences) return text.trim();
-  return parts.slice(0, maxSentences).join(' ').trim();
-}
-
-export function humanizeSlackReply(raw: string, options: IHumanizeSlackReplyOptions = {}): string {
-  const {
-    allowEmoji = true,
-    allowNonFacialEmoji = true,
-    maxSentences = MAX_HUMANIZED_SENTENCES,
-  } = options;
-
-  let text = raw.trim();
-  if (!text) return text;
-  if (isSkipMessage(text)) return 'SKIP';
-
-  // Remove markdown formatting artifacts that look templated in chat.
-  text = text
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/^\s*[-*]\s+/gm, '')
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  // Strip common assistant-y openers.
-  for (const pattern of CANNED_PHRASE_PREFIXES) {
-    text = text.replace(pattern, '').trim();
-  }
-
-  text = dedupeRepeatedSentences(text);
-  text = applyEmojiPolicy(text, allowEmoji, allowNonFacialEmoji);
-  text = limitEmojiCount(text, 1);
-  text = trimToSentences(text, maxSentences);
-
-  if (text.length > MAX_HUMANIZED_CHARS) {
-    text = `${text.slice(0, MAX_HUMANIZED_CHARS - 3).trimEnd()}...`;
-  }
-
-  return text;
-}
-
-function buildCurrentCliInvocation(args: string[]): string[] | null {
-  const cliEntry = process.argv[1];
-  if (!cliEntry) return null;
-  return [...process.execArgv, cliEntry, ...args];
-}
-
-function formatCommandForLog(bin: string, args: string[]): string {
-  return [bin, ...args].map((part) => JSON.stringify(part)).join(' ');
 }
 
 export class DeliberationEngine {
@@ -955,7 +403,7 @@ export class DeliberationEngine {
       10
     );
     const historyText = formatThreadHistory(history);
-    const historySet = new Set(history.map((m) => normalizeForComparison(m.text)).filter(Boolean));
+    const historySet = new Set(history.map((m) => normalizeText(m.text)).filter(Boolean));
 
     // Rebuild trigger context from discussion record
     const trigger: IDiscussionTrigger = {
@@ -988,7 +436,7 @@ export class DeliberationEngine {
         message,
       );
       if (isSkipMessage(finalMessage)) return;
-      const normalized = normalizeForComparison(finalMessage);
+      const normalized = normalizeText(finalMessage);
       if (!normalized || historySet.has(normalized)) return;
       await this._slackClient.postAsAgent(
         discussion.channelId,
@@ -1077,7 +525,7 @@ export class DeliberationEngine {
       10,
     );
     let historyText = formatThreadHistory(history) || currentContext;
-    const seenMessages = new Set(history.map((message) => normalizeForComparison(message.text)).filter(Boolean));
+    const seenMessages = new Set(history.map((message) => normalizeText(message.text)).filter(Boolean));
 
     const repliesUsed = countThreadReplies(history);
     const reviewerBudget = Math.max(0, MAX_AGENT_THREAD_REPLIES - repliesUsed - 1);
@@ -1119,7 +567,7 @@ export class DeliberationEngine {
       );
       if (!finalMessage || isSkipMessage(finalMessage)) continue;
 
-      const normalized = normalizeForComparison(finalMessage);
+      const normalized = normalizeText(finalMessage);
       if (!normalized || seenMessages.has(normalized)) continue;
 
       await this._slackClient.postAsAgent(
@@ -1379,7 +827,7 @@ Write the prefix and your message. Nothing else.`;
     }
 
     const historyText = formatThreadHistory(history);
-    const historySet = new Set(history.map((m) => normalizeForComparison(m.text)).filter(Boolean));
+    const historySet = new Set(history.map((m) => normalizeText(m.text)).filter(Boolean));
 
     const prompt =
       `You are ${persona.name}, ${persona.role}.\n` +
@@ -1429,7 +877,7 @@ Write the prefix and your message. Nothing else.`;
     if (message) {
       const finalMessage = this._humanizeForPost(channel, threadTs, persona, message);
       if (isSkipMessage(finalMessage)) return '';
-      const normalized = normalizeForComparison(finalMessage);
+      const normalized = normalizeText(finalMessage);
       if (!normalized || historySet.has(normalized)) return '';
       await this._slackClient.postAsAgent(channel, finalMessage, persona, threadTs);
       return finalMessage;
