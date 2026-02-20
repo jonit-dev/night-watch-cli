@@ -60,6 +60,17 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Find the package root (works from both src/ in dev and dist/src/ in production)
+function findPackageRoot(dir: string): string {
+  let d = dir;
+  for (let i = 0; i < 5; i++) {
+    if (fs.existsSync(path.join(d, 'package.json'))) return d;
+    d = dirname(d);
+  }
+  return dir;
+}
+const __packageRoot = findPackageRoot(__dirname);
+
 // Track spawned processes
 const spawnedProcesses = new Map<number, ChildProcess>();
 
@@ -1320,7 +1331,7 @@ function cleanOrphanedClaims(dir: string): void {
 // ==================== Static Files + SPA Fallback ====================
 
 function setupStaticFiles(app: Express): void {
-  const webDistPath = path.resolve(__dirname, '../../web/dist');
+  const webDistPath = path.join(__packageRoot, 'web/dist');
   if (fs.existsSync(webDistPath)) {
     app.use(express.static(webDistPath));
   }
