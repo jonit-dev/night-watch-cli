@@ -33,6 +33,7 @@ const REACTION_DELAY_MIN_MS = 180;
 const REACTION_DELAY_MAX_MS = 1200;
 const RESPONSE_DELAY_MIN_MS = 700;
 const RESPONSE_DELAY_MAX_MS = 3400;
+const SOCKET_DISCONNECT_TIMEOUT_MS = 5_000;
 const CODEWATCH_MAX_FILES = 250;
 const CODEWATCH_MAX_FILE_BYTES = 256_000;
 const CODEWATCH_INCLUDE_EXTENSIONS = new Set([
@@ -642,12 +643,18 @@ export class SlackInteractionListener {
     this._socketClient = null;
 
     try {
-      socket.removeAllListeners();
-      await socket.disconnect();
+      await Promise.race([
+        socket.disconnect(),
+        sleep(SOCKET_DISCONNECT_TIMEOUT_MS).then(() => {
+          throw new Error(`timed out after ${SOCKET_DISCONNECT_TIMEOUT_MS}ms`);
+        }),
+      ]);
       console.log('Slack interaction listener stopped');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`Slack interaction listener shutdown failed: ${msg}`);
+    } finally {
+      socket.removeAllListeners();
     }
   }
 

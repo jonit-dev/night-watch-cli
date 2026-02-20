@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { IAgentPersona } from '../../../shared/types.js';
 import {
+  SlackInteractionListener,
   buildInboundMessageKey,
   extractMentionHandles,
   findCodeWatchSignal,
@@ -321,5 +322,29 @@ describe('Slack interaction listener helpers', () => {
 
       expect(selected.name).toBe('Priya');
     });
+  });
+});
+
+describe('Slack interaction listener lifecycle', () => {
+  it('disconnects socket before removing listeners during stop', async () => {
+    const callOrder: string[] = [];
+    const fakeSocket = {
+      disconnect: vi.fn(async () => {
+        callOrder.push('disconnect');
+      }),
+      removeAllListeners: vi.fn(() => {
+        callOrder.push('removeAllListeners');
+      }),
+    };
+
+    const listener = new SlackInteractionListener({} as any);
+    (listener as unknown as { _socketClient: typeof fakeSocket | null })._socketClient =
+      fakeSocket;
+
+    await listener.stop();
+
+    expect(fakeSocket.disconnect).toHaveBeenCalledTimes(1);
+    expect(fakeSocket.removeAllListeners).toHaveBeenCalledTimes(1);
+    expect(callOrder).toEqual(['disconnect', 'removeAllListeners']);
   });
 });
