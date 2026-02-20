@@ -1,0 +1,67 @@
+/**
+ * Default configuration values for Night Watch CLI
+ */
+import { IBoardProviderConfig } from "./board/types.js";
+import { ClaudeModel, IAuditConfig, INotificationConfig, IQaConfig, IRoadmapScannerConfig, ISlackBotConfig, MergeMethod, Provider, QaArtifacts } from "./types.js";
+export declare const DEFAULT_DEFAULT_BRANCH = "";
+export declare const DEFAULT_PRD_DIR = "docs/PRDs/night-watch";
+export declare const DEFAULT_MAX_RUNTIME = 7200;
+export declare const DEFAULT_REVIEWER_MAX_RUNTIME = 3600;
+export declare const DEFAULT_CRON_SCHEDULE = "0 0-21 * * *";
+export declare const DEFAULT_REVIEWER_SCHEDULE = "0 0,3,6,9,12,15,18,21 * * *";
+export declare const DEFAULT_CRON_SCHEDULE_OFFSET = 0;
+export declare const DEFAULT_MAX_RETRIES = 3;
+export declare const DEFAULT_BRANCH_PREFIX = "night-watch";
+export declare const DEFAULT_BRANCH_PATTERNS: string[];
+export declare const DEFAULT_MIN_REVIEW_SCORE = 80;
+export declare const DEFAULT_MAX_LOG_SIZE = 524288;
+export declare const DEFAULT_PROVIDER: Provider;
+export declare const DEFAULT_REVIEWER_ENABLED = true;
+export declare const DEFAULT_PROVIDER_ENV: Record<string, string>;
+export declare const DEFAULT_FALLBACK_ON_RATE_LIMIT = false;
+export declare const DEFAULT_CLAUDE_MODEL: ClaudeModel;
+export declare const VALID_CLAUDE_MODELS: ClaudeModel[];
+/** Full Anthropic model IDs used in the --model flag */
+export declare const CLAUDE_MODEL_IDS: Record<ClaudeModel, string>;
+export declare const DEFAULT_NOTIFICATIONS: INotificationConfig;
+export declare const DEFAULT_PRD_PRIORITY: string[];
+export declare const DEFAULT_SLICER_SCHEDULE = "0 */6 * * *";
+export declare const DEFAULT_SLICER_MAX_RUNTIME = 600;
+export declare const DEFAULT_ROADMAP_SCANNER: IRoadmapScannerConfig;
+export declare const DEFAULT_TEMPLATES_DIR = ".night-watch/templates";
+export declare const DEFAULT_BOARD_PROVIDER: IBoardProviderConfig;
+export declare const DEFAULT_AUTO_MERGE = false;
+export declare const DEFAULT_AUTO_MERGE_METHOD: MergeMethod;
+export declare const VALID_MERGE_METHODS: MergeMethod[];
+export declare const DEFAULT_QA_ENABLED = true;
+export declare const DEFAULT_QA_SCHEDULE = "30 1,7,13,19 * * *";
+export declare const DEFAULT_QA_MAX_RUNTIME = 3600;
+export declare const DEFAULT_QA_ARTIFACTS: QaArtifacts;
+export declare const DEFAULT_QA_SKIP_LABEL = "skip-qa";
+export declare const DEFAULT_QA_AUTO_INSTALL_PLAYWRIGHT = true;
+export declare const DEFAULT_QA: IQaConfig;
+export declare const QA_LOG_NAME = "night-watch-qa";
+export declare const DEFAULT_AUDIT_ENABLED = true;
+export declare const DEFAULT_AUDIT_SCHEDULE = "0 3 * * *";
+export declare const DEFAULT_AUDIT_MAX_RUNTIME = 1800;
+export declare const DEFAULT_AUDIT: IAuditConfig;
+export declare const AUDIT_LOG_NAME = "audit";
+export declare const DEFAULT_SLACK_BOT_CONFIG: ISlackBotConfig;
+export declare const VALID_PROVIDERS: Provider[];
+export declare const PROVIDER_COMMANDS: Record<Provider, string>;
+export declare const CONFIG_FILE_NAME = "night-watch.config.json";
+export declare const LOCK_FILE_PREFIX = "/tmp/night-watch-";
+export declare const LOG_DIR = "logs";
+export declare const CLAIM_FILE_EXTENSION = ".claim";
+export declare const EXECUTOR_LOG_NAME = "executor";
+export declare const REVIEWER_LOG_NAME = "reviewer";
+export declare const EXECUTOR_LOG_FILE = "executor.log";
+export declare const REVIEWER_LOG_FILE = "reviewer.log";
+export declare const LOG_FILE_NAMES: Record<string, string>;
+export declare const GLOBAL_CONFIG_DIR = ".night-watch";
+export declare const REGISTRY_FILE_NAME = "projects.json";
+export declare const HISTORY_FILE_NAME = "history.json";
+export declare const PRD_STATES_FILE_NAME = "prd-states.json";
+export declare const STATE_DB_FILE_NAME = "state.db";
+export declare const MAX_HISTORY_RECORDS_PER_PRD = 10;
+//# sourceMappingURL=constants.d.ts.map

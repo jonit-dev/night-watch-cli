@@ -1,0 +1,71 @@
+{
+  "name": "@jonit-dev/night-watch-cli",
+  "version": "1.7.30",
+  "description": "Autonomous PRD execution using AI Provider CLIs + cron",
+  "type": "module",
+  "bin": {
+    "night-watch": "./bin/night-watch.mjs"
+  },
+  "main": "./dist/cli.js",
+  "exports": {
+    ".": {
+      "import": "./dist/cli.js",
+      "types": "./dist/cli.d.ts"
+    }
+  },
+  "files": [
+    "dist/",
+    "bin/",
+    "scripts/",
+    "templates/"
+  ],
+  "scripts": {
+    "build": "tsc --build tsconfig.json && tsc-alias -p tsconfig.json",
+    "verify": "tsc --build tsconfig.json --dry",
+    "test": "vitest run",
+    "prepublishOnly": "yarn build && yarn test"
+  },
+  "keywords": [
+    "claude",
+    "codex",
+    "ai",
+    "prd",
+    "automation",
+    "cron",
+    "cli",
+    "night-watch"
+  ],
+  "author": "Joao Pio",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jonit-dev/night-watch-cli.git"
+  },
+  "homepage": "https://github.com/jonit-dev/night-watch-cli#readme",
+  "bugs": {
+    "url": "https://github.com/jonit-dev/night-watch-cli/issues"
+  },
+  "dependencies": {
+    "@night-watch/core": "*",
+    "@night-watch/server": "*",
+    "@night-watch/slack": "*",
+    "blessed": "^0.1.81",
+    "chalk": "^5.6.2",
+    "cli-table3": "^0.6.5",
+    "commander": "^12.0.0",
+    "concurrently": "^9.2.1",
+    "ora": "^9.3.0",
+    "reflect-metadata": "^0.2.2"
+  },
+  "devDependencies": {
+    "@types/blessed": "^0.1.27",
+    "@types/node": "^22.0.0",
+    "tsc-alias": "^1.8.16",
+    "tsx": "^4.19.0",
+    "typescript": "^5.3.0",
+    "vitest": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

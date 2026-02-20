@@ -1,0 +1,39 @@
+{
+  "name": "@night-watch/core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./*": {
+      "import": "./dist/*",
+      "types": "./dist/*"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.json && tsc-alias -p tsconfig.json",
+    "verify": "tsc --build tsconfig.json --dry",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "chalk": "^5.6.2",
+    "commander": "^12.0.0",
+    "cron-parser": "^5.5.0",
+    "cronstrue": "^3.12.0",
+    "reflect-metadata": "^0.2.2",
+    "tsyringe": "^4.10.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.0.0",
+    "tsc-alias": "^1.8.16",
+    "typescript": "^5.3.0",
+    "vitest": "^4.0.0"
+  }
+}
