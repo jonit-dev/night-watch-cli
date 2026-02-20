@@ -35,6 +35,35 @@ export default function Integrations() {
     }
   }, [config]);
 
+  const onDisconnect = async () => {
+    try {
+      setLoading(true);
+      await updateConfig({
+        slack: {
+          enabled: false,
+          botToken: '',
+          appToken: '',
+          channels: { eng: '', prs: '', incidents: '', releases: '' },
+          autoCreateProjectChannels: false,
+          discussionEnabled: true,
+        },
+      });
+      setBotToken('');
+      setAppToken('');
+      setEngChannel('');
+      setPrsChannel('');
+      setIncidentsChannel('');
+      setReleasesChannel('');
+      setStep(1);
+      refetch();
+      addToast({ title: 'Disconnected', message: 'Slack integration removed.', type: 'success' });
+    } catch (e: any) {
+      addToast({ title: 'Error', message: e.message || 'Failed to disconnect', type: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const onSaveConfig = async (isFinalStep = false) => {
     try {
       setLoading(true);
@@ -209,8 +238,13 @@ export default function Integrations() {
           </h2>
           <p className="text-slate-400 mt-1">Manage your connected Slack workspace.</p>
         </div>
-        <div className="flex items-center gap-2 text-sm text-green-400 bg-green-400/10 px-3 py-1.5 rounded-full border border-green-500/20">
-          <Check className="w-4 h-4" /> Connected
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 text-sm text-green-400 bg-green-400/10 px-3 py-1.5 rounded-full border border-green-500/20">
+            <Check className="w-4 h-4" /> Connected
+          </div>
+          <Button variant="ghost" onClick={onDisconnect} loading={loading} className="text-red-400 hover:text-red-300 hover:bg-red-500/10 border border-red-500/20 text-sm px-3 py-1.5">
+            Disconnect
+          </Button>
         </div>
       </div>
 
