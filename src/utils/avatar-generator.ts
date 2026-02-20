@@ -10,8 +10,13 @@ const MAX_POLLS = 60; // 3 minutes max
 interface IReplicatePrediction {
   id: string;
   status: 'starting' | 'processing' | 'succeeded' | 'failed' | 'canceled';
-  output?: string[];
+  output?: string | string[];
   error?: string;
+}
+
+function extractOutputUrl(output: string | string[] | undefined): string | null {
+  if (!output) return null;
+  return Array.isArray(output) ? (output[0] ?? null) : output;
 }
 
 /**
@@ -131,7 +136,7 @@ export async function generatePersonaAvatar(
 
   // If the Prefer: wait header resolved it immediately
   if (prediction.status === 'succeeded') {
-    const url = prediction.output?.[0] ?? null;
+    const url = extractOutputUrl(prediction.output);
     console.log(`[avatar] Generated for ${personaName}: ${url}`);
     return url;
   }
@@ -150,7 +155,7 @@ export async function generatePersonaAvatar(
     prediction = (await pollRes.json()) as IReplicatePrediction;
 
     if (prediction.status === 'succeeded') {
-      const url = prediction.output?.[0] ?? null;
+      const url = extractOutputUrl(prediction.output);
       console.log(`[avatar] Generated for ${personaName}: ${url}`);
       return url;
     }
