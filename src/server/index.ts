@@ -870,6 +870,23 @@ async function handlePostSlackChannelCreate(
 
     const slack = new SlackClient(botToken);
     const channelId = await slack.createChannel(name);
+    let invitedCount = 0;
+    let inviteWarning: string | null = null;
+    let welcomeMessagePosted = false;
+
+    // Auto-invite everyone in the workspace
+    try {
+      const users = await slack.listUsers();
+      const userIds = users.map((u) => u.id);
+      if (userIds.length > 0) {
+        // inviteUsers can take up to 1000 IDs
+        invitedCount = await slack.inviteUsers(channelId, userIds);
+      }
+    } catch (inviteErr) {
+      console.warn('Failed to auto-invite users to new channel:', inviteErr);
+      inviteWarning =
+        inviteErr instanceof Error ? inviteErr.message : String(inviteErr);
+    }
 
     // Post a first message so the channel pops up in the user's Slack
     try {
@@ -877,11 +894,17 @@ async function handlePostSlackChannelCreate(
         channelId,
         `👋 *Night Watch AI* has linked this channel for integration. Ready to work!`,
       );
+      welcomeMessagePosted = true;
     } catch (msgErr) {
       console.warn('Failed to post welcome message to new channel:', msgErr);
     }
 
-    res.json(channelId);
+    res.json({
+      channelId,
+      invitedCount,
+      inviteWarning,
+      welcomeMessagePosted,
+    });
   } catch (error) {
     res
       .status(500)

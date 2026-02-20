@@ -129,4 +129,57 @@ export class SlackClient {
       name: ch.name as string,
     }));
   }
+
+  /**
+   * List all users in the workspace.
+   */
+  async listUsers(): Promise<{ id: string; name: string }[]> {
+    const users = new Map<string, { id: string; name: string }>();
+    let cursor: string | undefined;
+
+    do {
+      const result = await this._client.users.list({
+        limit: 200,
+        ...(cursor ? { cursor } : {}),
+      });
+
+      for (const member of result.members ?? []) {
+        const id = member.id;
+        if (!id || member.is_bot || member.deleted || id === 'USLACKBOT') {
+          continue;
+        }
+
+        users.set(id, {
+          id,
+          name: (member.real_name || member.name || id) as string,
+        });
+      }
+
+      const nextCursor = result.response_metadata?.next_cursor;
+      cursor = nextCursor && nextCursor.length > 0 ? nextCursor : undefined;
+    } while (cursor);
+
+    return Array.from(users.values());
+  }
+
+  /**
+   * Invite multiple users to a channel.
+   */
+  async inviteUsers(channelId: string, userIds: string[]): Promise<number> {
+    const uniqueUserIds = Array.from(new Set(userIds.filter((id) => id.length > 0)));
+    if (uniqueUserIds.length === 0) return 0;
+
+    let invitedCount = 0;
+    // Slack allows up to 1000 users per invite call.
+    for (let i = 0; i < uniqueUserIds.length; i += 1000) {
+      const batch = uniqueUserIds.slice(i, i + 1000);
+      await this._client.conversations.invite({
+        channel: channelId,
+        users: batch.join(','),
+      });
+      invitedCount += batch.length;
+    }
+
+    return invitedCount;
+  }
 }

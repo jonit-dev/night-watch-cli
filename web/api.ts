@@ -412,8 +412,18 @@ export interface ISlackChannel {
   name: string;
 }
 
-export function createSlackChannel(botToken: string, name: string): Promise<string> {
-  return apiFetch<string>(apiPath('/api/slack/channels/create'), {
+export interface ICreateSlackChannelResult {
+  channelId: string;
+  invitedCount: number;
+  inviteWarning: string | null;
+  welcomeMessagePosted: boolean;
+}
+
+export function createSlackChannel(
+  botToken: string,
+  name: string,
+): Promise<ICreateSlackChannelResult> {
+  return apiFetch<ICreateSlackChannelResult>(apiPath('/api/slack/channels/create'), {
     method: 'POST',
     body: JSON.stringify({ botToken, name }),
   });
