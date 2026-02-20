@@ -7,6 +7,7 @@ import { getScriptPath, loadConfig } from "@/config.js";
 import { INightWatchConfig } from "@/types.js";
 import { executeScriptWithOutput } from "@/utils/shell.js";
 import { PROVIDER_COMMANDS } from "@/constants.js";
+import * as fs from "fs";
 import * as path from "path";
 import { parseScriptResult } from "@/utils/script-result.js";
 import {
@@ -89,8 +90,11 @@ export function auditCommand(program: Command): void {
 
         header("Provider Invocation");
         const providerCmd = PROVIDER_COMMANDS[config.provider];
-        const autoFlag = config.provider === "claude" ? "--dangerously-skip-permissions" : "--yolo";
-        dim(`  ${providerCmd} ${autoFlag} -p "/night-watch-audit"`);
+        if (config.provider === "claude") {
+          dim(`  ${providerCmd} -p "<bundled night-watch-audit.md>" --dangerously-skip-permissions`);
+        } else {
+          dim(`  ${providerCmd} --quiet --yolo --prompt "<bundled night-watch-audit.md>"`);
+        }
 
         header("Command");
         dim(`  bash ${scriptPath} ${projectDir}`);
@@ -113,10 +117,16 @@ export function auditCommand(program: Command): void {
             spinner.succeed("Code audit skipped");
           } else {
             const reportPath = path.join(projectDir, "logs", "audit-report.md");
+            if (!fs.existsSync(reportPath)) {
+              spinner.fail("Code audit finished without a report file");
+              process.exit(1);
+            }
             spinner.succeed(`Code audit complete — report written to ${reportPath}`);
           }
         } else {
-          spinner.fail(`Code audit exited with code ${exitCode}`);
+          const statusSuffix = scriptResult?.status ? ` (${scriptResult.status})` : "";
+          spinner.fail(`Code audit exited with code ${exitCode}${statusSuffix}`);
+          process.exit(exitCode || 1);
         }
       } catch (err) {
         spinner.fail(`Code audit failed: ${err instanceof Error ? err.message : String(err)}`);

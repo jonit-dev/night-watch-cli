@@ -32,6 +32,7 @@ source "${SCRIPT_DIR}/night-watch-helpers.sh"
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 # NOTE: Lock file path must match auditLockPath() in src/utils/status-data.ts
 LOCK_FILE="/tmp/night-watch-audit-${PROJECT_RUNTIME_KEY}.lock"
+AUDIT_PROMPT_TEMPLATE="${SCRIPT_DIR}/../templates/night-watch-audit.md"
 
 emit_result() {
   local status="${1:?status required}"
@@ -62,9 +63,18 @@ if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   echo "Provider: ${PROVIDER_CMD}"
   echo "Max Runtime: ${MAX_RUNTIME}s"
   echo "Report File: ${REPORT_FILE}"
+  echo "Prompt Template: ${AUDIT_PROMPT_TEMPLATE}"
   emit_result "skip_dry_run"
   exit 0
 fi
+
+if [ ! -f "${AUDIT_PROMPT_TEMPLATE}" ]; then
+  log "FAIL: Missing bundled audit prompt template at ${AUDIT_PROMPT_TEMPLATE}"
+  emit_result "failure_missing_prompt"
+  exit 1
+fi
+
+AUDIT_PROMPT="$(cat "${AUDIT_PROMPT_TEMPLATE}")"
 
 if [ -n "${NW_DEFAULT_BRANCH:-}" ]; then
   DEFAULT_BRANCH="${NW_DEFAULT_BRANCH}"
@@ -93,7 +103,7 @@ case "${PROVIDER_CMD}" in
   claude)
     if (
       cd "${AUDIT_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
-        claude -p "/night-watch-audit" \
+        claude -p "${AUDIT_PROMPT}" \
           --dangerously-skip-permissions \
           >> "${LOG_FILE}" 2>&1
     ); then
@@ -107,7 +117,7 @@ case "${PROVIDER_CMD}" in
       cd "${AUDIT_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
         codex --quiet \
           --yolo \
-          --prompt "$(cat "${AUDIT_WORKTREE_DIR}/.claude/commands/night-watch-audit.md")" \
+          --prompt "${AUDIT_PROMPT}" \
           >> "${LOG_FILE}" 2>&1
     ); then
       EXIT_CODE=0
@@ -131,7 +141,13 @@ fi
 cleanup_worktrees "${PROJECT_DIR}" "${AUDIT_WORKTREE_BASENAME}"
 
 if [ "${EXIT_CODE}" -eq 0 ]; then
-  if [ -f "${REPORT_FILE}" ] && grep -q "NO_ISSUES_FOUND" "${REPORT_FILE}" 2>/dev/null; then
+  if [ ! -f "${REPORT_FILE}" ]; then
+    log "FAIL: Audit provider exited 0 but no report was generated at ${REPORT_FILE}"
+    emit_result "failure_no_report"
+    exit 1
+  fi
+
+  if grep -q "NO_ISSUES_FOUND" "${REPORT_FILE}" 2>/dev/null; then
     log "DONE: Audit complete — no actionable issues found"
     emit_result "skip_clean"
   else

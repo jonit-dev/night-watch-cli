@@ -11,6 +11,7 @@ const repoRoot = path.resolve(__dirname, "../../../");
 const executorScript = path.join(repoRoot, "scripts", "night-watch-cron.sh");
 const reviewerScript = path.join(repoRoot, "scripts", "night-watch-pr-reviewer-cron.sh");
 const qaScript = path.join(repoRoot, "scripts", "night-watch-qa-cron.sh");
+const auditScript = path.join(repoRoot, "scripts", "night-watch-audit-cron.sh");
 
 const tempDirs: string[] = [];
 
@@ -266,6 +267,97 @@ describe("core flow smoke tests (bash scripts)", () => {
 
     expect(result.status).toBe(42);
     expect(result.stdout).toContain("NIGHT_WATCH_RESULT:failure");
+  });
+
+  it("audit should fail when provider exits 0 without producing a report", () => {
+    const projectDir = mkTempDir("nw-smoke-audit-missing-report-");
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, "logs"), { recursive: true });
+
+    const fakeBin = mkTempDir("nw-smoke-audit-missing-report-bin-");
+    fs.writeFileSync(
+      path.join(fakeBin, "claude"),
+      "#!/usr/bin/env bash\n" +
+      "echo 'Unknown skill: night-watch-audit' >&2\n" +
+      "exit 0\n",
+      { encoding: "utf-8", mode: 0o755 }
+    );
+
+    const result = runScript(auditScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: "claude",
+      NW_DEFAULT_BRANCH: "main",
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain("NIGHT_WATCH_RESULT:failure_no_report");
+    expect(fs.existsSync(path.join(projectDir, "logs", "audit-report.md"))).toBe(false);
+  });
+
+  it("audit should emit skip_clean when report contains NO_ISSUES_FOUND", () => {
+    const projectDir = mkTempDir("nw-smoke-audit-clean-");
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, "logs"), { recursive: true });
+
+    const fakeBin = mkTempDir("nw-smoke-audit-clean-bin-");
+    fs.writeFileSync(
+      path.join(fakeBin, "claude"),
+      "#!/usr/bin/env bash\n" +
+      "mkdir -p logs\n" +
+      "printf 'NO_ISSUES_FOUND\\n' > logs/audit-report.md\n" +
+      "exit 0\n",
+      { encoding: "utf-8", mode: 0o755 }
+    );
+
+    const result = runScript(auditScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: "claude",
+      NW_DEFAULT_BRANCH: "main",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("NIGHT_WATCH_RESULT:skip_clean");
+    expect(fs.readFileSync(path.join(projectDir, "logs", "audit-report.md"), "utf-8")).toContain("NO_ISSUES_FOUND");
+  });
+
+  it("audit should emit success_audit when provider writes findings report", () => {
+    const projectDir = mkTempDir("nw-smoke-audit-success-");
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, "logs"), { recursive: true });
+
+    const fakeBin = mkTempDir("nw-smoke-audit-success-bin-");
+    fs.writeFileSync(
+      path.join(fakeBin, "claude"),
+      "#!/usr/bin/env bash\n" +
+      "mkdir -p logs\n" +
+      "cat <<'EOF' > logs/audit-report.md\n" +
+      "# Code Audit Report\n" +
+      "\n" +
+      "Generated: 2026-02-20T00:00:00.000Z\n" +
+      "\n" +
+      "## Findings\n" +
+      "\n" +
+      "### Finding 1\n" +
+      "- **Location**: `src/example.ts:1`\n" +
+      "- **Severity**: medium\n" +
+      "- **Category**: dry_violation\n" +
+      "- **Description**: duplicate logic in two services\n" +
+      "- **Snippet**: `doWork()`\n" +
+      "- **Suggested Fix**: extract helper\n" +
+      "EOF\n" +
+      "exit 0\n",
+      { encoding: "utf-8", mode: 0o755 }
+    );
+
+    const result = runScript(auditScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: "claude",
+      NW_DEFAULT_BRANCH: "main",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("NIGHT_WATCH_RESULT:success_audit");
+    expect(fs.readFileSync(path.join(projectDir, "logs", "audit-report.md"), "utf-8")).toContain("# Code Audit Report");
   });
 
   it("reviewer worker mode should allow concurrent runs for different target PRs", async () => {
