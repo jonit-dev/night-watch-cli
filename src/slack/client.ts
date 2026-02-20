@@ -42,9 +42,13 @@ export class SlackClient {
       thread_ts: threadTs,
     });
 
+    if (!result.ts || !result.channel) {
+      throw new Error(`Slack postMessage returned no timestamp (channel=${channel})`);
+    }
+
     return {
-      ts: result.ts as string,
-      channel: result.channel as string,
+      ts: result.ts,
+      channel: result.channel,
       text,
     };
   }
@@ -57,6 +61,15 @@ export class SlackClient {
       channel,
       text,
     });
+  }
+
+  /**
+   * Resolve the bot user id for mention detection/filtering.
+   */
+  async getBotUserId(): Promise<string | null> {
+    const result = await this._client.auth.test();
+    const userId = result.user_id;
+    return typeof userId === 'string' && userId.length > 0 ? userId : null;
   }
 
   /**

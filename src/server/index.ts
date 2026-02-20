@@ -145,6 +145,20 @@ function validatePrdName(name: string): boolean {
 }
 
 /**
+ * Mask sensitive fields in config before returning API payloads.
+ */
+function maskConfigSecrets(config: INightWatchConfig): INightWatchConfig {
+  if (!config.slack?.botToken) return config;
+  return {
+    ...config,
+    slack: {
+      ...config.slack,
+      botToken: '***',
+    },
+  };
+}
+
+/**
  * Mask persona model env var values before returning API payloads.
  */
 function maskPersonaSecrets(persona: IAgentPersona): IAgentPersona {
@@ -301,7 +315,7 @@ function handleGetConfig(
   res: Response,
 ): void {
   try {
-    res.json(config);
+    res.json(maskConfigSecrets(config));
   } catch (error) {
     res
       .status(500)
@@ -317,7 +331,7 @@ function handlePutConfig(
   res: Response,
 ): void {
   try {
-    const changes = req.body as Partial<INightWatchConfig>;
+    let changes = req.body as Partial<INightWatchConfig>;
 
     if (typeof changes !== 'object' || changes === null) {
       res.status(400).json({ error: 'Invalid request body' });
@@ -486,6 +500,12 @@ function handlePutConfig(
       }
     }
 
+    // Don't overwrite bot token if the client sent back the masked placeholder
+    if (changes.slack?.botToken === '***') {
+      const { botToken: _masked, ...slackRest } = changes.slack;
+      changes = { ...changes, slack: slackRest as typeof changes.slack };
+    }
+
     const result = saveConfig(projectDir, changes);
 
     if (!result.success) {
@@ -494,7 +514,7 @@ function handlePutConfig(
     }
 
     reloadConfig();
-    res.json(getConfig());
+    res.json(maskConfigSecrets(getConfig()));
   } catch (error) {
     res
       .status(500)
@@ -831,6 +851,7 @@ function handlePutRoadmapToggle(
 // ==================== Slack Integration ====================
 
 import { SlackClient } from '../slack/client.js';
+import { SlackInteractionListener } from '../slack/interaction-listener.js';
 
 async function handlePostSlackChannels(
   req: Request,
@@ -1980,22 +2001,37 @@ export function createGlobalApp(): Express {
 /**
  * Graceful shutdown handler
  */
-function setupGracefulShutdown(server: ReturnType<Express['listen']>): void {
-  process.on('SIGTERM', () => {
-    console.log('SIGTERM received, shutting down server...');
-    server.close(() => {
-      console.log('Server closed');
-      process.exit(0);
-    });
-  });
+function setupGracefulShutdown(
+  server: ReturnType<Express['listen']>,
+  beforeClose?: () => Promise<void> | void,
+): void {
+  let shuttingDown = false;
 
-  process.on('SIGINT', () => {
-    console.log('\nSIGINT received, shutting down server...');
-    server.close(() => {
-      console.log('Server closed');
-      process.exit(0);
-    });
-  });
+  const shutdown = (signal: 'SIGTERM' | 'SIGINT'): void => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+
+    if (signal === 'SIGINT') {
+      console.log('\nSIGINT received, shutting down server...');
+    } else {
+      console.log('SIGTERM received, shutting down server...');
+    }
+
+    Promise.resolve(beforeClose?.())
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`Pre-shutdown cleanup failed: ${message}`);
+      })
+      .finally(() => {
+        server.close(() => {
+          console.log('Server closed');
+          process.exit(0);
+        });
+      });
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 /**
@@ -2003,12 +2039,20 @@ function setupGracefulShutdown(server: ReturnType<Express['listen']>): void {
  */
 export function startServer(projectDir: string, port: number): void {
   const app = createApp(projectDir);
+  const listener = new SlackInteractionListener(loadConfig(projectDir));
 
   const server = app.listen(port, () => {
     console.log(`Night Watch UI running at http://localhost:${port}`);
   });
 
-  setupGracefulShutdown(server);
+  void listener.start().catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.warn(`Slack interaction listener failed to start: ${message}`);
+  });
+
+  setupGracefulShutdown(server, async () => {
+    await listener.stop();
+  });
 }
 
 /**
@@ -2035,10 +2079,38 @@ export function startGlobalServer(port: number): void {
   valid.forEach((p) => console.log(`  - ${p.name} (${p.path})`));
 
   const app = createGlobalApp();
+  const listenersBySlackToken = new Map<string, SlackInteractionListener>();
+  for (const project of valid) {
+    const config = loadConfig(project.path);
+    const slack = config.slack;
+    if (
+      !slack?.enabled ||
+      !slack.discussionEnabled ||
+      !slack.botToken ||
+      !slack.appToken
+    ) {
+      continue;
+    }
+
+    const key = `${slack.botToken}:${slack.appToken}`;
+    if (!listenersBySlackToken.has(key)) {
+      listenersBySlackToken.set(key, new SlackInteractionListener(config));
+    }
+  }
+  const listeners = Array.from(listenersBySlackToken.values());
 
   const server = app.listen(port, () => {
     console.log(`Night Watch Global UI running at http://localhost:${port}`);
   });
 
-  setupGracefulShutdown(server);
+  for (const listener of listeners) {
+    void listener.start().catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(`Slack interaction listener failed to start: ${message}`);
+    });
+  }
+
+  setupGracefulShutdown(server, async () => {
+    await Promise.allSettled(listeners.map((listener) => listener.stop()));
+  });
 }
