@@ -725,4 +725,42 @@ Respond with ONLY one of:
       );
     }
   }
+
+  /**
+   * Reply as a persona in any Slack thread — no formal discussion required.
+   * Used when someone @mentions a persona outside of a Night Watch discussion.
+   */
+  async replyAsAgent(
+    channel: string,
+    threadTs: string,
+    incomingText: string,
+    persona: IAgentPersona,
+  ): Promise<void> {
+    let history: { text: string }[] = [];
+    try {
+      history = await this._slackClient.getChannelHistory(channel, threadTs, 10);
+    } catch {
+      // Ignore — reply with just the incoming text as context
+    }
+
+    const historyText = history.map((m) => m.text).join('\n---\n');
+
+    const prompt =
+      `You are ${persona.name}, ${persona.role}.\n` +
+      (persona.soul?.whoIAm ? `About you: ${persona.soul.whoIAm}\n\n` : '') +
+      (historyText ? `Thread context:\n${historyText}\n\n` : '') +
+      `Someone just said: "${incomingText}"\n\n` +
+      `Reply concisely in your own voice. Keep it under 3 sentences unless detail is clearly needed.`;
+
+    let message: string;
+    try {
+      message = await callAIForContribution(persona, this._config, prompt);
+    } catch {
+      message = `[Reply from ${persona.name} unavailable — AI provider not configured]`;
+    }
+
+    if (message) {
+      await this._slackClient.postAsAgent(channel, message, persona, threadTs);
+    }
+  }
 }

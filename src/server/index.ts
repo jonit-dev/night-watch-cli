@@ -2042,11 +2042,25 @@ function setupGracefulShutdown(
  * Start the HTTP server (single-project mode)
  */
 export function startServer(projectDir: string, port: number): void {
+  const config = loadConfig(projectDir);
   const app = createApp(projectDir);
-  const listener = new SlackInteractionListener(loadConfig(projectDir));
+  const listener = new SlackInteractionListener(config);
 
   const server = app.listen(port, () => {
-    console.log(`Night Watch UI running at http://localhost:${port}`);
+    console.log(`\nNight Watch UI  http://localhost:${port}`);
+    console.log(`Project         ${projectDir}`);
+    console.log(`Provider        ${config.provider}`);
+
+    const slack = config.slack;
+    if (slack?.enabled && slack.botToken) {
+      console.log(`Slack           enabled — channels: ${Object.entries(slack.channels ?? {}).map(([k, v]) => `#${k}=${v}`).join(', ')}`);
+      if (slack.replicateApiToken) {
+        console.log(`Avatar gen      Replicate Flux enabled`);
+      }
+    } else {
+      console.log(`Slack           not configured`);
+    }
+    console.log('');
   });
 
   void listener.start().catch((err: unknown) => {
@@ -2079,8 +2093,14 @@ export function startGlobalServer(port: number): void {
     );
   }
 
+  console.log(`\nNight Watch Global UI`);
   console.log(`Managing ${valid.length} project(s):`);
-  valid.forEach((p) => console.log(`  - ${p.name} (${p.path})`));
+  for (const p of valid) {
+    const cfg = loadConfig(p.path);
+    const slackStatus = cfg.slack?.enabled && cfg.slack.botToken ? 'slack:on' : 'slack:off';
+    const avatarStatus = cfg.slack?.replicateApiToken ? ' avatar-gen:on' : '';
+    console.log(`  - ${p.name} (${p.path}) [${slackStatus}${avatarStatus}]`);
+  }
 
   const app = createGlobalApp();
   const listenersBySlackToken = new Map<string, SlackInteractionListener>();

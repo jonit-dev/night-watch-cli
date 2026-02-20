@@ -164,6 +164,7 @@ export interface ISlackBotConfig {
   };
   autoCreateProjectChannels: boolean;
   discussionEnabled: boolean;
+  replicateApiToken?: string;  // For AI-generated persona avatars (Flux)
 }
 
 // ==================== Agent Personas ====================

@@ -34,11 +34,17 @@ export class SlackClient {
     persona: IAgentPersona,
     threadTs?: string,
   ): Promise<ISlackMessage> {
+    // Slack icon_url must be a real HTTP URL — data URIs are not supported
+    const iconUrl =
+      persona.avatarUrl && !persona.avatarUrl.startsWith('data:')
+        ? persona.avatarUrl
+        : undefined;
+
     const result = await this._client.chat.postMessage({
       channel,
       text,
       username: persona.name,
-      icon_url: persona.avatarUrl ?? undefined,
+      icon_url: iconUrl,
       thread_ts: threadTs,
     });
 
