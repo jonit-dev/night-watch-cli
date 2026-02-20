@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ExternalLink, CheckCircle, XCircle, Loader2, AlertCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, HelpCircle } from 'lucide-react';
+import { ExternalLink, CheckCircle, XCircle, Loader2, AlertCircle, Search, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
 import { useApi, fetchPrs, triggerReview } from '../api';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -8,38 +8,6 @@ import { useStore } from '../store/useStore';
 type FilterType = 'all' | 'needs-work' | 'pending' | 'passed';
 type SortField = 'number' | 'title' | 'branch' | 'ciStatus' | 'reviewScore';
 type SortDirection = 'asc' | 'desc';
-
-/**
- * Get tooltip text for CI status
- */
-const getCiStatusTooltip = (status: string): string => {
-  switch (status) {
-    case 'pass':
-      return 'All CI checks passed';
-    case 'fail':
-      return 'One or more CI checks failed';
-    case 'pending':
-      return 'CI checks are still running';
-    default:
-      return 'No CI data available or CI not configured';
-  }
-};
-
-/**
- * Get tooltip text for review score
- */
-const getReviewScoreTooltip = (score: number | null): string => {
-  if (score === null) {
-    return 'No review yet or review not required';
-  }
-  if (score === 100) {
-    return 'PR has been approved';
-  }
-  if (score === 0) {
-    return 'Changes have been requested';
-  }
-  return `Review score: ${score}`;
-};
 
 const PRs: React.FC = () => {
   const [selectedPR, setSelectedPR] = useState<number | null>(null);
@@ -56,8 +24,24 @@ const PRs: React.FC = () => {
       case 'pass': return <CheckCircle className="h-4 w-4 text-green-500" />;
       case 'fail': return <XCircle className="h-4 w-4 text-red-500" />;
       case 'pending': return <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />;
-      default: return <HelpCircle className="h-4 w-4 text-slate-500" />;
+      default: return <AlertCircle className="h-4 w-4 text-slate-500" />;
     }
+  };
+
+  const getStatusTooltip = (status: string): string => {
+    switch (status) {
+      case 'pass': return 'All CI checks passed';
+      case 'fail': return 'One or more CI checks failed';
+      case 'pending': return 'CI checks are still running';
+      default: return 'No CI data available';
+    }
+  };
+
+  const getReviewScoreTooltip = (score: number | null): string => {
+    if (score === null) return 'No review decision yet';
+    if (score === 100) return 'PR has been approved';
+    if (score === 0) return 'Changes have been requested';
+    return `Review score: ${score}`;
   };
 
   // Filter PRs based on selected filter
@@ -280,20 +264,14 @@ const PRs: React.FC = () => {
                    <span className="px-2 py-1 bg-slate-800 text-slate-400 border border-slate-700 rounded text-xs font-mono">{pr.branch}</span>
                 </td>
                 <td className="px-6 py-4">
-                   <div
-                     className="flex items-center space-x-2"
-                     title={getCiStatusTooltip(pr.ciStatus)}
-                   >
+                   <div className="flex items-center space-x-2" title={getStatusTooltip(pr.ciStatus)}>
                       {getStatusIcon(pr.ciStatus)}
                       <span className="text-sm capitalize text-slate-400">{pr.ciStatus}</span>
                    </div>
                 </td>
                 <td className="px-6 py-4">
                   {pr.reviewScore !== null ? (
-                    <div
-                      className="flex items-center space-x-2"
-                      title={getReviewScoreTooltip(pr.reviewScore)}
-                    >
+                    <div className="flex items-center space-x-2" title={getReviewScoreTooltip(pr.reviewScore)}>
                        <div className="w-24 h-2 bg-slate-800 rounded-full overflow-hidden">
                           <div
                             className={`h-full ${pr.reviewScore >= 70 ? 'bg-green-500' : 'bg-red-500'}`}
@@ -303,12 +281,7 @@ const PRs: React.FC = () => {
                        <span className={`text-sm font-bold ${pr.reviewScore >= 70 ? 'text-green-500' : 'text-red-500'}`}>{pr.reviewScore}</span>
                     </div>
                   ) : (
-                    <span
-                      className="text-slate-600 text-sm"
-                      title={getReviewScoreTooltip(null)}
-                    >
-                      —
-                    </span>
+                    <span className="text-slate-600 text-sm" title="No review decision yet">—</span>
                   )}
                 </td>
                 <td className="px-6 py-4 text-right">
@@ -342,22 +315,17 @@ const PRs: React.FC = () => {
                         <p className="text-sm text-slate-400 mt-1">Branch: <span className="font-mono">{pr.branch}</span></p>
                      </div>
                      <div className="flex items-center space-x-4">
-                        <div className="text-center" title={getCiStatusTooltip(pr.ciStatus)}>
+                        <div className="text-center" title={getStatusTooltip(pr.ciStatus)}>
                            <div className="text-xs text-slate-500">CI Status</div>
                            <div className="flex items-center space-x-1 mt-1">
                               {getStatusIcon(pr.ciStatus)}
                               <span className="text-sm capitalize text-slate-300">{pr.ciStatus}</span>
                            </div>
                         </div>
-                        {pr.reviewScore !== null ? (
+                        {pr.reviewScore !== null && (
                            <div className="text-center" title={getReviewScoreTooltip(pr.reviewScore)}>
                               <div className="text-xs text-slate-500">Review Score</div>
                               <div className={`text-xl font-bold mt-1 ${pr.reviewScore >= 70 ? 'text-green-500' : 'text-red-500'}`}>{pr.reviewScore}</div>
-                           </div>
-                        ) : (
-                           <div className="text-center" title={getReviewScoreTooltip(null)}>
-                              <div className="text-xs text-slate-500">Review Score</div>
-                              <div className="text-xl font-bold mt-1 text-slate-500">—</div>
                            </div>
                         )}
                      </div>
