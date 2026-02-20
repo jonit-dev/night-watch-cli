@@ -387,6 +387,16 @@ prepare_detached_worktree() {
   local log_file="${4:-${LOG_FILE:-/dev/null}}"
   local base_ref=""
 
+  # Remove stale directory that exists on disk but is not registered in git's
+  # worktree list (left over from a killed or interrupted previous run).
+  if [ -d "${worktree_dir}" ]; then
+    if ! git -C "${project_dir}" worktree list --porcelain 2>/dev/null \
+        | grep -qF "worktree ${worktree_dir}"; then
+      log "WARN: Removing unregistered stale worktree directory ${worktree_dir}"
+      rm -rf "${worktree_dir}"
+    fi
+  fi
+
   git -C "${project_dir}" fetch origin "${default_branch}" >> "${log_file}" 2>&1 || true
   base_ref=$(resolve_worktree_base_ref "${project_dir}" "${default_branch}") || return 1
 

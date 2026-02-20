@@ -12,7 +12,7 @@ import { loadConfig } from "@/config.js";
 import { createBoardProvider } from "@/board/factory.js";
 import { IBoardProviderConfig } from "@/board/types.js";
 import { execFileSync } from "node:child_process";
-import { buildCurrentCliInvocation, formatCommandForLog, normalizeText, sleep } from "./utils.js";
+import { buildCurrentCliInvocation, formatCommandForLog, getNightWatchTsconfigPath, normalizeText, sleep } from "./utils.js";
 import { humanizeSlackReply, isSkipMessage } from "./humanizer.js";
 import { findCarlos, findDev, getParticipatingPersonas } from "./personas.js";
 import { buildBoardTools, callAIForContribution, callAIWithTools, resolvePersonaAIConfig } from "./ai/index.js";
@@ -71,8 +71,17 @@ function getChannelForTrigger(trigger: IDiscussionTrigger, config: INightWatchCo
  */
 function buildOpeningMessage(trigger: IDiscussionTrigger): string {
   switch (trigger.type) {
-    case 'pr_review':
-      return `Opened ${trigger.ref}${trigger.prUrl ? ` — ${trigger.prUrl}` : ''}. Ready for eyes.`;
+    case 'pr_review': {
+      const prRef = `#${trigger.ref}`;
+      const prWithUrl = trigger.prUrl ? `${prRef} — ${trigger.prUrl}` : prRef;
+      const openers = [
+        `Opened ${prWithUrl}. Ready for eyes.`,
+        `Just opened ${prWithUrl}. Anyone free to review?`,
+        `${prWithUrl} is up. Tagging for review.`,
+        `Opened ${prWithUrl}. Let me know if you spot anything.`,
+      ];
+      return openers[Math.floor(Math.random() * openers.length)];
+    }
     case 'build_failure':
       return `Build broke on ${trigger.ref}. Looking into it.\n\n${trigger.context.slice(0, 500)}`;
     case 'prd_kickoff':
@@ -196,6 +205,7 @@ ${isFirstRound ? '- First round: give your initial take from your angle. Be spec
 - Emojis: use one only if it genuinely fits. Default to none.
 - Never start with "Great question", "Of course", "I hope this helps", or similar.
 - Never say "as an AI" or break character.
+- Only reference PR numbers, issue numbers, or URLs that appear in the Context or Thread above. Never invent or guess links.
 ${isFinalRound ? '- Final round: be decisive. State your position clearly.' : ''}
 
 Write ONLY your message. No name prefix, no labels.`;
@@ -795,6 +805,7 @@ Write the prefix and your message. Nothing else.`;
     );
 
     // Spawn the reviewer as a detached process
+    const tsconfigPath = getNightWatchTsconfigPath();
     const { spawn } = await import('child_process');
     const reviewer = spawn(
       process.execPath,
@@ -802,7 +813,12 @@ Write the prefix and your message. Nothing else.`;
       {
         detached: true,
         stdio: 'ignore',
-        env: { ...process.env, NW_SLACK_FEEDBACK: feedback, NW_TARGET_PR: prNumber },
+        env: {
+          ...process.env,
+          NW_SLACK_FEEDBACK: feedback,
+          NW_TARGET_PR: prNumber,
+          ...(tsconfigPath ? { TSX_TSCONFIG_PATH: tsconfigPath } : {}),
+        },
       }
     );
     reviewer.unref();
@@ -844,7 +860,8 @@ Write the prefix and your message. Nothing else.`;
       `- If you disagree, say why in one line. If you agree, keep it short.\n` +
       `- Base opinions on concrete code evidence from context (file path, symbol, diff, or stack/log detail).\n` +
       `- If there is no concrete code evidence, ask for the exact file/diff before giving an opinion.\n` +
-      `- You have board tools available. If asked to open, update, or list issues, use them — don't just say you will.\n\n` +
+      `- You have board tools available. If asked to open, update, or list issues, use them — don't just say you will.\n` +
+      `- Only reference PR numbers, issue numbers, or URLs that appear in the context above. Never invent or guess links.\n\n` +
       `Write only your reply. No name prefix.`;
 
     const projectPathForTools = this._resolveReplyProjectPath(channel, threadTs);
@@ -917,6 +934,7 @@ Write the prefix and your message. Nothing else.`;
       `- No markdown, headings, bullets. Just a message.\n` +
       `- No "Great question", "Just checking in", or "Hope everyone is doing well."\n` +
       `- Emojis: one max, only if natural. Default to none.\n` +
+      `- Do not make up specific PR numbers, issue numbers, or URLs. If you don't have a concrete reference from context, speak in general terms.\n` +
       `- If you genuinely have nothing useful to say, write exactly: SKIP\n\n` +
       `Write only your message. No name prefix.`;
 

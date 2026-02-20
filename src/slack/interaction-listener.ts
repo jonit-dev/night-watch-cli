@@ -18,7 +18,7 @@ import { getRoadmapStatus } from '../utils/roadmap-scanner.js';
 import { generatePersonaAvatar } from '../utils/avatar-generator.js';
 import { DeliberationEngine } from './deliberation.js';
 import { SlackClient } from './client.js';
-import { buildCurrentCliInvocation, formatCommandForLog, normalizeProjectRef, normalizeText, sleep, stripSlackUserMentions } from './utils.js';
+import { buildCurrentCliInvocation, formatCommandForLog, getNightWatchTsconfigPath, normalizeProjectRef, normalizeText, sleep, stripSlackUserMentions } from './utils.js';
 import {
   resolveMentionedPersonas,
   resolvePersonasByPlainName,
@@ -878,6 +878,7 @@ export class SlackInteractionListener {
       `[slack][job] persona=${persona.name} project=${project.name}${opts?.prNumber ? ` pr=${opts.prNumber}` : ''} spawn=${formatCommandForLog(process.execPath, invocationArgs)}`,
     );
 
+    const tsconfigPath = getNightWatchTsconfigPath();
     const child = spawn(
       process.execPath,
       invocationArgs,
@@ -886,6 +887,7 @@ export class SlackInteractionListener {
         env: {
           ...process.env,
           NW_EXECUTION_CONTEXT: 'agent',
+          ...(tsconfigPath ? { TSX_TSCONFIG_PATH: tsconfigPath } : {}),
           ...(opts?.prNumber ? { NW_TARGET_PR: opts.prNumber } : {}),
           ...(opts?.issueNumber ? { NW_TARGET_ISSUE: opts.issueNumber } : {}),
           ...(opts?.fixConflicts
@@ -1325,9 +1327,14 @@ export class SlackInteractionListener {
     );
 
     const startedAt = Date.now();
+    const tsconfigPath = getNightWatchTsconfigPath();
     const child = spawn(process.execPath, invocationArgs, {
       cwd: project.path,
-      env: { ...process.env, NW_EXECUTION_CONTEXT: 'agent' },
+      env: {
+        ...process.env,
+        NW_EXECUTION_CONTEXT: 'agent',
+        ...(tsconfigPath ? { TSX_TSCONFIG_PATH: tsconfigPath } : {}),
+      },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
