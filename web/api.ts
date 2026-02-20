@@ -262,6 +262,35 @@ export function retryPrd(prdName: string): Promise<{ message: string }> {
   });
 }
 
+// ==================== Agents ====================
+
+export function fetchAgents(): Promise<unknown[]> {
+  return apiFetch<unknown[]>(apiPath('/api/agents'));
+}
+
+export function fetchAgentPrompt(id: string): Promise<{ prompt: string }> {
+  return apiFetch<{ prompt: string }>(apiPath(`/api/agents/${encodeURIComponent(id)}/prompt`));
+}
+
+export function seedDefaultAgents(): Promise<{ message: string }> {
+  return apiFetch<{ message: string }>(apiPath('/api/agents/seed-defaults'), {
+    method: 'POST',
+  });
+}
+
+export async function deleteAgent(id: string): Promise<void> {
+  const url = `${API_BASE}${apiPath(`/api/agents/${encodeURIComponent(id)}`)}`;
+  const response = await fetch(url, {
+    headers: { 'Content-Type': 'application/json' },
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+  }
+  // 204 No Content — do not parse response body
+}
+
 // ==================== Roadmap Scanner ====================
 // RoadmapItem and RoadmapStatus are imported from @night-watch/types above.
 
