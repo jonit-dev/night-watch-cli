@@ -120,16 +120,19 @@ function rowToPersona(row: IAgentPersonaRow, modelConfig: IAgentModelConfig | nu
 }
 
 /**
- * Default avatar paths for built-in personas.
- * Images are stored locally in web/public/avatars/ and served by the Night Watch server.
- * The SlackClient resolves these relative paths to absolute URLs using the configured serverBaseUrl.
- * To regenerate: run the avatar-generator utility and save new images to web/public/avatars/.
+ * Default avatar URLs for built-in personas.
+ * Hosted as GitHub raw content so Slack can fetch them directly without auth.
+ * Images are committed to web/public/avatars/ and served from GitHub's CDN.
+ * To regenerate: run the avatar-generator utility and push new images to the repo.
  */
+const GITHUB_RAW_BASE =
+  'https://raw.githubusercontent.com/jonit-dev/night-watch-cli/main/web/public/avatars';
+
 const DEFAULT_AVATAR_URLS: Record<string, string> = {
-  Maya: '/avatars/maya.webp',
-  Carlos: '/avatars/carlos.webp',
-  Priya: '/avatars/priya.webp',
-  Dev: '/avatars/dev.webp',
+  Maya: `${GITHUB_RAW_BASE}/maya.webp`,
+  Carlos: `${GITHUB_RAW_BASE}/carlos.webp`,
+  Priya: `${GITHUB_RAW_BASE}/priya.webp`,
+  Dev: `${GITHUB_RAW_BASE}/dev.webp`,
 };
 
 // Default personas to seed on first run
@@ -800,14 +803,16 @@ export class SqliteAgentPersonaRepository implements IAgentPersonaRepository {
   }
 
   /**
-   * Patch avatar URLs for built-in personas that are missing them.
-   * Called on every startup to ensure avatars are always present.
+   * Patch avatar URLs for built-in personas.
+   * Replaces null or local-path avatars with the canonical GitHub-hosted URLs.
+   * Called on every startup so that upgrades always get the correct URLs.
    */
   patchDefaultAvatarUrls(): void {
     for (const [name, url] of Object.entries(DEFAULT_AVATAR_URLS)) {
       this._db
         .prepare<[string, number, string]>(
-          'UPDATE agent_personas SET avatar_url = ?, updated_at = ? WHERE name = ? AND avatar_url IS NULL'
+          `UPDATE agent_personas SET avatar_url = ?, updated_at = ?
+           WHERE name = ? AND (avatar_url IS NULL OR avatar_url LIKE '/avatars/%')`
         )
         .run(url, Date.now(), name);
     }
