@@ -4,22 +4,37 @@
  * Agents discuss in threads, reach consensus, and drive PR actions.
  */
 
-import { IAgentPersona, IDiscussionTrigger, ISlackDiscussion } from "@night-watch/core/shared/types.js";
-import { type ISlackMessage, SlackClient } from "./client.js";
-import { getRepositories } from "@night-watch/core/storage/repositories/index.js";
-import { INightWatchConfig } from "@night-watch/core/types.js";
-import { loadConfig } from "@night-watch/core/config.js";
-import { createBoardProvider } from "@night-watch/core/board/factory.js";
-import { IBoardProviderConfig } from "@night-watch/core/board/types.js";
-import { execFileSync } from "node:child_process";
-import { buildCurrentCliInvocation, formatCommandForLog, getNightWatchTsconfigPath, normalizeText, sleep } from "./utils.js";
-import { humanizeSlackReply, isSkipMessage } from "./humanizer.js";
-import { findCarlos, findDev, getParticipatingPersonas } from "./personas.js";
-import { buildBoardTools, callAIForContribution, callAIWithTools, resolvePersonaAIConfig } from "./ai/index.js";
+import {
+  IAgentPersona,
+  IDiscussionTrigger,
+  ISlackDiscussion,
+} from '@night-watch/core/shared/types.js';
+import { type ISlackMessage, SlackClient } from './client.js';
+import { getRepositories } from '@night-watch/core/storage/repositories/index.js';
+import { INightWatchConfig } from '@night-watch/core/types.js';
+import { loadConfig } from '@night-watch/core/config.js';
+import { createBoardProvider } from '@night-watch/core/board/factory.js';
+import { IBoardProviderConfig } from '@night-watch/core/board/types.js';
+import { execFileSync } from 'node:child_process';
+import {
+  buildCurrentCliInvocation,
+  formatCommandForLog,
+  getNightWatchTsconfigPath,
+  normalizeText,
+  sleep,
+} from './utils.js';
+import { humanizeSlackReply, isSkipMessage } from './humanizer.js';
+import { findCarlos, findDev, getParticipatingPersonas } from './personas.js';
+import {
+  buildBoardTools,
+  callAIForContribution,
+  callAIWithTools,
+  resolvePersonaAIConfig,
+} from './ai/index.js';
 
 // Re-export humanizeSlackReply for backwards compatibility with existing tests
 
-export { humanizeSlackReply } from "./humanizer.js";
+export { humanizeSlackReply } from './humanizer.js';
 
 const MAX_ROUNDS = 2;
 const MAX_CONTRIBUTIONS_PER_ROUND = 2;
@@ -129,11 +144,11 @@ function buildIssueTitleFromTrigger(trigger: IDiscussionTrigger): string {
 
 function hasConcreteCodeContext(context: string): boolean {
   return (
-    /```/.test(context)
-    || /(^|\s)(src|test|scripts|web)\/[^\s:]+\.[A-Za-z0-9]+(?::\d+)?/.test(context)
-    || /\bdiff --git\b/.test(context)
-    || /@@\s[-+]\d+/.test(context)
-    || /\b(function|class|const|let|if\s*\(|try\s*{|catch\s*\()/.test(context)
+    /```/.test(context) ||
+    /(^|\s)(src|test|scripts|web)\/[^\s:]+\.[A-Za-z0-9]+(?::\d+)?/.test(context) ||
+    /\bdiff --git\b/.test(context) ||
+    /@@\s[-+]\d+/.test(context) ||
+    /\b(function|class|const|let|if\s*\(|try\s*{|catch\s*\()/.test(context)
   );
 }
 
@@ -142,21 +157,13 @@ function loadPrDiffExcerpt(projectPath: string, ref: string): string {
   if (Number.isNaN(prNumber)) return '';
 
   try {
-    const diff = execFileSync(
-      'gh',
-      ['pr', 'diff', String(prNumber), '--color=never'],
-      {
-        cwd: projectPath,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-        maxBuffer: 2 * 1024 * 1024,
-      },
-    );
-    const excerpt = diff
-      .split('\n')
-      .slice(0, 160)
-      .join('\n')
-      .trim();
+    const diff = execFileSync('gh', ['pr', 'diff', String(prNumber), '--color=never'], {
+      cwd: projectPath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: 2 * 1024 * 1024,
+    });
+    const excerpt = diff.split('\n').slice(0, 160).join('\n').trim();
     if (!excerpt) return '';
     return `PR diff excerpt (first 160 lines):\n\`\`\`diff\n${excerpt}\n\`\`\``;
   } catch {
@@ -331,9 +338,11 @@ export class DeliberationEngine {
 
   private async _startDiscussionInternal(trigger: IDiscussionTrigger): Promise<ISlackDiscussion> {
     const repos = getRepositories();
-    const latest = repos
-      .slackDiscussion
-      .getLatestByTrigger(trigger.projectPath, trigger.type, trigger.ref);
+    const latest = repos.slackDiscussion.getLatestByTrigger(
+      trigger.projectPath,
+      trigger.type,
+      trigger.ref,
+    );
     if (latest) {
       if (latest.status === 'active') {
         return latest;
@@ -351,7 +360,7 @@ export class DeliberationEngine {
     const resolvedTrigger = { ...trigger };
     if (trigger.type === 'prd_kickoff' && !trigger.channelId) {
       const projects = repos.projectRegistry.getAll();
-      const project = projects.find(p => p.path === trigger.projectPath);
+      const project = projects.find((p) => p.path === trigger.projectPath);
       if (project?.slackChannelId) {
         resolvedTrigger.channelId = project.slackChannelId;
       }
@@ -416,7 +425,7 @@ export class DeliberationEngine {
     const history = await this._slackClient.getChannelHistory(
       discussion.channelId,
       discussion.threadTs,
-      10
+      10,
     );
     const historyText = formatThreadHistory(history);
     const historySet = new Set(history.map((m) => normalizeText(m.text)).filter(Boolean));
@@ -478,8 +487,8 @@ export class DeliberationEngine {
     // Find the discussion by threadTs
     const repos = getRepositories();
     const activeDiscussions = repos.slackDiscussion.getActive('');
-    const discussion = activeDiscussions.find(d =>
-      d.channelId === channel && d.threadTs === threadTs
+    const discussion = activeDiscussions.find(
+      (d) => d.channelId === channel && d.threadTs === threadTs,
     );
 
     if (!discussion) return;
@@ -502,7 +511,7 @@ export class DeliberationEngine {
 
         await this._slackClient.postAsAgent(
           channel,
-          "Ok, picking this back up. Let me see where we landed.",
+          'Ok, picking this back up. Let me see where we landed.',
           carlos,
           threadTs,
         );
@@ -541,7 +550,9 @@ export class DeliberationEngine {
       10,
     );
     let historyText = formatThreadHistory(history) || currentContext;
-    const seenMessages = new Set(history.map((message) => normalizeText(message.text)).filter(Boolean));
+    const seenMessages = new Set(
+      history.map((message) => normalizeText(message.text)).filter(Boolean),
+    );
 
     const repliesUsed = countThreadReplies(history);
     const reviewerBudget = Math.max(0, MAX_AGENT_THREAD_REPLIES - repliesUsed - 1);
@@ -569,7 +580,9 @@ export class DeliberationEngine {
       let message: string;
       try {
         message = await callAIForContribution(persona, this._config, contributionPrompt);
-      } catch (_err) {
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[deliberation] AI contribution failed for ${persona.name}: ${msg}`);
         message = '';
       }
 
@@ -669,7 +682,9 @@ Write the prefix and your message. Nothing else.`;
       let decision: string;
       try {
         decision = await callAIForContribution(carlos, this._config, consensusPrompt);
-      } catch (_err) {
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[deliberation] AI consensus evaluation failed: ${msg}`);
         decision = 'HUMAN: AI evaluation failed — needs manual review';
       }
 
@@ -679,22 +694,31 @@ Write the prefix and your message. Nothing else.`;
           { allowEmoji: false, maxSentences: 1 },
         );
         if (!isSkipMessage(message)) {
-          await this._slackClient.postAsAgent(discussion.channelId, message, carlos, discussion.threadTs);
+          await this._slackClient.postAsAgent(
+            discussion.channelId,
+            message,
+            carlos,
+            discussion.threadTs,
+          );
         }
         repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'approved');
         if (trigger.type === 'code_watch') {
-          await this.triggerIssueOpener(discussionId, trigger)
-            .catch((e: unknown) => console.warn('Issue opener failed:', String(e)));
+          await this.triggerIssueOpener(discussionId, trigger).catch((e: unknown) =>
+            console.warn('Issue opener failed:', String(e)),
+          );
         }
         return;
       }
 
       if (decision.startsWith('CHANGES') && discussion.round < MAX_ROUNDS && repliesLeft >= 3) {
         const changes = decision.replace(/^CHANGES:\s*/, '').trim();
-        const changesMessage = humanizeSlackReply(changes || 'Need one more pass on a couple items.', {
-          allowEmoji: false,
-          maxSentences: 1,
-        });
+        const changesMessage = humanizeSlackReply(
+          changes || 'Need one more pass on a couple items.',
+          {
+            allowEmoji: false,
+            maxSentences: 1,
+          },
+        );
         if (!isSkipMessage(changesMessage)) {
           await this._slackClient.postAsAgent(
             discussion.channelId,
@@ -735,8 +759,8 @@ Write the prefix and your message. Nothing else.`;
         repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'changes_requested');
 
         if (discussion.triggerType === 'pr_review') {
-          await this.triggerPRRefinement(discussionId, changesSummary, discussion.triggerRef).catch(e =>
-            console.warn('PR refinement trigger failed:', e)
+          await this.triggerPRRefinement(discussionId, changesSummary, discussion.triggerRef).catch(
+            (e) => console.warn('PR refinement trigger failed:', e),
           );
         }
         return;
@@ -813,20 +837,16 @@ Write the prefix and your message. Nothing else.`;
     // Spawn the reviewer as a detached process
     const tsconfigPath = getNightWatchTsconfigPath();
     const { spawn } = await import('child_process');
-    const reviewer = spawn(
-      process.execPath,
-      invocationArgs,
-      {
-        detached: true,
-        stdio: 'ignore',
-        env: {
-          ...process.env,
-          NW_SLACK_FEEDBACK: feedback,
-          NW_TARGET_PR: prNumber,
-          ...(tsconfigPath ? { TSX_TSCONFIG_PATH: tsconfigPath } : {}),
-        },
-      }
-    );
+    const reviewer = spawn(process.execPath, invocationArgs, {
+      detached: true,
+      stdio: 'ignore',
+      env: {
+        ...process.env,
+        NW_SLACK_FEEDBACK: feedback,
+        NW_TARGET_PR: prNumber,
+        ...(tsconfigPath ? { TSX_TSCONFIG_PATH: tsconfigPath } : {}),
+      },
+    });
     reviewer.unref();
   }
 
@@ -852,8 +872,13 @@ Write the prefix and your message. Nothing else.`;
     const historySet = new Set(history.map((m) => normalizeText(m.text)).filter(Boolean));
 
     // Detect if this is a casual/social message or a technical one
-    const isCasual = /\b(hey|hi|hello|yo|sup|happy|morning|afternoon|evening|friday|weekend|alive|there|guys|team|everyone|folks)\b/i.test(incomingText)
-      && !/\b(bug|error|crash|fail|test|pr|code|build|deploy|security|auth|token|vuln|diff|commit|review|issue|impl)\b/i.test(incomingText);
+    const isCasual =
+      /\b(hey|hi|hello|yo|sup|happy|morning|afternoon|evening|friday|weekend|alive|there|guys|team|everyone|folks)\b/i.test(
+        incomingText,
+      ) &&
+      !/\b(bug|error|crash|fail|test|pr|code|build|deploy|security|auth|token|vuln|diff|commit|review|issue|impl)\b/i.test(
+        incomingText,
+      );
 
     const casualGuidance = isCasual
       ? `This is a casual social message — respond like a real colleague, not a bot. Be warm, brief, maybe crack a light comment about work or the day. Don't force a work topic. It's fine to just say hey back, ask how things are going, or make a quick joke. 1-2 sentences.\n`
@@ -883,11 +908,11 @@ Write the prefix and your message. Nothing else.`;
       `Write only your reply. No name prefix.`;
 
     const projectPathForTools = this._resolveReplyProjectPath(channel, threadTs);
-    const boardConfig = projectPathForTools
-      ? this._resolveBoardConfig(projectPathForTools)
-      : null;
+    const boardConfig = projectPathForTools ? this._resolveBoardConfig(projectPathForTools) : null;
     const resolved = resolvePersonaAIConfig(persona, this._config);
-    const useTools = Boolean(projectPathForTools && boardConfig && resolved.provider === 'anthropic');
+    const useTools = Boolean(
+      projectPathForTools && boardConfig && resolved.provider === 'anthropic',
+    );
 
     let message: string;
     try {
@@ -1122,7 +1147,9 @@ ${trigger.context}`;
       .replace(/[.!?]+$/, '')
       .replace(/^(found|noticed|flagging|caught)\s+/i, '')
       .slice(0, 80)}`;
-    const issueBody = await this._generateIssueBody(fakeTrigger, devPersona).catch(() => report.slice(0, 1200));
+    const issueBody = await this._generateIssueBody(fakeTrigger, devPersona).catch(() =>
+      report.slice(0, 1200),
+    );
 
     // Step 3: Create GitHub issue (if board is configured for this project)
     const boardConfig = this._resolveBoardConfig(projectPath);
@@ -1130,9 +1157,15 @@ ${trigger.context}`;
     if (boardConfig) {
       try {
         const provider = createBoardProvider(boardConfig, projectPath);
-        const issue = await provider.createIssue({ title: issueTitle, body: issueBody, column: 'Ready' });
+        const issue = await provider.createIssue({
+          title: issueTitle,
+          body: issueBody,
+          column: 'Ready',
+        });
         issueUrl = issue.url;
-        console.log(`[deliberation][audit] filed issue #${issue.number} for ${projectName}: ${issueUrl}`);
+        console.log(
+          `[deliberation][audit] filed issue #${issue.number} for ${projectName}: ${issueUrl}`,
+        );
       } catch (err) {
         console.warn('[deliberation][audit] failed to create GitHub issue:', err);
       }
@@ -1155,10 +1188,7 @@ ${trigger.context}`;
    * Open a GitHub issue from a code_watch finding and post back to the thread.
    * Called automatically after an approved code_watch consensus.
    */
-  async triggerIssueOpener(
-    discussionId: string,
-    trigger: IDiscussionTrigger,
-  ): Promise<void> {
+  async triggerIssueOpener(discussionId: string, trigger: IDiscussionTrigger): Promise<void> {
     const repos = getRepositories();
     const discussion = repos.slackDiscussion.getById(discussionId);
     if (!discussion) return;
