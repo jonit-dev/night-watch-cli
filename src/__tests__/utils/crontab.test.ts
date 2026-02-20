@@ -24,12 +24,23 @@ import {
 } from "../../utils/crontab.js";
 
 describe("crontab utilities", () => {
+  let originalContext: string | undefined;
+
   beforeEach(() => {
     vi.resetAllMocks();
+    // Save and clear NW_EXECUTION_CONTEXT to allow crontab writes in tests
+    originalContext = process.env.NW_EXECUTION_CONTEXT;
+    delete process.env.NW_EXECUTION_CONTEXT;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    // Restore NW_EXECUTION_CONTEXT
+    if (originalContext === undefined) {
+      delete process.env.NW_EXECUTION_CONTEXT;
+    } else {
+      process.env.NW_EXECUTION_CONTEXT = originalContext;
+    }
   });
 
   describe("generateMarker", () => {
