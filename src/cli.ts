@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { initCommand } from './commands/init.js';
 import { runCommand } from './commands/run.js';
 import { reviewCommand } from './commands/review.js';
+import { qaCommand } from './commands/qa.js';
 import { installCommand } from './commands/install.js';
 import { uninstallCommand } from './commands/uninstall.js';
 import { statusCommand } from './commands/status.js';
@@ -26,11 +27,19 @@ import { sliceCommand } from './commands/slice.js';
 import { createStateCommand } from './commands/state.js';
 import { boardCommand } from './commands/board.js';
 
-// Get package.json version
+// Find the package root (works from both src/ in dev and dist/src/ in production)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const packageJsonPath = join(__dirname, '..', 'package.json');
-const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+function findPackageRoot(dir: string): string {
+  let d = dir;
+  for (let i = 0; i < 5; i++) {
+    if (existsSync(join(d, 'package.json'))) return d;
+    d = dirname(d);
+  }
+  return dir;
+}
+const packageRoot = findPackageRoot(__dirname);
+const packageJson = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf-8'));
 
 const program = new Command();
 
@@ -47,6 +56,9 @@ runCommand(program);
 
 // Register review command
 reviewCommand(program);
+
+// Register qa command
+qaCommand(program);
 
 // Register Phase 5 commands
 installCommand(program);

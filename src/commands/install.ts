@@ -30,6 +30,8 @@ export interface IInstallOptions {
   reviewerSchedule?: string;
   noReviewer?: boolean;
   noSlicer?: boolean;
+  noQa?: boolean;
+  qa?: boolean;
 }
 
 /**
@@ -145,7 +147,7 @@ export interface IInstallResult {
 export function performInstall(
   projectDir: string,
   config: INightWatchConfig,
-  options?: { schedule?: string; reviewerSchedule?: string; noReviewer?: boolean; noSlicer?: boolean; force?: boolean }
+  options?: { schedule?: string; reviewerSchedule?: string; noReviewer?: boolean; noSlicer?: boolean; noQa?: boolean; qa?: boolean; force?: boolean }
 ): IInstallResult {
   try {
     const offset = config.cronScheduleOffset ?? 0;
@@ -204,6 +206,16 @@ export function performInstall(
       entries.push(slicerEntry);
     }
 
+    // QA entry (if enabled and noQa not set)
+    const disableQa = options?.noQa === true || options?.qa === false;
+    const installQa = disableQa ? false : config.qa.enabled;
+    if (installQa) {
+      const qaSchedule = applyScheduleOffset(config.qa.schedule, offset);
+      const qaLog = path.join(logDir, "qa.log");
+      const qaEntry = `${qaSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} qa >> ${shellQuote(qaLog)} 2>&1  ${marker}`;
+      entries.push(qaEntry);
+    }
+
     const currentCrontab = readCrontab();
     const newCrontab = [...currentCrontab, ...entries];
     writeCrontab(newCrontab);
@@ -229,6 +241,7 @@ export function installCommand(program: Command): void {
     .option("--reviewer-schedule <cron>", "Cron schedule for reviewer")
     .option("--no-reviewer", "Skip installing reviewer cron")
     .option("--no-slicer", "Skip installing slicer cron")
+    .option("--no-qa", "Skip installing QA cron")
     .action(async (options: IInstallOptions) => {
       try {
         // Get project directory
@@ -314,6 +327,19 @@ export function installCommand(program: Command): void {
           entries.push(slicerEntry);
         }
 
+        // Determine if QA should be installed
+        const disableQa = options.noQa === true || options.qa === false;
+        const installQa = disableQa ? false : config.qa.enabled;
+
+        // QA entry (if enabled)
+        let qaLog: string | undefined;
+        if (installQa) {
+          qaLog = path.join(logDir, "qa.log");
+          const qaSchedule = applyScheduleOffset(config.qa.schedule, offset);
+          const qaEntry = `${qaSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} qa >> ${shellQuote(qaLog)} 2>&1  ${marker}`;
+          entries.push(qaEntry);
+        }
+
         // Add all entries
         const currentCrontab = readCrontab();
         const newCrontab = [...currentCrontab, ...entries];
@@ -332,6 +358,9 @@ export function installCommand(program: Command): void {
         }
         if (installSlicer && slicerLog) {
           dim(`  Slicer: ${slicerLog}`);
+        }
+        if (installQa && qaLog) {
+          dim(`  QA: ${qaLog}`);
         }
         console.log();
         dim("To uninstall, run: night-watch uninstall");

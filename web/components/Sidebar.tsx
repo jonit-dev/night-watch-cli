@@ -1,19 +1,20 @@
-import React, { useState } from 'react';
-import { NavLink } from 'react-router-dom';
 import {
-  Home,
-  FileText,
-  GitPullRequest,
+  Blocks,
+  Briefcase,
   Calendar,
-  Terminal,
-  Settings,
-  Map,
-  Kanban,
   ChevronLeft,
   ChevronRight,
-  Briefcase,
   ChevronsUpDown,
+  GitPullRequest,
+  Home,
+  Kanban,
+  Map,
+  Settings,
+  Terminal,
+  Users,
 } from 'lucide-react';
+import React, { useState } from 'react';
+import { NavLink } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 
 const Sidebar: React.FC = () => {
@@ -23,16 +24,17 @@ const Sidebar: React.FC = () => {
   const navItems = [
     { icon: Home, label: 'Dashboard', path: '/' },
     { icon: Kanban, label: 'Board', path: '/board' },
-    { icon: FileText, label: 'PRDs', path: '/prds', badge: 3 },
     { icon: GitPullRequest, label: 'Pull Requests', path: '/prs', badge: 1 },
     { icon: Map, label: 'Roadmap', path: '/roadmap' },
     { icon: Calendar, label: 'Scheduling', path: '/scheduling' },
     { icon: Terminal, label: 'Logs', path: '/logs' },
+    { icon: Blocks, label: 'Integrations', path: '/integrations' },
+    { icon: Users, label: 'Agents', path: '/agents' },
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];
 
   return (
-    <aside 
+    <aside
       className={`
         relative flex flex-col transition-all duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]
         ${collapsed ? 'w-20' : 'w-72'} h-screen flex-shrink-0 z-50
@@ -68,11 +70,11 @@ const Sidebar: React.FC = () => {
             )}
           </div>
         ) : (
-           <div className="relative group">
-              <div className="h-10 w-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold cursor-pointer shadow-lg shadow-indigo-500/20 group-hover:bg-indigo-500 transition-colors bg-gradient-to-br from-indigo-500 to-indigo-700" title="Switch Project">
-                NW
-              </div>
-           </div>
+          <div className="relative group">
+            <div className="h-10 w-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold cursor-pointer shadow-lg shadow-indigo-500/20 group-hover:bg-indigo-500 transition-colors bg-gradient-to-br from-indigo-500 to-indigo-700" title="Switch Project">
+              NW
+            </div>
+          </div>
         )}
       </div>
 
@@ -80,50 +82,57 @@ const Sidebar: React.FC = () => {
       <nav className="flex-1 py-6 overflow-y-auto overflow-x-hidden scrollbar-hide">
         <ul className="space-y-1.5 px-4">
           {navItems.map((item) => (
-            <li key={item.path}>
-              <NavLink
-                to={item.path}
-                className={({ isActive }) => `
-                  flex items-center px-3.5 py-3 rounded-xl transition-all duration-200 group relative
-                  ${isActive 
-                    ? 'bg-indigo-500/10 text-indigo-300 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]' 
-                    : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}
-                  ${collapsed ? 'justify-center' : ''}
-                `}
-              >
-                {({ isActive }) => (
-                  <>
-                    <item.icon className={`h-5 w-5 transition-colors ${isActive ? 'text-indigo-400 drop-shadow-[0_0_8px_rgba(99,102,241,0.5)]' : 'text-slate-500 group-hover:text-slate-300'} ${collapsed ? '' : 'mr-3.5'}`} />
-                    {!collapsed && (
-                      <span className="flex-1 text-sm font-medium tracking-wide">{item.label}</span>
-                    )}
-                    
-                    {/* Badge */}
-                    {item.badge && (
-                      collapsed ? (
-                        <span className="absolute top-2 right-2 h-2 w-2 bg-indigo-500 rounded-full border border-[#030712] shadow-sm"></span>
-                      ) : (
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isActive ? 'bg-indigo-500/20 text-indigo-300' : 'bg-white/5 text-slate-400 border border-white/5'}`}>
-                          {item.badge}
-                        </span>
-                      )
-                    )}
+            <React.Fragment key={item.path}>
+              {item.path === '/agents' && !collapsed && (
+                <li className="pt-3 pb-1 px-3.5">
+                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Team</span>
+                </li>
+              )}
+              <li>
+                <NavLink
+                  to={item.path}
+                  className={({ isActive }) => `
+                    flex items-center px-3.5 py-3 rounded-xl transition-all duration-200 group relative
+                    ${isActive
+                      ? 'bg-indigo-500/10 text-indigo-300 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)]'
+                      : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'}
+                    ${collapsed ? 'justify-center' : ''}
+                  `}
+                >
+                  {({ isActive }) => (
+                    <>
+                      <item.icon className={`h-5 w-5 transition-colors ${isActive ? 'text-indigo-400 drop-shadow-[0_0_8px_rgba(99,102,241,0.5)]' : 'text-slate-500 group-hover:text-slate-300'} ${collapsed ? '' : 'mr-3.5'}`} />
+                      {!collapsed && (
+                        <span className="flex-1 text-sm font-medium tracking-wide">{item.label}</span>
+                      )}
 
-                    {/* Active Indicator Bar */}
-                    {isActive && !collapsed && (
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-indigo-500 rounded-r-full shadow-[0_0_10px_rgba(99,102,241,0.4)]"></div>
-                    )}
+                      {/* Badge */}
+                      {item.badge && (
+                        collapsed ? (
+                          <span className="absolute top-2 right-2 h-2 w-2 bg-indigo-500 rounded-full border border-[#030712] shadow-sm"></span>
+                        ) : (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${isActive ? 'bg-indigo-500/20 text-indigo-300' : 'bg-white/5 text-slate-400 border border-white/5'}`}>
+                            {item.badge}
+                          </span>
+                        )
+                      )}
 
-                    {/* Tooltip on collapse */}
-                    {collapsed && (
-                      <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#111827] text-white text-xs font-medium rounded-md border border-white/10 shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity translate-x-2 group-hover:translate-x-0">
-                        {item.label}
-                      </div>
-                    )}
-                  </>
-                )}
-              </NavLink>
-            </li>
+                      {/* Active Indicator Bar */}
+                      {isActive && !collapsed && (
+                        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-indigo-500 rounded-r-full shadow-[0_0_10px_rgba(99,102,241,0.4)]"></div>
+                      )}
+
+                      {/* Tooltip on collapse */}
+                      {collapsed && (
+                        <div className="absolute left-full ml-4 px-3 py-1.5 bg-[#111827] text-white text-xs font-medium rounded-md border border-white/10 shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity translate-x-2 group-hover:translate-x-0">
+                          {item.label}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </NavLink>
+              </li>
+            </React.Fragment>
           ))}
         </ul>
       </nav>

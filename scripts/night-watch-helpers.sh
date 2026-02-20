@@ -406,11 +406,63 @@ mark_prd_done() {
 
 # ── Rate limit detection ────────────────────────────────────────────────────
 
-# Check if the last N lines of the log contain a 429 rate limit error.
+# Check if the log contains a 429 rate limit error since a given line number.
+# Usage: check_rate_limited <log_file> [start_line]
+# When start_line is provided, only lines after that position are checked,
+# preventing false positives from 429 errors in previous runs.
 # Returns 0 if rate limited, 1 otherwise.
 check_rate_limited() {
   local log_file="${1:?log_file required}"
-  tail -20 "${log_file}" 2>/dev/null | grep -q "429"
+  local start_line="${2:-0}"
+  if [ "${start_line}" -gt 0 ] 2>/dev/null; then
+    tail -n "+$((start_line + 1))" "${log_file}" 2>/dev/null | grep -q "429"
+  else
+    tail -20 "${log_file}" 2>/dev/null | grep -q "429"
+  fi
+}
+
+# Send an immediate Telegram warning when the rate-limit fallback is triggered.
+# Preferred input: NW_TELEGRAM_RATE_LIMIT_WEBHOOKS (JSON array with botToken/chatId).
+# Legacy fallback: NW_TELEGRAM_BOT_TOKEN + NW_TELEGRAM_CHAT_ID.
+# Usage: send_rate_limit_fallback_warning <model> <project_name>
+send_rate_limit_fallback_warning() {
+  local model="${1:-native Claude}"
+  local project_name="${2:-unknown}"
+  local msg="⚠️ Rate Limit Fallback
+
+Project: ${project_name}
+Proxy quota exhausted - falling back to native Claude (${model})"
+
+  # Preferred path: iterate all opted-in Telegram webhooks.
+  if [ -n "${NW_TELEGRAM_RATE_LIMIT_WEBHOOKS:-}" ] && command -v jq >/dev/null 2>&1; then
+    local sent=0
+    local webhook_json
+    while IFS= read -r webhook_json; do
+      [ -z "${webhook_json}" ] && continue
+      local bot_token
+      local chat_id
+      bot_token=$(printf '%s' "${webhook_json}" | jq -r '.botToken // empty' 2>/dev/null || true)
+      chat_id=$(printf '%s' "${webhook_json}" | jq -r '.chatId // empty' 2>/dev/null || true)
+      if [ -n "${bot_token}" ] && [ -n "${chat_id}" ]; then
+        curl -s -X POST "https://api.telegram.org/bot${bot_token}/sendMessage" \
+          --data-urlencode "chat_id=${chat_id}" \
+          --data-urlencode "text=${msg}" > /dev/null 2>&1 || true
+        sent=1
+      fi
+    done < <(printf '%s' "${NW_TELEGRAM_RATE_LIMIT_WEBHOOKS}" | jq -c '.[]?' 2>/dev/null || true)
+
+    if [ "${sent}" -eq 1 ]; then
+      return 0
+    fi
+  fi
+
+  # Legacy single-webhook fallback.
+  if [ -z "${NW_TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${NW_TELEGRAM_CHAT_ID:-}" ]; then
+    return 0
+  fi
+  curl -s -X POST "https://api.telegram.org/bot${NW_TELEGRAM_BOT_TOKEN}/sendMessage" \
+    --data-urlencode "chat_id=${NW_TELEGRAM_CHAT_ID}" \
+    --data-urlencode "text=${msg}" > /dev/null 2>&1 || true
 }
 
 # ── Board mode issue discovery ────────────────────────────────────────────────

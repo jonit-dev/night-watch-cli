@@ -25,7 +25,14 @@ const SENSITIVE_PATTERNS = /TOKEN|KEY|SECRET|PASSWORD/i;
 
 const WEBHOOK_TYPES: WebhookType[] = ["slack", "discord", "telegram"];
 const NOTIFICATION_EVENTS: NotificationEvent[] = [
-  "run_started", "run_succeeded", "run_failed", "run_timeout", "review_completed",
+  "run_started",
+  "run_succeeded",
+  "run_failed",
+  "run_timeout",
+  "review_completed",
+  "pr_auto_merged",
+  "rate_limit_fallback",
+  "qa_completed",
 ];
 
 /**
@@ -594,6 +601,7 @@ export function createConfigTab(): ITab {
       }
 
       pendingChanges.providerEnv = {
+        ANTHROPIC_API_KEY: apiKey,
         ANTHROPIC_AUTH_TOKEN: apiKey,
         ...GLM5_DEFAULTS,
       };

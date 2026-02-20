@@ -210,6 +210,9 @@ describe("doctor command", () => {
           "run_failed",
           "run_timeout",
           "review_completed",
+          "pr_auto_merged",
+          "rate_limit_fallback",
+          "qa_completed",
         ],
       };
       expect(validateWebhook(webhook)).toEqual([]);

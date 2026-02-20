@@ -7,7 +7,7 @@ import { createHash } from "crypto";
 import { execSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import { CLAIM_FILE_EXTENSION, LOCK_FILE_PREFIX, LOG_DIR } from "../constants.js";
+import { CLAIM_FILE_EXTENSION, LOCK_FILE_PREFIX, LOG_DIR, LOG_FILE_NAMES } from "../constants.js";
 import { getPrdStatesForProject } from "./prd-states.js";
 import { INightWatchConfig } from "../types.js";
 import { generateMarker, getEntries, getProjectEntries } from "./crontab.js";
@@ -111,6 +111,13 @@ export function executorLockPath(projectDir: string): string {
  */
 export function reviewerLockPath(projectDir: string): string {
   return `${LOCK_FILE_PREFIX}pr-reviewer-${projectRuntimeKey(projectDir)}.lock`;
+}
+
+/**
+ * Compute the lock file path for the QA process of a given project directory.
+ */
+export function qaLockPath(projectDir: string): string {
+  return `${LOCK_FILE_PREFIX}qa-${projectRuntimeKey(projectDir)}.lock`;
 }
 
 /**
@@ -661,9 +668,11 @@ export function getLogInfo(
  * Collect log info as ILogInfo items
  */
 export function collectLogInfo(projectDir: string): ILogInfo[] {
-  const logNames = ["executor", "reviewer"];
+  const logNames = ["executor", "reviewer", "qa"];
   return logNames.map((name) => {
-    const logPath = path.join(projectDir, LOG_DIR, `${name}.log`);
+    // Map logical name (executor/reviewer) to actual file name (night-watch/night-watch-pr-reviewer)
+    const fileName = LOG_FILE_NAMES[name] || name;
+    const logPath = path.join(projectDir, LOG_DIR, `${fileName}.log`);
     const exists = fs.existsSync(logPath);
     return {
       name,
@@ -703,10 +712,12 @@ export function fetchStatusSnapshot(
 
   const executorLock = checkLockFile(executorLockPath(projectDir));
   const reviewerLock = checkLockFile(reviewerLockPath(projectDir));
+  const qaLock = checkLockFile(qaLockPath(projectDir));
 
   const processes: IProcessInfo[] = [
     { name: "executor", running: executorLock.running, pid: executorLock.pid },
     { name: "reviewer", running: reviewerLock.running, pid: reviewerLock.pid },
+    { name: "qa", running: qaLock.running, pid: qaLock.pid },
   ];
 
   const prds = collectPrdInfo(projectDir, config.prdDir, config.maxRuntime);

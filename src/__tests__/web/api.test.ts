@@ -1,117 +1,77 @@
 /**
- * Tests for the web API client functions
- *
- * These tests verify the API client behavior using mocked fetch.
+ * Tests for web API client URL integration.
+ * Verifies that agent endpoints are called with correct paths in
+ * single-project and global mode.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Mock global fetch
+import {
+  deleteAgent,
+  fetchAgentPrompt,
+  fetchAgents,
+  seedDefaultAgents,
+  setCurrentProject,
+  setGlobalMode,
+} from "../../../web/api.js";
+
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
-// Mock the api module's dependencies
-vi.mock("../../web/api.js", () => {
-  const original = vi.importActual("../../web/api.js");
-  return {
-    ...original,
-    // Re-export everything
-  };
-});
-
-// Since we can't easily import the web module from node environment,
-// we'll test the logic inline here to verify the expected behavior
-
-describe("web/api triggerRun", () => {
+describe("web/api agent URL integration", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    setGlobalMode(false);
+    setCurrentProject(null);
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    setGlobalMode(false);
+    setCurrentProject(null);
   });
 
-  it("should pass prdName in body when provided", async () => {
-    // Setup mock response
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ started: true, pid: 12345 }),
-    });
+  it("calls single-project agent endpoints under /api", async () => {
+    mockFetch.mockResolvedValue({ ok: true, status: 200, json: async () => [] });
 
-    // Simulate what triggerRun("my-feature-prd") does:
-    const prdName = "my-feature-prd";
-    const body = prdName ? JSON.stringify({ prdName }) : undefined;
-
-    await fetch("/api/actions/run", {
-      method: "POST",
-      headers: prdName ? { "Content-Type": "application/json" } : undefined,
-      body,
-    });
-
-    // Verify the request was made correctly
+    await fetchAgents();
     expect(mockFetch).toHaveBeenCalledWith(
-      "/api/actions/run",
-      expect.objectContaining({
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prdName: "my-feature-prd" }),
-      })
+      "/api/agents",
+      expect.objectContaining({ headers: expect.objectContaining({ "Content-Type": "application/json" }) }),
+    );
+
+    mockFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ prompt: "test" }) });
+    await fetchAgentPrompt("abc");
+    expect(mockFetch).toHaveBeenLastCalledWith(
+      "/api/agents/abc/prompt",
+      expect.objectContaining({ headers: expect.objectContaining({ "Content-Type": "application/json" }) }),
     );
   });
 
-  it("should not send body when prdName is undefined", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ started: true, pid: 12345 }),
-    });
+  it("calls project-scoped agent endpoints in global mode", async () => {
+    setGlobalMode(true);
+    setCurrentProject("night-watch-project");
+    mockFetch.mockResolvedValue({ ok: true, status: 200, json: async () => ({ message: "ok" }) });
 
-    // Simulate what triggerRun() does without prdName:
-    const prdName = undefined;
-    const body = prdName ? JSON.stringify({ prdName }) : undefined;
+    await seedDefaultAgents();
 
-    await fetch("/api/actions/run", {
-      method: "POST",
-      headers: prdName ? { "Content-Type": "application/json" } : undefined,
-      body,
-    });
-
-    // Verify the request was made correctly - no body or content-type
     expect(mockFetch).toHaveBeenCalledWith(
-      "/api/actions/run",
+      "/api/projects/night-watch-project/agents/seed-defaults",
       expect.objectContaining({
         method: "POST",
-        body: undefined,
-      })
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
+      }),
     );
-
-    // Verify headers doesn't have Content-Type
-    const call = mockFetch.mock.calls[0];
-    expect(call[1]?.headers).toBeUndefined();
   });
 
-  it("should not send body when prdName is empty string", async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ started: true, pid: 12345 }),
-    });
+  it("handles 204 response for deleteAgent without parsing JSON", async () => {
+    const json = vi.fn(async () => ({}));
+    mockFetch.mockResolvedValue({ ok: true, status: 204, json });
 
-    // Simulate what triggerRun("") does:
-    const prdName = "";
-    const body = prdName ? JSON.stringify({ prdName }) : undefined;
-
-    await fetch("/api/actions/run", {
-      method: "POST",
-      headers: prdName ? { "Content-Type": "application/json" } : undefined,
-      body,
-    });
-
-    // Verify the request was made correctly - empty string is falsy so no body
+    await expect(deleteAgent("agent-1")).resolves.toBeUndefined();
     expect(mockFetch).toHaveBeenCalledWith(
-      "/api/actions/run",
-      expect.objectContaining({
-        method: "POST",
-        body: undefined,
-      })
+      "/api/agents/agent-1",
+      expect.objectContaining({ method: "DELETE" }),
     );
+    expect(json).not.toHaveBeenCalled();
   });
 });

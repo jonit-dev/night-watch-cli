@@ -7,15 +7,19 @@ import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import { BoardProviderType, IBoardProviderConfig } from "./board/types.js";
-import { INightWatchConfig, INotificationConfig, IRoadmapScannerConfig, IWebhookConfig, NotificationEvent, Provider, WebhookType } from "./types.js";
+import { ClaudeModel, INightWatchConfig, INotificationConfig, IQaConfig, IRoadmapScannerConfig, ISlackBotConfig, IWebhookConfig, MergeMethod, NotificationEvent, Provider, QaArtifacts, WebhookType } from "./types.js";
 import {
   CONFIG_FILE_NAME,
+  DEFAULT_AUTO_MERGE,
+  DEFAULT_AUTO_MERGE_METHOD,
   DEFAULT_BOARD_PROVIDER,
   DEFAULT_BRANCH_PATTERNS,
   DEFAULT_BRANCH_PREFIX,
+  DEFAULT_CLAUDE_MODEL,
   DEFAULT_CRON_SCHEDULE,
   DEFAULT_CRON_SCHEDULE_OFFSET,
   DEFAULT_DEFAULT_BRANCH,
+  DEFAULT_FALLBACK_ON_RATE_LIMIT,
   DEFAULT_MAX_LOG_SIZE,
   DEFAULT_MAX_RETRIES,
   DEFAULT_MAX_RUNTIME,
@@ -25,11 +29,15 @@ import {
   DEFAULT_PRD_PRIORITY,
   DEFAULT_PROVIDER,
   DEFAULT_PROVIDER_ENV,
+  DEFAULT_QA,
   DEFAULT_REVIEWER_ENABLED,
   DEFAULT_REVIEWER_MAX_RUNTIME,
   DEFAULT_REVIEWER_SCHEDULE,
   DEFAULT_ROADMAP_SCANNER,
+  DEFAULT_SLACK_BOT_CONFIG,
   DEFAULT_TEMPLATES_DIR,
+  VALID_CLAUDE_MODELS,
+  VALID_MERGE_METHODS,
   VALID_PROVIDERS,
 } from "./constants.js";
 
@@ -73,6 +81,20 @@ export function getDefaultConfig(): INightWatchConfig {
 
     // Board provider
     boardProvider: { ...DEFAULT_BOARD_PROVIDER },
+
+    // Auto-merge
+    autoMerge: DEFAULT_AUTO_MERGE,
+    autoMergeMethod: DEFAULT_AUTO_MERGE_METHOD,
+
+    // Rate-limit fallback
+    fallbackOnRateLimit: DEFAULT_FALLBACK_ON_RATE_LIMIT,
+    claudeModel: DEFAULT_CLAUDE_MODEL,
+
+    // QA process
+    qa: { ...DEFAULT_QA },
+
+    // Slack Bot API
+    slack: { ...DEFAULT_SLACK_BOT_CONFIG, channels: { ...DEFAULT_SLACK_BOT_CONFIG.channels } },
   };
 }
 
@@ -226,6 +248,65 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     normalized.boardProvider = bp;
   }
 
+  // Rate-limit fallback
+  normalized.fallbackOnRateLimit = readBoolean(rawConfig.fallbackOnRateLimit);
+  const claudeModelRaw = readString(rawConfig.claudeModel);
+  if (claudeModelRaw && VALID_CLAUDE_MODELS.includes(claudeModelRaw as ClaudeModel)) {
+    normalized.claudeModel = claudeModelRaw as ClaudeModel;
+  }
+
+  // Auto-Merge
+  normalized.autoMerge = readBoolean(rawConfig.autoMerge);
+  const mergeMethod = readString(rawConfig.autoMergeMethod);
+  if (mergeMethod && VALID_MERGE_METHODS.includes(mergeMethod as MergeMethod)) {
+    normalized.autoMergeMethod = mergeMethod as MergeMethod;
+  }
+
+  // Slack Bot Configuration
+  const rawSlack = readObject(rawConfig.slack);
+  if (rawSlack) {
+    const rawChannels = readObject(rawSlack.channels) ?? {};
+    const slack: ISlackBotConfig = {
+      enabled: readBoolean(rawSlack.enabled) ?? DEFAULT_SLACK_BOT_CONFIG.enabled,
+      botToken: readString(rawSlack.botToken) ?? DEFAULT_SLACK_BOT_CONFIG.botToken,
+      channels: {
+        eng: readString(rawChannels.eng) ?? DEFAULT_SLACK_BOT_CONFIG.channels.eng,
+        prs: readString(rawChannels.prs) ?? DEFAULT_SLACK_BOT_CONFIG.channels.prs,
+        incidents: readString(rawChannels.incidents) ?? DEFAULT_SLACK_BOT_CONFIG.channels.incidents,
+        releases: readString(rawChannels.releases) ?? DEFAULT_SLACK_BOT_CONFIG.channels.releases,
+      },
+      autoCreateProjectChannels:
+        readBoolean(rawSlack.autoCreateProjectChannels) ??
+        DEFAULT_SLACK_BOT_CONFIG.autoCreateProjectChannels,
+      discussionEnabled:
+        readBoolean(rawSlack.discussionEnabled) ?? DEFAULT_SLACK_BOT_CONFIG.discussionEnabled,
+    };
+    if (typeof rawSlack.appToken === "string") {
+      slack.appToken = rawSlack.appToken;
+    }
+    normalized.slack = slack;
+  }
+
+  // QA Configuration
+  const rawQa = readObject(rawConfig.qa);
+  if (rawQa) {
+    const artifactsValue = readString(rawQa.artifacts);
+    const artifacts = artifactsValue && ["screenshot", "video", "both"].includes(artifactsValue)
+      ? (artifactsValue as QaArtifacts)
+      : DEFAULT_QA.artifacts;
+
+    const qa: IQaConfig = {
+      enabled: readBoolean(rawQa.enabled) ?? DEFAULT_QA.enabled,
+      schedule: readString(rawQa.schedule) ?? DEFAULT_QA.schedule,
+      maxRuntime: readNumber(rawQa.maxRuntime) ?? DEFAULT_QA.maxRuntime,
+      branchPatterns: readStringArray(rawQa.branchPatterns) ?? DEFAULT_QA.branchPatterns,
+      artifacts,
+      skipLabel: readString(rawQa.skipLabel) ?? DEFAULT_QA.skipLabel,
+      autoInstallPlaywright: readBoolean(rawQa.autoInstallPlaywright) ?? DEFAULT_QA.autoInstallPlaywright,
+    };
+    normalized.qa = qa;
+  }
+
   return normalized;
 }
 
@@ -249,6 +330,16 @@ function parseBoolean(value: string): boolean | null {
 function validateProvider(value: string): Provider | null {
   if (VALID_PROVIDERS.includes(value as Provider)) {
     return value as Provider;
+  }
+  return null;
+}
+
+/**
+ * Validate and return a merge method value
+ */
+function validateMergeMethod(value: string): MergeMethod | null {
+  if (VALID_MERGE_METHODS.includes(value as MergeMethod)) {
+    return value as MergeMethod;
   }
   return null;
 }
@@ -307,6 +398,14 @@ function mergeConfigs(
     if (fileConfig.templatesDir !== undefined) merged.templatesDir = fileConfig.templatesDir;
     if (fileConfig.boardProvider !== undefined)
       merged.boardProvider = { ...merged.boardProvider, ...fileConfig.boardProvider };
+    if (fileConfig.autoMerge !== undefined) merged.autoMerge = fileConfig.autoMerge;
+    if (fileConfig.autoMergeMethod !== undefined) merged.autoMergeMethod = fileConfig.autoMergeMethod;
+    if (fileConfig.fallbackOnRateLimit !== undefined) merged.fallbackOnRateLimit = fileConfig.fallbackOnRateLimit;
+    if (fileConfig.claudeModel !== undefined) merged.claudeModel = fileConfig.claudeModel;
+    if (fileConfig.qa !== undefined)
+      merged.qa = { ...merged.qa, ...fileConfig.qa };
+    if (fileConfig.slack !== undefined)
+      merged.slack = { ...merged.slack, ...fileConfig.slack, channels: { ...merged.slack?.channels, ...fileConfig.slack.channels } };
   }
 
   // Merge env config (takes precedence)
@@ -339,6 +438,14 @@ function mergeConfigs(
   if (envConfig.templatesDir !== undefined) merged.templatesDir = envConfig.templatesDir;
   if (envConfig.boardProvider !== undefined)
     merged.boardProvider = { ...merged.boardProvider, ...envConfig.boardProvider };
+  if (envConfig.autoMerge !== undefined) merged.autoMerge = envConfig.autoMerge;
+  if (envConfig.autoMergeMethod !== undefined) merged.autoMergeMethod = envConfig.autoMergeMethod;
+  if (envConfig.fallbackOnRateLimit !== undefined) merged.fallbackOnRateLimit = envConfig.fallbackOnRateLimit;
+  if (envConfig.claudeModel !== undefined) merged.claudeModel = envConfig.claudeModel;
+  if (envConfig.qa !== undefined)
+    merged.qa = { ...merged.qa, ...envConfig.qa };
+  if (envConfig.slack !== undefined)
+    merged.slack = { ...merged.slack, ...envConfig.slack, channels: { ...merged.slack?.channels, ...envConfig.slack.channels } };
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
 
@@ -499,6 +606,105 @@ export function loadConfig(projectDir: string): INightWatchConfig {
     }
   }
 
+  // NW_AUTO_MERGE environment variable
+  if (process.env.NW_AUTO_MERGE) {
+    const autoMerge = parseBoolean(process.env.NW_AUTO_MERGE);
+    if (autoMerge !== null) {
+      envConfig.autoMerge = autoMerge;
+    }
+  }
+
+  // NW_AUTO_MERGE_METHOD environment variable
+  if (process.env.NW_AUTO_MERGE_METHOD) {
+    const mergeMethod = validateMergeMethod(process.env.NW_AUTO_MERGE_METHOD);
+    if (mergeMethod !== null) {
+      envConfig.autoMergeMethod = mergeMethod;
+    }
+  }
+
+  // NW_FALLBACK_ON_RATE_LIMIT environment variable
+  if (process.env.NW_FALLBACK_ON_RATE_LIMIT) {
+    const fallback = parseBoolean(process.env.NW_FALLBACK_ON_RATE_LIMIT);
+    if (fallback !== null) {
+      envConfig.fallbackOnRateLimit = fallback;
+    }
+  }
+
+  // NW_CLAUDE_MODEL environment variable
+  if (process.env.NW_CLAUDE_MODEL) {
+    const model = process.env.NW_CLAUDE_MODEL;
+    if (VALID_CLAUDE_MODELS.includes(model as ClaudeModel)) {
+      envConfig.claudeModel = model as ClaudeModel;
+    }
+  }
+
+  const qaBaseConfig = (): IQaConfig => envConfig.qa ?? fileConfig?.qa ?? DEFAULT_QA;
+
+  // QA configuration from env vars
+  if (process.env.NW_QA_ENABLED) {
+    const qaEnabled = parseBoolean(process.env.NW_QA_ENABLED);
+    if (qaEnabled !== null) {
+      envConfig.qa = {
+        ...qaBaseConfig(),
+        enabled: qaEnabled,
+      };
+    }
+  }
+
+  if (process.env.NW_QA_SCHEDULE) {
+    envConfig.qa = {
+      ...qaBaseConfig(),
+      schedule: process.env.NW_QA_SCHEDULE,
+    };
+  }
+
+  if (process.env.NW_QA_MAX_RUNTIME) {
+    const qaMaxRuntime = parseInt(process.env.NW_QA_MAX_RUNTIME, 10);
+    if (!isNaN(qaMaxRuntime) && qaMaxRuntime > 0) {
+      envConfig.qa = {
+        ...qaBaseConfig(),
+        maxRuntime: qaMaxRuntime,
+      };
+    }
+  }
+
+  if (process.env.NW_QA_ARTIFACTS) {
+    const artifacts = process.env.NW_QA_ARTIFACTS;
+    if (["screenshot", "video", "both"].includes(artifacts)) {
+      envConfig.qa = {
+        ...qaBaseConfig(),
+        artifacts: artifacts as QaArtifacts,
+      };
+    }
+  }
+
+  if (process.env.NW_QA_SKIP_LABEL) {
+    envConfig.qa = {
+      ...qaBaseConfig(),
+      skipLabel: process.env.NW_QA_SKIP_LABEL,
+    };
+  }
+
+  if (process.env.NW_QA_AUTO_INSTALL_PLAYWRIGHT) {
+    const autoInstall = parseBoolean(process.env.NW_QA_AUTO_INSTALL_PLAYWRIGHT);
+    if (autoInstall !== null) {
+      envConfig.qa = {
+        ...qaBaseConfig(),
+        autoInstallPlaywright: autoInstall,
+      };
+    }
+  }
+
+  if (process.env.NW_QA_BRANCH_PATTERNS) {
+    const patterns = process.env.NW_QA_BRANCH_PATTERNS.split(",").map((s) => s.trim()).filter(Boolean);
+    if (patterns.length > 0) {
+      envConfig.qa = {
+        ...qaBaseConfig(),
+        branchPatterns: patterns,
+      };
+    }
+  }
+
   // Merge all configs
   return mergeConfigs(defaults, fileConfig, envConfig);
 }
@@ -509,7 +715,23 @@ export function loadConfig(projectDir: string): INightWatchConfig {
  */
 export function getScriptPath(scriptName: string): string {
   const configFilePath = fileURLToPath(import.meta.url);
-  // In development, scripts are in scripts/ relative to package root
-  // In production (after npm pack), they're still in scripts/
-  return path.join(path.dirname(configFilePath), "..", "scripts", scriptName);
+  const baseDir = path.dirname(configFilePath);
+
+  const candidates = [
+    // Dev (tsx): src/config.ts -> ../scripts
+    path.resolve(baseDir, "..", "scripts", scriptName),
+    // Built package (dist/src/config.js): ../../scripts
+    path.resolve(baseDir, "..", "..", "scripts", scriptName),
+    // Fallback for unusual launch contexts
+    path.resolve(process.cwd(), "scripts", scriptName),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  // Return primary candidate for backward compatibility even if missing.
+  return candidates[0];
 }

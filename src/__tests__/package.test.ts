@@ -187,7 +187,7 @@ describe("Package Files", () => {
 
     const content = fs.readFileSync(licensePath, "utf-8");
     expect(content).toContain("MIT License");
-    expect(content).toContain("Joao Pio");
+    expect(content).toContain("Joao Paulo Furtado");
   });
 
   it("should have .npmignore file", () => {

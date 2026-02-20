@@ -41,6 +41,30 @@ vi.mock("../utils/crontab.js", () => ({
   generateMarker: vi.fn((name: string) => `# night-watch-cli: ${name}`),
 }));
 
+const mockSlackClient = {
+  listChannels: vi.fn(),
+  createChannel: vi.fn(),
+  listUsers: vi.fn(),
+  inviteUsers: vi.fn(),
+  postMessage: vi.fn(),
+};
+
+const mockSlackClientCtor = vi.fn();
+
+vi.mock("../slack/client.js", () => ({
+  SlackClient: class {
+    constructor(botToken: string) {
+      mockSlackClientCtor(botToken);
+    }
+
+    listChannels = mockSlackClient.listChannels;
+    createChannel = mockSlackClient.createChannel;
+    listUsers = mockSlackClient.listUsers;
+    inviteUsers = mockSlackClient.inviteUsers;
+    postMessage = mockSlackClient.postMessage;
+  },
+}));
+
 import { execSync, spawn } from "child_process";
 import { getEntries, getProjectEntries } from "../utils/crontab.js";
 
@@ -104,11 +128,11 @@ describe("server API", () => {
     const logDir = path.join(tempDir, "logs");
     fs.mkdirSync(logDir, { recursive: true });
     fs.writeFileSync(
-      path.join(logDir, "executor.log"),
+      path.join(logDir, "night-watch.log"),
       "Executor log line 1\nExecutor log line 2\nExecutor log line 3"
     );
     fs.writeFileSync(
-      path.join(logDir, "reviewer.log"),
+      path.join(logDir, "night-watch-pr-reviewer.log"),
       "Reviewer log line 1\nReviewer log line 2\nReviewer log line 3"
     );
 
@@ -133,6 +157,14 @@ describe("server API", () => {
       unref: vi.fn(),
       on: vi.fn(),
     } as any);
+
+    // Mock Slack client defaults
+    vi.mocked(mockSlackClient.listChannels).mockResolvedValue([]);
+    vi.mocked(mockSlackClient.createChannel).mockResolvedValue("CNEW123");
+    vi.mocked(mockSlackClient.listUsers).mockResolvedValue([]);
+    vi.mocked(mockSlackClient.inviteUsers).mockResolvedValue(0);
+    vi.mocked(mockSlackClient.postMessage).mockResolvedValue(undefined);
+    vi.mocked(mockSlackClientCtor).mockReset();
 
     // Create app
     app = createApp(tempDir);
@@ -638,6 +670,68 @@ describe("server API", () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain("Invalid PRD name");
+    });
+  });
+
+  describe("Slack endpoints", () => {
+    it("POST /api/slack/channels returns channels from Slack API", async () => {
+      vi.mocked(mockSlackClient.listChannels).mockResolvedValue([
+        { id: "CENG", name: "eng" },
+        { id: "CPRS", name: "prs" },
+      ]);
+
+      const response = await request(app)
+        .post("/api/slack/channels")
+        .send({ botToken: "xoxb-test-token" });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual([
+        { id: "CENG", name: "eng" },
+        { id: "CPRS", name: "prs" },
+      ]);
+      expect(mockSlackClientCtor).toHaveBeenCalledWith("xoxb-test-token");
+      expect(mockSlackClient.listChannels).toHaveBeenCalledTimes(1);
+    });
+
+    it("POST /api/slack/channels/create returns channel metadata when invite succeeds", async () => {
+      vi.mocked(mockSlackClient.createChannel).mockResolvedValue("CNEW123");
+      vi.mocked(mockSlackClient.listUsers).mockResolvedValue([
+        { id: "U1", name: "Alice" },
+        { id: "U2", name: "Bob" },
+      ]);
+      vi.mocked(mockSlackClient.inviteUsers).mockResolvedValue(2);
+      vi.mocked(mockSlackClient.postMessage).mockResolvedValue(undefined);
+
+      const response = await request(app)
+        .post("/api/slack/channels/create")
+        .send({ botToken: "xoxb-test-token", name: "eng" });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({
+        channelId: "CNEW123",
+        invitedCount: 2,
+        inviteWarning: null,
+        welcomeMessagePosted: true,
+      });
+      expect(mockSlackClient.inviteUsers).toHaveBeenCalledWith("CNEW123", ["U1", "U2"]);
+      expect(mockSlackClient.postMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("POST /api/slack/channels/create reports invite warning without failing channel creation", async () => {
+      vi.mocked(mockSlackClient.createChannel).mockResolvedValue("CWARN01");
+      vi.mocked(mockSlackClient.listUsers).mockResolvedValue([{ id: "U1", name: "Alice" }]);
+      vi.mocked(mockSlackClient.inviteUsers).mockRejectedValue(new Error("missing_scope"));
+      vi.mocked(mockSlackClient.postMessage).mockResolvedValue(undefined);
+
+      const response = await request(app)
+        .post("/api/slack/channels/create")
+        .send({ botToken: "xoxb-test-token", name: "alerts" });
+
+      expect(response.status).toBe(200);
+      expect(response.body.channelId).toBe("CWARN01");
+      expect(response.body.invitedCount).toBe(0);
+      expect(response.body.inviteWarning).toContain("missing_scope");
+      expect(response.body.welcomeMessagePosted).toBe(true);
     });
   });
 

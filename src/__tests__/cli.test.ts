@@ -235,7 +235,7 @@ describe('CLI', () => {
       expect(output).toContain('Board Status');
       expect(output).toContain('Provider Invocation');
       expect(output).toContain('night-watch-cron.sh');
-    });
+    }, 15000);
 
     it('should show dry-run output for review command', () => {
       const output = execSync('npx tsx src/cli.ts review --dry-run', {

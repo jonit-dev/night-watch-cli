@@ -10,6 +10,7 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../../../");
 const executorScript = path.join(repoRoot, "scripts", "night-watch-cron.sh");
 const reviewerScript = path.join(repoRoot, "scripts", "night-watch-pr-reviewer-cron.sh");
+const qaScript = path.join(repoRoot, "scripts", "night-watch-qa-cron.sh");
 
 const tempDirs: string[] = [];
 
@@ -177,5 +178,64 @@ describe("core flow smoke tests (bash scripts)", () => {
     expect(
       fs.existsSync(path.join(projectDir, "docs", "PRDs", "night-watch", "01-smoke-failure.md"))
     ).toBe(true);
+  });
+
+  it("qa should emit skip marker when no open PRs", () => {
+    const projectDir = mkTempDir("nw-smoke-qa-skip-");
+    fs.mkdirSync(path.join(projectDir, "logs"), { recursive: true });
+
+    const result = runScript(qaScript, projectDir);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("NIGHT_WATCH_RESULT:skip_no_open_prs");
+  });
+
+  it("qa should return non-zero when provider fails on a PR", () => {
+    const projectDir = mkTempDir("nw-smoke-qa-failure-");
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, "logs"), { recursive: true });
+
+    const fakeBin = mkTempDir("nw-smoke-qa-failure-bin-");
+
+    fs.writeFileSync(
+      path.join(fakeBin, "claude"),
+      "#!/usr/bin/env bash\nexit 42\n",
+      { encoding: "utf-8", mode: 0o755 }
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, "gh"),
+      "#!/usr/bin/env bash\n" +
+      "if [[ \"$1\" == \"pr\" && \"$2\" == \"list\" ]]; then\n" +
+      "  echo '[{\"number\":1,\"headRefName\":\"feat/qa-fail\",\"title\":\"QA fail\",\"labels\":[]}]'\n" +
+      "  exit 0\n" +
+      "fi\n" +
+      "if [[ \"$1\" == \"repo\" && \"$2\" == \"view\" ]]; then\n" +
+      "  echo 'owner/repo'\n" +
+      "  exit 0\n" +
+      "fi\n" +
+      "if [[ \"$1\" == \"pr\" && \"$2\" == \"view\" ]]; then\n" +
+      "  exit 0\n" +
+      "fi\n" +
+      "if [[ \"$1\" == \"api\" ]]; then\n" +
+      "  echo '[]'\n" +
+      "  exit 0\n" +
+      "fi\n" +
+      "if [[ \"$1\" == \"pr\" && \"$2\" == \"checkout\" ]]; then\n" +
+      "  exit 0\n" +
+      "fi\n" +
+      "exit 0\n",
+      { encoding: "utf-8", mode: 0o755 }
+    );
+
+    const result = runScript(qaScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: "claude",
+      NW_DEFAULT_BRANCH: "main",
+      NW_BRANCH_PATTERNS: "feat/",
+    });
+
+    expect(result.status).toBe(42);
+    expect(result.stdout).toContain("NIGHT_WATCH_RESULT:failure");
   });
 });

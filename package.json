@@ -1,16 +1,16 @@
 {
   "name": "@jonit-dev/night-watch-cli",
-  "version": "1.7.9",
+  "version": "1.7.25",
   "description": "Autonomous PRD execution using AI Provider CLIs + cron",
   "type": "module",
   "bin": {
     "night-watch": "./bin/night-watch.mjs"
   },
-  "main": "./dist/cli.js",
+  "main": "./dist/src/cli.js",
   "exports": {
     ".": {
-      "import": "./dist/cli.js",
-      "types": "./dist/cli.d.ts"
+      "import": "./dist/src/cli.js",
+      "types": "./dist/src/cli.d.ts"
     }
   },
   "scripts": {
@@ -57,6 +57,8 @@
     "url": "https://github.com/jonit-dev/night-watch-cli/issues"
   },
   "dependencies": {
+    "@slack/socket-mode": "^2.0.3",
+    "@slack/web-api": "^7.14.1",
     "better-sqlite3": "^12.6.2",
     "blessed": "^0.1.81",
     "chalk": "^5.6.2",
