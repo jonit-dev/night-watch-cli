@@ -307,7 +307,6 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     };
     normalized.qa = qa;
   }
-  }
 
   return normalized;
 }
@@ -705,7 +704,6 @@ export function loadConfig(projectDir: string): INightWatchConfig {
         branchPatterns: patterns,
       };
     }
-  }
   }
 
   // Merge all configs
