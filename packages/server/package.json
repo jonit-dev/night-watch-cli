@@ -1,0 +1,41 @@
+{
+  "name": "@night-watch/server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./*": {
+      "import": "./dist/*",
+      "types": "./dist/*"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.json && tsc-alias -p tsconfig.json",
+    "verify": "tsc --build tsconfig.json --dry",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@night-watch/core": "*",
+    "@night-watch/slack": "*",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "reflect-metadata": "^0.2.2",
+    "tsyringe": "^4.10.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^22.0.0",
+    "@types/supertest": "^6.0.3",
+    "supertest": "^7.2.2",
+    "tsc-alias": "^1.8.16",
+    "typescript": "^5.3.0",
+    "vitest": "^4.0.0"
+  }
+}

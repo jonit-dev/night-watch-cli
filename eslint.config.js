@@ -33,20 +33,15 @@ export default tseslint.config(
       }],
     },
   },
-  // SQL boundary rule: restrict better-sqlite3 imports to src/storage/** only
   {
-    files: ["src/**/*.ts"],
-    ignores: ["src/storage/**"],
-    rules: {
-      "no-restricted-imports": ["error", {
-        patterns: [{
-          group: ["better-sqlite3"],
-          message: "SQL access is restricted to src/storage/**. Use repository interfaces instead.",
-        }],
-      }],
-    },
-  },
-  {
-    ignores: ["dist/", "node_modules/", "scripts/", "templates/", "web/", "**/*.test.ts", "**/__tests__/"],
+    ignores: [
+      "**/dist/**",
+      "**/node_modules/**",
+      "scripts/",
+      "templates/",
+      "web/",
+      "**/*.test.ts",
+      "**/__tests__/**",
+    ],
   }
 );

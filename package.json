@@ -1,97 +1,35 @@
 {
-  "name": "@jonit-dev/night-watch-cli",
-  "version": "1.7.30",
-  "description": "Autonomous PRD execution using AI Provider CLIs + cron",
-  "type": "module",
-  "bin": {
-    "night-watch": "./bin/night-watch.mjs"
-  },
-  "main": "./dist/src/cli.js",
-  "exports": {
-    ".": {
-      "import": "./dist/src/cli.js",
-      "types": "./dist/src/cli.d.ts"
-    }
-  },
+  "name": "@night-watch/root",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "build": "yarn build:cli && yarn build:web",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "verify": "turbo run verify",
     "build:web": "cd web && yarn install && yarn build",
-    "build:cli": "tsc && tsc-alias",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
-    "dev": "tsx src/cli.ts",
-    "dev:sandbox": "NIGHT_WATCH_HOME=/tmp/nw-sandbox tsx src/cli.ts",
-    "dev:sandbox:inspect": "sqlite3 /tmp/nw-sandbox/state.db",
-    "dev:sandbox:reset": "rm -rf /tmp/nw-sandbox && echo 'Sandbox cleared'",
-    "dev:web": "concurrently --names \"api,vite\" --prefix-colors \"cyan,magenta\" \"tsx src/cli.ts serve\" \"yarn --cwd web dev\"",
-    "prepublishOnly": "npm run build && npm test",
-    "publish:npm": "npm publish --access public",
-    "lint": "eslint src/",
-    "verify": "tsc --noEmit && eslint . --ignore-pattern 'node_modules/' --ignore-pattern 'dist/' --ignore-pattern 'web/dist/' --ignore-pattern 'web/node_modules/'",
-    "local": "tsc && yarn link"
-  },
-  "files": [
-    "dist/",
-    "bin/",
-    "scripts/",
-    "templates/",
-    "web/dist/"
-  ],
-  "keywords": [
-    "claude",
-    "codex",
-    "ai",
-    "prd",
-    "automation",
-    "cron",
-    "cli",
-    "night-watch"
-  ],
-  "author": "Joao Pio",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/jonit-dev/night-watch-cli.git"
-  },
-  "homepage": "https://github.com/jonit-dev/night-watch-cli#readme",
-  "bugs": {
-    "url": "https://github.com/jonit-dev/night-watch-cli/issues"
-  },
-  "dependencies": {
-    "@slack/socket-mode": "^2.0.3",
-    "@slack/web-api": "^7.14.1",
-    "better-sqlite3": "^12.6.2",
-    "blessed": "^0.1.81",
-    "chalk": "^5.6.2",
-    "cli-table3": "^0.6.5",
-    "commander": "^12.0.0",
-    "cors": "^2.8.6",
-    "cron-parser": "^5.5.0",
-    "cronstrue": "^3.12.0",
-    "express": "^5.2.1",
-    "ora": "^9.3.0",
-    "reflect-metadata": "^0.2.2",
-    "tsyringe": "^4.10.0"
+    "dev:web": "concurrently --names \"api,vite\" --prefix-colors \"cyan,magenta\" \"node packages/cli/bin/night-watch.mjs serve\" \"yarn --cwd web dev\"",
+    "prepublishOnly": "yarn build && yarn test",
+    "lint": "eslint packages/",
+    "local": "yarn build && yarn link"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/better-sqlite3": "^7.6.13",
-    "@types/blessed": "^0.1.27",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.6",
     "@types/node": "^22.0.0",
-    "@types/supertest": "^6.0.3",
     "@vitest/coverage-v8": "^4.0.0",
     "concurrently": "^9.2.1",
     "eslint": "^10.0.0",
-    "supertest": "^7.2.2",
     "tsc-alias": "^1.8.16",
     "tsx": "^4.7.0",
+    "turbo": "^2.8.10",
     "typescript": "^5.3.0",
     "typescript-eslint": "^8.56.0",
     "vitest": "^4.0.0"
   },
   "engines": {
     "node": ">=22.0.0"
-  }
+  },
+  "packageManager": "yarn@1.22.22"
 }

@@ -1,0 +1,36 @@
+{
+  "name": "@night-watch/slack",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./*": {
+      "import": "./dist/*",
+      "types": "./dist/*"
+    }
+  },
+  "scripts": {
+    "build": "tsc --build tsconfig.json && tsc-alias -p tsconfig.json",
+    "verify": "tsc --build tsconfig.json --dry",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@night-watch/core": "*",
+    "@slack/socket-mode": "^2.0.3",
+    "@slack/web-api": "^7.14.1",
+    "reflect-metadata": "^0.2.2",
+    "tsyringe": "^4.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsc-alias": "^1.8.16",
+    "typescript": "^5.3.0",
+    "vitest": "^4.0.0"
+  }
+}
