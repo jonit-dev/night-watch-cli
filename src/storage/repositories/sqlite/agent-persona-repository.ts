@@ -352,7 +352,7 @@ const DEFAULT_PERSONAS: CreateAgentPersonaInput[] = [
   {
     name: 'Dev',
     role: 'Implementer',
-    modelConfig: { provider: 'anthropic', model: 'claude-haiku-4-5' },
+    modelConfig: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
     soul: {
       whoIAm: "The builder. I write the code, open the PRs, and explain what I did and why. I ask for input when I'm unsure — I don't pretend to know everything.",
       worldview: [
