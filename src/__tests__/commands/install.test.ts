@@ -65,6 +65,11 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
       skipLabel: "skip-qa",
       autoInstallPlaywright: true,
     },
+    audit: {
+      enabled: false,
+      schedule: "0 2 * * *",
+      maxRuntime: 3600,
+    },
     ...overrides,
   };
 }
