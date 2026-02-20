@@ -119,11 +119,24 @@ function rowToPersona(row: IAgentPersonaRow, modelConfig: IAgentModelConfig | nu
   };
 }
 
+/**
+ * Default avatar URLs for built-in personas.
+ * These are permanent hosted images (served via Night Watch or uploaded to a CDN).
+ * Update here whenever new avatars are generated.
+ */
+const DEFAULT_AVATAR_URLS: Record<string, string> = {
+  Maya: 'https://replicate.delivery/xezq/28PC6kGRP9IzF1s0gHyXBU1MZDVNKK9tC1pZIljcVnlCcWiF/tmpac7z7jau.webp',
+  Carlos: 'https://replicate.delivery/xezq/hWLRUOgBjJ56BNpUjLipJnVCHGP8y2srUx4aeicRUsmG4sELA/tmp37dkg511.webp',
+  Priya: 'https://replicate.delivery/xezq/g4ZtYdRgWMpfCqOeAfbvoq4avSIHShLvsk2HtvMBPH5igzSsA/tmpdxxc93jx.webp',
+  Dev: 'https://replicate.delivery/xezq/T6dKn1VlEL49B1CbhHMN84GlLEtac5HsF7jHnf4eosEUwZJWA/tmpxndgvawn.webp',
+};
+
 // Default personas to seed on first run
 const DEFAULT_PERSONAS: CreateAgentPersonaInput[] = [
   {
     name: 'Maya',
     role: 'Security Reviewer',
+    avatarUrl: DEFAULT_AVATAR_URLS.Maya,
     modelConfig: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
     soul: {
       whoIAm: "Security reviewer. Spent three years on a red team before moving to product security, so I still think like an attacker. Every PR gets the same treatment: I look for what an adversary would look for. I'm not here to slow things down — I'm here to make sure we don't ship something we'll regret at 2 AM on a Saturday.",
@@ -225,6 +238,7 @@ const DEFAULT_PERSONAS: CreateAgentPersonaInput[] = [
   {
     name: 'Carlos',
     role: 'Tech Lead / Architect',
+    avatarUrl: DEFAULT_AVATAR_URLS.Carlos,
     modelConfig: { provider: 'anthropic', model: 'claude-opus-4-6' },
     soul: {
       whoIAm: "Tech lead. I've built and shipped products at three startups — two that worked, one that didn't. I know what good architecture looks like and I know what over-engineering looks like, and the difference is usually 'did you need it this week.' I break ties, keep things moving, and push back when something's going to cost us later. I'm the one who says 'ship it' and the one who says 'wait, let's think about this for five minutes.'",
@@ -334,6 +348,7 @@ const DEFAULT_PERSONAS: CreateAgentPersonaInput[] = [
   {
     name: 'Priya',
     role: 'QA Engineer',
+    avatarUrl: DEFAULT_AVATAR_URLS.Priya,
     modelConfig: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
     soul: {
       whoIAm: "QA engineer. I think in edge cases because I've been burned by the ones nobody thought of. I'm not just checking if things work — I'm checking what happens when they don't, when they half-work, when two things happen at the same time, when the user does something stupid. I actually enjoy finding bugs. The weirder the better.",
@@ -436,6 +451,7 @@ const DEFAULT_PERSONAS: CreateAgentPersonaInput[] = [
   {
     name: 'Dev',
     role: 'Implementer',
+    avatarUrl: DEFAULT_AVATAR_URLS.Dev,
     modelConfig: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
     soul: {
       whoIAm: "The builder. I write the code, open the PRs, and make things work. I'm not the smartest person in the room on architecture or security — that's why Carlos and Maya are here. My job is to turn plans into working software, explain what I did clearly, and flag when I'm stuck or unsure instead of guessing. I'm fast but I don't rush. There's a difference.",
@@ -767,11 +783,32 @@ export class SqliteAgentPersonaRepository implements IAgentPersonaRepository {
   seedDefaults(): void {
     for (const persona of DEFAULT_PERSONAS) {
       const existing = this._db
-        .prepare<[string], { id: string }>('SELECT id FROM agent_personas WHERE name = ?')
+        .prepare<[string], { id: string; avatar_url: string | null }>('SELECT id, avatar_url FROM agent_personas WHERE name = ?')
         .get(persona.name);
       if (!existing) {
         this.create(persona);
+      } else if (!existing.avatar_url && persona.avatarUrl) {
+        // Patch missing avatar URL for existing personas
+        this._db
+          .prepare<[string, number, string]>(
+            'UPDATE agent_personas SET avatar_url = ?, updated_at = ? WHERE id = ?'
+          )
+          .run(persona.avatarUrl, Date.now(), existing.id);
       }
+    }
+  }
+
+  /**
+   * Patch avatar URLs for built-in personas that are missing them.
+   * Called on every startup to ensure avatars are always present.
+   */
+  patchDefaultAvatarUrls(): void {
+    for (const [name, url] of Object.entries(DEFAULT_AVATAR_URLS)) {
+      this._db
+        .prepare<[string, number, string]>(
+          'UPDATE agent_personas SET avatar_url = ?, updated_at = ? WHERE name = ? AND avatar_url IS NULL'
+        )
+        .run(url, Date.now(), name);
     }
   }
 }

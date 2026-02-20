@@ -47,6 +47,7 @@ export interface IAgentPersonaRepository {
   delete(id: string): void;
   seedDefaultsOnFirstRun(): void;
   seedDefaults(): void;
+  patchDefaultAvatarUrls(): void;
 }
 
 export interface ISlackDiscussionRepository {
