@@ -4,30 +4,34 @@
  * and applies loop-protection safeguards.
  */
 
-import 'reflect-metadata';
-
-import { injectable } from 'tsyringe';
-
+import { IAgentPersona } from '@night-watch/core/shared/types.js';
+import { getRepositories } from '@night-watch/core/storage/repositories/index.js';
+import { getDb } from '@night-watch/core/storage/sqlite/client.js';
+import { INightWatchConfig } from '@night-watch/core/types.js';
+import { generatePersonaAvatar } from '@night-watch/core/utils/avatar-generator.js';
+import type { IRegistryEntry } from '@night-watch/core/utils/registry.js';
+import { getRoadmapStatus } from '@night-watch/core/utils/roadmap-scanner.js';
+import { parseScriptResult } from '@night-watch/core/utils/script-result.js';
 import { SocketModeClient } from '@slack/socket-mode';
 import { execFileSync, spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { IAgentPersona } from '@night-watch/core/shared/types.js';
-import { getDb } from '@night-watch/core/storage/sqlite/client.js';
-import { getRepositories } from '@night-watch/core/storage/repositories/index.js';
-import { INightWatchConfig } from '@night-watch/core/types.js';
-import type { IRegistryEntry } from '@night-watch/core/utils/registry.js';
-import { parseScriptResult } from '@night-watch/core/utils/script-result.js';
-import { getRoadmapStatus } from '@night-watch/core/utils/roadmap-scanner.js';
-import { generatePersonaAvatar } from '@night-watch/core/utils/avatar-generator.js';
-import { DeliberationEngine } from './deliberation.js';
 import { SlackClient } from './client.js';
-import { buildCurrentCliInvocation, formatCommandForLog, getNightWatchTsconfigPath, normalizeProjectRef, normalizeText, sleep, stripSlackUserMentions } from './utils.js';
+import { DeliberationEngine } from './deliberation.js';
 import {
   resolveMentionedPersonas,
   resolvePersonasByPlainName,
   selectFollowUpPersona,
 } from './personas.js';
+import {
+  buildCurrentCliInvocation,
+  formatCommandForLog,
+  getNightWatchTsconfigPath,
+  normalizeProjectRef,
+  normalizeText,
+  sleep,
+  stripSlackUserMentions,
+} from './utils.js';
 
 // Re-export persona helpers for backwards compatibility with existing test imports
 export {
@@ -54,7 +58,7 @@ const RESPONSE_DELAY_MIN_MS = 700;
 const RESPONSE_DELAY_MAX_MS = 3400;
 const SOCKET_DISCONNECT_TIMEOUT_MS = 5_000;
 // Chance a second persona spontaneously chimes in after the first replies
-const PIGGYBACK_REPLY_PROBABILITY = 0.40;
+const PIGGYBACK_REPLY_PROBABILITY = 0.4;
 const PIGGYBACK_DELAY_MIN_MS = 4_000;
 const PIGGYBACK_DELAY_MAX_MS = 15_000;
 
@@ -158,12 +162,14 @@ function normalizeForParsing(text: string): string {
   return normalizeText(text, { preservePaths: true });
 }
 
-
 export function isAmbientTeamMessage(text: string): boolean {
   const normalized = normalizeForParsing(stripSlackUserMentions(text));
   if (!normalized) return false;
 
-  if (/^(hey|hi|hello|yo|sup)\b/.test(normalized) && /\b(guys|team|everyone|folks)\b/.test(normalized)) {
+  if (
+    /^(hey|hi|hello|yo|sup)\b/.test(normalized) &&
+    /\b(guys|team|everyone|folks)\b/.test(normalized)
+  ) {
     return true;
   }
 
@@ -181,11 +187,18 @@ export function parseSlackJobRequest(text: string): ISlackJobRequest | null {
 
   // Be tolerant of wrapped/copied URLs where whitespace/newlines split segments.
   const compactForUrl = withoutMentions.replace(/\s+/g, '');
-  const prUrlMatch = compactForUrl.match(/https?:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/i);
+  const prUrlMatch = compactForUrl.match(
+    /https?:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/i,
+  );
   const prPathMatch = compactForUrl.match(/\/pull\/(\d+)(?:[/?#]|$)/i);
   const prHashMatch = withoutMentions.match(/(?:^|\s)#(\d+)(?:\s|$)/);
-  const conflictSignal = /\b(conflict|conflicts|merge conflict|merge issues?|rebase)\b/i.test(normalized);
-  const requestSignal = /\b(can someone|someone|anyone|please|need|look at|take a look|fix|review|check)\b/i.test(normalized);
+  const conflictSignal = /\b(conflict|conflicts|merge conflict|merge issues?|rebase)\b/i.test(
+    normalized,
+  );
+  const requestSignal =
+    /\b(can someone|someone|anyone|please|need|look at|take a look|fix|review|check)\b/i.test(
+      normalized,
+    );
 
   const match = normalized.match(/\b(run|review|qa)\b(?:\s+(?:for|on)?\s*([a-z0-9./_-]+))?/i);
   if (!match && !prUrlMatch && !prHashMatch) return null;
@@ -198,8 +211,8 @@ export function parseSlackJobRequest(text: string): ISlackJobRequest | null {
 
   const prNumber = prUrlMatch?.[3] ?? prPathMatch?.[1] ?? prHashMatch?.[1];
   const repoHintFromUrl = prUrlMatch?.[2]?.toLowerCase();
-  const candidates = [match?.[2]?.toLowerCase(), repoHintFromUrl].filter(
-    (value): value is string => Boolean(value && !JOB_STOPWORDS.has(value)),
+  const candidates = [match?.[2]?.toLowerCase(), repoHintFromUrl].filter((value): value is string =>
+    Boolean(value && !JOB_STOPWORDS.has(value)),
   );
   const projectHint = candidates[0];
 
@@ -224,7 +237,9 @@ export function parseSlackIssuePickupRequest(text: string): ISlackIssuePickupReq
   let repo: string;
 
   // Standard format: github.com/{owner}/{repo}/issues/{number}
-  const directIssueMatch = compactForUrl.match(/https?:\/\/github\.com\/([^/\s<>]+)\/([^/\s<>]+)\/issues\/(\d+)/i);
+  const directIssueMatch = compactForUrl.match(
+    /https?:\/\/github\.com\/([^/\s<>]+)\/([^/\s<>]+)\/issues\/(\d+)/i,
+  );
 
   if (directIssueMatch) {
     [issueUrl, , repo, issueNumber] = directIssueMatch;
@@ -232,7 +247,9 @@ export function parseSlackIssuePickupRequest(text: string): ISlackIssuePickupReq
   } else {
     // Project board format: github.com/...?...&issue={owner}%7C{repo}%7C{number}
     // e.g. github.com/users/jonit-dev/projects/41/views/2?pane=issue&issue=jonit-dev%7Cnight-watch-cli%7C12
-    const boardMatch = compactForUrl.match(/https?:\/\/github\.com\/[^<>\s]*[?&]issue=([^<>\s&]+)/i);
+    const boardMatch = compactForUrl.match(
+      /https?:\/\/github\.com\/[^<>\s]*[?&]issue=([^<>\s&]+)/i,
+    );
     if (!boardMatch) return null;
 
     const rawParam = boardMatch[1].replace(/%7[Cc]/g, '|');
@@ -246,8 +263,12 @@ export function parseSlackIssuePickupRequest(text: string): ISlackIssuePickupReq
 
   // Requires pickup-intent language or "this issue" + request language
   // "pickup" (one word) is also accepted alongside "pick up" (two words)
-  const pickupSignal = /\b(pick\s+up|pickup|work\s+on|implement|tackle|start\s+on|grab|handle\s+this|ship\s+this)\b/i.test(normalized);
-  const requestSignal = /\b(please|can\s+someone|anyone)\b/i.test(normalized) && /\bthis\s+issue\b/i.test(normalized);
+  const pickupSignal =
+    /\b(pick\s+up|pickup|work\s+on|implement|tackle|start\s+on|grab|handle\s+this|ship\s+this)\b/i.test(
+      normalized,
+    );
+  const requestSignal =
+    /\b(please|can\s+someone|anyone)\b/i.test(normalized) && /\bthis\s+issue\b/i.test(normalized);
   if (!pickupSignal && !requestSignal) return null;
 
   return {
@@ -347,8 +368,9 @@ async function fetchUrlSummaries(urls: string[]): Promise<string> {
         if (!res.ok) continue;
         const html = await res.text();
         const titleMatch = html.match(/<title[^>]*>([^<]{1,200})<\/title>/i);
-        const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']{1,300})["']/i)
-          ?? html.match(/<meta[^>]*content=["']([^"']{1,300})["'][^>]*name=["']description["']/i);
+        const descMatch =
+          html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']{1,300})["']/i) ??
+          html.match(/<meta[^>]*content=["']([^"']{1,300})["'][^>]*name=["']description["']/i);
         const title = titleMatch?.[1]?.trim() ?? '';
         const desc = descMatch?.[1]?.trim() ?? '';
         if (title || desc) {
@@ -387,12 +409,26 @@ async function fetchGitHubIssueContext(urls: string[]): Promise<string> {
         : `/repos/${owner}/${repo}/issues/${number}`;
 
     try {
-      const raw = execFileSync('gh', ['api', endpoint, '--jq', '{title: .title, state: .state, body: .body, labels: [.labels[].name]}'], {
-        timeout: 10_000,
-        encoding: 'utf-8',
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-      const data = JSON.parse(raw) as { title: string; state: string; body: string | null; labels: string[] };
+      const raw = execFileSync(
+        'gh',
+        [
+          'api',
+          endpoint,
+          '--jq',
+          '{title: .title, state: .state, body: .body, labels: [.labels[].name]}',
+        ],
+        {
+          timeout: 10_000,
+          encoding: 'utf-8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+      const data = JSON.parse(raw) as {
+        title: string;
+        state: string;
+        body: string | null;
+        labels: string[];
+      };
       const labelStr = data.labels.length > 0 ? ` [${data.labels.join(', ')}]` : '';
       const body = (data.body ?? '').trim().slice(0, 1200);
       parts.push(
@@ -429,12 +465,7 @@ export class SlackInteractionListener {
 
   async start(): Promise<void> {
     const slack = this._config.slack;
-    if (
-      !slack?.enabled ||
-      !slack.discussionEnabled ||
-      !slack.botToken ||
-      !slack.appToken
-    ) {
+    if (!slack?.enabled || !slack.discussionEnabled || !slack.botToken || !slack.appToken) {
       return;
     }
 
@@ -534,9 +565,7 @@ export class SlackInteractionListener {
     const metaRow = db
       .prepare(`SELECT value FROM schema_meta WHERE key = 'slack_persona_intros_v4'`)
       .get() as { value: string } | undefined;
-    const introduced = new Set<string>(
-      metaRow ? (JSON.parse(metaRow.value) as string[]) : [],
-    );
+    const introduced = new Set<string>(metaRow ? (JSON.parse(metaRow.value) as string[]) : []);
 
     const repos = getRepositories();
     const personas = repos.agentPersona.getActive();
@@ -554,9 +583,15 @@ export class SlackInteractionListener {
       if (!currentPersona.avatarUrl && slack.replicateApiToken) {
         try {
           console.log(`[slack] Generating avatar for ${persona.name}…`);
-          const avatarUrl = await generatePersonaAvatar(persona.name, persona.role, slack.replicateApiToken);
+          const avatarUrl = await generatePersonaAvatar(
+            persona.name,
+            persona.role,
+            slack.replicateApiToken,
+          );
           if (avatarUrl) {
-            currentPersona = repos.agentPersona.update(persona.id, { avatarUrl });
+            currentPersona = repos.agentPersona.update(persona.id, {
+              avatarUrl,
+            });
             console.log(`[slack] Avatar set for ${persona.name}: ${avatarUrl}`);
           }
         } catch (err) {
@@ -618,9 +653,9 @@ export class SlackInteractionListener {
     // Direct bot mentions arrive as app_mention; ignore the mirrored message event
     // to avoid duplicate or out-of-order handling on the same Slack message ts.
     if (
-      event.type === 'message'
-      && this._botUserId
-      && (event.text ?? '').includes(`<@${this._botUserId}>`)
+      event.type === 'message' &&
+      this._botUserId &&
+      (event.text ?? '').includes(`<@${this._botUserId}>`)
     ) {
       console.log('[slack] ignoring mirrored message event for direct bot mention');
       return;
@@ -652,22 +687,14 @@ export class SlackInteractionListener {
     return true;
   }
 
-  private _isPersonaOnCooldown(
-    channel: string,
-    threadTs: string,
-    personaId: string,
-  ): boolean {
+  private _isPersonaOnCooldown(channel: string, threadTs: string, personaId: string): boolean {
     const key = `${channel}:${threadTs}:${personaId}`;
     const last = this._lastPersonaReplyAt.get(key);
     if (!last) return false;
     return Date.now() - last < PERSONA_REPLY_COOLDOWN_MS;
   }
 
-  private _markPersonaReply(
-    channel: string,
-    threadTs: string,
-    personaId: string,
-  ): void {
+  private _markPersonaReply(channel: string, threadTs: string, personaId: string): void {
     const key = `${channel}:${threadTs}:${personaId}`;
     this._lastPersonaReplyAt.set(key, Date.now());
   }
@@ -680,11 +707,7 @@ export class SlackInteractionListener {
     this._lastChannelActivityAt.set(channel, Date.now());
   }
 
-  private _rememberAdHocThreadPersona(
-    channel: string,
-    threadTs: string,
-    personaId: string,
-  ): void {
+  private _rememberAdHocThreadPersona(channel: string, threadTs: string, personaId: string): void {
     this._adHocThreadState.set(this._threadKey(channel, threadTs), {
       personaId,
       expiresAt: Date.now() + AD_HOC_THREAD_MEMORY_MS,
@@ -747,11 +770,24 @@ export class SlackInteractionListener {
     const persona = others[Math.floor(Math.random() * others.length)];
     await sleep(this._randomInt(PIGGYBACK_DELAY_MIN_MS, PIGGYBACK_DELAY_MAX_MS));
 
-    const postedText = await this._engine.replyAsAgent(channel, threadTs, text, persona, projectContext);
+    const postedText = await this._engine.replyAsAgent(
+      channel,
+      threadTs,
+      text,
+      persona,
+      projectContext,
+    );
     this._markPersonaReply(channel, threadTs, persona.id);
     this._rememberAdHocThreadPersona(channel, threadTs, persona.id);
     if (postedText) {
-      await this._followAgentMentions(postedText, channel, threadTs, personas, projectContext, persona.id);
+      await this._followAgentMentions(
+        postedText,
+        channel,
+        threadTs,
+        personas,
+        projectContext,
+        persona.id,
+      );
     }
   }
 
@@ -784,12 +820,25 @@ export class SlackInteractionListener {
       } else {
         await this._applyHumanResponseTiming(channel, messageTs, persona);
       }
-      const postedText = await this._engine.replyAsAgent(channel, threadTs, text, persona, projectContext);
+      const postedText = await this._engine.replyAsAgent(
+        channel,
+        threadTs,
+        text,
+        persona,
+        projectContext,
+      );
       this._markPersonaReply(channel, threadTs, persona.id);
       this._rememberAdHocThreadPersona(channel, threadTs, persona.id);
       if (i === 0) firstPostedPersonaId = persona.id;
       if (postedText && i === participants.length - 1 && firstPostedPersonaId) {
-        await this._followAgentMentions(postedText, channel, threadTs, personas, projectContext, persona.id);
+        await this._followAgentMentions(
+          postedText,
+          channel,
+          threadTs,
+          personas,
+          projectContext,
+          persona.id,
+        );
       }
     }
   }
@@ -809,9 +858,7 @@ export class SlackInteractionListener {
       // Walk backwards to find the most recent message sent by a persona
       for (const msg of [...history].reverse()) {
         if (!msg.username) continue;
-        const matched = personas.find(
-          (p) => p.name.toLowerCase() === msg.username!.toLowerCase(),
-        );
+        const matched = personas.find((p) => p.name.toLowerCase() === msg.username!.toLowerCase());
         if (matched) return matched;
       }
     } catch {
@@ -891,16 +938,11 @@ export class SlackInteractionListener {
     return parts.join('\n');
   }
 
-  private _resolveProjectByHint(
-    projects: IRegistryEntry[],
-    hint: string,
-  ): IRegistryEntry | null {
+  private _resolveProjectByHint(projects: IRegistryEntry[], hint: string): IRegistryEntry | null {
     const normalizedHint = normalizeProjectRef(hint);
     if (!normalizedHint) return null;
 
-    const byNameExact = projects.find(
-      (p) => normalizeProjectRef(p.name) === normalizedHint,
-    );
+    const byNameExact = projects.find((p) => normalizeProjectRef(p.name) === normalizedHint);
     if (byNameExact) return byNameExact;
 
     const byPathExact = projects.find((p) => {
@@ -914,10 +956,12 @@ export class SlackInteractionListener {
     );
     if (byNameContains) return byNameContains;
 
-    return projects.find((p) => {
-      const base = p.path.split('/').pop() ?? '';
-      return normalizeProjectRef(base).includes(normalizedHint);
-    }) ?? null;
+    return (
+      projects.find((p) => {
+        const base = p.path.split('/').pop() ?? '';
+        return normalizeProjectRef(base).includes(normalizedHint);
+      }) ?? null
+    );
   }
 
   private _resolveTargetProject(
@@ -948,9 +992,12 @@ export class SlackInteractionListener {
   private _reactionCandidatesForPersona(persona: IAgentPersona): string[] {
     const role = persona.role.toLowerCase();
     if (role.includes('security')) return ['eyes', 'thinking_face', 'shield', 'thumbsup'];
-    if (role.includes('qa') || role.includes('quality')) return ['test_tube', 'mag', 'thinking_face', 'thumbsup'];
-    if (role.includes('lead') || role.includes('architect')) return ['thinking_face', 'thumbsup', 'memo', 'eyes'];
-    if (role.includes('implementer') || role.includes('developer')) return ['wrench', 'hammer_and_wrench', 'thumbsup', 'eyes'];
+    if (role.includes('qa') || role.includes('quality'))
+      return ['test_tube', 'mag', 'thinking_face', 'thumbsup'];
+    if (role.includes('lead') || role.includes('architect'))
+      return ['thinking_face', 'thumbsup', 'memo', 'eyes'];
+    if (role.includes('implementer') || role.includes('developer'))
+      return ['wrench', 'hammer_and_wrench', 'thumbsup', 'eyes'];
     return ['eyes', 'thinking_face', 'thumbsup', 'wave'];
   }
 
@@ -1013,19 +1060,16 @@ export class SlackInteractionListener {
     );
 
     const tsconfigPath = getNightWatchTsconfigPath();
-    const child = spawn(
-      process.execPath,
-      invocationArgs,
-      {
-        cwd: project.path,
-        env: {
-          ...process.env,
-          NW_EXECUTION_CONTEXT: 'agent',
-          ...(tsconfigPath ? { TSX_TSCONFIG_PATH: tsconfigPath } : {}),
-          ...(opts?.prNumber ? { NW_TARGET_PR: opts.prNumber } : {}),
-          ...(opts?.issueNumber ? { NW_TARGET_ISSUE: opts.issueNumber } : {}),
-          ...(opts?.fixConflicts
-            ? {
+    const child = spawn(process.execPath, invocationArgs, {
+      cwd: project.path,
+      env: {
+        ...process.env,
+        NW_EXECUTION_CONTEXT: 'agent',
+        ...(tsconfigPath ? { TSX_TSCONFIG_PATH: tsconfigPath } : {}),
+        ...(opts?.prNumber ? { NW_TARGET_PR: opts.prNumber } : {}),
+        ...(opts?.issueNumber ? { NW_TARGET_ISSUE: opts.issueNumber } : {}),
+        ...(opts?.fixConflicts
+          ? {
               NW_SLACK_FEEDBACK: JSON.stringify({
                 source: 'slack',
                 kind: 'merge_conflict_resolution',
@@ -1033,11 +1077,10 @@ export class SlackInteractionListener {
                 changes: 'Resolve merge conflicts and stabilize the PR for re-review.',
               }),
             }
-            : {}),
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
+          : {}),
       },
-    );
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     console.log(
       `[slack][job] ${persona.name} spawned ${job} for ${project.name}${opts?.prNumber ? ` (PR #${opts.prNumber})` : ''} pid=${child.pid ?? 'unknown'}`,
     );
@@ -1085,12 +1128,7 @@ export class SlackInteractionListener {
             : job === 'qa'
               ? `QA pass done${prRef ? ` on${prRef}` : ''}.`
               : `Run finished${prRef ? ` for${prRef}` : ''}.`;
-        await this._slackClient.postAsAgent(
-          channel,
-          doneMessage,
-          persona,
-          threadTs,
-        );
+        await this._slackClient.postAsAgent(channel, doneMessage, persona, threadTs);
       } else {
         if (detail) {
           console.warn(`[slack][job] ${persona.name} ${job} failure detail: ${detail}`);
@@ -1118,27 +1156,24 @@ export class SlackInteractionListener {
     persona: IAgentPersona,
   ): Promise<void> {
     const providerLabel = request.provider === 'claude' ? 'Claude' : 'Codex';
-    const args = request.provider === 'claude'
-      ? ['-p', request.prompt, '--dangerously-skip-permissions']
-      : ['--quiet', '--yolo', '--prompt', request.prompt];
+    const args =
+      request.provider === 'claude'
+        ? ['-p', request.prompt, '--dangerously-skip-permissions']
+        : ['--quiet', '--yolo', '--prompt', request.prompt];
 
     console.log(
       `[slack][provider] persona=${persona.name} provider=${request.provider} project=${project.name} spawn=${formatCommandForLog(request.provider, args)}`,
     );
 
-    const child = spawn(
-      request.provider,
-      args,
-      {
-        cwd: project.path,
-        env: {
-          ...process.env,
-          ...(this._config.providerEnv ?? {}),
-          NW_EXECUTION_CONTEXT: 'agent',
-        },
-        stdio: ['ignore', 'pipe', 'pipe'],
+    const child = spawn(request.provider, args, {
+      cwd: project.path,
+      env: {
+        ...process.env,
+        ...(this._config.providerEnv ?? {}),
+        NW_EXECUTION_CONTEXT: 'agent',
       },
-    );
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
     console.log(
       `[slack][provider] ${persona.name} spawned ${request.provider} for ${project.name} pid=${child.pid ?? 'unknown'}`,
     );
@@ -1186,7 +1221,9 @@ export class SlackInteractionListener {
         );
       } else {
         if (detail) {
-          console.warn(`[slack][provider] ${persona.name} ${request.provider} failure detail: ${detail}`);
+          console.warn(
+            `[slack][provider] ${persona.name} ${request.provider} failure detail: ${detail}`,
+          );
         }
         await this._slackClient.postAsAgent(
           channel,
@@ -1213,7 +1250,10 @@ export class SlackInteractionListener {
 
     const addressedToBot = this._isMessageAddressedToBot(event);
     const normalized = normalizeForParsing(stripSlackUserMentions(event.text ?? ''));
-    const startsWithProviderCommand = /^(?:can\s+(?:you|someone|anyone)\s+)?(?:please\s+)?(?:(?:run|use|invoke|trigger|ask)\s+)?(?:claude|codex)\b/i.test(normalized);
+    const startsWithProviderCommand =
+      /^(?:can\s+(?:you|someone|anyone)\s+)?(?:please\s+)?(?:(?:run|use|invoke|trigger|ask)\s+)?(?:claude|codex)\b/i.test(
+        normalized,
+      );
     if (!addressedToBot && !startsWithProviderCommand) {
       return false;
     }
@@ -1221,9 +1261,9 @@ export class SlackInteractionListener {
     const repos = getRepositories();
     const projects = repos.projectRegistry.getAll();
     const persona =
-      this._findPersonaByName(personas, 'Dev')
-      ?? this._pickRandomPersona(personas, channel, threadTs)
-      ?? personas[0];
+      this._findPersonaByName(personas, 'Dev') ??
+      this._pickRandomPersona(personas, channel, threadTs) ??
+      personas[0];
     if (!persona) return false;
 
     const targetProject = this._resolveTargetProject(channel, projects, request.projectHint);
@@ -1246,9 +1286,8 @@ export class SlackInteractionListener {
 
     const providerLabel = request.provider === 'claude' ? 'Claude' : 'Codex';
     const compactPrompt = request.prompt.replace(/\s+/g, ' ').trim();
-    const promptPreview = compactPrompt.length > 120
-      ? `${compactPrompt.slice(0, 117)}...`
-      : compactPrompt;
+    const promptPreview =
+      compactPrompt.length > 120 ? `${compactPrompt.slice(0, 117)}...` : compactPrompt;
 
     await this._applyHumanResponseTiming(channel, messageTs, persona);
     await this._slackClient.postAsAgent(
@@ -1261,13 +1300,7 @@ export class SlackInteractionListener {
     this._markPersonaReply(channel, threadTs, persona.id);
     this._rememberAdHocThreadPersona(channel, threadTs, persona.id);
 
-    await this._spawnDirectProviderRequest(
-      request,
-      targetProject,
-      channel,
-      threadTs,
-      persona,
-    );
+    await this._spawnDirectProviderRequest(request, targetProject, channel, threadTs, persona);
     return true;
   }
 
@@ -1287,11 +1320,11 @@ export class SlackInteractionListener {
     const startsWithCommand = /^(run|review|qa)\b/i.test(normalized);
 
     if (
-      !addressedToBot
-      && !request.prNumber
-      && !request.fixConflicts
-      && !teamRequestLanguage
-      && !startsWithCommand
+      !addressedToBot &&
+      !request.prNumber &&
+      !request.fixConflicts &&
+      !teamRequestLanguage &&
+      !startsWithCommand
     ) {
       return false;
     }
@@ -1300,11 +1333,11 @@ export class SlackInteractionListener {
     const projects = repos.projectRegistry.getAll();
 
     const persona =
-      (request.job === 'run' ? this._findPersonaByName(personas, 'Dev') : null)
-      ?? (request.job === 'qa' ? this._findPersonaByName(personas, 'Priya') : null)
-      ?? (request.job === 'review' ? this._findPersonaByName(personas, 'Carlos') : null)
-      ?? this._pickRandomPersona(personas, channel, threadTs)
-      ?? personas[0];
+      (request.job === 'run' ? this._findPersonaByName(personas, 'Dev') : null) ??
+      (request.job === 'qa' ? this._findPersonaByName(personas, 'Priya') : null) ??
+      (request.job === 'review' ? this._findPersonaByName(personas, 'Carlos') : null) ??
+      this._pickRandomPersona(personas, channel, threadTs) ??
+      personas[0];
 
     if (!persona) return false;
 
@@ -1335,12 +1368,7 @@ export class SlackInteractionListener {
 
     await this._applyHumanResponseTiming(channel, messageTs, persona);
 
-    await this._slackClient.postAsAgent(
-      channel,
-      `${planLine}`,
-      persona,
-      threadTs,
-    );
+    await this._slackClient.postAsAgent(channel, `${planLine}`, persona, threadTs);
     console.log(
       `[slack][job] ${persona.name} accepted job=${request.job} project=${targetProject.name}${request.prNumber ? ` pr=${request.prNumber}` : ''}`,
     );
@@ -1348,14 +1376,10 @@ export class SlackInteractionListener {
     this._markPersonaReply(channel, threadTs, persona.id);
     this._rememberAdHocThreadPersona(channel, threadTs, persona.id);
 
-    await this._spawnNightWatchJob(
-      request.job,
-      targetProject,
-      channel,
-      threadTs,
-      persona,
-      { prNumber: request.prNumber, fixConflicts: request.fixConflicts },
-    );
+    await this._spawnNightWatchJob(request.job, targetProject, channel, threadTs, persona, {
+      prNumber: request.prNumber,
+      fixConflicts: request.fixConflicts,
+    });
     return true;
   }
 
@@ -1378,9 +1402,9 @@ export class SlackInteractionListener {
     const projects = repos.projectRegistry.getAll();
 
     const persona =
-      this._findPersonaByName(personas, 'Dev')
-      ?? this._pickRandomPersona(personas, channel, threadTs)
-      ?? personas[0];
+      this._findPersonaByName(personas, 'Dev') ??
+      this._pickRandomPersona(personas, channel, threadTs) ??
+      personas[0];
     if (!persona) return false;
 
     const targetProject = this._resolveTargetProject(channel, projects, request.repoHint);
@@ -1414,7 +1438,11 @@ export class SlackInteractionListener {
 
     // Move issue to In Progress on board (best-effort, spawn via CLI subprocess)
     const boardArgs = buildCurrentCliInvocation([
-      'board', 'move-issue', request.issueNumber, '--column', 'In Progress',
+      'board',
+      'move-issue',
+      request.issueNumber,
+      '--column',
+      'In Progress',
     ]);
     if (boardArgs) {
       try {
@@ -1452,7 +1480,9 @@ export class SlackInteractionListener {
 
     const invocationArgs = buildCurrentCliInvocation(['audit']);
     if (!invocationArgs) {
-      console.warn(`[slack][codewatch] audit spawn failed for ${project.name}: CLI entry path unavailable`);
+      console.warn(
+        `[slack][codewatch] audit spawn failed for ${project.name}: CLI entry path unavailable`,
+      );
       return;
     }
 
@@ -1472,7 +1502,9 @@ export class SlackInteractionListener {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    console.log(`[slack][codewatch] audit spawned for ${project.name} pid=${child.pid ?? 'unknown'}`);
+    console.log(
+      `[slack][codewatch] audit spawned for ${project.name} pid=${child.pid ?? 'unknown'}`,
+    );
     let output = '';
     const appendOutput = (chunk: Buffer): void => {
       output += chunk.toString();
@@ -1491,7 +1523,9 @@ export class SlackInteractionListener {
     });
 
     child.on('close', async (code) => {
-      console.log(`[slack][codewatch] audit finished for ${project.name} exit=${code ?? 'unknown'}`);
+      console.log(
+        `[slack][codewatch] audit finished for ${project.name} exit=${code ?? 'unknown'}`,
+      );
       if (spawnErrored) {
         return;
       }
@@ -1541,11 +1575,10 @@ export class SlackInteractionListener {
     });
   }
 
-  private async _runProactiveCodeWatch(
-    projects: IRegistryEntry[],
-    now: number,
-  ): Promise<void> {
+  private async _runProactiveCodeWatch(projects: IRegistryEntry[], now: number): Promise<void> {
     for (const project of projects) {
+      if (!fs.existsSync(project.path)) continue;
+
       const channel = this._resolveProactiveChannelForProject(project);
       if (!channel) continue;
 
@@ -1616,7 +1649,9 @@ export class SlackInteractionListener {
 
   private async _handleInboundMessage(event: IInboundSlackEvent): Promise<void> {
     if (shouldIgnoreInboundSlackEvent(event, this._botUserId)) {
-      console.log(`[slack] ignoring event — failed shouldIgnore check (user=${event.user}, bot_id=${event.bot_id ?? '-'}, subtype=${event.subtype ?? '-'})`);
+      console.log(
+        `[slack] ignoring event — failed shouldIgnore check (user=${event.user}, bot_id=${event.bot_id ?? '-'}, subtype=${event.subtype ?? '-'})`,
+      );
       return;
     }
 
@@ -1641,7 +1676,9 @@ export class SlackInteractionListener {
     // Fetch GitHub issue/PR content from URLs in the message so agents can inspect them.
     const githubUrls = extractGitHubIssueUrls(text);
     const genericUrls = extractGenericUrls(text);
-    console.log(`[slack] processing message channel=${channel} thread=${threadTs} github_urls=${githubUrls.length} generic_urls=${genericUrls.length}`);
+    console.log(
+      `[slack] processing message channel=${channel} thread=${threadTs} github_urls=${githubUrls.length} generic_urls=${genericUrls.length}`,
+    );
     const githubContext = githubUrls.length > 0 ? await fetchGitHubIssueContext(githubUrls) : '';
     const urlContext = genericUrls.length > 0 ? await fetchUrlSummaries(genericUrls) : '';
     let fullContext = projectContext;
@@ -1674,9 +1711,10 @@ export class SlackInteractionListener {
 
     // Persona mentioned → respond regardless of whether a formal discussion exists.
     if (mentionedPersonas.length > 0) {
-      console.log(`[slack] routing to persona(s): ${mentionedPersonas.map((p) => p.name).join(', ')} in ${channel}`);
-      const discussion = repos
-        .slackDiscussion
+      console.log(
+        `[slack] routing to persona(s): ${mentionedPersonas.map((p) => p.name).join(', ')} in ${channel}`,
+      );
+      const discussion = repos.slackDiscussion
         .getActive('')
         .find((d) => d.channelId === channel && d.threadTs === threadTs);
 
@@ -1692,7 +1730,13 @@ export class SlackInteractionListener {
           await this._engine.contributeAsAgent(discussion.id, persona);
         } else {
           console.log(`[slack] replying as ${persona.name} in ${channel}`);
-          lastPosted = await this._engine.replyAsAgent(channel, threadTs, text, persona, fullContext);
+          lastPosted = await this._engine.replyAsAgent(
+            channel,
+            threadTs,
+            text,
+            persona,
+            fullContext,
+          );
           lastPersonaId = persona.id;
         }
         this._markPersonaReply(channel, threadTs, persona.id);
@@ -1704,26 +1748,29 @@ export class SlackInteractionListener {
 
       // Follow up if the last agent reply mentions other teammates by name.
       if (lastPosted && lastPersonaId) {
-        await this._followAgentMentions(lastPosted, channel, threadTs, personas, fullContext, lastPersonaId);
+        await this._followAgentMentions(
+          lastPosted,
+          channel,
+          threadTs,
+          personas,
+          fullContext,
+          lastPersonaId,
+        );
       }
       return;
     }
 
-    console.log(`[slack] no persona match — checking for active discussion in ${channel}:${threadTs}`);
+    console.log(
+      `[slack] no persona match — checking for active discussion in ${channel}:${threadTs}`,
+    );
 
     // No persona mention — only handle within an existing Night Watch discussion thread.
-    const discussion = repos
-      .slackDiscussion
+    const discussion = repos.slackDiscussion
       .getActive('')
       .find((d) => d.channelId === channel && d.threadTs === threadTs);
 
     if (discussion) {
-      await this._engine.handleHumanMessage(
-        channel,
-        threadTs,
-        text,
-        event.user as string,
-      );
+      await this._engine.handleHumanMessage(channel, threadTs, text, event.user as string);
       return;
     }
 
@@ -1732,33 +1779,81 @@ export class SlackInteractionListener {
     if (rememberedPersona) {
       const followUpPersona = selectFollowUpPersona(rememberedPersona, personas, text);
       if (followUpPersona.id !== rememberedPersona.id) {
-        console.log(`[slack] handing off ad-hoc thread from ${rememberedPersona.name} to ${followUpPersona.name} based on topic`);
+        console.log(
+          `[slack] handing off ad-hoc thread from ${rememberedPersona.name} to ${followUpPersona.name} based on topic`,
+        );
       } else {
         console.log(`[slack] continuing ad-hoc thread with ${rememberedPersona.name}`);
       }
       await this._applyHumanResponseTiming(channel, ts, followUpPersona);
       console.log(`[slack] replying as ${followUpPersona.name} in ${channel}`);
-      const postedText = await this._engine.replyAsAgent(channel, threadTs, text, followUpPersona, fullContext);
+      const postedText = await this._engine.replyAsAgent(
+        channel,
+        threadTs,
+        text,
+        followUpPersona,
+        fullContext,
+      );
       this._markPersonaReply(channel, threadTs, followUpPersona.id);
       this._rememberAdHocThreadPersona(channel, threadTs, followUpPersona.id);
-      await this._followAgentMentions(postedText, channel, threadTs, personas, fullContext, followUpPersona.id);
-      void this._maybePiggybackReply(channel, threadTs, text, personas, fullContext, followUpPersona.id);
+      await this._followAgentMentions(
+        postedText,
+        channel,
+        threadTs,
+        personas,
+        fullContext,
+        followUpPersona.id,
+      );
+      void this._maybePiggybackReply(
+        channel,
+        threadTs,
+        text,
+        personas,
+        fullContext,
+        followUpPersona.id,
+      );
       return;
     }
 
     // In-memory state was lost (e.g. server restart) — recover persona from thread history.
     if (threadTs) {
-      const recoveredPersona = await this._recoverPersonaFromThreadHistory(channel, threadTs, personas);
+      const recoveredPersona = await this._recoverPersonaFromThreadHistory(
+        channel,
+        threadTs,
+        personas,
+      );
       if (recoveredPersona) {
         const followUpPersona = selectFollowUpPersona(recoveredPersona, personas, text);
-        console.log(`[slack] recovered ad-hoc thread persona ${recoveredPersona.name} from history, replying as ${followUpPersona.name}`);
+        console.log(
+          `[slack] recovered ad-hoc thread persona ${recoveredPersona.name} from history, replying as ${followUpPersona.name}`,
+        );
         await this._applyHumanResponseTiming(channel, ts, followUpPersona);
         console.log(`[slack] replying as ${followUpPersona.name} in ${channel}`);
-        const postedText = await this._engine.replyAsAgent(channel, threadTs, text, followUpPersona, fullContext);
+        const postedText = await this._engine.replyAsAgent(
+          channel,
+          threadTs,
+          text,
+          followUpPersona,
+          fullContext,
+        );
         this._markPersonaReply(channel, threadTs, followUpPersona.id);
         this._rememberAdHocThreadPersona(channel, threadTs, followUpPersona.id);
-        await this._followAgentMentions(postedText, channel, threadTs, personas, fullContext, followUpPersona.id);
-        void this._maybePiggybackReply(channel, threadTs, text, personas, fullContext, followUpPersona.id);
+        await this._followAgentMentions(
+          postedText,
+          channel,
+          threadTs,
+          personas,
+          fullContext,
+          followUpPersona.id,
+        );
+        void this._maybePiggybackReply(
+          channel,
+          threadTs,
+          text,
+          personas,
+          fullContext,
+          followUpPersona.id,
+        );
         return;
       }
     }
@@ -1776,19 +1871,42 @@ export class SlackInteractionListener {
       if (randomPersona) {
         console.log(`[slack] app_mention auto-engaging via ${randomPersona.name}`);
         await this._applyHumanResponseTiming(channel, ts, randomPersona);
-        const postedText = await this._engine.replyAsAgent(channel, threadTs, text, randomPersona, fullContext);
+        const postedText = await this._engine.replyAsAgent(
+          channel,
+          threadTs,
+          text,
+          randomPersona,
+          fullContext,
+        );
         this._markPersonaReply(channel, threadTs, randomPersona.id);
         this._rememberAdHocThreadPersona(channel, threadTs, randomPersona.id);
-        await this._followAgentMentions(postedText, channel, threadTs, personas, fullContext, randomPersona.id);
+        await this._followAgentMentions(
+          postedText,
+          channel,
+          threadTs,
+          personas,
+          fullContext,
+          randomPersona.id,
+        );
         // Spontaneous second voice
-        void this._maybePiggybackReply(channel, threadTs, text, personas, fullContext, randomPersona.id);
+        void this._maybePiggybackReply(
+          channel,
+          threadTs,
+          text,
+          personas,
+          fullContext,
+          randomPersona.id,
+        );
         return;
       }
     }
 
     // Any human message: agents independently decide whether to react.
     for (const persona of personas) {
-      if (!this._isPersonaOnCooldown(channel, threadTs, persona.id) && Math.random() < RANDOM_REACTION_PROBABILITY) {
+      if (
+        !this._isPersonaOnCooldown(channel, threadTs, persona.id) &&
+        Math.random() < RANDOM_REACTION_PROBABILITY
+      ) {
         void this._maybeReactToHumanMessage(channel, ts, persona);
       }
     }
@@ -1798,12 +1916,32 @@ export class SlackInteractionListener {
     if (randomPersona) {
       console.log(`[slack] fallback engage via ${randomPersona.name}`);
       await this._applyHumanResponseTiming(channel, ts, randomPersona);
-      const postedText = await this._engine.replyAsAgent(channel, threadTs, text, randomPersona, fullContext);
+      const postedText = await this._engine.replyAsAgent(
+        channel,
+        threadTs,
+        text,
+        randomPersona,
+        fullContext,
+      );
       this._markPersonaReply(channel, threadTs, randomPersona.id);
       this._rememberAdHocThreadPersona(channel, threadTs, randomPersona.id);
-      await this._followAgentMentions(postedText, channel, threadTs, personas, fullContext, randomPersona.id);
+      await this._followAgentMentions(
+        postedText,
+        channel,
+        threadTs,
+        personas,
+        fullContext,
+        randomPersona.id,
+      );
       // Spontaneous second voice
-      void this._maybePiggybackReply(channel, threadTs, text, personas, fullContext, randomPersona.id);
+      void this._maybePiggybackReply(
+        channel,
+        threadTs,
+        text,
+        personas,
+        fullContext,
+        randomPersona.id,
+      );
       return;
     }
 
