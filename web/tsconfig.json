@@ -23,7 +23,7 @@
         "./*"
       ],
       "@shared/types": [
-        "../shared/types.ts"
+        "../packages/core/src/shared/types.ts"
       ]
     },
     "allowImportingTsExtensions": true,
