@@ -858,7 +858,7 @@ async function handlePostSlackChannels(
   res: Response,
 ): Promise<void> {
   try {
-    const { botToken } = req.body as { botToken?: string };
+    const { botToken } = (req.body ?? {}) as { botToken?: string };
     if (!botToken || typeof botToken !== 'string') {
       res.status(400).json({ error: 'botToken is required' });
       return;
@@ -879,7 +879,10 @@ async function handlePostSlackChannelCreate(
   res: Response,
 ): Promise<void> {
   try {
-    const { botToken, name } = req.body as { botToken?: string; name?: string };
+    const { botToken, name } = (req.body ?? {}) as {
+      botToken?: string;
+      name?: string;
+    };
     if (!botToken || typeof botToken !== 'string') {
       res.status(400).json({ error: 'botToken is required' });
       return;
