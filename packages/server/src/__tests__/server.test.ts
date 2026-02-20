@@ -207,55 +207,22 @@ describe("server API", () => {
   });
 
   describe("GET /api/prds", () => {
-    it("should return PRD list with content", async () => {
+    it("should return 410 Gone (endpoint deprecated)", async () => {
       const response = await request(app).get("/api/prds");
 
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveLength(3);
-      expect(response.body[0]).toHaveProperty("name");
-      expect(response.body[0]).toHaveProperty("status");
-      expect(response.body[0]).toHaveProperty("content");
-    });
-
-    it("should include file content for each PRD", async () => {
-      const response = await request(app).get("/api/prds");
-
-      expect(response.status).toBe(200);
-      const phase1 = response.body.find((p: any) => p.name === "phase1");
-      expect(phase1.content).toContain("# Phase 1");
-      expect(phase1.content).toContain("Some content.");
+      expect(response.status).toBe(410);
+      expect(response.body).toHaveProperty("error");
+      expect(response.body.error).toContain("deprecated");
     });
   });
 
   describe("GET /api/prds/:name", () => {
-    it("should return specific PRD content", async () => {
+    it("should return 410 Gone (endpoint deprecated)", async () => {
       const response = await request(app).get("/api/prds/phase1");
 
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty("name", "phase1");
-      expect(response.body.content).toContain("# Phase 1");
-    });
-
-    it("should work with .md extension", async () => {
-      const response = await request(app).get("/api/prds/phase1.md");
-
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty("name", "phase1");
-    });
-
-    it("should return 404 for non-existent PRD", async () => {
-      const response = await request(app).get("/api/prds/nonexistent");
-
-      expect(response.status).toBe(404);
+      expect(response.status).toBe(410);
       expect(response.body).toHaveProperty("error");
-    });
-
-    it("should return 400 for invalid PRD name with special characters", async () => {
-      // Use encodeURI to bypass Express path normalization
-      const response = await request(app).get("/api/prds/test%2Ffile");
-
-      expect(response.status).toBe(400);
-      expect(response.body).toHaveProperty("error");
+      expect(response.body.error).toContain("deprecated");
     });
   });
 
