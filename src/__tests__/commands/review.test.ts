@@ -250,6 +250,15 @@ describe("review command", () => {
 
       expect(overridden.autoMerge).toBe(true);
     });
+
+    it("should allow --auto-merge flag to disable autoMerge", () => {
+      const config = createTestConfig({ autoMerge: true });
+      const options: IReviewOptions = { dryRun: false, autoMerge: false };
+
+      const overridden = applyCliOverrides(config, options);
+
+      expect(overridden.autoMerge).toBe(false);
+    });
   });
 
   describe("notification integration", () => {
