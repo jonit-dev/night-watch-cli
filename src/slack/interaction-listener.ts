@@ -59,6 +59,7 @@ export function extractMentionHandles(text: string): string[] {
 
 /**
  * Resolve mention handles to active personas by display name.
+ * Matches @-prefixed handles in text (e.g. "@maya").
  */
 export function resolveMentionedPersonas(
   text: string,
@@ -82,6 +83,34 @@ export function resolveMentionedPersonas(
     }
     seenPersonaIds.add(persona.id);
     resolved.push(persona);
+  }
+
+  return resolved;
+}
+
+/**
+ * Match personas whose name appears as a word in the text (case-insensitive, no @ needed).
+ * Used for app_mention events where text looks like "<@BOTID> maya check this PR".
+ */
+export function resolvePersonasByPlainName(
+  text: string,
+  personas: IAgentPersona[],
+): IAgentPersona[] {
+  // Strip Slack user ID mentions like <@U12345678> to avoid false positives
+  const stripped = text.replace(/<@[A-Z0-9]+>/g, '').toLowerCase();
+
+  const resolved: IAgentPersona[] = [];
+  const seenPersonaIds = new Set<string>();
+
+  for (const persona of personas) {
+    if (seenPersonaIds.has(persona.id)) continue;
+    const nameLower = persona.name.toLowerCase();
+    // Word-boundary match: persona name as a whole word
+    const re = new RegExp(`\\b${nameLower}\\b`);
+    if (re.test(stripped)) {
+      resolved.push(persona);
+      seenPersonaIds.add(persona.id);
+    }
   }
 
   return resolved;
@@ -200,7 +229,7 @@ export class SlackInteractionListener {
 
     const db = getDb();
     const metaRow = db
-      .prepare(`SELECT value FROM schema_meta WHERE key = 'slack_persona_intros_v3'`)
+      .prepare(`SELECT value FROM schema_meta WHERE key = 'slack_persona_intros_v4'`)
       .get() as { value: string } | undefined;
     const introduced = new Set<string>(
       metaRow ? (JSON.parse(metaRow.value) as string[]) : [],
@@ -235,15 +264,18 @@ export class SlackInteractionListener {
 
       // Personality-driven intro — persona's own voice, no canned boilerplate
       const whoIAm = currentPersona.soul?.whoIAm?.trim() ?? '';
+      // Personas are not real Slack users (they share the Night Watch AI bot).
+      // Users invoke them by @-mentioning the Night Watch AI bot and including the agent name.
+      const howToTag = `To reach me: mention \`@Night Watch AI\` in any message and include my name — e.g. \`@Night Watch AI ${currentPersona.name}, what do you think about this PR?\``;
       const intro = whoIAm
-        ? `${whoIAm}\n\nType \`@${currentPersona.name}\` in any channel message to get my take.`
-        : `*${currentPersona.name}* — ${currentPersona.role}.\n\nType \`@${currentPersona.name}\` in any channel message to get my take.`;
+        ? `${whoIAm}\n\n${howToTag}`
+        : `*${currentPersona.name}* — ${currentPersona.role}.\n\n${howToTag}`;
 
       try {
         await this._slackClient.postAsAgent(engChannelId, intro, currentPersona);
         introduced.add(persona.id);
         db.prepare(
-          `INSERT INTO schema_meta (key, value) VALUES ('slack_persona_intros_v3', ?)
+          `INSERT INTO schema_meta (key, value) VALUES ('slack_persona_intros_v4', ?)
            ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
         ).run(JSON.stringify(Array.from(introduced)));
         console.log(`[slack] Intro posted for ${persona.name}`);
@@ -263,6 +295,10 @@ export class SlackInteractionListener {
 
     const event = payload.event;
     if (!event) return;
+
+    // Log every event so we can debug what's arriving
+    console.log(`[slack] event type=${event.type ?? '?'} subtype=${event.subtype ?? '-'} channel=${event.channel ?? '-'} user=${event.user ?? '-'} bot_id=${event.bot_id ?? '-'} text=${(event.text ?? '').slice(0, 80)}`);
+
     if (event.type !== 'message' && event.type !== 'app_mention') return;
 
     try {
@@ -313,6 +349,7 @@ export class SlackInteractionListener {
 
   private async _handleInboundMessage(event: IInboundSlackEvent): Promise<void> {
     if (shouldIgnoreInboundSlackEvent(event, this._botUserId)) {
+      console.log(`[slack] ignoring event — failed shouldIgnore check (user=${event.user}, bot_id=${event.bot_id ?? '-'}, subtype=${event.subtype ?? '-'})`);
       return;
     }
 
@@ -324,16 +361,28 @@ export class SlackInteractionListener {
 
     // Deduplicate retried/replayed events to prevent response loops.
     if (!this._rememberMessageKey(messageKey)) {
+      console.log(`[slack] duplicate event ${messageKey} — skipping`);
       return;
     }
 
     const repos = getRepositories();
     const personas = repos.agentPersona.getActive();
-    const mentionedPersonas = resolveMentionedPersonas(text, personas);
 
-    // Explicit @persona mention → respond regardless of whether a formal discussion exists.
+    // @mention matching: "@maya ..."
+    let mentionedPersonas = resolveMentionedPersonas(text, personas);
+
+    // For app_mention events (bot was @-tagged by Slack), also try plain-name matching.
+    // Text arrives as "<@UBOTID> maya check this" — the @-regex won't find "maya".
+    if (mentionedPersonas.length === 0 && event.type === 'app_mention') {
+      mentionedPersonas = resolvePersonasByPlainName(text, personas);
+      if (mentionedPersonas.length > 0) {
+        console.log(`[slack] plain-name match in app_mention: ${mentionedPersonas.map((p) => p.name).join(', ')}`);
+      }
+    }
+
+    // Persona mentioned → respond regardless of whether a formal discussion exists.
     if (mentionedPersonas.length > 0) {
-      console.log(`[slack] @mention detected in ${channel}: ${mentionedPersonas.map((p) => p.name).join(', ')}`);
+      console.log(`[slack] routing to persona(s): ${mentionedPersonas.map((p) => p.name).join(', ')} in ${channel}`);
       const discussion = repos
         .slackDiscussion
         .getActive('')
@@ -347,7 +396,6 @@ export class SlackInteractionListener {
         if (discussion) {
           await this._engine.contributeAsAgent(discussion.id, persona);
         } else {
-          // No formal discussion — ad-hoc reply in the thread
           await this._engine.replyAsAgent(channel, threadTs, text, persona);
         }
         this._markPersonaReply(channel, threadTs, persona.id);
@@ -355,13 +403,16 @@ export class SlackInteractionListener {
       return;
     }
 
-    // No @mention — only handle within an existing Night Watch discussion thread.
+    console.log(`[slack] no persona match — checking for active discussion in ${channel}:${threadTs}`);
+
+    // No persona mention — only handle within an existing Night Watch discussion thread.
     const discussion = repos
       .slackDiscussion
       .getActive('')
       .find((d) => d.channelId === channel && d.threadTs === threadTs);
 
     if (!discussion) {
+      console.log(`[slack] no active discussion found — ignoring message`);
       return;
     }
 
