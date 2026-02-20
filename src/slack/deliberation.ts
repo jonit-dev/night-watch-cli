@@ -1582,37 +1582,88 @@ ${trigger.context}`;
   }
 
   /**
-   * Summarize a pre-written audit report (from the provider) into a Slack-ready message.
-   * Returns null if the report says NO_ISSUES_FOUND or if Dev decides it's not worth posting.
+   * Triage an audit report, file a GitHub issue if warranted, and post a short Slack ping.
+   * No discussion thread — Dev just drops a link in the channel and moves on.
    */
-  async summarizeAuditReport(report: string, projectName: string): Promise<string | null> {
-    if (!report || report.trim() === 'NO_ISSUES_FOUND') return null;
+  async handleAuditReport(
+    report: string,
+    projectName: string,
+    projectPath: string,
+    channel: string,
+  ): Promise<void> {
+    if (!report || report.trim() === 'NO_ISSUES_FOUND') return;
 
     const repos = getRepositories();
     const personas = repos.agentPersona.getActive();
     const devPersona = findDev(personas);
-    if (!devPersona) return null;
+    if (!devPersona) return;
 
-    const prompt =
+    // Step 1: Dev triages the report — worth filing? If yes, give a one-liner for Slack.
+    const triagePrompt =
       `You are ${devPersona.name}, ${devPersona.role}.\n` +
-      `The Night Watch code auditor just finished scanning ${projectName} and wrote this report:\n\n` +
+      `The code auditor just finished scanning ${projectName} and wrote this report:\n\n` +
       `${report.slice(0, 3000)}\n\n` +
-      `Rephrase the findings as a short Slack message (2-4 sentences) that you'd drop in the team channel.\n` +
-      `The report was already triaged by the auditor — your job is to surface the highest-priority items in your own voice.\n\n` +
+      `Should this be filed as a GitHub issue for the team to track?\n\n` +
       `Rules:\n` +
-      `- If ALL findings are minor/low-severity → respond with exactly: SKIP\n` +
-      `- Otherwise write 2-4 sentences covering the highest-priority findings. Name the specific file/location.\n` +
-      `- Sound like a teammate flagging issues, not an AI filing a report.\n` +
-      `- No markdown, no bullet points, no headers.\n` +
-      `- Never start with "I noticed", "The code has", "Great question", or similar.\n\n` +
-      `Write only your message or SKIP.`;
+      `- If the findings are genuinely worth tracking (medium or high severity, real risk) → reply with:\n` +
+      `  FILE: [one short sentence you'd drop in Slack — specific about what was found, no filler]\n` +
+      `- If everything is minor, intentional, or noise → reply with exactly: SKIP\n` +
+      `- Be honest. Don't file issues for trivial noise.\n\n` +
+      `Write only FILE: [sentence] or SKIP.`;
+
+    let triage: string;
+    try {
+      triage = await callAIForContribution(devPersona, this._config, triagePrompt, 256);
+    } catch {
+      return;
+    }
+
+    if (!triage || triage.trim().toUpperCase() === 'SKIP' || !/^FILE:/i.test(triage.trim())) {
+      console.log(`[deliberation][audit] Dev skipped filing for ${projectName}`);
+      return;
+    }
+
+    const slackOneliner = triage.replace(/^FILE:\s*/i, '').trim();
+    if (!slackOneliner) return;
+
+    // Step 2: Generate a proper GitHub issue body via Dev
+    const fakeTrigger: IDiscussionTrigger = {
+      type: 'code_watch',
+      projectPath,
+      ref: `audit-${Date.now()}`,
+      context: `Project: ${projectName}\n\nAudit report:\n${report.slice(0, 2000)}`,
+    };
+    const issueTitle = `fix: ${slackOneliner
+      .toLowerCase()
+      .replace(/[.!?]+$/, '')
+      .replace(/^(found|noticed|flagging|caught)\s+/i, '')
+      .slice(0, 80)}`;
+    const issueBody = await this._generateIssueBody(fakeTrigger, devPersona).catch(() => report.slice(0, 1200));
+
+    // Step 3: Create GitHub issue (if board is configured for this project)
+    const boardConfig = this._resolveBoardConfig(projectPath);
+    let issueUrl: string | null = null;
+    if (boardConfig) {
+      try {
+        const provider = createBoardProvider(boardConfig, projectPath);
+        const issue = await provider.createIssue({ title: issueTitle, body: issueBody, column: 'Ready' });
+        issueUrl = issue.url;
+        console.log(`[deliberation][audit] filed issue #${issue.number} for ${projectName}: ${issueUrl}`);
+      } catch (err) {
+        console.warn('[deliberation][audit] failed to create GitHub issue:', err);
+      }
+    }
+
+    // Step 4: Post brief Slack notification — just a link drop, no thread
+    const slackMsg = issueUrl
+      ? `${slackOneliner} → ${issueUrl}`
+      : humanizeSlackReply(slackOneliner, { allowEmoji: false, maxSentences: 2 });
 
     try {
-      const result = await callAIForContribution(devPersona, this._config, prompt, 512);
-      if (!result || result.trim().toUpperCase() === 'SKIP') return null;
-      return humanizeSlackReply(result, { allowEmoji: false, maxSentences: 4 });
-    } catch {
-      return null;
+      await this._slackClient.postAsAgent(channel, slackMsg, devPersona);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[deliberation][audit] failed to post Slack notification: ${msg}`);
     }
   }
 

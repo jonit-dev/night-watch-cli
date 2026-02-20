@@ -75,6 +75,12 @@ interface ISlackProviderRequest {
   projectHint?: string;
 }
 
+interface ISlackIssuePickupRequest {
+  issueNumber: string;
+  issueUrl: string;
+  repoHint?: string;
+}
+
 interface IAdHocThreadState {
   personaId: string;
   expiresAt: number;
@@ -206,6 +212,52 @@ export function parseSlackJobRequest(text: string): ISlackJobRequest | null {
   if (job === 'review' && conflictSignal) request.fixConflicts = true;
 
   return request;
+}
+
+export function parseSlackIssuePickupRequest(text: string): ISlackIssuePickupRequest | null {
+  const withoutMentions = stripSlackUserMentions(text);
+  const normalized = normalizeForParsing(withoutMentions);
+  if (!normalized) return null;
+
+  // Extract GitHub issue URL — NOT pull requests (those handled by parseSlackJobRequest)
+  const compactForUrl = withoutMentions.replace(/\s+/g, '');
+
+  let issueUrl: string;
+  let issueNumber: string;
+  let repo: string;
+
+  // Standard format: github.com/{owner}/{repo}/issues/{number}
+  const directIssueMatch = compactForUrl.match(/https?:\/\/github\.com\/([^/\s<>]+)\/([^/\s<>]+)\/issues\/(\d+)/i);
+
+  if (directIssueMatch) {
+    [issueUrl, , repo, issueNumber] = directIssueMatch;
+    repo = repo.toLowerCase();
+  } else {
+    // Project board format: github.com/...?...&issue={owner}%7C{repo}%7C{number}
+    // e.g. github.com/users/jonit-dev/projects/41/views/2?pane=issue&issue=jonit-dev%7Cnight-watch-cli%7C12
+    const boardMatch = compactForUrl.match(/https?:\/\/github\.com\/[^<>\s]*[?&]issue=([^<>\s&]+)/i);
+    if (!boardMatch) return null;
+
+    const rawParam = boardMatch[1].replace(/%7[Cc]/g, '|');
+    const parts = rawParam.split('|');
+    if (parts.length < 3 || !/^\d+$/.test(parts[parts.length - 1])) return null;
+
+    issueNumber = parts[parts.length - 1];
+    repo = parts[parts.length - 2].toLowerCase();
+    issueUrl = boardMatch[0];
+  }
+
+  // Requires pickup-intent language or "this issue" + request language
+  // "pickup" (one word) is also accepted alongside "pick up" (two words)
+  const pickupSignal = /\b(pick\s+up|pickup|work\s+on|implement|tackle|start\s+on|grab|handle\s+this|ship\s+this)\b/i.test(normalized);
+  const requestSignal = /\b(please|can\s+someone|anyone)\b/i.test(normalized) && /\bthis\s+issue\b/i.test(normalized);
+  if (!pickupSignal && !requestSignal) return null;
+
+  return {
+    issueNumber,
+    issueUrl,
+    repoHint: repo,
+  };
 }
 
 export function parseSlackProviderRequest(text: string): ISlackProviderRequest | null {
@@ -974,7 +1026,7 @@ export class SlackInteractionListener {
     channel: string,
     threadTs: string,
     persona: IAgentPersona,
-    opts?: { prNumber?: string; fixConflicts?: boolean },
+    opts?: { prNumber?: string; fixConflicts?: boolean; issueNumber?: string },
   ): Promise<void> {
     const invocationArgs = buildCurrentCliInvocation([job]);
     const prRef = opts?.prNumber ? ` PR #${opts.prNumber}` : '';
@@ -1006,6 +1058,7 @@ export class SlackInteractionListener {
           ...process.env,
           NW_EXECUTION_CONTEXT: 'agent',
           ...(opts?.prNumber ? { NW_TARGET_PR: opts.prNumber } : {}),
+          ...(opts?.issueNumber ? { NW_TARGET_ISSUE: opts.issueNumber } : {}),
           ...(opts?.fixConflicts
             ? {
               NW_SLACK_FEEDBACK: JSON.stringify({
@@ -1341,6 +1394,83 @@ export class SlackInteractionListener {
     return true;
   }
 
+  private async _triggerIssuePickupIfRequested(
+    event: IInboundSlackEvent,
+    channel: string,
+    threadTs: string,
+    messageTs: string,
+    personas: IAgentPersona[],
+  ): Promise<boolean> {
+    const request = parseSlackIssuePickupRequest(event.text ?? '');
+    if (!request) return false;
+
+    const addressedToBot = this._isMessageAddressedToBot(event);
+    const normalized = normalizeForParsing(stripSlackUserMentions(event.text ?? ''));
+    const teamRequestLanguage = /\b(can someone|someone|anyone|please|need)\b/i.test(normalized);
+    if (!addressedToBot && !teamRequestLanguage) return false;
+
+    const repos = getRepositories();
+    const projects = repos.projectRegistry.getAll();
+
+    const persona =
+      this._findPersonaByName(personas, 'Dev')
+      ?? this._pickRandomPersona(personas, channel, threadTs)
+      ?? personas[0];
+    if (!persona) return false;
+
+    const targetProject = this._resolveTargetProject(channel, projects, request.repoHint);
+    if (!targetProject) {
+      const projectNames = projects.map((p) => p.name).join(', ') || '(none registered)';
+      await this._slackClient.postAsAgent(
+        channel,
+        `Which project? Registered: ${projectNames}.`,
+        persona,
+        threadTs,
+      );
+      this._markChannelActivity(channel);
+      this._markPersonaReply(channel, threadTs, persona.id);
+      return true;
+    }
+
+    console.log(
+      `[slack][issue-pickup] routing issue=#${request.issueNumber} to persona=${persona.name} project=${targetProject.name}`,
+    );
+
+    await this._applyHumanResponseTiming(channel, messageTs, persona);
+    await this._slackClient.postAsAgent(
+      channel,
+      `On it — picking up #${request.issueNumber}. Starting the run now.`,
+      persona,
+      threadTs,
+    );
+    this._markChannelActivity(channel);
+    this._markPersonaReply(channel, threadTs, persona.id);
+    this._rememberAdHocThreadPersona(channel, threadTs, persona.id);
+
+    // Move issue to In Progress on board (best-effort, spawn via CLI subprocess)
+    const boardArgs = buildCurrentCliInvocation([
+      'board', 'move-issue', request.issueNumber, '--column', 'In Progress',
+    ]);
+    if (boardArgs) {
+      try {
+        execFileSync(process.execPath, boardArgs, {
+          cwd: targetProject.path,
+          timeout: 15_000,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        console.log(`[slack][issue-pickup] moved #${request.issueNumber} to In Progress`);
+      } catch {
+        console.warn(`[slack][issue-pickup] failed to move #${request.issueNumber} to In Progress`);
+      }
+    }
+
+    console.log(`[slack][issue-pickup] spawning run for #${request.issueNumber}`);
+    await this._spawnNightWatchJob('run', targetProject, channel, threadTs, persona, {
+      issueNumber: request.issueNumber,
+    });
+    return true;
+  }
+
   private _resolveProactiveChannelForProject(project: IRegistryEntry): string | null {
     const slack = this._config.slack;
     if (!slack) return null;
@@ -1383,42 +1513,12 @@ export class SlackInteractionListener {
         return;
       }
 
-      if (!report || report === 'NO_ISSUES_FOUND') {
-        console.log(`[slack][codewatch] audit found nothing actionable for ${project.name}`);
-        return;
-      }
-
-      let summary: string | null;
       try {
-        summary = await this._engine.summarizeAuditReport(report, project.name);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[slack][codewatch] summarizeAuditReport failed for ${project.name}: ${msg}`);
-        return;
-      }
-
-      if (!summary) {
-        console.log(`[slack][codewatch] audit summary was empty/skip for ${project.name}`);
-        return;
-      }
-
-      const now = Date.now();
-      const ref = `codewatch-${project.name}-${now}`;
-      console.log(`[slack][codewatch] posting audit summary for ${project.name} → ${channel}`);
-
-      try {
-        await this._engine.startDiscussion({
-          type: 'code_watch',
-          projectPath: project.path,
-          ref,
-          context: report.slice(0, 3000),
-          channelId: channel,
-          openingMessage: summary,
-        });
+        await this._engine.handleAuditReport(report, project.name, project.path, channel);
         this._markChannelActivity(channel);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[slack][codewatch] failed to start discussion for ${project.name}: ${msg}`);
+        console.warn(`[slack][codewatch] handleAuditReport failed for ${project.name}: ${msg}`);
       }
     });
   }
@@ -1522,6 +1622,7 @@ export class SlackInteractionListener {
 
     // Fetch GitHub issue/PR content from URLs in the message so agents can inspect them.
     const githubUrls = extractGitHubIssueUrls(text);
+    console.log(`[slack] processing message channel=${channel} thread=${threadTs} urls=${githubUrls.length}`);
     const githubContext = githubUrls.length > 0 ? await fetchGitHubIssueContext(githubUrls) : '';
     const fullContext = githubContext ? `${projectContext}\n\nReferenced GitHub content:\n${githubContext}` : projectContext;
 
@@ -1530,6 +1631,10 @@ export class SlackInteractionListener {
     }
 
     if (await this._triggerSlackJobIfRequested(event, channel, threadTs, ts, personas)) {
+      return;
+    }
+
+    if (await this._triggerIssuePickupIfRequested(event, channel, threadTs, ts, personas)) {
       return;
     }
 
@@ -1564,6 +1669,7 @@ export class SlackInteractionListener {
         if (discussion) {
           await this._engine.contributeAsAgent(discussion.id, persona);
         } else {
+          console.log(`[slack] replying as ${persona.name} in ${channel}`);
           lastPosted = await this._engine.replyAsAgent(channel, threadTs, text, persona, fullContext);
           lastPersonaId = persona.id;
         }
@@ -1609,6 +1715,7 @@ export class SlackInteractionListener {
         console.log(`[slack] continuing ad-hoc thread with ${rememberedPersona.name}`);
       }
       await this._applyHumanResponseTiming(channel, ts, followUpPersona);
+      console.log(`[slack] replying as ${followUpPersona.name} in ${channel}`);
       const postedText = await this._engine.replyAsAgent(channel, threadTs, text, followUpPersona, fullContext);
       this._markPersonaReply(channel, threadTs, followUpPersona.id);
       this._rememberAdHocThreadPersona(channel, threadTs, followUpPersona.id);
@@ -1623,6 +1730,7 @@ export class SlackInteractionListener {
         const followUpPersona = selectFollowUpPersona(recoveredPersona, personas, text);
         console.log(`[slack] recovered ad-hoc thread persona ${recoveredPersona.name} from history, replying as ${followUpPersona.name}`);
         await this._applyHumanResponseTiming(channel, ts, followUpPersona);
+        console.log(`[slack] replying as ${followUpPersona.name} in ${channel}`);
         const postedText = await this._engine.replyAsAgent(channel, threadTs, text, followUpPersona, fullContext);
         this._markPersonaReply(channel, threadTs, followUpPersona.id);
         this._rememberAdHocThreadPersona(channel, threadTs, followUpPersona.id);
@@ -1638,6 +1746,7 @@ export class SlackInteractionListener {
       if (randomPersona) {
         console.log(`[slack] auto-engaging via ${randomPersona.name}`);
         await this._applyHumanResponseTiming(channel, ts, randomPersona);
+        console.log(`[slack] replying as ${randomPersona.name} in ${channel}`);
         const postedText = await this._engine.replyAsAgent(channel, threadTs, text, randomPersona, fullContext);
         this._markPersonaReply(channel, threadTs, randomPersona.id);
         this._rememberAdHocThreadPersona(channel, threadTs, randomPersona.id);

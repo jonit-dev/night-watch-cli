@@ -96,25 +96,44 @@ if [ "${NW_BOARD_ENABLED:-}" = "true" ]; then
     log "ERROR: Cannot resolve night-watch CLI for board mode"
     exit 1
   fi
-  ISSUE_JSON=$(find_eligible_board_issue)
-  if [ -z "${ISSUE_JSON}" ]; then
-    log "SKIP: No eligible issues in Ready column (board mode)"
-    emit_result "skip_no_eligible_prd"
-    exit 0
+
+  if [ -n "${NW_TARGET_ISSUE:-}" ]; then
+    # Targeted issue pickup: use specified issue directly (already "In Progress" from Slack trigger)
+    ISSUE_NUMBER="${NW_TARGET_ISSUE}"
+    log "BOARD: Using targeted issue #${ISSUE_NUMBER} (from NW_TARGET_ISSUE)"
+    ISSUE_JSON=$(gh issue view "${ISSUE_NUMBER}" --json number,title,body 2>/dev/null || true)
+    if [ -z "${ISSUE_JSON}" ]; then
+      log "ERROR: Cannot fetch issue #${ISSUE_NUMBER} via gh"
+      exit 1
+    fi
+    ISSUE_TITLE_RAW=$(printf '%s' "${ISSUE_JSON}" | jq -r '.title // empty' 2>/dev/null || true)
+    ISSUE_BODY=$(printf '%s' "${ISSUE_JSON}" | jq -r '.body // empty' 2>/dev/null || true)
+  else
+    ISSUE_JSON=$(find_eligible_board_issue)
+    if [ -z "${ISSUE_JSON}" ]; then
+      log "SKIP: No eligible issues in Ready column (board mode)"
+      emit_result "skip_no_eligible_prd"
+      exit 0
+    fi
+    ISSUE_NUMBER=$(printf '%s' "${ISSUE_JSON}" | jq -r '.number // empty' 2>/dev/null || true)
+    ISSUE_TITLE_RAW=$(printf '%s' "${ISSUE_JSON}" | jq -r '.title // empty' 2>/dev/null || true)
+    ISSUE_BODY=$(printf '%s' "${ISSUE_JSON}" | jq -r '.body // empty' 2>/dev/null || true)
+    if [ -z "${ISSUE_NUMBER}" ]; then
+      log "ERROR: Board mode: failed to parse issue number from JSON"
+      exit 1
+    fi
+    # Move issue to In Progress (claim it on the board)
+    "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "In Progress" 2>>"${LOG_FILE}" || \
+      log "WARN: Failed to move issue #${ISSUE_NUMBER} to In Progress"
   fi
-  ISSUE_NUMBER=$(printf '%s' "${ISSUE_JSON}" | jq -r '.number // empty' 2>/dev/null || true)
-  ISSUE_TITLE_RAW=$(printf '%s' "${ISSUE_JSON}" | jq -r '.title // empty' 2>/dev/null || true)
-  ISSUE_BODY=$(printf '%s' "${ISSUE_JSON}" | jq -r '.body // empty' 2>/dev/null || true)
+
   if [ -z "${ISSUE_NUMBER}" ]; then
-    log "ERROR: Board mode: failed to parse issue number from JSON"
+    log "ERROR: Board mode: no issue number resolved"
     exit 1
   fi
   # Slugify title for branch naming
   ELIGIBLE_PRD="${ISSUE_NUMBER}-$(printf '%s' "${ISSUE_TITLE_RAW}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-\|-$//g')"
-  log "BOARD: Found ready issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}"
-  # Move issue to In Progress (claim it on the board)
-  "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "In Progress" 2>>"${LOG_FILE}" || \
-    log "WARN: Failed to move issue #${ISSUE_NUMBER} to In Progress"
+  log "BOARD: Processing issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}"
   trap "rm -f '${LOCK_FILE}'" EXIT
 else
   # Filesystem mode: scan PRD directory

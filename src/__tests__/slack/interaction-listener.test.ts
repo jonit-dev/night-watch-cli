@@ -5,6 +5,7 @@ import {
   buildInboundMessageKey,
   extractMentionHandles,
   isAmbientTeamMessage,
+  parseSlackIssuePickupRequest,
   parseSlackJobRequest,
   parseSlackProviderRequest,
   resolveMentionedPersonas,
@@ -275,6 +276,84 @@ describe('Slack interaction listener helpers', () => {
 
     it('returns null for non-provider job requests', () => {
       expect(parseSlackProviderRequest('please run night-watch-cli now')).toBeNull();
+    });
+  });
+
+  describe('parseSlackIssuePickupRequest', () => {
+    const issueUrl = 'https://github.com/jonit-dev/night-watch-cli/issues/42';
+
+    it('parses pickup request with "pick up" + issue URL', () => {
+      expect(parseSlackIssuePickupRequest(`please pick up ${issueUrl}`)).toEqual({
+        issueNumber: '42',
+        issueUrl,
+        repoHint: 'night-watch-cli',
+      });
+    });
+
+    it('parses "work on" + issue URL', () => {
+      expect(parseSlackIssuePickupRequest(`can someone work on ${issueUrl}`)).toEqual({
+        issueNumber: '42',
+        issueUrl,
+        repoHint: 'night-watch-cli',
+      });
+    });
+
+    it('parses "implement" + issue URL', () => {
+      expect(parseSlackIssuePickupRequest(`Dev, implement ${issueUrl}`)).toEqual({
+        issueNumber: '42',
+        issueUrl,
+        repoHint: 'night-watch-cli',
+      });
+    });
+
+    it('parses "tackle" + issue URL', () => {
+      expect(parseSlackIssuePickupRequest(`please tackle ${issueUrl}`)).toEqual({
+        issueNumber: '42',
+        issueUrl,
+        repoHint: 'night-watch-cli',
+      });
+    });
+
+    it('returns null for PR URLs (not issues)', () => {
+      expect(
+        parseSlackIssuePickupRequest('please pick up https://github.com/jonit-dev/night-watch-cli/pull/42'),
+      ).toBeNull();
+    });
+
+    it('returns null without pickup-intent language', () => {
+      expect(parseSlackIssuePickupRequest(`check out ${issueUrl}`)).toBeNull();
+    });
+
+    it('returns null without a GitHub issue URL', () => {
+      expect(parseSlackIssuePickupRequest('please pick up issue #42')).toBeNull();
+    });
+
+    it('matches "this issue" + request language', () => {
+      expect(
+        parseSlackIssuePickupRequest(`can someone please work on this issue ${issueUrl}`),
+      ).toEqual({
+        issueNumber: '42',
+        issueUrl,
+        repoHint: 'night-watch-cli',
+      });
+    });
+
+    it('parses GitHub project board URL with URL-encoded issue param', () => {
+      const boardUrl = 'https://github.com/users/jonit-dev/projects/41/views/2?pane=issue&itemId=158295510&issue=jonit-dev%7Cnight-watch-cli%7C12';
+      const result = parseSlackIssuePickupRequest(`Someone, please pickup this issue: ${boardUrl}`);
+      expect(result).toEqual({
+        issueNumber: '12',
+        issueUrl: boardUrl,
+        repoHint: 'night-watch-cli',
+      });
+    });
+
+    it('parses "pickup" (one word) as pickup intent', () => {
+      expect(parseSlackIssuePickupRequest(`please pickup ${issueUrl}`)).toEqual({
+        issueNumber: '42',
+        issueUrl,
+        repoHint: 'night-watch-cli',
+      });
     });
   });
 
