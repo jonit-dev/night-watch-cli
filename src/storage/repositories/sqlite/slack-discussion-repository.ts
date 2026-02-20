@@ -74,6 +74,23 @@ export class SqliteSlackDiscussionRepository implements ISlackDiscussionReposito
     return rows.map(rowToDiscussion);
   }
 
+  getLatestByTrigger(
+    projectPath: string,
+    triggerType: TriggerType,
+    triggerRef: string,
+  ): ISlackDiscussion | null {
+    const row = this._db
+      .prepare<[string, string, string], ISlackDiscussionRow>(
+        `SELECT *
+         FROM slack_discussions
+         WHERE project_path = ? AND trigger_type = ? AND trigger_ref = ?
+         ORDER BY created_at DESC
+         LIMIT 1`
+      )
+      .get(projectPath, triggerType, triggerRef);
+    return row ? rowToDiscussion(row) : null;
+  }
+
   create(discussion: Omit<ISlackDiscussion, 'id' | 'createdAt' | 'updatedAt'>): ISlackDiscussion {
     const id = randomUUID();
     const now = Date.now();

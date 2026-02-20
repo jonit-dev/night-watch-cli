@@ -12,6 +12,14 @@ import { INightWatchConfig } from "../types.js";
 
 const MAX_ROUNDS = 3;
 const MESSAGE_DELAY_MS = 1500; // Rate limit: 1.5s between posts
+const DISCUSSION_RESUME_DELAY_MS = 60_000;
+const DISCUSSION_REPLAY_GUARD_MS = 30 * 60_000;
+
+const inFlightDiscussionStarts = new Map<string, Promise<ISlackDiscussion>>();
+
+function discussionStartKey(trigger: IDiscussionTrigger): string {
+  return `${trigger.projectPath}:${trigger.type}:${trigger.ref}`;
+}
 
 /**
  * Wait for the specified milliseconds
@@ -294,6 +302,7 @@ async function callAIForContribution(
 export class DeliberationEngine {
   private readonly _slackClient: SlackClient;
   private readonly _config: INightWatchConfig;
+  private readonly _humanResumeTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(slackClient: SlackClient, config: INightWatchConfig) {
     this._slackClient = slackClient;
@@ -305,7 +314,38 @@ export class DeliberationEngine {
    * Posts the opening message and kicks off the first round of contributions.
    */
   async startDiscussion(trigger: IDiscussionTrigger): Promise<ISlackDiscussion> {
+    const key = discussionStartKey(trigger);
+    const existingInFlight = inFlightDiscussionStarts.get(key);
+    if (existingInFlight) {
+      return existingInFlight;
+    }
+
+    const startPromise = this._startDiscussionInternal(trigger);
+    inFlightDiscussionStarts.set(key, startPromise);
+
+    try {
+      return await startPromise;
+    } finally {
+      if (inFlightDiscussionStarts.get(key) === startPromise) {
+        inFlightDiscussionStarts.delete(key);
+      }
+    }
+  }
+
+  private async _startDiscussionInternal(trigger: IDiscussionTrigger): Promise<ISlackDiscussion> {
     const repos = getRepositories();
+    const latest = repos
+      .slackDiscussion
+      .getLatestByTrigger(trigger.projectPath, trigger.type, trigger.ref);
+    if (latest) {
+      if (latest.status === 'active') {
+        return latest;
+      }
+      if (Date.now() - latest.updatedAt < DISCUSSION_REPLAY_GUARD_MS) {
+        return latest;
+      }
+    }
+
     const personas = repos.agentPersona.getActive();
 
     const participants = getParticipatingPersonas(trigger.type, personas);
@@ -430,9 +470,13 @@ export class DeliberationEngine {
 
     if (!discussion) return;
 
-    // Human is involved — pause and wait 60s for them to finish
-    // Then lead agent (Carlos) resumes with a summary
-    setTimeout(() => {
+    const existingTimer = this._humanResumeTimers.get(discussion.id);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    // Human is involved — debounce for a short pause before the lead summarizes.
+    const timer = setTimeout(() => {
       void (async () => {
         const innerRepos = getRepositories();
         const personas = innerRepos.agentPersona.getActive();
@@ -455,8 +499,12 @@ export class DeliberationEngine {
           ref: discussion.triggerRef,
           context: '',
         });
-      })();
-    }, 60_000);
+      })().finally(() => {
+        this._humanResumeTimers.delete(discussion.id);
+      });
+    }, DISCUSSION_RESUME_DELAY_MS);
+
+    this._humanResumeTimers.set(discussion.id, timer);
   }
 
   /**
@@ -515,33 +563,36 @@ export class DeliberationEngine {
   /**
    * Evaluate whether consensus has been reached.
    * Lead agent (Carlos) decides: approve, request changes, or escalate.
-   * Supports multiple rounds — recurses when CHANGES is requested and rounds remain.
+   * Uses an iterative loop for multi-round handling (no recursion).
    */
   private async _evaluateConsensus(
     discussionId: string,
     trigger: IDiscussionTrigger,
   ): Promise<void> {
     const repos = getRepositories();
-    const discussion = repos.slackDiscussion.getById(discussionId);
-    if (!discussion || discussion.status !== 'active') return;
 
-    const personas = repos.agentPersona.getActive();
-    const carlos = findCarlos(personas);
+    // Re-check state each round; stop when consensus/blocked or discussion disappears.
+    while (true) {
+      const discussion = repos.slackDiscussion.getById(discussionId);
+      if (!discussion || discussion.status !== 'active') return;
 
-    if (!carlos) {
-      repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'approved');
-      return;
-    }
+      const personas = repos.agentPersona.getActive();
+      const carlos = findCarlos(personas);
 
-    // Get thread history and let Carlos evaluate
-    const history = await this._slackClient.getChannelHistory(
-      discussion.channelId,
-      discussion.threadTs,
-      20,
-    );
-    const historyText = history.map(m => m.text).join('\n---\n');
+      if (!carlos) {
+        repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'approved');
+        return;
+      }
 
-    const consensusPrompt = `You are ${carlos.name}, ${carlos.role}.
+      // Get thread history and let Carlos evaluate
+      const history = await this._slackClient.getChannelHistory(
+        discussion.channelId,
+        discussion.threadTs,
+        20,
+      );
+      const historyText = history.map(m => m.text).join('\n---\n');
+
+      const consensusPrompt = `You are ${carlos.name}, ${carlos.role}.
 
 Review this discussion thread and decide: are we ready to ship, do we need another round of review, or do we need a human?
 
@@ -555,55 +606,60 @@ Respond with ONLY one of:
 - CHANGES: [summary of what still needs to change — be specific]
 - HUMAN: [why you need a human decision]`;
 
-    let decision: string;
-    try {
-      decision = await callAIForContribution(carlos, this._config, consensusPrompt);
-    } catch (_err) {
-      decision = 'APPROVE: Ship it 🚀';
-    }
-
-    if (decision.startsWith('APPROVE')) {
-      const message = decision.replace(/^APPROVE:\s*/, '').trim() || 'Ship it 🚀';
-      await this._slackClient.postAsAgent(discussion.channelId, message, carlos, discussion.threadTs);
-      repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'approved');
-    } else if (decision.startsWith('CHANGES') && discussion.round < MAX_ROUNDS) {
-      const changes = decision.replace(/^CHANGES:\s*/, '').trim();
-      await this._slackClient.postAsAgent(
-        discussion.channelId,
-        `One more pass needed:\n${changes}`,
-        carlos,
-        discussion.threadTs,
-      );
-      await sleep(MESSAGE_DELAY_MS);
-
-      // Increment round and start another contribution round
-      const nextRound = discussion.round + 1;
-      repos.slackDiscussion.updateRound(discussionId, nextRound);
-
-      const participants = getParticipatingPersonas(trigger.type, personas);
-      const devPersona = findDev(personas);
-      const reviewers = participants.filter((p) => !devPersona || p.id !== devPersona.id);
-      await this._runContributionRound(discussionId, reviewers, trigger, changes);
-
-      // Recurse for next evaluation
-      await this._evaluateConsensus(discussionId, trigger);
-    } else if (decision.startsWith('CHANGES') && discussion.round >= MAX_ROUNDS) {
-      // Max rounds reached — set changes_requested and optionally trigger PR refinement
-      const changesSummary = decision.replace(/^CHANGES:\s*/, '').trim();
-      await this._slackClient.postAsAgent(
-        discussion.channelId,
-        "3 rounds in — shipping what we have. Ship it 🚀",
-        carlos,
-        discussion.threadTs,
-      );
-      repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'changes_requested');
-
-      if (discussion.triggerType === 'pr_review') {
-        await this.triggerPRRefinement(discussionId, changesSummary, discussion.triggerRef).catch(e =>
-          console.warn('PR refinement trigger failed:', e)
-        );
+      let decision: string;
+      try {
+        decision = await callAIForContribution(carlos, this._config, consensusPrompt);
+      } catch (_err) {
+        decision = 'HUMAN: AI evaluation failed — needs manual review';
       }
-    } else {
+
+      if (decision.startsWith('APPROVE')) {
+        const message = decision.replace(/^APPROVE:\s*/, '').trim() || 'Ship it 🚀';
+        await this._slackClient.postAsAgent(discussion.channelId, message, carlos, discussion.threadTs);
+        repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'approved');
+        return;
+      }
+
+      if (decision.startsWith('CHANGES') && discussion.round < MAX_ROUNDS) {
+        const changes = decision.replace(/^CHANGES:\s*/, '').trim();
+        await this._slackClient.postAsAgent(
+          discussion.channelId,
+          `One more pass needed:\n${changes}`,
+          carlos,
+          discussion.threadTs,
+        );
+        await sleep(MESSAGE_DELAY_MS);
+
+        // Increment round and start another contribution round, then loop back.
+        const nextRound = discussion.round + 1;
+        repos.slackDiscussion.updateRound(discussionId, nextRound);
+
+        const participants = getParticipatingPersonas(trigger.type, personas);
+        const devPersona = findDev(personas);
+        const reviewers = participants.filter((p) => !devPersona || p.id !== devPersona.id);
+        await this._runContributionRound(discussionId, reviewers, trigger, changes);
+        continue;
+      }
+
+      if (decision.startsWith('CHANGES') && discussion.round >= MAX_ROUNDS) {
+        // Max rounds reached — set changes_requested and optionally trigger PR refinement
+        const changesSummary = decision.replace(/^CHANGES:\s*/, '').trim();
+        await this._slackClient.postAsAgent(
+          discussion.channelId,
+          "3 rounds in — shipping what we have. Ship it 🚀",
+          carlos,
+          discussion.threadTs,
+        );
+        repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'changes_requested');
+
+        if (discussion.triggerType === 'pr_review') {
+          await this.triggerPRRefinement(discussionId, changesSummary, discussion.triggerRef).catch(e =>
+            console.warn('PR refinement trigger failed:', e)
+          );
+        }
+        return;
+      }
+
       // HUMAN or fallback
       await this._slackClient.postAsAgent(
         discussion.channelId,
@@ -612,6 +668,7 @@ Respond with ONLY one of:
         discussion.threadTs,
       );
       repos.slackDiscussion.updateStatus(discussionId, 'blocked', 'human_needed');
+      return;
     }
   }
 

@@ -7,7 +7,7 @@ import { IRegistryEntry } from "@/utils/registry.js";
 import { IExecutionRecord } from "@/utils/execution-history.js";
 import { IPrdStateEntry } from "@/utils/prd-states.js";
 import { IRoadmapState } from "@/utils/roadmap-state.js";
-import { ConsensusResult, CreateAgentPersonaInput, DiscussionStatus, IAgentPersona, ISlackDiscussion, UpdateAgentPersonaInput } from "../../../shared/types.js";
+import { ConsensusResult, CreateAgentPersonaInput, DiscussionStatus, IAgentPersona, ISlackDiscussion, TriggerType, UpdateAgentPersonaInput } from "../../../shared/types.js";
 
 export interface IProjectRegistryRepository {
   getAll(): IRegistryEntry[];
@@ -52,6 +52,7 @@ export interface IAgentPersonaRepository {
 export interface ISlackDiscussionRepository {
   getById(id: string): ISlackDiscussion | null;
   getActive(projectPath: string): ISlackDiscussion[];
+  getLatestByTrigger(projectPath: string, triggerType: TriggerType, triggerRef: string): ISlackDiscussion | null;
   create(discussion: Omit<ISlackDiscussion, 'id' | 'createdAt' | 'updatedAt'>): ISlackDiscussion;
   updateStatus(id: string, status: DiscussionStatus, consensusResult?: ConsensusResult): void;
   updateRound(id: string, round: number): void;

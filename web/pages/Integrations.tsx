@@ -18,19 +18,23 @@ export default function Integrations() {
 
   // Temporary state for the stepper forms
   const [botToken, setBotToken] = useState('');
+  const [appToken, setAppToken] = useState('');
   const [engChannel, setEngChannel] = useState('');
   const [prsChannel, setPrsChannel] = useState('');
   const [incidentsChannel, setIncidentsChannel] = useState('');
   const [releasesChannel, setReleasesChannel] = useState('');
+  const [discussionEnabled, setDiscussionEnabled] = useState(false);
 
   // When config loads, populate initial state if available
   React.useEffect(() => {
     if (config?.slack) {
       setBotToken(config.slack.botToken || '');
+      setAppToken(config.slack.appToken || '');
       setEngChannel(config.slack.channels?.eng || '');
       setPrsChannel(config.slack.channels?.prs || '');
       setIncidentsChannel(config.slack.channels?.incidents || '');
       setReleasesChannel(config.slack.channels?.releases || '');
+      setDiscussionEnabled(config.slack.discussionEnabled ?? false);
     }
   }, [config]);
 
@@ -41,7 +45,7 @@ export default function Integrations() {
         slack: {
           enabled: true,
           botToken,
-          appToken: '',
+          appToken,
           channels: {
             eng: engChannel,
             prs: prsChannel,
@@ -49,7 +53,7 @@ export default function Integrations() {
             releases: releasesChannel,
           },
           autoCreateProjectChannels: true,
-          discussionEnabled: true,
+          discussionEnabled,
         },
       });
       addToast({
@@ -85,10 +89,10 @@ export default function Integrations() {
       // Auto-map channels if their names exist
       const findChannel = (name: string) => channels.find(c => c.name.toLowerCase() === name)?.id;
 
-      let _engChannel = engChannel || findChannel('eng');
-      let _prsChannel = prsChannel || findChannel('prs');
-      let _incidentsChannel = incidentsChannel || findChannel('incidents');
-      let _releasesChannel = releasesChannel || findChannel('releases');
+      const _engChannel = engChannel || findChannel('eng');
+      const _prsChannel = prsChannel || findChannel('prs');
+      const _incidentsChannel = incidentsChannel || findChannel('incidents');
+      const _releasesChannel = releasesChannel || findChannel('releases');
 
       // Auto-create missing channels
       const missingToCreate = [];
@@ -138,7 +142,7 @@ export default function Integrations() {
         if (_releasesChannel) setReleasesChannel(_releasesChannel);
       }
 
-    } catch (e: any) {
+    } catch {
       addToast({
         title: 'Warning',
         message: 'Could not fetch channels automatically. Please verify your token.',
@@ -178,6 +182,17 @@ export default function Integrations() {
         "users:read"
       ]
     }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "bot_events": [
+        "app_mention",
+        "message.channels"
+      ]
+    },
+    "socket_mode_enabled": true,
+    "token_rotation_enabled": false,
+    "org_deploy_enabled": false
   }
 } `;
 
@@ -223,6 +238,19 @@ export default function Integrations() {
           />
         </div>
 
+        <div className="mt-4">
+          <Input
+            label="App-Level Token (Socket Mode)"
+            type={showToken ? 'text' : 'password'}
+            value={appToken}
+            onChange={(e) => setAppToken(e.target.value)}
+            placeholder="xapp-..."
+          />
+          <p className="text-xs text-slate-500 mt-1">
+            Required for real-time agent mentions like <code>@maya</code>.
+          </p>
+        </div>
+
         <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-4 mt-8">
           <h3 className="font-medium text-slate-200">Channels</h3>
           <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Public & Visible</span>
@@ -266,6 +294,24 @@ export default function Integrations() {
             <strong className="text-indigo-300">Pro Tip:</strong> Channels are created as <strong>Public</strong>.
             If you don't see them in your sidebar, click <b>"Add Channels" &gt; "Browse all channels"</b> in Slack to join them for the first time.
           </p>
+        </div>
+
+        <div className="mt-4 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] p-3">
+          <div>
+            <p className="text-sm font-medium text-slate-200">Enable Agent Discussions</p>
+            <p className="text-xs text-slate-400">Allows mention routing and threaded agent deliberation.</p>
+          </div>
+          <label className="inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              className="sr-only peer"
+              checked={discussionEnabled}
+              onChange={(e) => setDiscussionEnabled(e.target.checked)}
+            />
+            <span className="w-11 h-6 bg-slate-700 rounded-full peer peer-checked:bg-indigo-500 transition-colors relative">
+              <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${discussionEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+            </span>
+          </label>
         </div>
 
         <div className="pt-6 border-t border-white/10 flex justify-end">
@@ -316,7 +362,7 @@ export default function Integrations() {
               style={{ width: `${((step - 1) / (steps.length - 1)) * 100}%` }}
             ></div>
 
-            {steps.map((s, idx) => (
+            {steps.map((s) => (
               <div
                 key={s.number}
                 className={`relative z-10 flex flex-col items-center gap-2 ${step >= s.number ? 'text-indigo-400' : 'text-slate-500'}`}
@@ -377,7 +423,7 @@ export default function Integrations() {
                   <div className="space-y-4">
                     <h3 className="text-lg font-semibold text-slate-200">2. Install App & Get Token</h3>
                     <p className="text-sm text-slate-400">
-                      After creating the app, navigate to <strong>Features &gt; OAuth & Permissions</strong> in the left sidebar of the Slack API dashboard. Click <strong>Install to Workspace</strong>. Once installed, copy the <strong>Bot User OAuth Token</strong> (starts with <code>xoxb-</code>) and paste it below. Ignore the Client ID and secrets on the Basic Information page.
+                      After creating the app, navigate to <strong>Features &gt; OAuth & Permissions</strong> in the left sidebar of the Slack API dashboard. Click <strong>Install to Workspace</strong>. Once installed, copy the <strong>Bot User OAuth Token</strong> (starts with <code>xoxb-</code>) and paste it below. Then create an <strong>App-Level Token</strong> with <code>connections:write</code> (starts with <code>xapp-</code>) and paste it as well. Ignore the Client ID and secrets on the Basic Information page.
                     </p>
 
                     <div className="max-w-md mt-6">
@@ -397,6 +443,18 @@ export default function Integrations() {
                           </button>
                         }
                       />
+                      <div className="mt-4">
+                        <Input
+                          label="Slack App Token (Socket Mode)"
+                          placeholder="xapp-..."
+                          value={appToken}
+                          onChange={(e) => setAppToken(e.target.value)}
+                          type={showToken ? 'text' : 'password'}
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                          Needed for real-time <code>@agent</code> replies (Socket Mode + <code>connections:write</code>).
+                        </p>
+                      </div>
                     </div>
                   </div>
 
@@ -519,6 +577,24 @@ export default function Integrations() {
                           </Card>
                         </>
                       )}
+                    </div>
+
+                    <div className="mt-6 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] p-3">
+                      <div>
+                        <p className="text-sm font-medium text-slate-200">Enable Agent Discussions</p>
+                        <p className="text-xs text-slate-400">Threaded agent collaboration and targeted @persona responses.</p>
+                      </div>
+                      <label className="inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="sr-only peer"
+                          checked={discussionEnabled}
+                          onChange={(e) => setDiscussionEnabled(e.target.checked)}
+                        />
+                        <span className="w-11 h-6 bg-slate-700 rounded-full peer peer-checked:bg-indigo-500 transition-colors relative">
+                          <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${discussionEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                        </span>
+                      </label>
                     </div>
                   </div>
 

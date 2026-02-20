@@ -381,19 +381,31 @@
   resolved "https://registry.yarnpkg.com/@rollup/rollup-win32-x64-msvc/-/rollup-win32-x64-msvc-4.57.1.tgz#a03348e7b559c792b6277cc58874b89ef46e1e72"
   integrity sha512-mxRFDdHIWRxg3UfIIAwCm6NzvxG0jDX/wBN6KsQFTvKFqqg9vTrWUE68qEjHt19A5wwx5X5aUi2zuZT7YR0jrA==
 
-"@slack/logger@^4.0.0":
+"@slack/logger@^4", "@slack/logger@^4.0.0":
   version "4.0.0"
   resolved "https://registry.yarnpkg.com/@slack/logger/-/logger-4.0.0.tgz#788303ff1840be91bdad7711ef66ca0cbc7073d2"
   integrity sha512-Wz7QYfPAlG/DR+DfABddUZeNgoeY7d1J39OCR2jR+v7VBsB8ezulDK5szTnDDPDwLH5IWhLvXIHlCFZV7MSKgA==
   dependencies:
     "@types/node" ">=18.0.0"
 
+"@slack/socket-mode@^2.0.3":
+  version "2.0.5"
+  resolved "https://registry.yarnpkg.com/@slack/socket-mode/-/socket-mode-2.0.5.tgz#6156dacf86417ec1b96a440eef9c068566eae343"
+  integrity sha512-VaapvmrAifeFLAFaDPfGhEwwunTKsI6bQhYzxRXw7BSujZUae5sANO76WqlVsLXuhVtCVrBWPiS2snAQR2RHJQ==
+  dependencies:
+    "@slack/logger" "^4"
+    "@slack/web-api" "^7.10.0"
+    "@types/node" ">=18"
+    "@types/ws" "^8"
+    eventemitter3 "^5"
+    ws "^8"
+
 "@slack/types@^2.20.0":
   version "2.20.0"
   resolved "https://registry.yarnpkg.com/@slack/types/-/types-2.20.0.tgz#58428a7d31f9eb7c31f315502f84f3b7f7910282"
   integrity sha512-PVF6P6nxzDMrzPC8fSCsnwaI+kF8YfEpxf3MqXmdyjyWTYsZQURpkK7WWUWvP5QpH55pB7zyYL9Qem/xSgc5VA==
 
-"@slack/web-api@^7.14.1":
+"@slack/web-api@^7.10.0", "@slack/web-api@^7.14.1":
   version "7.14.1"
   resolved "https://registry.yarnpkg.com/@slack/web-api/-/web-api-7.14.1.tgz#38756bed0de4a9d8c8fe0e2c7f4b74a7ce67ea85"
   integrity sha512-RoygyteJeFswxDPJjUMESn9dldWVMD2xUcHHd9DenVavSfVC6FeVnSdDerOO7m8LLvw4Q132nQM4hX8JiF7dng==
@@ -521,7 +533,7 @@
   dependencies:
     undici-types "~7.16.0"
 
-"@types/node@>=18.0.0":
+"@types/node@>=18", "@types/node@>=18.0.0":
   version "25.3.0"
   resolved "https://registry.yarnpkg.com/@types/node/-/node-25.3.0.tgz#749b1bd4058e51b72e22bd41e9eab6ebd0180470"
   integrity sha512-4K3bqJpXpqfg2XKGK9bpDTc6xO/xoUP/RBWS7AtRMug6zZFaRekiLzjVtAoZMquxoAbzBvy5nxQ7veS5eYzf8A==
@@ -582,6 +594,13 @@
   dependencies:
     "@types/methods" "^1.1.4"
     "@types/superagent" "^8.1.0"
+
+"@types/ws@^8":
+  version "8.18.1"
+  resolved "https://registry.yarnpkg.com/@types/ws/-/ws-8.18.1.tgz#48464e4bf2ddfd17db13d845467f6070ffea4aa9"
+  integrity sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==
+  dependencies:
+    "@types/node" "*"
 
 "@typescript-eslint/eslint-plugin@8.56.0":
   version "8.56.0"
@@ -1373,7 +1392,7 @@ eventemitter3@^4.0.4:
   resolved "https://registry.yarnpkg.com/eventemitter3/-/eventemitter3-4.0.7.tgz#2de9b68f6528d5644ef5c59526a1b4a07306169f"
   integrity sha512-8guHBZCwKnFhYdHr2ysuRWErTwhoN2X8XELRlrRwpmfeY2jjuUN4taQMsULKUVo1K4DvZl+0pgfyoysHxvmvEw==
 
-eventemitter3@^5.0.1:
+eventemitter3@^5, eventemitter3@^5.0.1:
   version "5.0.4"
   resolved "https://registry.yarnpkg.com/eventemitter3/-/eventemitter3-5.0.4.tgz#a86d66170433712dde814707ac52b5271ceb1feb"
   integrity sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==
@@ -2822,6 +2841,11 @@ wrappy@1:
   version "1.0.2"
   resolved "https://registry.yarnpkg.com/wrappy/-/wrappy-1.0.2.tgz#b5243d8f3ec1aa35f1364605bc0d1036e30ab69f"
   integrity sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==
+
+ws@^8:
+  version "8.19.0"
+  resolved "https://registry.yarnpkg.com/ws/-/ws-8.19.0.tgz#ddc2bdfa5b9ad860204f5a72a4863a8895fd8c8b"
+  integrity sha512-blAT2mjOEIi0ZzruJfIhb3nps74PRWTCz1IjglWEEpQl5XS/UNama6u2/rjFkDDouqr4L67ry+1aGIALViWjDg==
 
 y18n@^5.0.5:
   version "5.0.8"
