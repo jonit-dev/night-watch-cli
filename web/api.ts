@@ -13,6 +13,8 @@ import type {
   IProcessInfo,
   IPrInfo,
   ILogInfo,
+  IRoadmapScannerConfig,
+  ISlackBotConfig,
   IStatusSnapshot,
   IRoadmapItem,
   IRoadmapStatus,
@@ -34,6 +36,8 @@ export type {
   IProcessInfo,
   IPrInfo,
   ILogInfo,
+  IRoadmapScannerConfig,
+  ISlackBotConfig,
   IStatusSnapshot,
   IRoadmapItem,
   IRoadmapStatus,
@@ -45,6 +49,8 @@ export type {
   CreateAgentPersonaInput,
   UpdateAgentPersonaInput,
 };
+
+export type PrdWithContent = IPrdInfo & { content: string };
 
 /**
  * Base URL for API requests
@@ -158,6 +164,7 @@ export interface DoctorCheck {
 export interface IScheduleInfo {
   executor: { schedule: string; installed: boolean; nextRun: string | null };
   reviewer: { schedule: string; installed: boolean; nextRun: string | null };
+  qa?: { schedule: string; installed: boolean; nextRun: string | null };
   paused: boolean;
   entries: string[];
 }
@@ -302,8 +309,8 @@ export function fetchSlackChannels(botToken: string): Promise<ISlackChannel[]> {
   });
 }
 
-export function createSlackChannel(botToken: string, name: string): Promise<{ channelId: string }> {
-  return apiFetch<{ channelId: string }>(apiPath('/api/slack/channels/create'), {
+export function createSlackChannel(botToken: string, name: string): Promise<{ channelId: string; inviteWarning?: string; welcomeMessagePosted?: boolean }> {
+  return apiFetch<{ channelId: string; inviteWarning?: string; welcomeMessagePosted?: boolean }>(apiPath('/api/slack/channels/create'), {
     method: 'POST',
     body: JSON.stringify({ botToken, name }),
   });
