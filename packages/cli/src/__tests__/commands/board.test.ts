@@ -501,6 +501,207 @@ describe("board commands", () => {
   });
 
   // -------------------------------------------------------------------------
+  // board setup-labels
+  // -------------------------------------------------------------------------
+  describe("board setup-labels", () => {
+    it("registers setup-labels subcommand", () => {
+      const program = new Command();
+      boardCommand(program);
+
+      const boardCmd = program.commands.find((c) => c.name() === "board");
+      expect(boardCmd).toBeDefined();
+
+      const subNames = boardCmd!.commands.map((c) => c.name());
+      expect(subNames).toContain("setup-labels");
+    });
+
+    it("shows dry-run output without creating labels", async () => {
+      await runCommand(["board", "setup-labels", "--dry-run"]);
+
+      const allOutput = consoleSpy.mock.calls.flat().join(" ");
+      expect(allOutput).toContain("P0");
+      expect(allOutput).toContain("reliability");
+      expect(allOutput).toContain("short-term");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // board create-prd with labels
+  // -------------------------------------------------------------------------
+  describe("board create-prd with labels", () => {
+    it("accepts --priority, --category, and --horizon flags", async () => {
+      const issue = makeIssue({ number: 15, column: "Draft", labels: ["P1", "reliability", "short-term"] });
+      mockProvider.createIssue.mockResolvedValue(issue);
+
+      await runCommand([
+        "board",
+        "create-prd",
+        "Labelled Issue",
+        "--priority", "P1",
+        "--category", "reliability",
+        "--horizon", "short-term",
+      ]);
+
+      expect(mockProvider.createIssue).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Labelled Issue",
+          labels: ["P1", "reliability", "short-term"],
+        })
+      );
+    });
+
+    it("rejects invalid priority value", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
+        throw new Error(`process.exit(${code})`);
+      });
+
+      await expect(
+        runCommand(["board", "create-prd", "Bad Priority", "--priority", "P9"])
+      ).rejects.toThrow("process.exit(1)");
+
+      expect(mockProvider.createIssue).not.toHaveBeenCalled();
+      const errOutput = consoleErrSpy.mock.calls.flat().join(" ");
+      expect(errOutput).toContain("Invalid priority");
+      expect(errOutput).toContain("P0, P1, P2");
+
+      exitSpy.mockRestore();
+    });
+
+    it("rejects invalid category value", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
+        throw new Error(`process.exit(${code})`);
+      });
+
+      await expect(
+        runCommand(["board", "create-prd", "Bad Category", "--category", "nonexistent"])
+      ).rejects.toThrow("process.exit(1)");
+
+      expect(mockProvider.createIssue).not.toHaveBeenCalled();
+      const errOutput = consoleErrSpy.mock.calls.flat().join(" ");
+      expect(errOutput).toContain("Invalid category");
+
+      exitSpy.mockRestore();
+    });
+
+    it("rejects invalid horizon value", async () => {
+      const exitSpy = vi.spyOn(process, "exit").mockImplementation((code) => {
+        throw new Error(`process.exit(${code})`);
+      });
+
+      await expect(
+        runCommand(["board", "create-prd", "Bad Horizon", "--horizon", "immediate"])
+      ).rejects.toThrow("process.exit(1)");
+
+      expect(mockProvider.createIssue).not.toHaveBeenCalled();
+      const errOutput = consoleErrSpy.mock.calls.flat().join(" ");
+      expect(errOutput).toContain("Invalid horizon");
+
+      exitSpy.mockRestore();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // board status --group-by
+  // -------------------------------------------------------------------------
+  describe("board status --group-by", () => {
+    it("supports --group-by priority", async () => {
+      mockProvider.getAllIssues.mockResolvedValue([
+        makeIssue({ number: 1, title: "P0 Issue", column: "Ready", labels: ["P0"] }),
+        makeIssue({ number: 2, title: "P1 Issue", column: "Ready", labels: ["P1"] }),
+        makeIssue({ number: 3, title: "P2 Issue", column: "Ready", labels: ["P2"] }),
+      ]);
+
+      await runCommand(["board", "status", "--group-by", "priority"]);
+
+      expect(mockProvider.getAllIssues).toHaveBeenCalled();
+      const allOutput = consoleSpy.mock.calls.flat().join(" ");
+      expect(allOutput).toContain("P0 Issue");
+      expect(allOutput).toContain("P1 Issue");
+      expect(allOutput).toContain("P2 Issue");
+    });
+
+    it("supports --group-by category", async () => {
+      mockProvider.getAllIssues.mockResolvedValue([
+        makeIssue({ number: 1, title: "Reliability Issue", column: "Ready", labels: ["reliability"] }),
+        makeIssue({ number: 2, title: "Quality Issue", column: "Ready", labels: ["quality"] }),
+      ]);
+
+      await runCommand(["board", "status", "--group-by", "category"]);
+
+      expect(mockProvider.getAllIssues).toHaveBeenCalled();
+      const allOutput = consoleSpy.mock.calls.flat().join(" ");
+      expect(allOutput).toContain("Reliability Issue");
+      expect(allOutput).toContain("Quality Issue");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // board next-issue with priority sorting
+  // -------------------------------------------------------------------------
+  describe("board next-issue priority sorting", () => {
+    it("returns highest priority issue (P0 > P1 > P2)", async () => {
+      mockProvider.getIssuesByColumn.mockResolvedValue([
+        makeIssue({ number: 3, title: "P2 Issue", column: "Ready", labels: ["P2"] }),
+        makeIssue({ number: 1, title: "P0 Issue", column: "Ready", labels: ["P0"] }),
+        makeIssue({ number: 2, title: "P1 Issue", column: "Ready", labels: ["P1"] }),
+      ]);
+
+      await runCommand(["board", "next-issue"]);
+
+      const allOutput = consoleSpy.mock.calls.flat().join(" ");
+      expect(allOutput).toContain("1");
+      expect(allOutput).toContain("P0 Issue");
+    });
+
+    it("breaks ties by issue number (lowest first)", async () => {
+      mockProvider.getIssuesByColumn.mockResolvedValue([
+        makeIssue({ number: 5, title: "Later Issue", column: "Ready", labels: ["P1"] }),
+        makeIssue({ number: 3, title: "Earlier Issue", column: "Ready", labels: ["P1"] }),
+      ]);
+
+      await runCommand(["board", "next-issue"]);
+
+      const allOutput = consoleSpy.mock.calls.flat().join(" ");
+      expect(allOutput).toContain("3");
+      expect(allOutput).toContain("Earlier Issue");
+    });
+
+    it("shows priority and category labels in output", async () => {
+      mockProvider.getIssuesByColumn.mockResolvedValue([
+        makeIssue({
+          number: 1,
+          title: "Labeled Issue",
+          column: "Ready",
+          labels: ["P0", "reliability", "short-term"]
+        }),
+      ]);
+
+      await runCommand(["board", "next-issue"]);
+
+      const allOutput = consoleSpy.mock.calls.flat().join(" ");
+      expect(allOutput).toContain("P0");
+      expect(allOutput).toContain("reliability");
+      expect(allOutput).toContain("short-term");
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // board sync-roadmap
+  // -------------------------------------------------------------------------
+  describe("board sync-roadmap", () => {
+    it("registers sync-roadmap subcommand", () => {
+      const program = new Command();
+      boardCommand(program);
+
+      const boardCmd = program.commands.find((c) => c.name() === "board");
+      expect(boardCmd).toBeDefined();
+
+      const subNames = boardCmd!.commands.map((c) => c.name());
+      expect(subNames).toContain("sync-roadmap");
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // command registration
   // -------------------------------------------------------------------------
   describe("command registration", () => {
@@ -519,12 +720,14 @@ describe("board commands", () => {
 
       const subNames = boardCmd!.commands.map((c) => c.name());
       expect(subNames).toContain("setup");
+      expect(subNames).toContain("setup-labels");
       expect(subNames).toContain("create-prd");
       expect(subNames).toContain("status");
       expect(subNames).toContain("next-issue");
       expect(subNames).toContain("move-issue");
       expect(subNames).toContain("comment");
       expect(subNames).toContain("close-issue");
+      expect(subNames).toContain("sync-roadmap");
     });
   });
 });
