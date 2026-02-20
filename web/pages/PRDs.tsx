@@ -92,7 +92,7 @@ const PRDs: React.FC = () => {
   // When status changes, refetch PRD list to get updated statuses and content
   useStatusStream(() => {
     refetch();
-  }, [selectedProjectId]);
+  }, [selectedProjectId, globalModeLoading], { enabled: !globalModeLoading });
 
   const handleRetry = async () => {
     if (!selectedPRD) return;

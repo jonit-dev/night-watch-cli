@@ -3,9 +3,13 @@
  * Sends webhook notifications to Slack, Discord, and Telegram
  */
 
-import { INightWatchConfig, IWebhookConfig, NotificationEvent } from "../types.js";
+import { INightWatchConfig, ISlackBotConfig, IWebhookConfig, NotificationEvent } from "../types.js";
+import { IDiscussionTrigger } from "../../shared/types.js";
 import { info, warn } from "./ui.js";
 import { extractSummary } from "./github.js";
+import { SlackClient } from "../slack/client.js";
+import { DeliberationEngine } from "../slack/deliberation.js";
+import { getRepositories } from "../storage/repositories/index.js";
 
 export interface INotificationContext {
   event: NotificationEvent;
@@ -40,6 +44,12 @@ export function getEventEmoji(event: NotificationEvent): string {
       return "\u23F0";
     case "review_completed":
       return "\uD83D\uDD0D";
+    case "rate_limit_fallback":
+      return "\u26A0\uFE0F";
+    case "pr_auto_merged":
+      return "\uD83D\uDD00";
+    case "qa_completed":
+      return "\uD83E\uDDEA";
   }
 }
 
@@ -58,6 +68,12 @@ export function getEventTitle(event: NotificationEvent): string {
       return "PRD Execution Timed Out";
     case "review_completed":
       return "PR Review Completed";
+    case "rate_limit_fallback":
+      return "Rate Limit Fallback";
+    case "pr_auto_merged":
+      return "PR Auto-Merged";
+    case "qa_completed":
+      return "QA Completed";
   }
 }
 
@@ -76,6 +92,12 @@ export function getEventColor(event: NotificationEvent): number {
       return 0xff0000;
     case "review_completed":
       return 0x0099ff;
+    case "rate_limit_fallback":
+      return 0xffa500;
+    case "pr_auto_merged":
+      return 0x9b59b6;
+    case "qa_completed":
+      return 0x2ecc71;
   }
 }
 
@@ -229,6 +251,78 @@ export function formatTelegramPayload(ctx: INotificationContext): {
 }
 
 /**
+ * Build a one-line notification text for Slack Bot API posts
+ */
+function buildQaNotificationText(ctx: INotificationContext): string {
+  const prLabel = ctx.prNumber !== undefined ? `PR #${ctx.prNumber}` : "the latest PR";
+  const prRef = ctx.prUrl ? `<${ctx.prUrl}|${prLabel}>` : prLabel;
+  const project = ctx.projectName;
+
+  if (ctx.exitCode === 0) {
+    return `Finished QA on ${prRef} for ${project}.`;
+  }
+
+  return `I ran QA on ${prRef} for ${project}, but it failed. I'll check the logs.`;
+}
+
+export function buildNotificationText(ctx: INotificationContext): string {
+  if (ctx.event === "qa_completed") {
+    return buildQaNotificationText(ctx);
+  }
+
+  const emoji = getEventEmoji(ctx.event);
+  const title = getEventTitle(ctx.event);
+  const parts: string[] = [`${emoji} *${title}*`, `Project: ${ctx.projectName}`];
+  if (ctx.prdName) parts.push(`PRD: ${ctx.prdName}`);
+  if (ctx.branchName) parts.push(`Branch: ${ctx.branchName}`);
+  if (ctx.prNumber !== undefined) parts.push(`PR: #${ctx.prNumber}`);
+  if (ctx.prUrl) parts.push(`<${ctx.prUrl}|View PR>`);
+  if (ctx.duration !== undefined) parts.push(`Duration: ${ctx.duration}s`);
+  return parts.join(" | ");
+}
+
+/**
+ * Determine which agent persona name should post for a given event
+ */
+function getPersonaNameForEvent(event: NotificationEvent): string {
+  switch (event) {
+    case "run_started":
+    case "run_succeeded":
+    case "run_failed":
+    case "run_timeout":
+      return "Dev";
+    case "review_completed":
+    case "pr_auto_merged":
+      return "Carlos";
+    case "qa_completed":
+      return "Priya";
+    default:
+      return "Carlos";
+  }
+}
+
+/**
+ * Determine which Slack channel to post to for a given event
+ */
+function getChannelForEvent(event: NotificationEvent, slackConfig: ISlackBotConfig): string {
+  switch (event) {
+    case "run_started":
+    case "run_succeeded":
+    case "run_failed":
+    case "run_timeout":
+    case "rate_limit_fallback":
+      return slackConfig.channels.eng;
+    case "review_completed":
+    case "pr_auto_merged":
+      return slackConfig.channels.prs;
+    case "qa_completed":
+      return slackConfig.channels.eng;
+    default:
+      return slackConfig.channels.eng;
+  }
+}
+
+/**
  * Send a notification to a single webhook endpoint
  * Silently catches errors — never throws
  */
@@ -273,20 +367,92 @@ export async function sendWebhook(webhook: IWebhookConfig, ctx: INotificationCon
 }
 
 /**
- * Send notifications to all configured webhooks
+ * Build a discussion trigger from a notification context, if the event warrants deliberation.
+ * Returns null when deliberation should not be triggered.
+ */
+function buildDiscussionTrigger(ctx: INotificationContext, projectPath: string): IDiscussionTrigger | null {
+  if (ctx.event === "run_succeeded" && ctx.prNumber) {
+    return {
+      type: "pr_review",
+      projectPath,
+      ref: String(ctx.prNumber),
+      context: ctx.prBody
+        ? ctx.prBody.slice(0, 2000)
+        : `PR #${ctx.prNumber}: ${ctx.prTitle ?? ctx.projectName}`,
+      prUrl: ctx.prUrl,
+    };
+  }
+  return null;
+}
+
+/**
+ * Send notifications to all configured webhooks and (if configured) to Slack via Bot API.
  */
 export async function sendNotifications(
   config: INightWatchConfig,
   ctx: INotificationContext
 ): Promise<void> {
-  if (!config.notifications || config.notifications.webhooks.length === 0) {
+  const tasks: Promise<unknown>[] = [];
+
+  // Slack Bot API path — additive, controlled by config.slack?.enabled
+  if (config.slack?.enabled && config.slack?.botToken) {
+    const slackConfig = config.slack;
+    const slackClient = new SlackClient(slackConfig.botToken);
+
+    // Notification post
+    tasks.push(
+      (async () => {
+        try {
+          const repos = getRepositories();
+          const personas = repos.agentPersona.getActive();
+          const personaName = getPersonaNameForEvent(ctx.event);
+          const persona = personas.find((p) => p.name === personaName) ?? personas[0];
+
+          if (persona) {
+            const channel = getChannelForEvent(ctx.event, slackConfig);
+            if (channel) {
+              const text = buildNotificationText(ctx);
+              await slackClient.postAsAgent(channel, text, persona);
+            }
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          warn(`Slack Bot notification failed: ${message}`);
+        }
+      })()
+    );
+
+    // Deliberation — fire-and-forget, gated by discussionEnabled
+    if (slackConfig.discussionEnabled) {
+      const trigger = buildDiscussionTrigger(ctx, process.cwd());
+      if (trigger) {
+        tasks.push(
+          (async () => {
+            try {
+              const engine = new DeliberationEngine(slackClient, config);
+              await engine.startDiscussion(trigger);
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+              warn(`Slack deliberation failed: ${message}`);
+            }
+          })()
+        );
+      }
+    }
+  }
+
+  // Legacy webhook path — backward compatible
+  const webhooks = config.notifications?.webhooks ?? [];
+  for (const wh of webhooks) {
+    tasks.push(sendWebhook(wh, ctx));
+  }
+
+  if (tasks.length === 0) {
     return;
   }
 
-  const webhooks = config.notifications.webhooks;
-  const results = await Promise.allSettled(webhooks.map((wh: IWebhookConfig) => sendWebhook(wh, ctx)));
-
-  const sent = results.filter((r: PromiseSettledResult<unknown>) => r.status === "fulfilled").length;
-  const total = webhooks.length;
+  const results = await Promise.allSettled(tasks);
+  const sent = results.filter((r) => r.status === "fulfilled").length;
+  const total = results.length;
   info(`Sent ${sent}/${total} notifications`);
 }

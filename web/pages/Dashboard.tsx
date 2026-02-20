@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, CheckCircle, Clock, ArrowRight, AlertCircle, Calendar, XCircle } from 'lucide-react';
+import { Activity, CheckCircle, Clock, ArrowRight, AlertCircle, Calendar, XCircle, TestTube2 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import { useApi, fetchStatus, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, useStatusStream, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
@@ -13,15 +13,6 @@ const BOARD_COLUMN_COLORS: Record<BoardColumnName, string> = {
   'In Progress': 'text-blue-400   bg-blue-500/10   ring-blue-500/20',
   'Review':      'text-amber-400  bg-amber-500/10  ring-amber-500/20',
   'Done':        'text-slate-500  bg-slate-600/10  ring-slate-600/20',
-};
-
-// Map API status to UI status
-const statusMap: Record<string, string> = {
-  'ready': 'Ready',
-  'in-progress': 'In Progress',
-  'blocked': 'Blocked',
-  'pending-review': 'Pending Review',
-  'done': 'Done',
 };
 
 const Dashboard: React.FC = () => {
@@ -41,7 +32,7 @@ const Dashboard: React.FC = () => {
   // Subscribe to SSE for real-time updates (primary path)
   useStatusStream((snapshot) => {
     setStreamedStatus(snapshot);
-  }, [selectedProjectId]);
+  }, [selectedProjectId, globalModeLoading], { enabled: !globalModeLoading });
 
   // Use streamed status when available, fall back to polled status
   const currentStatus = streamedStatus || status;
@@ -98,6 +89,7 @@ const Dashboard: React.FC = () => {
 
   const executorProcess = currentStatus.processes.find(p => p.name === 'executor');
   const reviewerProcess = currentStatus.processes.find(p => p.name === 'reviewer');
+  const qaProcess = currentStatus.processes.find(p => p.name === 'qa');
 
   const handleCancelProcess = async (type: 'run' | 'review') => {
     setCancellingProcess(type);
@@ -228,83 +220,28 @@ const Dashboard: React.FC = () => {
         </Card>
       </div>
 
-      {/* Middle Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        {/* Kanban Preview */}
-        <div className="lg:col-span-2">
-           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-slate-200">PRD Pipeline</h2>
-            <button onClick={() => navigate('/prds')} className="text-sm text-indigo-400 hover:text-indigo-300 flex items-center transition-colors">
-              View all <ArrowRight className="ml-1 h-3 w-3" />
-            </button>
-           </div>
-
-           <div className="bg-slate-900 rounded-xl p-4 grid grid-cols-5 gap-3 h-64 overflow-hidden border border-slate-800">
-              {(['blocked', 'ready', 'in-progress', 'pending-review', 'done'] as const).map(apiStatus => (
-                <div key={apiStatus} className="flex flex-col h-full">
-                   <div className="text-xs font-semibold text-slate-500 uppercase mb-3 flex items-center">
-                    <span className={`w-2 h-2 rounded-full mr-2 flex-shrink-0 ${
-                      apiStatus === 'ready' ? 'bg-green-500' :
-                      apiStatus === 'in-progress' ? 'bg-blue-500' :
-                      apiStatus === 'pending-review' ? 'bg-yellow-500' :
-                      apiStatus === 'blocked' ? 'bg-red-500' : 'bg-slate-600'
-                    }`}></span>
-                    <span className="truncate">{statusMap[apiStatus]}</span>
-                   </div>
-                   <div className="flex-1 space-y-2 overflow-y-auto scrollbar-hide">
-                      {currentStatus.prds.filter(p => p.status === apiStatus).map(prd => (
-                        <Card key={prd.name} className="p-3 shadow-none bg-slate-800 border-slate-700 hover:border-slate-600 hover:shadow-md cursor-pointer transition-all active:scale-95" onClick={() => navigate('/prds')}>
-                           <div className="text-xs font-medium text-slate-200 line-clamp-2">{prd.name}</div>
-                           {prd.unmetDependencies.length > 0 && (
-                             <div className="mt-2 text-[10px] text-amber-400">
-                               Blocked by: {prd.unmetDependencies.join(', ')}
-                             </div>
-                           )}
-                           {prd.status === 'in-progress' && (
-                             <div className="h-1.5 w-1.5 bg-blue-500 rounded-full animate-pulse mt-2"></div>
-                           )}
-                           {prd.status === 'pending-review' && (
-                             <div className="h-1.5 w-1.5 bg-yellow-500 rounded-full animate-pulse mt-2"></div>
-                           )}
-                        </Card>
-                      ))}
-                      {currentStatus.prds.filter(p => p.status === apiStatus).length === 0 && (
-                        <div className="h-full border-2 border-dashed border-slate-800 rounded-lg flex items-center justify-center">
-                          <span className="text-xs text-slate-600">Empty</span>
-                        </div>
-                      )}
-                   </div>
-                </div>
-              ))}
-           </div>
+      {/* System Status */}
+      <Card className="p-6">
+        <h2 className="text-base font-semibold text-slate-200 mb-4">System Status</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <p className="text-xs font-medium text-slate-500 uppercase mb-1">Project</p>
+            <p className="text-sm text-slate-200">{currentStatus.projectName}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-500 uppercase mb-1">Provider</p>
+            <p className="text-sm text-slate-200 capitalize">{currentStatus.config.provider}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-500 uppercase mb-1">PRD Directory</p>
+            <p className="text-sm text-slate-200">{currentStatus.config.prdDir}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-slate-500 uppercase mb-1">Last Updated</p>
+            <p className="text-sm text-slate-200">{new Date(currentStatus.timestamp).toLocaleString()}</p>
+          </div>
         </div>
-
-        {/* Recent Activity */}
-        <div className="lg:col-span-1">
-          <h2 className="text-lg font-semibold text-slate-200 mb-4">System Status</h2>
-          <Card className="h-64 overflow-y-auto">
-            <div className="p-4 space-y-4">
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase mb-1">Project</p>
-                <p className="text-sm text-slate-200">{currentStatus.projectName}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase mb-1">Provider</p>
-                <p className="text-sm text-slate-200 capitalize">{currentStatus.config.provider}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase mb-1">PRD Directory</p>
-                <p className="text-sm text-slate-200">{currentStatus.config.prdDir}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-slate-500 uppercase mb-1">Last Updated</p>
-                <p className="text-sm text-slate-200">{new Date(currentStatus.timestamp).toLocaleString()}</p>
-              </div>
-            </div>
-          </Card>
-        </div>
-      </div>
+      </Card>
 
       {/* Bottom Section */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -364,6 +301,23 @@ const Dashboard: React.FC = () => {
                   <Button size="sm" variant="ghost" onClick={() => navigate('/logs')} disabled={!reviewerProcess?.running}>View Log</Button>
                 </div>
              </div>
+             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
+                <div className="flex items-center space-x-3">
+                  <div className={`h-2.5 w-2.5 rounded-full ${qaProcess?.running ? 'bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-slate-700'}`}></div>
+                  <div>
+                    <div className={`font-medium ${qaProcess?.running ? 'text-slate-200' : 'text-slate-400'}`}>QA</div>
+                    <div className="text-xs text-slate-500">
+                      {qaProcess?.running
+                        ? `PID: ${qaProcess.pid} • Running`
+                        : 'Idle'
+                      }
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>
+                </div>
+             </div>
           </div>
         </Card>
 
@@ -398,6 +352,19 @@ const Dashboard: React.FC = () => {
                     <div className={`text-sm font-medium ${scheduleInfo?.reviewer.installed ? 'text-slate-200' : 'text-slate-500'}`}>Reviewer</div>
                     <div className="text-xs text-slate-500">
                       {scheduleInfo?.paused ? 'Paused' : formatNextRun(scheduleInfo?.reviewer.nextRun)}
+                    </div>
+                  </div>
+                </div>
+             </div>
+             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
+                <div className="flex items-center space-x-3">
+                  <div className={`p-1.5 rounded-md ${scheduleInfo?.qa?.installed ? 'bg-green-500/10 text-green-400' : 'bg-slate-800 text-slate-500'}`}>
+                    <TestTube2 className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className={`text-sm font-medium ${scheduleInfo?.qa?.installed ? 'text-slate-200' : 'text-slate-500'}`}>QA</div>
+                    <div className="text-xs text-slate-500">
+                      {scheduleInfo?.paused ? 'Paused' : formatNextRun(scheduleInfo?.qa?.nextRun)}
                     </div>
                   </div>
                 </div>

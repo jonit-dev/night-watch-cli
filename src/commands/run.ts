@@ -5,11 +5,11 @@
 import { Command } from "commander";
 import { getScriptPath, loadConfig } from "../config.js";
 import { createBoardProvider } from "../board/factory.js";
-import { INightWatchConfig, NotificationEvent } from "../types.js";
+import { INightWatchConfig, IWebhookConfig, NotificationEvent } from "../types.js";
 import { executeScriptWithOutput } from "../utils/shell.js";
 import { sendNotifications } from "../utils/notify.js";
 import { type IPrDetails, fetchPrDetails, fetchPrDetailsForBranch } from "../utils/github.js";
-import { CLAIM_FILE_EXTENSION, PROVIDER_COMMANDS } from "../constants.js";
+import { CLAIM_FILE_EXTENSION, CLAUDE_MODEL_IDS, PROVIDER_COMMANDS } from "../constants.js";
 import * as fs from "fs";
 import * as path from "path";
 import { parseScriptResult } from "../utils/script-result.js";
@@ -49,6 +49,31 @@ export function resolveRunNotificationEvent(
     return "run_succeeded";
   }
   return null;
+}
+
+/**
+ * Return Telegram webhooks that opted in to rate-limit fallback notifications.
+ */
+export function getRateLimitFallbackTelegramWebhooks(
+  config: INightWatchConfig
+): Array<{ botToken: string; chatId: string }> {
+  return (config.notifications?.webhooks ?? [])
+    .filter((wh): wh is IWebhookConfig & { type: "telegram"; botToken: string; chatId: string } =>
+      wh.type === "telegram"
+      && typeof wh.botToken === "string"
+      && wh.botToken.trim().length > 0
+      && typeof wh.chatId === "string"
+      && wh.chatId.trim().length > 0
+      && wh.events.includes("rate_limit_fallback")
+    )
+    .map((wh) => ({ botToken: wh.botToken, chatId: wh.chatId }));
+}
+
+/**
+ * Whether the bash execution reported a rate-limit fallback trigger.
+ */
+export function isRateLimitFallbackTriggered(resultData?: Record<string, string>): boolean {
+  return resultData?.rate_limit_fallback === "1";
 }
 
 /**
@@ -104,6 +129,24 @@ export function buildEnvVars(config: INightWatchConfig, options: IRunOptions): R
   // a board and persists it before continuing.
   if (config.boardProvider?.enabled !== false) {
     env.NW_BOARD_ENABLED = "true";
+  }
+
+  // Rate-limit fallback: fall back to native Claude when proxy quota is exhausted
+  if (config.fallbackOnRateLimit) {
+    env.NW_FALLBACK_ON_RATE_LIMIT = "true";
+  }
+
+  // Claude model used for native / fallback execution
+  env.NW_CLAUDE_MODEL_ID = CLAUDE_MODEL_IDS[config.claudeModel ?? "sonnet"];
+
+  // Telegram credentials for in-script fallback warnings.
+  // Export only webhooks that explicitly subscribed to rate_limit_fallback.
+  const fallbackTelegramWebhooks = getRateLimitFallbackTelegramWebhooks(config);
+  if (fallbackTelegramWebhooks.length > 0) {
+    env.NW_TELEGRAM_RATE_LIMIT_WEBHOOKS = JSON.stringify(fallbackTelegramWebhooks);
+    // Backward compatibility for older helper implementations.
+    env.NW_TELEGRAM_BOT_TOKEN = fallbackTelegramWebhooks[0].botToken;
+    env.NW_TELEGRAM_CHAT_ID = fallbackTelegramWebhooks[0].chatId;
   }
 
   return env;
@@ -227,6 +270,7 @@ export function runCommand(program: Command): void {
         configTable.push(["PRD Directory", config.prdDir]);
         configTable.push(["Max Runtime", `${config.maxRuntime}s (${Math.floor(config.maxRuntime / 60)}min)`]);
         configTable.push(["Branch Prefix", config.branchPrefix]);
+        configTable.push(["Auto-merge", config.autoMerge ? `Enabled (${config.autoMergeMethod})` : "Disabled"]);
         console.log(configTable.toString());
 
         if (envVars.NW_BOARD_ENABLED === "true") {
@@ -327,6 +371,27 @@ export function runCommand(program: Command): void {
 
         // Send notifications (fire-and-forget, failures do not affect exit code)
         if (!options.dryRun) {
+          // Rate-limit fallback notifications are sent immediately to Telegram in bash.
+          // Send this event only to non-Telegram webhooks to avoid duplicate alerts.
+          if (isRateLimitFallbackTriggered(scriptResult?.data)) {
+            const nonTelegramWebhooks = (config.notifications?.webhooks ?? [])
+              .filter((wh) => wh.type !== "telegram");
+            if (nonTelegramWebhooks.length > 0) {
+              await sendNotifications({
+                ...config,
+                notifications: {
+                  ...config.notifications,
+                  webhooks: nonTelegramWebhooks,
+                },
+              }, {
+                event: "rate_limit_fallback",
+                projectName: path.basename(projectDir),
+                exitCode,
+                provider: config.provider,
+              });
+            }
+          }
+
           // Backward-compatible fallback: if no marker is present, preserve previous behavior.
           const event = resolveRunNotificationEvent(exitCode, scriptResult?.status);
 

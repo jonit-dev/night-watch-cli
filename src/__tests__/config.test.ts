@@ -588,4 +588,307 @@ describe("config", () => {
       expect(config.roadmapScanner.slicerSchedule).toBe(envValue);
     });
   });
+
+  describe("autoMerge config", () => {
+    it("should default autoMerge to false", () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMerge).toBe(false);
+    });
+
+    it("should default autoMergeMethod to squash", () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMergeMethod).toBe("squash");
+    });
+
+    it("should load autoMerge from config file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          autoMerge: true,
+        })
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMerge).toBe(true);
+    });
+
+    it("should load autoMergeMethod from config file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          autoMergeMethod: "rebase",
+        })
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMergeMethod).toBe("rebase");
+    });
+
+    it("should handle NW_AUTO_MERGE env var", () => {
+      process.env.NW_AUTO_MERGE = "true";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMerge).toBe(true);
+    });
+
+    it("should handle NW_AUTO_MERGE env var with '1' value", () => {
+      process.env.NW_AUTO_MERGE = "1";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMerge).toBe(true);
+    });
+
+    it("should handle NW_AUTO_MERGE env var with '0' value", () => {
+      // First set autoMerge to true in config file
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          autoMerge: true,
+        })
+      );
+
+      process.env.NW_AUTO_MERGE = "0";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMerge).toBe(false);
+    });
+
+    it("should handle NW_AUTO_MERGE_METHOD env var", () => {
+      process.env.NW_AUTO_MERGE_METHOD = "merge";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMergeMethod).toBe("merge");
+    });
+
+    it("should reject invalid merge method", () => {
+      process.env.NW_AUTO_MERGE_METHOD = "invalid";
+
+      const config = loadConfig(tempDir);
+
+      // Should fall back to default
+      expect(config.autoMergeMethod).toBe("squash");
+    });
+
+    it("should let NW_AUTO_MERGE env var override config file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          autoMerge: false,
+        })
+      );
+
+      process.env.NW_AUTO_MERGE = "true";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMerge).toBe(true);
+    });
+
+    it("should let NW_AUTO_MERGE_METHOD env var override config file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          autoMergeMethod: "squash",
+        })
+      );
+
+      process.env.NW_AUTO_MERGE_METHOD = "rebase";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.autoMergeMethod).toBe("rebase");
+    });
+
+    it("should accept all valid merge methods", () => {
+      const validMethods = ["squash", "merge", "rebase"] as const;
+
+      for (const method of validMethods) {
+        const configPath = path.join(tempDir, "night-watch.config.json");
+        fs.writeFileSync(
+          configPath,
+          JSON.stringify({
+            autoMergeMethod: method,
+          })
+        );
+
+        const config = loadConfig(tempDir);
+        expect(config.autoMergeMethod).toBe(method);
+      }
+    });
+  });
+
+  describe("qa config", () => {
+    it("should load QA defaults when no qa config present", () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.qa).toBeDefined();
+      expect(config.qa.enabled).toBe(true);
+      expect(config.qa.schedule).toBe("30 1,7,13,19 * * *");
+      expect(config.qa.maxRuntime).toBe(3600);
+      expect(config.qa.branchPatterns).toEqual([]);
+      expect(config.qa.artifacts).toBe("both");
+      expect(config.qa.skipLabel).toBe("skip-qa");
+      expect(config.qa.autoInstallPlaywright).toBe(true);
+    });
+
+    it("should load QA config from file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          qa: {
+            enabled: false,
+            schedule: "0 */4 * * *",
+            maxRuntime: 1800,
+            artifacts: "screenshot",
+            skipLabel: "no-qa",
+            autoInstallPlaywright: false,
+          },
+        })
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.qa.enabled).toBe(false);
+      expect(config.qa.schedule).toBe("0 */4 * * *");
+      expect(config.qa.maxRuntime).toBe(1800);
+      expect(config.qa.artifacts).toBe("screenshot");
+      expect(config.qa.skipLabel).toBe("no-qa");
+      expect(config.qa.autoInstallPlaywright).toBe(false);
+    });
+
+    it("should override QA config from env vars", () => {
+      process.env.NW_QA_ENABLED = "false";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.qa.enabled).toBe(false);
+    });
+
+    it("should override QA schedule from env var", () => {
+      process.env.NW_QA_SCHEDULE = "0 */2 * * *";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.qa.schedule).toBe("0 */2 * * *");
+    });
+
+    it("should override QA max runtime from env var", () => {
+      process.env.NW_QA_MAX_RUNTIME = "7200";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.qa.maxRuntime).toBe(7200);
+    });
+
+    it("should override QA artifacts from env var", () => {
+      process.env.NW_QA_ARTIFACTS = "video";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.qa.artifacts).toBe("video");
+    });
+
+    it("should override QA skip label from env var", () => {
+      process.env.NW_QA_SKIP_LABEL = "no-tests";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.qa.skipLabel).toBe("no-tests");
+    });
+
+    it("should override QA auto install playwright from env var", () => {
+      process.env.NW_QA_AUTO_INSTALL_PLAYWRIGHT = "false";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.qa.autoInstallPlaywright).toBe(false);
+    });
+
+    it("should override qa.branchPatterns from NW_QA_BRANCH_PATTERNS env var", () => {
+      process.env.NW_QA_BRANCH_PATTERNS = "qa/,test/";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.qa.branchPatterns).toEqual(["qa/", "test/"]);
+    });
+
+    it("should let env vars override QA config from file", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          qa: {
+            enabled: true,
+            schedule: "0 */4 * * *",
+          },
+        })
+      );
+
+      process.env.NW_QA_ENABLED = "false";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.qa.enabled).toBe(false);
+    });
+
+    it("should preserve file QA fields when only one QA env var is provided", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          qa: {
+            enabled: false,
+            schedule: "5 * * * *",
+            maxRuntime: 900,
+            branchPatterns: ["custom/"],
+            artifacts: "video",
+            skipLabel: "custom-skip",
+            autoInstallPlaywright: false,
+          },
+        })
+      );
+
+      process.env.NW_QA_BRANCH_PATTERNS = "qa/";
+
+      const config = loadConfig(tempDir);
+
+      expect(config.qa.enabled).toBe(false);
+      expect(config.qa.schedule).toBe("5 * * * *");
+      expect(config.qa.maxRuntime).toBe(900);
+      expect(config.qa.artifacts).toBe("video");
+      expect(config.qa.skipLabel).toBe("custom-skip");
+      expect(config.qa.autoInstallPlaywright).toBe(false);
+      expect(config.qa.branchPatterns).toEqual(["qa/"]);
+    });
+
+    it("should fall back to default QA artifacts when config has invalid value", () => {
+      const configPath = path.join(tempDir, "night-watch.config.json");
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          qa: {
+            artifacts: "invalid-artifacts-mode",
+          },
+        })
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.qa.artifacts).toBe("both");
+    });
+  });
 });

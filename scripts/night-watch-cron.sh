@@ -47,6 +47,13 @@ LOCK_FILE="/tmp/night-watch-${PROJECT_RUNTIME_KEY}.lock"
 emit_result() {
   local status="${1:?status required}"
   local details="${2:-}"
+  if [ "${RATE_LIMIT_FALLBACK_TRIGGERED:-0}" = "1" ]; then
+    if [ -n "${details}" ]; then
+      details="${details}|rate_limit_fallback=1"
+    else
+      details="rate_limit_fallback=1"
+    fi
+  fi
   if [ -n "${details}" ]; then
     echo "NIGHT_WATCH_RESULT:${status}|${details}"
   else
@@ -290,9 +297,14 @@ fi
 BACKOFF_BASE=300  # 5 minutes in seconds
 EXIT_CODE=0
 ATTEMPT=0
+RATE_LIMIT_FALLBACK_TRIGGERED=0
 
 while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
   EXIT_CODE=0
+  # Capture log position before this attempt so check_rate_limited only
+  # scans lines written by the current invocation (not leftover 429s from
+  # previous runs that would cause false-positive rate-limit retries).
+  LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
 
   case "${PROVIDER_CMD}" in
     claude)
@@ -331,8 +343,14 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
     break
   fi
 
-  # Check if this was a rate limit (429) error
-  if check_rate_limited "${LOG_FILE}"; then
+  # Check if this was a rate limit (429) error (only in lines from this attempt)
+  if check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
+    # If fallback is enabled, skip proxy retries and switch to native Claude immediately
+    if [ "${NW_FALLBACK_ON_RATE_LIMIT:-}" = "true" ] && [ "${PROVIDER_CMD}" = "claude" ]; then
+      log "RATE-LIMITED: Proxy quota exhausted — triggering native Claude fallback"
+      RATE_LIMIT_FALLBACK_TRIGGERED=1
+      break
+    fi
     ATTEMPT=$((ATTEMPT + 1))
     if [ "${ATTEMPT}" -ge "${MAX_RETRIES}" ]; then
       log "RATE-LIMITED: All ${MAX_RETRIES} attempts exhausted for ${ELIGIBLE_PRD}"
@@ -348,6 +366,36 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
     break
   fi
 done
+
+# ── Native Claude fallback ────────────────────────────────────────────────────
+# When the proxy returns 429 and fallbackOnRateLimit is enabled, re-run the
+# same prompt with native Claude (OAuth), bypassing the proxy entirely.
+if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
+  FALLBACK_MODEL="${NW_CLAUDE_MODEL_ID:-claude-sonnet-4-6}"
+  log "RATE-LIMIT-FALLBACK: Running native Claude (${FALLBACK_MODEL})"
+
+  # Send immediate Telegram warning (fire-and-forget)
+  send_rate_limit_fallback_warning "${FALLBACK_MODEL}" "$(basename "${PROJECT_DIR}")"
+
+  LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
+
+  if (
+    cd "${WORKTREE_DIR}" && \
+      unset ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN \
+            ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL && \
+      timeout "${MAX_RUNTIME}" \
+        claude -p "${PROMPT}" \
+          --dangerously-skip-permissions \
+          --model "${FALLBACK_MODEL}" \
+          >> "${LOG_FILE}" 2>&1
+  ); then
+    EXIT_CODE=0
+  else
+    EXIT_CODE=$?
+  fi
+
+  log "RATE-LIMIT-FALLBACK: Native Claude exited with code ${EXIT_CODE}"
+fi
 
 if [ ${EXIT_CODE} -eq 0 ]; then
   OPEN_PR_COUNT=$(count_prs_for_branch open "${BRANCH_NAME}")

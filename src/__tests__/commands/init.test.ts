@@ -131,9 +131,12 @@ describe('init command', () => {
       const prdExecutorMd = path.join(commandsDir, 'prd-executor.md');
       const prReviewerMd = path.join(commandsDir, 'night-watch-pr-reviewer.md');
 
+      const qaMd = path.join(commandsDir, 'night-watch-qa.md');
+
       expect(fs.existsSync(nightWatchMd)).toBe(true);
       expect(fs.existsSync(prdExecutorMd)).toBe(true);
       expect(fs.existsSync(prReviewerMd)).toBe(true);
+      expect(fs.existsSync(qaMd)).toBe(true);
 
       // Verify placeholder replacement
       const content = fs.readFileSync(nightWatchMd, 'utf-8');

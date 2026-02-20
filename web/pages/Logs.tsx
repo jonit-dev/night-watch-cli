@@ -4,7 +4,7 @@ import Button from '../components/ui/Button';
 import { useApi, fetchLogs, fetchStatus } from '../api';
 import { useStore } from '../store/useStore';
 
-type LogName = 'executor' | 'reviewer';
+type LogName = 'executor' | 'reviewer' | 'qa';
 
 const Logs: React.FC = () => {
   const [autoScroll, setAutoScroll] = useState(true);
@@ -106,6 +106,19 @@ const Logs: React.FC = () => {
                  <div className="flex items-center space-x-2">
                    <span>Reviewer</span>
                    {getProcessStatus('reviewer') && <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>}
+                 </div>
+               </button>
+               <button
+                 onClick={() => handleLogChange('qa')}
+                 className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                   activeLog === 'qa'
+                     ? 'bg-slate-800 text-slate-200 shadow-sm border border-slate-700'
+                     : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                 }`}
+               >
+                 <div className="flex items-center space-x-2">
+                   <span>QA</span>
+                   {getProcessStatus('qa') && <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>}
                  </div>
                </button>
             </div>

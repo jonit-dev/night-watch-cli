@@ -28,6 +28,7 @@ export interface IReviewOptions {
   dryRun: boolean;
   timeout?: string;
   provider?: string;
+  autoMerge?: boolean;
 }
 
 /**
@@ -38,6 +39,19 @@ export function shouldSendReviewNotification(scriptStatus?: string): boolean {
     return true;
   }
   return !scriptStatus.startsWith("skip_");
+}
+
+/**
+ * Parse comma-separated PR numbers like "#12,#34" into numeric IDs.
+ */
+export function parseAutoMergedPrNumbers(raw?: string): number[] {
+  if (!raw || raw.trim().length === 0) {
+    return [];
+  }
+  return raw
+    .split(",")
+    .map((token) => parseInt(token.trim().replace(/^#/, ""), 10))
+    .filter((value) => !Number.isNaN(value));
 }
 
 /**
@@ -69,6 +83,12 @@ export function buildEnvVars(config: INightWatchConfig, options: IReviewOptions)
     env.NW_DRY_RUN = "1";
   }
 
+  // Auto-merge configuration
+  if (config.autoMerge) {
+    env.NW_AUTO_MERGE = "1";
+  }
+  env.NW_AUTO_MERGE_METHOD = config.autoMergeMethod;
+
   // Sandbox flag — prevents the agent from modifying crontab during execution
   env.NW_EXECUTION_CONTEXT = "agent";
 
@@ -90,6 +110,10 @@ export function applyCliOverrides(config: INightWatchConfig, options: IReviewOpt
 
   if (options.provider) {
     overridden.provider = options.provider as INightWatchConfig["provider"];
+  }
+
+  if (options.autoMerge !== undefined) {
+    overridden.autoMerge = options.autoMerge;
   }
 
   return overridden;
@@ -134,6 +158,7 @@ export function reviewCommand(program: Command): void {
     .option("--dry-run", "Show what would be executed without running")
     .option("--timeout <seconds>", "Override max runtime in seconds for reviewer")
     .option("--provider <string>", "AI provider to use (claude or codex)")
+    .option("--auto-merge", "Enable auto-merge for this run")
     .action(async (options: IReviewOptions) => {
       // Get the project directory (current working directory)
       const projectDir = process.cwd();
@@ -161,6 +186,7 @@ export function reviewCommand(program: Command): void {
         configTable.push(["Max Runtime", `${config.reviewerMaxRuntime}s (${Math.floor(config.reviewerMaxRuntime / 60)}min)`]);
         configTable.push(["Min Review Score", `${config.minReviewScore}/100`]);
         configTable.push(["Branch Patterns", config.branchPatterns.join(", ")]);
+        configTable.push(["Auto-merge", config.autoMerge ? `Enabled (${config.autoMergeMethod})` : "Disabled"]);
         console.log(configTable.toString());
 
         // Check for open PRs needing work
@@ -252,6 +278,25 @@ export function reviewCommand(program: Command): void {
               filesChanged: prDetails?.changedFiles,
               additions: prDetails?.additions,
               deletions: prDetails?.deletions,
+            });
+          }
+
+          const autoMergedPrNumbers = parseAutoMergedPrNumbers(scriptResult?.data.auto_merged);
+          if (autoMergedPrNumbers.length > 0) {
+            const autoMergedPrNumber = autoMergedPrNumbers[0];
+            const autoMergedPrDetails = fetchPrDetailsByNumber(autoMergedPrNumber, projectDir);
+            await sendNotifications(config, {
+              event: "pr_auto_merged",
+              projectName: path.basename(projectDir),
+              exitCode,
+              provider: config.provider,
+              prNumber: autoMergedPrDetails?.number ?? autoMergedPrNumber,
+              prUrl: autoMergedPrDetails?.url,
+              prTitle: autoMergedPrDetails?.title,
+              prBody: autoMergedPrDetails?.body,
+              filesChanged: autoMergedPrDetails?.changedFiles,
+              additions: autoMergedPrDetails?.additions,
+              deletions: autoMergedPrDetails?.deletions,
             });
           }
         }

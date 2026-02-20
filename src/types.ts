@@ -3,11 +3,19 @@
  */
 
 import { IBoardProviderConfig } from "./board/types.js";
+import { ISlackBotConfig } from "../shared/types.js";
+
+export type { ISlackBotConfig };
 
 /**
  * Supported AI providers
  */
 export type Provider = "claude" | "codex";
+
+/**
+ * Claude model to use for native (non-proxy) execution
+ */
+export type ClaudeModel = "sonnet" | "opus";
 
 /**
  * Complete Night Watch configuration
@@ -64,6 +72,22 @@ export interface INightWatchConfig {
   /** Extra environment variables to pass to the provider CLI (e.g. API keys, base URLs) */
   providerEnv: Record<string, string>;
 
+  /**
+   * When true, automatically fall back to native Claude (OAuth / direct Anthropic API)
+   * after the first rate-limit (429) on a proxy provider (e.g. GLM-5 via api.z.ai).
+   * A Telegram warning is sent immediately when the fallback is triggered.
+   * Default: false
+   */
+  fallbackOnRateLimit: boolean;
+
+  /**
+   * Claude model to use when running natively (i.e. when no ANTHROPIC_BASE_URL proxy
+   * is set, or when falling back from a rate-limited proxy).
+   * "sonnet" → claude-sonnet-4-6 (default)
+   * "opus"   → claude-opus-4-6
+   */
+  claudeModel: ClaudeModel;
+
   /** Notification webhook configuration */
   notifications: INotificationConfig;
 
@@ -78,10 +102,42 @@ export interface INightWatchConfig {
 
   /** Board provider configuration for PRD tracking */
   boardProvider: IBoardProviderConfig;
+
+  /** Enable automatic merging of PRs that pass CI and review score threshold */
+  autoMerge: boolean;
+
+  /** Git merge method for auto-merge */
+  autoMergeMethod: MergeMethod;
+
+  /** QA process configuration */
+  qa: IQaConfig;
+
+  /** Slack Bot API configuration (optional) */
+  slack?: ISlackBotConfig;
+}
+
+export type QaArtifacts = "screenshot" | "video" | "both";
+
+export interface IQaConfig {
+  /** Whether the QA process is enabled */
+  enabled: boolean;
+  /** Cron schedule for QA execution */
+  schedule: string;
+  /** Maximum runtime in seconds for QA */
+  maxRuntime: number;
+  /** Branch patterns to match for QA (defaults to top-level branchPatterns if empty) */
+  branchPatterns: string[];
+  /** What artifacts to capture for UI tests */
+  artifacts: QaArtifacts;
+  /** GitHub label to skip QA (PRs with this label are excluded) */
+  skipLabel: string;
+  /** Auto-install Playwright if missing during QA run */
+  autoInstallPlaywright: boolean;
 }
 
 export type WebhookType = "slack" | "discord" | "telegram";
-export type NotificationEvent = "run_started" | "run_succeeded" | "run_failed" | "run_timeout" | "review_completed";
+export type NotificationEvent = "run_started" | "run_succeeded" | "run_failed" | "run_timeout" | "review_completed" | "pr_auto_merged" | "rate_limit_fallback" | "qa_completed";
+export type MergeMethod = "squash" | "merge" | "rebase";
 
 export interface IWebhookConfig {
   type: WebhookType;
