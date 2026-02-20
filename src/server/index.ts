@@ -156,20 +156,6 @@ function validatePrdName(name: string): boolean {
 }
 
 /**
- * Mask sensitive fields in config before returning API payloads.
- */
-function maskConfigSecrets(config: INightWatchConfig): INightWatchConfig {
-  if (!config.slack?.botToken) return config;
-  return {
-    ...config,
-    slack: {
-      ...config.slack,
-      botToken: '***',
-    },
-  };
-}
-
-/**
  * Mask persona model env var values before returning API payloads.
  */
 function maskPersonaSecrets(persona: IAgentPersona): IAgentPersona {
@@ -326,7 +312,7 @@ function handleGetConfig(
   res: Response,
 ): void {
   try {
-    res.json(maskConfigSecrets(config));
+    res.json(config);
   } catch (error) {
     res
       .status(500)
@@ -511,11 +497,6 @@ function handlePutConfig(
       }
     }
 
-    // Don't overwrite bot token if the client sent back the masked placeholder
-    if (changes.slack?.botToken === '***') {
-      const { botToken: _masked, ...slackRest } = changes.slack;
-      changes = { ...changes, slack: slackRest as typeof changes.slack };
-    }
 
     const result = saveConfig(projectDir, changes);
 
@@ -525,7 +506,7 @@ function handlePutConfig(
     }
 
     reloadConfig();
-    res.json(maskConfigSecrets(getConfig()));
+    res.json(getConfig());
   } catch (error) {
     res
       .status(500)

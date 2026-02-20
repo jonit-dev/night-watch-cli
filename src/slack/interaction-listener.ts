@@ -176,17 +176,29 @@ export class SlackInteractionListener {
   }
 
   /**
-   * Post a self-introduction message for each active persona that hasn't
-   * introduced themselves to the eng channel yet. Tracked persistently in
-   * schema_meta so it only fires once per persona across restarts.
+   * Join all configured channels and post a one-time team roster to #eng.
+   * The roster explains how to address each agent by name in messages.
    */
   private async _postPersonaIntros(): Promise<void> {
-    const channelId = this._config.slack?.channels?.eng;
-    if (!channelId) return;
+    const slack = this._config.slack;
+    if (!slack) return;
+
+    // Join all configured channels so the bot receives messages in them
+    const channelIds = Object.values(slack.channels ?? {}).filter(Boolean);
+    for (const channelId of channelIds) {
+      try {
+        await this._slackClient.joinChannel(channelId);
+      } catch {
+        // Ignore — channel may already be joined or private
+      }
+    }
+
+    const engChannelId = slack.channels?.eng;
+    if (!engChannelId) return;
 
     const db = getDb();
     const metaRow = db
-      .prepare(`SELECT value FROM schema_meta WHERE key = 'slack_persona_intros'`)
+      .prepare(`SELECT value FROM schema_meta WHERE key = 'slack_persona_intros_v2'`)
       .get() as { value: string } | undefined;
     const introduced = new Set<string>(
       metaRow ? (JSON.parse(metaRow.value) as string[]) : [],
@@ -194,20 +206,23 @@ export class SlackInteractionListener {
 
     const repos = getRepositories();
     const personas = repos.agentPersona.getActive();
+    const newPersonas = personas.filter((p) => !introduced.has(p.id));
+    if (newPersonas.length === 0) return;
 
-    for (const persona of personas) {
-      if (introduced.has(persona.id)) continue;
-
+    // Post individual intros for new personas, explaining how to mention them
+    for (const persona of newPersonas) {
       const whoIAm = persona.soul?.whoIAm?.trim() ?? '';
-      const intro = whoIAm
-        ? `👋 Hey! I'm *${persona.name}*, ${persona.role}. ${whoIAm}`
-        : `👋 Hey! I'm *${persona.name}*, ${persona.role}. Ready to collaborate!`;
+      const intro = [
+        `👋 Hey! I'm *${persona.name}*, ${persona.role}.`,
+        whoIAm || 'Ready to collaborate!',
+        `\n> To talk to me, type \`@${persona.name}\` anywhere in a message in this channel.`,
+      ].join(' ');
 
       try {
-        await this._slackClient.postAsAgent(channelId, intro, persona);
+        await this._slackClient.postAsAgent(engChannelId, intro, persona);
         introduced.add(persona.id);
         db.prepare(
-          `INSERT INTO schema_meta (key, value) VALUES ('slack_persona_intros', ?)
+          `INSERT INTO schema_meta (key, value) VALUES ('slack_persona_intros_v2', ?)
            ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
         ).run(JSON.stringify(Array.from(introduced)));
       } catch (err) {
