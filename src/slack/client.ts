@@ -43,16 +43,13 @@ export class SlackClient {
   }
 
   /**
-   * Resolve an avatar URL: relative paths (e.g. /avatars/maya.webp) become
-   * absolute using the server base URL so Slack can fetch them.
+   * Resolve an avatar URL for use as Slack icon_url.
+   * Relative paths (legacy) are resolved against the server base URL.
+   * Absolute HTTP(S) URLs (e.g. GitHub raw CDN) are passed through unchanged.
    */
   private _resolveAvatarUrl(avatarUrl: string | null): string {
-    if (!avatarUrl || avatarUrl.startsWith('data:')) {
-      return '';
-    }
-    if (avatarUrl.startsWith('/')) {
-      return `${this._serverBaseUrl}${avatarUrl}`;
-    }
+    if (!avatarUrl || avatarUrl.startsWith('data:')) return '';
+    if (avatarUrl.startsWith('/')) return `${this._serverBaseUrl}${avatarUrl}`;
     return avatarUrl;
   }
 
