@@ -23,8 +23,6 @@ export default function Integrations() {
   const [prsChannel, setPrsChannel] = useState('');
   const [incidentsChannel, setIncidentsChannel] = useState('');
   const [releasesChannel, setReleasesChannel] = useState('');
-  const [discussionEnabled, setDiscussionEnabled] = useState(false);
-
   // When config loads, populate initial state if available
   React.useEffect(() => {
     if (config?.slack) {
@@ -34,7 +32,6 @@ export default function Integrations() {
       setPrsChannel(config.slack.channels?.prs || '');
       setIncidentsChannel(config.slack.channels?.incidents || '');
       setReleasesChannel(config.slack.channels?.releases || '');
-      setDiscussionEnabled(config.slack.discussionEnabled ?? false);
     }
   }, [config]);
 
@@ -53,7 +50,7 @@ export default function Integrations() {
             releases: releasesChannel,
           },
           autoCreateProjectChannels: true,
-          discussionEnabled,
+          discussionEnabled: true,
         },
       });
       addToast({
@@ -294,24 +291,6 @@ export default function Integrations() {
             <strong className="text-indigo-300">Pro Tip:</strong> Channels are created as <strong>Public</strong>.
             If you don't see them in your sidebar, click <b>"Add Channels" &gt; "Browse all channels"</b> in Slack to join them for the first time.
           </p>
-        </div>
-
-        <div className="mt-4 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] p-3">
-          <div>
-            <p className="text-sm font-medium text-slate-200">Enable Agent Discussions</p>
-            <p className="text-xs text-slate-400">Allows mention routing and threaded agent deliberation.</p>
-          </div>
-          <label className="inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              className="sr-only peer"
-              checked={discussionEnabled}
-              onChange={(e) => setDiscussionEnabled(e.target.checked)}
-            />
-            <span className="w-11 h-6 bg-slate-700 rounded-full peer peer-checked:bg-indigo-500 transition-colors relative">
-              <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${discussionEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-            </span>
-          </label>
         </div>
 
         <div className="pt-6 border-t border-white/10 flex justify-end">
@@ -579,23 +558,6 @@ export default function Integrations() {
                       )}
                     </div>
 
-                    <div className="mt-6 flex items-center justify-between rounded-lg border border-white/10 bg-white/[0.02] p-3">
-                      <div>
-                        <p className="text-sm font-medium text-slate-200">Enable Agent Discussions</p>
-                        <p className="text-xs text-slate-400">Threaded agent collaboration and targeted @persona responses.</p>
-                      </div>
-                      <label className="inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          className="sr-only peer"
-                          checked={discussionEnabled}
-                          onChange={(e) => setDiscussionEnabled(e.target.checked)}
-                        />
-                        <span className="w-11 h-6 bg-slate-700 rounded-full peer peer-checked:bg-indigo-500 transition-colors relative">
-                          <span className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${discussionEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
-                        </span>
-                      </label>
-                    </div>
                   </div>
 
                   <div className="flex justify-between pt-8">
