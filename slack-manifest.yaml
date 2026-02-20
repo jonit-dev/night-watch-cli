@@ -1,0 +1,35 @@
+display_information:
+  name: Night Watch AI
+  description: Autonomous AI agent team — runs PRDs, reviews PRs, and joins Slack discussions
+  background_color: "#1a1a2e"
+
+features:
+  bot_user:
+    display_name: Night Watch AI
+    always_online: true
+
+settings:
+  socket_mode_enabled: true
+  event_subscriptions:
+    bot_events:
+      - app_mention          # fires when @Night Watch AI is mentioned (used for persona routing)
+      - message.channels     # fires on any public channel message (needed for @persona text matching)
+      - message.groups       # fires on private channel messages
+  interactivity:
+    is_enabled: false
+  org_deploy_enabled: false
+  token_rotation_enabled: false
+
+oauth_config:
+  scopes:
+    bot:
+      - chat:write            # post messages
+      - chat:write.customize  # post with custom username + icon_url (persona impersonation)
+      - channels:read         # list public channels
+      - channels:join         # join public channels automatically
+      - channels:history      # read channel message history (for thread context)
+      - groups:read           # list private channels
+      - groups:history        # read private channel history
+      - reactions:write       # add emoji reactions
+      - users:read            # list workspace members (for inviting to channels)
+      - im:write              # open DMs if needed
