@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, X, ExternalLink, ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Plus, X, ExternalLink } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
@@ -233,55 +233,34 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose, onM
 interface IssueCardProps {
   issue: IBoardIssue;
   onClick: () => void;
-  onMoveRequest: (issue: IBoardIssue, column: BoardColumnName) => void;
+  onDragStart: (issue: IBoardIssue) => void;
 }
 
-const IssueCard: React.FC<IssueCardProps> = ({ issue, onClick, onMoveRequest }) => {
-  const [showMoveMenu, setShowMoveMenu] = useState(false);
-  const col = issue.column ?? 'Draft';
+const IssueCard: React.FC<IssueCardProps> = ({ issue, onClick, onDragStart }) => {
+  const [isDragging, setIsDragging] = useState(false);
 
   return (
-    <div className="relative group">
+    <div
+      className="relative"
+      draggable
+      onDragStart={e => {
+        e.dataTransfer.setData('issueNumber', String(issue.number));
+        e.dataTransfer.effectAllowed = 'move';
+        setIsDragging(true);
+        onDragStart(issue);
+      }}
+      onDragEnd={() => setIsDragging(false)}
+    >
       <Card
-        className="p-3 cursor-pointer hover:border-indigo-500/30 transition-all active:scale-[0.99] select-none"
+        className={`p-3 cursor-grab hover:border-indigo-500/30 transition-all select-none ${isDragging ? 'opacity-30' : ''}`}
         onClick={onClick}
       >
-        <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
-            <span className="text-[10px] font-mono text-slate-600">#{issue.number}</span>
-            <p className="text-xs font-medium text-slate-200 line-clamp-2 mt-0.5 leading-snug">{issue.title}</p>
-            {issue.assignees.length > 0 && (
-              <p className="text-[10px] text-slate-500 mt-1.5 truncate">{issue.assignees.join(', ')}</p>
-            )}
-          </div>
-          <button
-            onClick={e => { e.stopPropagation(); setShowMoveMenu(v => !v); }}
-            className="ml-2 p-1 rounded hover:bg-white/10 text-slate-500 hover:text-slate-300 transition-colors flex-shrink-0"
-            title="Move issue"
-          >
-            <ChevronDown className="h-3.5 w-3.5" />
-          </button>
-        </div>
+        <span className="text-[10px] font-mono text-slate-600">#{issue.number}</span>
+        <p className="text-xs font-medium text-slate-200 line-clamp-2 mt-0.5 leading-snug">{issue.title}</p>
+        {issue.assignees.length > 0 && (
+          <p className="text-[10px] text-slate-500 mt-1.5 truncate">{issue.assignees.join(', ')}</p>
+        )}
       </Card>
-
-      {/* Move dropdown */}
-      {showMoveMenu && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setShowMoveMenu(false)} />
-          <div className="absolute right-0 top-full mt-1 z-40 bg-[#0f172a] border border-white/10 rounded-xl shadow-2xl py-1 min-w-[140px]">
-            {BOARD_COLUMNS.filter(c => c !== col).map(c => (
-              <button
-                key={c}
-                onClick={() => { onMoveRequest(issue, c); setShowMoveMenu(false); }}
-                className="w-full text-left text-xs px-4 py-2 text-slate-300 hover:bg-white/5 hover:text-slate-100 transition-colors flex items-center space-x-2"
-              >
-                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${COLUMN_COLORS[c].dot}`} />
-                <span>{c}</span>
-              </button>
-            ))}
-          </div>
-        </>
-      )}
     </div>
   );
 };
@@ -291,16 +270,36 @@ const IssueCard: React.FC<IssueCardProps> = ({ issue, onClick, onMoveRequest }) 
 interface BoardColumnProps {
   name: BoardColumnName;
   issues: IBoardIssue[];
+  draggingIssue: IBoardIssue | null;
   onIssueClick: (issue: IBoardIssue) => void;
   onNewIssue: (column: BoardColumnName) => void;
   onMoveIssue: (issue: IBoardIssue, column: BoardColumnName) => void;
+  onDragStart: (issue: IBoardIssue) => void;
 }
 
-const BoardColumn: React.FC<BoardColumnProps> = ({ name, issues, onIssueClick, onNewIssue, onMoveIssue }) => {
+const BoardColumn: React.FC<BoardColumnProps> = ({ name, issues, draggingIssue, onIssueClick, onNewIssue, onMoveIssue, onDragStart }) => {
   const colors = COLUMN_COLORS[name];
+  const [isDragOver, setIsDragOver] = useState(false);
+  const isValidTarget = draggingIssue !== null && draggingIssue.column !== name;
 
   return (
-    <div className="flex flex-col min-w-[220px] max-w-[220px] h-full">
+    <div
+      className={`flex flex-col min-w-[220px] max-w-[220px] h-full rounded-xl transition-colors ${isDragOver && isValidTarget ? 'bg-indigo-500/5 ring-1 ring-indigo-500/30' : ''}`}
+      onDragOver={e => {
+        if (!isValidTarget) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setIsDragOver(true);
+      }}
+      onDragLeave={() => setIsDragOver(false)}
+      onDrop={e => {
+        e.preventDefault();
+        setIsDragOver(false);
+        if (draggingIssue && draggingIssue.column !== name) {
+          onMoveIssue(draggingIssue, name);
+        }
+      }}
+    >
       {/* Column header */}
       <div className="flex items-center justify-between mb-3 flex-shrink-0">
         <div className="flex items-center space-x-2">
@@ -320,8 +319,8 @@ const BoardColumn: React.FC<BoardColumnProps> = ({ name, issues, onIssueClick, o
       {/* Issues */}
       <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-hide min-h-0">
         {issues.length === 0 ? (
-          <div className="border-2 border-dashed border-slate-800 rounded-xl h-24 flex items-center justify-center">
-            <span className="text-xs text-slate-700">No issues</span>
+          <div className={`border-2 border-dashed rounded-xl h-24 flex items-center justify-center transition-colors ${isDragOver && isValidTarget ? 'border-indigo-500/40' : 'border-slate-800'}`}>
+            <span className="text-xs text-slate-700">{isDragOver && isValidTarget ? 'Drop here' : 'No issues'}</span>
           </div>
         ) : (
           issues.map(issue => (
@@ -329,7 +328,7 @@ const BoardColumn: React.FC<BoardColumnProps> = ({ name, issues, onIssueClick, o
               key={issue.id}
               issue={issue}
               onClick={() => onIssueClick(issue)}
-              onMoveRequest={onMoveIssue}
+              onDragStart={onDragStart}
             />
           ))
         )}
@@ -340,9 +339,15 @@ const BoardColumn: React.FC<BoardColumnProps> = ({ name, issues, onIssueClick, o
 
 // ==================== Board Page ====================
 
+type ColumnMap = Record<BoardColumnName, IBoardIssue[]>;
+
 const Board: React.FC = () => {
   const [selectedIssue, setSelectedIssue] = useState<IBoardIssue | null>(null);
   const [createColumn, setCreateColumn] = useState<BoardColumnName | null>(null);
+  const [draggingIssue, setDraggingIssue] = useState<IBoardIssue | null>(null);
+  // Optimistic overlay: applied immediately on move, cleared after server confirms
+  const [optimisticColumns, setOptimisticColumns] = useState<ColumnMap | null>(null);
+  const pendingMove = useRef(false);
   const { addToast, selectedProjectId, globalModeLoading } = useStore();
 
   const { data: boardStatus, loading, error, refetch } = useApi(
@@ -351,21 +356,50 @@ const Board: React.FC = () => {
     { enabled: !globalModeLoading },
   );
 
-  // 30s polling
+  // 30s polling — skip while a move is in-flight to avoid clobbering optimistic state
   useEffect(() => {
-    const interval = setInterval(() => refetch(), 30000);
+    const interval = setInterval(() => {
+      if (!pendingMove.current) refetch();
+    }, 30000);
     return () => clearInterval(interval);
   }, [refetch]);
 
   const handleMoveIssue = useCallback(async (issue: IBoardIssue, column: BoardColumnName) => {
+    setDraggingIssue(null);
+
+    // Build optimistic column map from current display state
+    const base = optimisticColumns ?? boardStatus?.columns;
+    if (!base) return;
+
+    const snapshot = base;
+    const next: ColumnMap = {} as ColumnMap;
+    for (const col of BOARD_COLUMNS) {
+      next[col] = (base[col] ?? []).filter(i => i.number !== issue.number);
+    }
+    const movedIssue: IBoardIssue = { ...issue, column };
+    next[column] = [...(next[column] ?? []), movedIssue];
+    setOptimisticColumns(next);
+
+    // Also keep selectedIssue in sync if it's the one being moved
+    setSelectedIssue(prev => (prev?.number === issue.number ? movedIssue : prev));
+
+    pendingMove.current = true;
     try {
       await moveBoardIssue(issue.number, column);
-      addToast({ title: 'Issue moved', message: `#${issue.number} moved to ${column}`, type: 'success' });
       refetch();
+      // Clear optimistic state after refetch completes (brief delay to avoid flash)
+      setTimeout(() => {
+        setOptimisticColumns(null);
+        pendingMove.current = false;
+      }, 800);
     } catch (err) {
+      // Revert
+      setOptimisticColumns(snapshot as ColumnMap);
+      setSelectedIssue(prev => (prev?.number === issue.number ? issue : prev));
+      pendingMove.current = false;
       addToast({ title: 'Move failed', message: err instanceof Error ? err.message : 'Failed to move issue', type: 'error' });
     }
-  }, [addToast, refetch]);
+  }, [addToast, refetch, optimisticColumns, boardStatus]);
 
   if (globalModeLoading || loading) {
     return (
@@ -400,7 +434,7 @@ const Board: React.FC = () => {
 
   if (!boardStatus) return null;
 
-  const columns = boardStatus.columns;
+  const columns = optimisticColumns ?? boardStatus.columns;
 
   return (
     <div className="flex flex-col h-full">
@@ -419,16 +453,18 @@ const Board: React.FC = () => {
       </div>
 
       {/* Kanban board */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden">
+      <div className="flex-1 overflow-x-auto overflow-y-hidden" onDragEnd={() => setDraggingIssue(null)}>
         <div className="flex space-x-4 h-full pb-4" style={{ minWidth: `${BOARD_COLUMNS.length * 236}px` }}>
           {BOARD_COLUMNS.map(colName => (
             <BoardColumn
               key={colName}
               name={colName}
               issues={columns[colName] ?? []}
+              draggingIssue={draggingIssue}
               onIssueClick={setSelectedIssue}
               onNewIssue={setCreateColumn}
               onMoveIssue={handleMoveIssue}
+              onDragStart={setDraggingIssue}
             />
           ))}
         </div>

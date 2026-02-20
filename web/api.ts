@@ -16,6 +16,13 @@ import type {
   IStatusSnapshot,
   IRoadmapItem,
   IRoadmapStatus,
+  IAgentPersona,
+  IAgentSoul,
+  IAgentStyle,
+  IAgentSkill,
+  IAgentModelConfig,
+  CreateAgentPersonaInput,
+  UpdateAgentPersonaInput,
 } from '@shared/types';
 
 // Re-export shared types so consumers can import from either place
@@ -30,6 +37,13 @@ export type {
   IStatusSnapshot,
   IRoadmapItem,
   IRoadmapStatus,
+  IAgentPersona,
+  IAgentSoul,
+  IAgentStyle,
+  IAgentSkill,
+  IAgentModelConfig,
+  CreateAgentPersonaInput,
+  UpdateAgentPersonaInput,
 };
 
 /**
@@ -264,8 +278,22 @@ export function retryPrd(prdName: string): Promise<{ message: string }> {
 
 // ==================== Agents ====================
 
-export function fetchAgents(): Promise<unknown[]> {
-  return apiFetch<unknown[]>(apiPath('/api/agents'));
+export function fetchAgents(): Promise<IAgentPersona[]> {
+  return apiFetch<IAgentPersona[]>(apiPath('/api/agents'));
+}
+
+export function createAgent(input: CreateAgentPersonaInput): Promise<IAgentPersona> {
+  return apiFetch<IAgentPersona>(apiPath('/api/agents'), {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateAgent(id: string, input: UpdateAgentPersonaInput): Promise<IAgentPersona> {
+  return apiFetch<IAgentPersona>(apiPath(`/api/agents/${encodeURIComponent(id)}`), {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
 }
 
 export function fetchAgentPrompt(id: string): Promise<{ prompt: string }> {
@@ -289,6 +317,125 @@ export async function deleteAgent(id: string): Promise<void> {
     throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
   }
   // 204 No Content — do not parse response body
+}
+
+// ==================== Slack ====================
+
+export interface ISlackChannel {
+  id: string;
+  name: string;
+}
+
+export function fetchSlackChannels(botToken: string): Promise<ISlackChannel[]> {
+  return apiFetch<ISlackChannel[]>(apiPath('/api/slack/channels'), {
+    method: 'POST',
+    body: JSON.stringify({ botToken }),
+  });
+}
+
+export function createSlackChannel(botToken: string, name: string): Promise<{ channelId: string }> {
+  return apiFetch<{ channelId: string }>(apiPath('/api/slack/channels/create'), {
+    method: 'POST',
+    body: JSON.stringify({ botToken, name }),
+  });
+}
+
+// ==================== Board ====================
+
+export type BoardColumnName = 'Draft' | 'Ready' | 'In Progress' | 'Review' | 'Done';
+
+export const BOARD_COLUMNS: BoardColumnName[] = [
+  'Draft', 'Ready', 'In Progress', 'Review', 'Done',
+];
+
+export interface IBoardIssue {
+  id: string;
+  number: number;
+  title: string;
+  body: string;
+  url: string;
+  column: BoardColumnName | null;
+  labels: string[];
+  assignees: string[];
+}
+
+export interface IBoardStatus {
+  enabled: boolean;
+  columns: Record<BoardColumnName, IBoardIssue[]>;
+}
+
+export function fetchBoardStatus(): Promise<IBoardStatus> {
+  return apiFetch<IBoardStatus>(apiPath('/api/board/status'));
+}
+
+export function createBoardIssue(input: {
+  title: string;
+  body: string;
+  column?: BoardColumnName;
+  labels?: string[];
+}): Promise<IBoardIssue> {
+  return apiFetch<IBoardIssue>(apiPath('/api/board/issues'), {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
+export function moveBoardIssue(number: number, column: BoardColumnName): Promise<{ moved: boolean }> {
+  return apiFetch<{ moved: boolean }>(apiPath(`/api/board/issues/${number}/move`), {
+    method: 'PATCH',
+    body: JSON.stringify({ column }),
+  });
+}
+
+export async function closeBoardIssue(number: number): Promise<void> {
+  const url = `${API_BASE}${apiPath(`/api/board/issues/${number}`)}`;
+  const response = await fetch(url, {
+    headers: { 'Content-Type': 'application/json' },
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+  }
+}
+
+// ==================== Actions ====================
+
+export function triggerClearLock(): Promise<{ cleared: boolean }> {
+  return apiFetch<{ cleared: boolean }>(apiPath('/api/actions/clear-lock'), { method: 'POST' });
+}
+
+// ==================== SSE Stream ====================
+
+export function useStatusStream(
+  onSnapshot: (snapshot: IStatusSnapshot) => void,
+  deps: DependencyList = [],
+  options?: { enabled?: boolean },
+): void {
+  const enabled = options?.enabled ?? true;
+  const onSnapshotRef = useRef(onSnapshot);
+  onSnapshotRef.current = onSnapshot;
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const url = `${API_BASE}${apiPath('/api/status/events')}`;
+    const es = new EventSource(url);
+
+    es.addEventListener('status_changed', (e) => {
+      try {
+        const snapshot = JSON.parse((e as MessageEvent).data) as IStatusSnapshot;
+        onSnapshotRef.current(snapshot);
+      } catch {
+        // ignore parse errors
+      }
+    });
+
+    return () => {
+      es.close();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, ...deps]);
 }
 
 // ==================== Roadmap Scanner ====================

@@ -33,6 +33,8 @@ export interface IInstallOptions {
   noSlicer?: boolean;
   noQa?: boolean;
   qa?: boolean;
+  noAudit?: boolean;
+  audit?: boolean;
 }
 
 /**
@@ -127,7 +129,7 @@ export interface IInstallResult {
 export function performInstall(
   projectDir: string,
   config: INightWatchConfig,
-  options?: { schedule?: string; reviewerSchedule?: string; noReviewer?: boolean; noSlicer?: boolean; noQa?: boolean; qa?: boolean; force?: boolean }
+  options?: { schedule?: string; reviewerSchedule?: string; noReviewer?: boolean; noSlicer?: boolean; noQa?: boolean; qa?: boolean; noAudit?: boolean; audit?: boolean; force?: boolean }
 ): IInstallResult {
   try {
     const offset = config.cronScheduleOffset ?? 0;
@@ -196,6 +198,16 @@ export function performInstall(
       entries.push(qaEntry);
     }
 
+    // Audit entry (if enabled and noAudit not set)
+    const disableAudit = options?.noAudit === true || options?.audit === false;
+    const installAudit = disableAudit ? false : config.audit.enabled;
+    if (installAudit) {
+      const auditSchedule = applyScheduleOffset(config.audit.schedule, offset);
+      const auditLog = path.join(logDir, "audit.log");
+      const auditEntry = `${auditSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} audit >> ${shellQuote(auditLog)} 2>&1  ${marker}`;
+      entries.push(auditEntry);
+    }
+
     const currentCrontab = readCrontab();
     const newCrontab = [...currentCrontab, ...entries];
     writeCrontab(newCrontab);
@@ -222,6 +234,7 @@ export function installCommand(program: Command): void {
     .option("--no-reviewer", "Skip installing reviewer cron")
     .option("--no-slicer", "Skip installing slicer cron")
     .option("--no-qa", "Skip installing QA cron")
+    .option("--no-audit", "Skip installing audit cron")
     .action(async (options: IInstallOptions) => {
       try {
         // Get project directory
@@ -320,6 +333,19 @@ export function installCommand(program: Command): void {
           entries.push(qaEntry);
         }
 
+        // Determine if audit should be installed
+        const disableAudit = options.noAudit === true || options.audit === false;
+        const installAudit = disableAudit ? false : config.audit.enabled;
+
+        // Audit entry (if enabled)
+        let auditLog: string | undefined;
+        if (installAudit) {
+          auditLog = path.join(logDir, "audit.log");
+          const auditSchedule = applyScheduleOffset(config.audit.schedule, offset);
+          const auditEntry = `${auditSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} audit >> ${shellQuote(auditLog)} 2>&1  ${marker}`;
+          entries.push(auditEntry);
+        }
+
         // Add all entries
         const currentCrontab = readCrontab();
         const newCrontab = [...currentCrontab, ...entries];
@@ -341,6 +367,9 @@ export function installCommand(program: Command): void {
         }
         if (installQa && qaLog) {
           dim(`  QA: ${qaLog}`);
+        }
+        if (installAudit && auditLog) {
+          dim(`  Audit: ${auditLog}`);
         }
         console.log();
         dim("To uninstall, run: night-watch uninstall");

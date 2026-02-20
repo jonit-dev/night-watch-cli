@@ -268,4 +268,5 @@ export interface IDiscussionTrigger {
   context: string;         // PR diff, failure message, PRD summary, etc.
   prUrl?: string;
   channelId?: string;      // Explicit Slack channel override (e.g., project-specific channel)
+  openingMessage?: string; // Override the generated opening message (e.g., AI-authored observation)
 }

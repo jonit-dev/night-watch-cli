@@ -7,9 +7,10 @@ import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 import { BoardProviderType, IBoardProviderConfig } from "./board/types.js";
-import { ClaudeModel, INightWatchConfig, INotificationConfig, IQaConfig, IRoadmapScannerConfig, ISlackBotConfig, IWebhookConfig, MergeMethod, NotificationEvent, Provider, QaArtifacts, WebhookType } from "./types.js";
+import { ClaudeModel, IAuditConfig, INightWatchConfig, INotificationConfig, IQaConfig, IRoadmapScannerConfig, ISlackBotConfig, IWebhookConfig, MergeMethod, NotificationEvent, Provider, QaArtifacts, WebhookType } from "./types.js";
 import {
   CONFIG_FILE_NAME,
+  DEFAULT_AUDIT,
   DEFAULT_AUTO_MERGE,
   DEFAULT_AUTO_MERGE_METHOD,
   DEFAULT_BOARD_PROVIDER,
@@ -93,6 +94,9 @@ export function getDefaultConfig(): INightWatchConfig {
 
     // QA process
     qa: { ...DEFAULT_QA },
+
+    // Code audit
+    audit: { ...DEFAULT_AUDIT },
 
     // Slack Bot API
     slack: { ...DEFAULT_SLACK_BOT_CONFIG, channels: { ...DEFAULT_SLACK_BOT_CONFIG.channels } },
@@ -306,6 +310,17 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
       autoInstallPlaywright: readBoolean(rawQa.autoInstallPlaywright) ?? DEFAULT_QA.autoInstallPlaywright,
     };
     normalized.qa = qa;
+  }
+
+  // Audit Configuration
+  const rawAudit = readObject(rawConfig.audit);
+  if (rawAudit) {
+    const audit: IAuditConfig = {
+      enabled: readBoolean(rawAudit.enabled) ?? DEFAULT_AUDIT.enabled,
+      schedule: readString(rawAudit.schedule) ?? DEFAULT_AUDIT.schedule,
+      maxRuntime: readNumber(rawAudit.maxRuntime) ?? DEFAULT_AUDIT.maxRuntime,
+    };
+    normalized.audit = audit;
   }
 
   return normalized;
@@ -703,6 +718,27 @@ export function loadConfig(projectDir: string): INightWatchConfig {
         ...qaBaseConfig(),
         branchPatterns: patterns,
       };
+    }
+  }
+
+  // Audit configuration from env vars
+  const auditBaseConfig = (): IAuditConfig => envConfig.audit ?? fileConfig?.audit ?? DEFAULT_AUDIT;
+
+  if (process.env.NW_AUDIT_ENABLED) {
+    const auditEnabled = parseBoolean(process.env.NW_AUDIT_ENABLED);
+    if (auditEnabled !== null) {
+      envConfig.audit = { ...auditBaseConfig(), enabled: auditEnabled };
+    }
+  }
+
+  if (process.env.NW_AUDIT_SCHEDULE) {
+    envConfig.audit = { ...auditBaseConfig(), schedule: process.env.NW_AUDIT_SCHEDULE };
+  }
+
+  if (process.env.NW_AUDIT_MAX_RUNTIME) {
+    const auditMaxRuntime = parseInt(process.env.NW_AUDIT_MAX_RUNTIME, 10);
+    if (!isNaN(auditMaxRuntime) && auditMaxRuntime > 0) {
+      envConfig.audit = { ...auditBaseConfig(), maxRuntime: auditMaxRuntime };
     }
   }
 
