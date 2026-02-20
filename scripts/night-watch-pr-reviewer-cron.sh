@@ -25,6 +25,8 @@ BRANCH_PATTERNS_RAW="${NW_BRANCH_PATTERNS:-feat/,night-watch/}"
 AUTO_MERGE="${NW_AUTO_MERGE:-0}"
 AUTO_MERGE_METHOD="${NW_AUTO_MERGE_METHOD:-squash}"
 TARGET_PR="${NW_TARGET_PR:-}"
+PARALLEL_ENABLED="${NW_REVIEWER_PARALLEL:-1}"
+WORKER_MODE="${NW_REVIEWER_WORKER_MODE:-0}"
 
 # Ensure NVM / Node / Claude are on PATH
 export NVM_DIR="${HOME}/.nvm"
@@ -39,8 +41,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
-# NOTE: Lock file path must match reviewerLockPath() in src/utils/status-data.ts
-LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_RUNTIME_KEY}.lock"
+GLOBAL_LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_RUNTIME_KEY}.lock"
+if [ "${WORKER_MODE}" = "1" ] && [ -n "${TARGET_PR}" ]; then
+  LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_RUNTIME_KEY}-pr-${TARGET_PR}.lock"
+else
+  # NOTE: Lock file path must match reviewerLockPath() in src/utils/status-data.ts
+  LOCK_FILE="${GLOBAL_LOCK_FILE}"
+fi
 
 emit_result() {
   local status="${1:?status required}"
@@ -49,6 +56,38 @@ emit_result() {
     echo "NIGHT_WATCH_RESULT:${status}|${details}"
   else
     echo "NIGHT_WATCH_RESULT:${status}"
+  fi
+}
+
+emit_final_status() {
+  local exit_code="${1:?exit code required}"
+  local prs_csv="${2:-}"
+  local auto_merged="${3:-}"
+  local auto_merge_failed="${4:-}"
+
+  if [ "${exit_code}" -eq 0 ]; then
+    log "DONE: PR reviewer completed successfully"
+    emit_result "success_reviewed" "prs=${prs_csv}|auto_merged=${auto_merged}|auto_merge_failed=${auto_merge_failed}"
+  elif [ "${exit_code}" -eq 124 ]; then
+    log "TIMEOUT: PR reviewer killed after ${MAX_RUNTIME}s"
+    emit_result "timeout" "prs=${prs_csv}"
+  else
+    log "FAIL: PR reviewer exited with code ${exit_code}"
+    emit_result "failure" "prs=${prs_csv}"
+  fi
+}
+
+append_csv() {
+  local current="${1:-}"
+  local incoming="${2:-}"
+  if [ -z "${incoming}" ]; then
+    printf "%s" "${current}"
+    return 0
+  fi
+  if [ -z "${current}" ]; then
+    printf "%s" "${incoming}"
+  else
+    printf "%s,%s" "${current}" "${incoming}"
   fi
 }
 
@@ -172,11 +211,121 @@ if [ -n "${NW_DEFAULT_BRANCH:-}" ]; then
 else
   DEFAULT_BRANCH=$(detect_default_branch "${PROJECT_DIR}")
 fi
-REVIEW_WORKTREE_DIR="$(dirname "${PROJECT_DIR}")/${PROJECT_NAME}-nw-review-runner"
 
 log "START: Found PR(s) needing work:${PRS_NEEDING_WORK}"
 
-cleanup_worktrees "${PROJECT_DIR}"
+# Convert "#12 #34" into ["12", "34"] for worker fan-out.
+PR_NUMBER_ARRAY=()
+for pr_token in ${PRS_NEEDING_WORK}; do
+  PR_NUMBER_ARRAY+=("${pr_token#\#}")
+done
+
+if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED}" = "1" ] && [ "${#PR_NUMBER_ARRAY[@]}" -gt 1 ]; then
+  # Dry-run mode: print diagnostics and exit
+  if [ "${NW_DRY_RUN:-0}" = "1" ]; then
+    echo "=== Dry Run: PR Reviewer ==="
+    echo "Provider: ${PROVIDER_CMD}"
+    echo "Branch Patterns: ${BRANCH_PATTERNS_RAW}"
+    echo "Min Review Score: ${MIN_REVIEW_SCORE}"
+    echo "Auto-merge: ${AUTO_MERGE}"
+    if [ "${AUTO_MERGE}" = "1" ]; then
+      echo "Auto-merge Method: ${AUTO_MERGE_METHOD}"
+    fi
+    echo "Open PRs needing work:${PRS_NEEDING_WORK}"
+    echo "Default Branch: ${DEFAULT_BRANCH}"
+    echo "Parallel Workers: ${#PR_NUMBER_ARRAY[@]}"
+    echo "Timeout: ${MAX_RUNTIME}s"
+    exit 0
+  fi
+
+  log "PARALLEL: Launching ${#PR_NUMBER_ARRAY[@]} reviewer worker(s)"
+
+  declare -a WORKER_PIDS=()
+  declare -a WORKER_PRS=()
+  declare -a WORKER_OUTPUTS=()
+
+  for pr_number in "${PR_NUMBER_ARRAY[@]}"; do
+    worker_output=$(mktemp "/tmp/night-watch-pr-reviewer-${PROJECT_RUNTIME_KEY}-pr-${pr_number}.XXXXXX")
+    WORKER_OUTPUTS+=("${worker_output}")
+    WORKER_PRS+=("${pr_number}")
+
+    (
+      NW_TARGET_PR="${pr_number}" \
+      NW_REVIEWER_WORKER_MODE="1" \
+      NW_REVIEWER_PARALLEL="0" \
+      bash "${SCRIPT_DIR}/night-watch-pr-reviewer-cron.sh" "${PROJECT_DIR}" > "${worker_output}" 2>&1
+    ) &
+
+    worker_pid=$!
+    WORKER_PIDS+=("${worker_pid}")
+    log "PARALLEL: Worker PID ${worker_pid} started for PR #${pr_number}"
+  done
+
+  EXIT_CODE=0
+  AUTO_MERGED_PRS=""
+  AUTO_MERGE_FAILED_PRS=""
+
+  for idx in "${!WORKER_PIDS[@]}"; do
+    worker_pid="${WORKER_PIDS[$idx]}"
+    worker_pr="${WORKER_PRS[$idx]}"
+    worker_output="${WORKER_OUTPUTS[$idx]}"
+
+    worker_exit_code=0
+    if wait "${worker_pid}"; then
+      worker_exit_code=0
+    else
+      worker_exit_code=$?
+    fi
+
+    if [ -f "${worker_output}" ] && [ -s "${worker_output}" ]; then
+      cat "${worker_output}" >> "${LOG_FILE}"
+    fi
+
+    worker_result=$(grep -o 'NIGHT_WATCH_RESULT:.*' "${worker_output}" 2>/dev/null | tail -1 || true)
+    worker_status=$(printf '%s' "${worker_result}" | sed -n 's/^NIGHT_WATCH_RESULT:\([^|]*\).*$/\1/p')
+    worker_auto_merged=$(printf '%s' "${worker_result}" | grep -oP '(?<=auto_merged=)[^|]+' || true)
+    worker_auto_merge_failed=$(printf '%s' "${worker_result}" | grep -oP '(?<=auto_merge_failed=)[^|]+' || true)
+
+    AUTO_MERGED_PRS=$(append_csv "${AUTO_MERGED_PRS}" "${worker_auto_merged}")
+    AUTO_MERGE_FAILED_PRS=$(append_csv "${AUTO_MERGE_FAILED_PRS}" "${worker_auto_merge_failed}")
+
+    rm -f "${worker_output}"
+
+    if [ "${worker_status}" = "failure" ] || { [ -n "${worker_status}" ] && [ "${worker_status}" != "success_reviewed" ] && [ "${worker_status}" != "timeout" ] && [ "${worker_status#skip_}" = "${worker_status}" ]; }; then
+      if [ "${EXIT_CODE}" -eq 0 ] || [ "${EXIT_CODE}" -eq 124 ]; then
+        EXIT_CODE=1
+      fi
+      log "PARALLEL: Worker for PR #${worker_pr} reported status '${worker_status:-unknown}'"
+    elif [ "${worker_status}" = "timeout" ]; then
+      if [ "${EXIT_CODE}" -eq 0 ]; then
+        EXIT_CODE=124
+      fi
+      log "PARALLEL: Worker for PR #${worker_pr} timed out"
+    elif [ "${worker_exit_code}" -ne 0 ]; then
+      if [ "${worker_exit_code}" -eq 124 ]; then
+        if [ "${EXIT_CODE}" -eq 0 ]; then
+          EXIT_CODE=124
+        fi
+      elif [ "${EXIT_CODE}" -eq 0 ] || [ "${EXIT_CODE}" -eq 124 ]; then
+        EXIT_CODE="${worker_exit_code}"
+      fi
+      log "PARALLEL: Worker for PR #${worker_pr} exited with code ${worker_exit_code}"
+    else
+      log "PARALLEL: Worker for PR #${worker_pr} completed"
+    fi
+  done
+
+  emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}"
+  exit 0
+fi
+
+REVIEW_WORKTREE_BASENAME="${PROJECT_NAME}-nw-review-runner"
+if [ -n "${TARGET_PR}" ]; then
+  REVIEW_WORKTREE_BASENAME="${REVIEW_WORKTREE_BASENAME}-pr-${TARGET_PR}"
+fi
+REVIEW_WORKTREE_DIR="$(dirname "${PROJECT_DIR}")/${REVIEW_WORKTREE_BASENAME}"
+
+cleanup_worktrees "${PROJECT_DIR}" "${REVIEW_WORKTREE_BASENAME}"
 
 # Dry-run mode: print diagnostics and exit
 if [ "${NW_DRY_RUN:-0}" = "1" ]; then
@@ -191,6 +340,10 @@ if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   echo "Open PRs needing work:${PRS_NEEDING_WORK}"
   echo "Default Branch: ${DEFAULT_BRANCH}"
   echo "Review Worktree: ${REVIEW_WORKTREE_DIR}"
+  echo "Target PR: ${TARGET_PR:-all}"
+  if [ -n "${TARGET_PR}" ]; then
+    echo "Worker Mode: ${WORKER_MODE}"
+  fi
   echo "Timeout: ${MAX_RUNTIME}s"
   exit 0
 fi
@@ -201,12 +354,17 @@ if ! prepare_detached_worktree "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}" "${DEFA
 fi
 
 EXIT_CODE=0
+TARGET_SCOPE_PROMPT=""
+if [ -n "${TARGET_PR}" ]; then
+  TARGET_SCOPE_PROMPT=$'\n\n## Target Scope\n- Only process PR #'"${TARGET_PR}"$'.\n- Ignore all other PRs.\n- If this PR no longer needs work, stop immediately.\n'
+fi
 
 case "${PROVIDER_CMD}" in
   claude)
+    CLAUDE_PROMPT="/night-watch-pr-reviewer${TARGET_SCOPE_PROMPT}"
     if (
       cd "${REVIEW_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
-        claude -p "/night-watch-pr-reviewer" \
+        claude -p "${CLAUDE_PROMPT}" \
           --dangerously-skip-permissions \
           >> "${LOG_FILE}" 2>&1
     ); then
@@ -216,11 +374,12 @@ case "${PROVIDER_CMD}" in
     fi
     ;;
   codex)
+    CODEX_PROMPT="$(cat "${REVIEW_WORKTREE_DIR}/.claude/commands/night-watch-pr-reviewer.md")${TARGET_SCOPE_PROMPT}"
     if (
       cd "${REVIEW_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
         codex --quiet \
           --yolo \
-          --prompt "$(cat "${REVIEW_WORKTREE_DIR}/.claude/commands/night-watch-pr-reviewer.md")" \
+          --prompt "${CODEX_PROMPT}" \
           >> "${LOG_FILE}" 2>&1
     ); then
       EXIT_CODE=0
@@ -234,7 +393,7 @@ case "${PROVIDER_CMD}" in
     ;;
 esac
 
-cleanup_worktrees "${PROJECT_DIR}"
+cleanup_worktrees "${PROJECT_DIR}" "${REVIEW_WORKTREE_BASENAME}"
 
 # ── Auto-merge eligible PRs ─────────────────────────────────────────────────────
 # After the reviewer completes, check for PRs that are merge-ready and queue them
@@ -310,13 +469,4 @@ if [ "${AUTO_MERGE}" = "1" ] && [ ${EXIT_CODE} -eq 0 ]; then
   done < <(gh pr list --state open --json number,headRefName --jq '.[] | [.number, .headRefName] | @tsv' 2>/dev/null || true)
 fi
 
-if [ ${EXIT_CODE} -eq 0 ]; then
-  log "DONE: PR reviewer completed successfully"
-  emit_result "success_reviewed" "prs=${PRS_NEEDING_WORK_CSV}|auto_merged=${AUTO_MERGED_PRS}|auto_merge_failed=${AUTO_MERGE_FAILED_PRS}"
-elif [ ${EXIT_CODE} -eq 124 ]; then
-  log "TIMEOUT: PR reviewer killed after ${MAX_RUNTIME}s"
-  emit_result "timeout" "prs=${PRS_NEEDING_WORK_CSV}"
-else
-  log "FAIL: PR reviewer exited with code ${EXIT_CODE}"
-  emit_result "failure" "prs=${PRS_NEEDING_WORK_CSV}"
-fi
+emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}"

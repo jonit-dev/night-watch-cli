@@ -9,9 +9,11 @@ import { SlackClient } from "./client.js";
 import { compileSoul } from "../agents/soul-compiler.js";
 import { getRepositories } from "../storage/repositories/index.js";
 import { INightWatchConfig } from "../types.js";
+import { createBoardProvider } from "@/board/factory.js";
 
 const MAX_ROUNDS = 3;
-const MESSAGE_DELAY_MS = 1500; // Rate limit: 1.5s between posts
+const HUMAN_DELAY_MIN_MS = 20_000; // Minimum pause between agent replies (20s)
+const HUMAN_DELAY_MAX_MS = 60_000; // Maximum pause between agent replies (60s)
 const DISCUSSION_RESUME_DELAY_MS = 60_000;
 const DISCUSSION_REPLAY_GUARD_MS = 30 * 60_000;
 const MAX_HUMANIZED_SENTENCES = 2;
@@ -33,6 +35,14 @@ function discussionStartKey(trigger: IDiscussionTrigger): string {
  */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Return a random delay in the human-like range so replies don't arrive
+ * in an obviously robotic cadence.
+ */
+function humanDelay(): number {
+  return HUMAN_DELAY_MIN_MS + Math.random() * (HUMAN_DELAY_MAX_MS - HUMAN_DELAY_MIN_MS);
 }
 
 /**
@@ -204,11 +214,32 @@ function buildOpeningMessage(trigger: IDiscussionTrigger): string {
       return `Build broke on ${trigger.ref}. Looking into it.\n\n${trigger.context.slice(0, 500)}`;
     case 'prd_kickoff':
       return `Picking up ${trigger.ref}. Going to start carving out the implementation.`;
-    case 'code_watch':
-      return `Something caught my eye during a scan — want to get a second opinion on this.\n\n${trigger.context.slice(0, 600)}`;
+    case 'code_watch': {
+      const CODE_WATCH_OPENERS = [
+        'Something caught my eye during a scan — want to get a second opinion on this.',
+        'Quick flag from the latest code scan. Might be nothing, might be worth patching.',
+        'Scanner flagged this one. Thought it was worth surfacing before it bites us.',
+        'Flagging something from the codebase — could be intentional, but it pinged the scanner.',
+        'Spotted this during a scan. Curious if it\'s expected or something we should fix.',
+      ];
+      const hash = trigger.ref.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+      const opener = CODE_WATCH_OPENERS[hash % CODE_WATCH_OPENERS.length];
+      return `${opener}\n\n${trigger.context.slice(0, 600)}`;
+    }
     default:
       return trigger.context.slice(0, 500);
   }
+}
+
+/**
+ * Parse the structured code_watch context string and derive a git-style issue title.
+ */
+function buildIssueTitleFromTrigger(trigger: IDiscussionTrigger): string {
+  const signalMatch = trigger.context.match(/^Signal: (.+)$/m);
+  const locationMatch = trigger.context.match(/^Location: (.+)$/m);
+  const signal = signalMatch?.[1] ?? 'code signal';
+  const location = locationMatch?.[1] ?? 'unknown location';
+  return `fix: ${signal} at ${location}`;
 }
 
 /**
@@ -521,7 +552,7 @@ export class DeliberationEngine {
     const openingText = buildOpeningMessage(trigger);
     const openingMsg = await this._slackClient.postAsAgent(channel, openingText, devPersona);
 
-    await sleep(MESSAGE_DELAY_MS);
+    await sleep(humanDelay());
 
     // Create discussion record
     const discussion = repos.slackDiscussion.create({
@@ -599,7 +630,7 @@ export class DeliberationEngine {
         discussion.threadTs,
       );
       repos.slackDiscussion.addParticipant(discussionId, persona.id);
-      await sleep(MESSAGE_DELAY_MS);
+      await sleep(humanDelay());
     }
   }
 
@@ -644,7 +675,7 @@ export class DeliberationEngine {
           carlos,
           threadTs,
         );
-        await sleep(MESSAGE_DELAY_MS);
+        await sleep(humanDelay());
         await this._evaluateConsensus(discussion.id, {
           type: discussion.triggerType,
           projectPath: discussion.projectPath,
@@ -713,7 +744,7 @@ export class DeliberationEngine {
         );
         repos.slackDiscussion.addParticipant(discussionId, persona.id);
         historyText = historyText ? `${historyText}\n---\n${finalMessage}` : finalMessage;
-        await sleep(MESSAGE_DELAY_MS);
+        await sleep(humanDelay());
       }
     }
   }
@@ -777,6 +808,10 @@ Write the prefix and your message. Nothing else.`;
         const message = decision.replace(/^APPROVE:\s*/, '').trim() || 'Clean. Ship it.';
         await this._slackClient.postAsAgent(discussion.channelId, message, carlos, discussion.threadTs);
         repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'approved');
+        if (trigger.type === 'code_watch') {
+          await this.triggerIssueOpener(discussionId, trigger)
+            .catch((e: unknown) => console.warn('Issue opener failed:', String(e)));
+        }
         return;
       }
 
@@ -788,7 +823,7 @@ Write the prefix and your message. Nothing else.`;
           carlos,
           discussion.threadTs,
         );
-        await sleep(MESSAGE_DELAY_MS);
+        await sleep(humanDelay());
 
         // Increment round and start another contribution round, then loop back.
         const nextRound = discussion.round + 1;
@@ -858,7 +893,7 @@ Write the prefix and your message. Nothing else.`;
         carlos,
         discussion.threadTs,
       );
-      await sleep(MESSAGE_DELAY_MS);
+      await sleep(humanDelay());
     }
 
     // Set NW_SLACK_FEEDBACK and trigger reviewer
@@ -998,6 +1033,100 @@ Write the prefix and your message. Nothing else.`;
     const finalMessage = this._humanizeForPost(channel, dummyTs, persona, message);
     if (finalMessage) {
       await this._slackClient.postAsAgent(channel, finalMessage, persona);
+    }
+  }
+
+  /**
+   * Generate a structured GitHub issue body written by the Dev persona.
+   */
+  private async _generateIssueBody(
+    trigger: IDiscussionTrigger,
+    devPersona: IAgentPersona,
+  ): Promise<string> {
+    const prompt = `You are ${devPersona.name}, ${devPersona.role}.
+Write a concise GitHub issue body for the following code scan finding.
+Use this structure exactly (GitHub Markdown):
+
+## Problem
+One sentence describing what was detected and why it's risky.
+
+## Location
+File and line where the issue exists.
+
+## Code
+\`\`\`
+The offending snippet
+\`\`\`
+
+## Suggested Fix
+2-3 bullet points on how to address it.
+
+## Acceptance Criteria
+- [ ] Checkbox items describing what "done" looks like
+
+Keep it tight — this is a bug report, not a spec. No fluff, no greetings.
+
+Context:
+${trigger.context}`;
+
+    const raw = await callAIForContribution(devPersona, this._config, prompt);
+    return raw.trim();
+  }
+
+  /**
+   * Open a GitHub issue from a code_watch finding and post back to the thread.
+   * Called automatically after an approved code_watch consensus.
+   */
+  async triggerIssueOpener(
+    discussionId: string,
+    trigger: IDiscussionTrigger,
+  ): Promise<void> {
+    const repos = getRepositories();
+    const discussion = repos.slackDiscussion.getById(discussionId);
+    if (!discussion) return;
+
+    const devPersona = findDev(repos.agentPersona.getActive());
+    if (!devPersona) return;
+
+    // Acknowledge before doing async work
+    await this._slackClient.postAsAgent(
+      discussion.channelId,
+      'Agreed. Writing up an issue for this.',
+      devPersona,
+      discussion.threadTs,
+    );
+
+    const title = buildIssueTitleFromTrigger(trigger);
+    const body = await this._generateIssueBody(trigger, devPersona);
+
+    const boardConfig = this._config.boardProvider;
+    if (boardConfig?.enabled) {
+      try {
+        const provider = createBoardProvider(boardConfig, trigger.projectPath);
+        const issue = await provider.createIssue({ title, body, column: 'Ready' });
+        await this._slackClient.postAsAgent(
+          discussion.channelId,
+          `Opened #${issue.number}: *${issue.title}* — ${issue.url}\n\nAnyone want to pick this up, or should I take a pass at it?`,
+          devPersona,
+          discussion.threadTs,
+        );
+      } catch (err) {
+        console.warn('[issue_opener] board createIssue failed:', err);
+        await this._slackClient.postAsAgent(
+          discussion.channelId,
+          `Couldn't open the issue automatically — board might not be configured. Here's the writeup:\n\n${body.slice(0, 600)}`,
+          devPersona,
+          discussion.threadTs,
+        );
+      }
+    } else {
+      // No board configured — post the writeup in thread so it's not lost
+      await this._slackClient.postAsAgent(
+        discussion.channelId,
+        `No board configured, dropping the writeup here:\n\n${body.slice(0, 600)}`,
+        devPersona,
+        discussion.threadTs,
+      );
     }
   }
 }
