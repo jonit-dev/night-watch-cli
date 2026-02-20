@@ -88,6 +88,13 @@ export class SlackClient {
   }
 
   /**
+   * Join an existing Slack channel by ID.
+   */
+  async joinChannel(channelId: string): Promise<void> {
+    await this._client.conversations.join({ channel: channelId });
+  }
+
+  /**
    * Create a new Slack channel. Returns the channel ID.
    */
   async createChannel(name: string): Promise<string> {
