@@ -1930,6 +1930,15 @@ function createProjectRouter(): Router {
     }
   });
 
+  // ==================== Slack Channels ====================
+
+  router.post('/slack/channels', (req, res) =>
+    handlePostSlackChannels(req, res),
+  );
+  router.post('/slack/channels/create', (req, res) =>
+    handlePostSlackChannelCreate(req, res),
+  );
+
   // ==================== Slack Discussions ====================
 
   router.get('/discussions', (req, res) => {
