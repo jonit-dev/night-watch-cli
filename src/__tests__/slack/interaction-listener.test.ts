@@ -3,6 +3,7 @@ import { IAgentPersona } from '../../../shared/types.js';
 import {
   buildInboundMessageKey,
   extractMentionHandles,
+  findCodeWatchSignal,
   isAmbientTeamMessage,
   parseSlackJobRequest,
   resolveMentionedPersonas,
@@ -252,6 +253,37 @@ describe('Slack interaction listener helpers', () => {
     it('ignores non-greeting chatter', () => {
       expect(isAmbientTeamMessage('Cool')).toBe(false);
       expect(isAmbientTeamMessage('ship it')).toBe(false);
+    });
+  });
+
+  describe('findCodeWatchSignal', () => {
+    it('detects empty catch blocks', () => {
+      const signal = findCodeWatchSignal(`
+        async function run() {
+          try {
+            await work();
+          } catch (err) {
+          }
+        }
+      `);
+      expect(signal?.type).toBe('empty_catch');
+    });
+
+    it('detects critical TODO markers', () => {
+      const signal = findCodeWatchSignal(`
+        // TODO security bug: tighten token validation before ship
+        export const ok = true;
+      `);
+      expect(signal?.type).toBe('critical_todo');
+    });
+
+    it('returns null when no suspicious signal is present', () => {
+      const signal = findCodeWatchSignal(`
+        export function sum(a: number, b: number): number {
+          return a + b;
+        }
+      `);
+      expect(signal).toBeNull();
     });
   });
 

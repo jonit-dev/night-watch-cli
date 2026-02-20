@@ -6,6 +6,8 @@
 
 import { SocketModeClient } from '@slack/socket-mode';
 import { spawn } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 import { IAgentPersona } from '../../shared/types.js';
 import { getDb } from '../storage/sqlite/client.js';
 import { getRepositories } from '../storage/repositories/index.js';
@@ -22,12 +24,50 @@ const AD_HOC_THREAD_MEMORY_MS = 60 * 60_000; // 1h
 const PROACTIVE_IDLE_MS = 20 * 60_000; // 20 min
 const PROACTIVE_MIN_INTERVAL_MS = 90 * 60_000; // per channel
 const PROACTIVE_SWEEP_INTERVAL_MS = 60_000;
+const PROACTIVE_CODEWATCH_MIN_INTERVAL_MS = 3 * 60 * 60_000; // per project
+const PROACTIVE_CODEWATCH_REPEAT_COOLDOWN_MS = 24 * 60 * 60_000; // per issue signature
 const MAX_JOB_OUTPUT_CHARS = 12_000;
 const HUMAN_REACTION_PROBABILITY = 0.65;
 const REACTION_DELAY_MIN_MS = 180;
 const REACTION_DELAY_MAX_MS = 1200;
 const RESPONSE_DELAY_MIN_MS = 700;
 const RESPONSE_DELAY_MAX_MS = 3400;
+const CODEWATCH_MAX_FILES = 250;
+const CODEWATCH_MAX_FILE_BYTES = 256_000;
+const CODEWATCH_INCLUDE_EXTENSIONS = new Set([
+  '.ts',
+  '.tsx',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.cjs',
+  '.py',
+  '.go',
+  '.rb',
+  '.java',
+  '.kt',
+  '.rs',
+  '.php',
+  '.cs',
+  '.swift',
+  '.scala',
+  '.sh',
+]);
+const CODEWATCH_IGNORE_DIRS = new Set([
+  '.git',
+  'node_modules',
+  'dist',
+  'build',
+  '.next',
+  'coverage',
+  '.turbo',
+  '.cache',
+  'logs',
+  '.yarn',
+  'vendor',
+  'tmp',
+  'temp',
+]);
 
 const JOB_STOPWORDS = new Set([
   'and',
@@ -92,6 +132,20 @@ function formatCommandForLog(bin: string, args: string[]): string {
 }
 
 type TPersonaDomain = 'security' | 'qa' | 'lead' | 'dev' | 'general';
+type TCodeWatchSignalType = 'empty_catch' | 'critical_todo';
+
+export interface ICodeWatchSignal {
+  type: TCodeWatchSignalType;
+  index: number;
+  summary: string;
+  snippet: string;
+}
+
+interface ICodeWatchCandidate extends ICodeWatchSignal {
+  relativePath: string;
+  line: number;
+  signature: string;
+}
 
 interface IInboundSlackEvent {
   type?: string;
@@ -141,6 +195,141 @@ function normalizeForParsing(text: string): string {
     .replace(/[^\w\s./-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function isCodeWatchSourceFile(filePath: string): boolean {
+  return CODEWATCH_INCLUDE_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+}
+
+function lineNumberAt(content: string, index: number): number {
+  if (index <= 0) return 1;
+  let line = 1;
+  for (let i = 0; i < index && i < content.length; i += 1) {
+    if (content.charCodeAt(i) === 10) {
+      line += 1;
+    }
+  }
+  return line;
+}
+
+function extractLineSnippet(content: string, index: number): string {
+  const clamped = Math.max(0, Math.min(index, content.length));
+  const before = content.lastIndexOf('\n', clamped);
+  const after = content.indexOf('\n', clamped);
+  const start = before === -1 ? 0 : before + 1;
+  const end = after === -1 ? content.length : after;
+  return content.slice(start, end).trim().slice(0, 220);
+}
+
+function walkProjectFilesForCodeWatch(projectPath: string): string[] {
+  const files: string[] = [];
+  const stack = [projectPath];
+
+  while (stack.length > 0 && files.length < CODEWATCH_MAX_FILES) {
+    const dir = stack.pop();
+    if (!dir) break;
+
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (files.length >= CODEWATCH_MAX_FILES) break;
+      const fullPath = path.join(dir, entry.name);
+
+      if (entry.isDirectory()) {
+        if (CODEWATCH_IGNORE_DIRS.has(entry.name)) {
+          continue;
+        }
+        stack.push(fullPath);
+        continue;
+      }
+
+      if (!entry.isFile()) {
+        continue;
+      }
+
+      if (isCodeWatchSourceFile(fullPath)) {
+        files.push(fullPath);
+      }
+    }
+  }
+
+  return files;
+}
+
+export function findCodeWatchSignal(content: string): ICodeWatchSignal | null {
+  if (!content || content.trim().length === 0) return null;
+
+  const emptyCatchMatch = /catch\s*(?:\([^)]*\))?\s*\{\s*(?:(?:\/\/[^\n]*|\/\*[\s\S]*?\*\/)\s*)*\}/gm.exec(content);
+  const criticalTodoMatch = /\b(?:TODO|FIXME|HACK)\b[^\n]{0,140}\b(?:bug|security|race|leak|crash|hotfix|rollback|unsafe)\b/gi.exec(content);
+
+  const emptyCatchIndex = emptyCatchMatch?.index ?? Number.POSITIVE_INFINITY;
+  const criticalTodoIndex = criticalTodoMatch?.index ?? Number.POSITIVE_INFINITY;
+  if (!Number.isFinite(emptyCatchIndex) && !Number.isFinite(criticalTodoIndex)) {
+    return null;
+  }
+
+  if (emptyCatchIndex <= criticalTodoIndex) {
+    return {
+      type: 'empty_catch',
+      index: emptyCatchIndex,
+      summary: 'empty catch block may hide runtime failures',
+      snippet: extractLineSnippet(content, emptyCatchIndex),
+    };
+  }
+
+  return {
+    type: 'critical_todo',
+    index: criticalTodoIndex,
+    summary: 'high-risk TODO/FIXME likely indicates unresolved bug or security concern',
+    snippet: (criticalTodoMatch?.[0] ?? extractLineSnippet(content, criticalTodoIndex)).trim().slice(0, 220),
+  };
+}
+
+function detectCodeWatchCandidate(projectPath: string): ICodeWatchCandidate | null {
+  const files = walkProjectFilesForCodeWatch(projectPath);
+
+  for (const filePath of files) {
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(filePath);
+    } catch {
+      continue;
+    }
+    if (stat.size <= 0 || stat.size > CODEWATCH_MAX_FILE_BYTES) {
+      continue;
+    }
+
+    let content: string;
+    try {
+      content = fs.readFileSync(filePath, 'utf-8');
+    } catch {
+      continue;
+    }
+    if (content.includes('\u0000')) {
+      continue;
+    }
+
+    const signal = findCodeWatchSignal(content);
+    if (!signal) continue;
+
+    const relativePath = path.relative(projectPath, filePath).replace(/\\/g, '/');
+    const line = lineNumberAt(content, signal.index);
+    const signature = `${signal.type}:${relativePath}:${line}`;
+
+    return {
+      ...signal,
+      relativePath,
+      line,
+      signature,
+    };
+  }
+
+  return null;
 }
 
 export function isAmbientTeamMessage(text: string): boolean {
@@ -379,6 +568,8 @@ export class SlackInteractionListener {
   private readonly _adHocThreadState = new Map<string, IAdHocThreadState>();
   private readonly _lastChannelActivityAt = new Map<string, number>();
   private readonly _lastProactiveAt = new Map<string, number>();
+  private readonly _lastCodeWatchAt = new Map<string, number>();
+  private readonly _lastCodeWatchSignatureAt = new Map<string, number>();
   private _proactiveTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(config: INightWatchConfig) {
@@ -991,6 +1182,67 @@ export class SlackInteractionListener {
     return true;
   }
 
+  private _resolveProactiveChannelForProject(project: IRegistryEntry): string | null {
+    const slack = this._config.slack;
+    if (!slack) return null;
+    return project.slackChannelId || slack.channels.eng || null;
+  }
+
+  private async _runProactiveCodeWatch(
+    projects: IRegistryEntry[],
+    now: number,
+  ): Promise<void> {
+    for (const project of projects) {
+      const channel = this._resolveProactiveChannelForProject(project);
+      if (!channel) continue;
+
+      const lastScan = this._lastCodeWatchAt.get(project.path) ?? 0;
+      if (now - lastScan < PROACTIVE_CODEWATCH_MIN_INTERVAL_MS) {
+        continue;
+      }
+      this._lastCodeWatchAt.set(project.path, now);
+
+      const candidate = detectCodeWatchCandidate(project.path);
+      if (!candidate) {
+        continue;
+      }
+
+      const signatureKey = `${project.path}:${candidate.signature}`;
+      const lastSeen = this._lastCodeWatchSignatureAt.get(signatureKey) ?? 0;
+      if (now - lastSeen < PROACTIVE_CODEWATCH_REPEAT_COOLDOWN_MS) {
+        continue;
+      }
+
+      const ref = `codewatch-${candidate.signature}`;
+      const context =
+        `Project: ${project.name}\n` +
+        `Signal: ${candidate.summary}\n` +
+        `Location: ${candidate.relativePath}:${candidate.line}\n` +
+        `Snippet: ${candidate.snippet}\n` +
+        `Question: Is this intentional, or should we patch it now?`;
+
+      console.log(
+        `[slack][codewatch] project=${project.name} location=${candidate.relativePath}:${candidate.line} signal=${candidate.type}`,
+      );
+
+      try {
+        await this._engine.startDiscussion({
+          type: 'code_watch',
+          projectPath: project.path,
+          ref,
+          context,
+          channelId: channel,
+        });
+        this._lastCodeWatchSignatureAt.set(signatureKey, now);
+        this._markChannelActivity(channel);
+        return;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[slack][codewatch] failed for ${project.name}: ${msg}`);
+      }
+    }
+  }
+
   private _startProactiveLoop(): void {
     if (this._proactiveTimer) return;
 
@@ -1020,6 +1272,7 @@ export class SlackInteractionListener {
 
     const now = Date.now();
     const projects = repos.projectRegistry.getAll();
+    await this._runProactiveCodeWatch(projects, now);
 
     for (const channel of channelIds) {
       const lastActivity = this._lastChannelActivityAt.get(channel) ?? now;
