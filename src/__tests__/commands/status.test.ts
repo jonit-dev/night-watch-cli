@@ -250,7 +250,7 @@ describe("status command", () => {
       const logDir = path.join(tempDir, "logs");
       fs.mkdirSync(logDir, { recursive: true });
       fs.writeFileSync(
-        path.join(logDir, "night-watch.log"),
+        path.join(logDir, "executor.log"),
         "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6"
       );
 

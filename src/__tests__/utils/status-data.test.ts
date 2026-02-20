@@ -1154,6 +1154,36 @@ describe("status-data utilities", () => {
       const reviewerLog = result.find((l) => l.name === "reviewer");
       expect(reviewerLog).toBeDefined();
       expect(reviewerLog!.exists).toBe(false);
+
+      const qaLog = result.find((l) => l.name === "qa");
+      expect(qaLog).toBeDefined();
+      expect(qaLog!.exists).toBe(false);
+    });
+
+    it("should use correct file names (executor.log, reviewer.log, night-watch-qa.log)", () => {
+      const logDir = path.join(tempDir, "logs");
+      fs.mkdirSync(logDir, { recursive: true });
+      fs.writeFileSync(path.join(logDir, "executor.log"), "Executor line 1");
+      fs.writeFileSync(path.join(logDir, "reviewer.log"), "Reviewer line 1");
+      fs.writeFileSync(path.join(logDir, "night-watch-qa.log"), "QA line 1");
+
+      const result = collectLogInfo(tempDir);
+      expect(result).toHaveLength(3);
+
+      const executorLog = result.find((l) => l.name === "executor");
+      expect(executorLog).toBeDefined();
+      expect(executorLog!.exists).toBe(true);
+      expect(executorLog!.path).toContain("executor.log");
+
+      const reviewerLog = result.find((l) => l.name === "reviewer");
+      expect(reviewerLog).toBeDefined();
+      expect(reviewerLog!.exists).toBe(true);
+      expect(reviewerLog!.path).toContain("reviewer.log");
+
+      const qaLog = result.find((l) => l.name === "qa");
+      expect(qaLog).toBeDefined();
+      expect(qaLog!.exists).toBe(true);
+      expect(qaLog!.path).toContain("night-watch-qa.log");
     });
   });
 

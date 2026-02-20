@@ -57,7 +57,7 @@ function showMessage(
 export function dashboardCommand(program: Command): void {
   program
     .command("dashboard")
-    .description("Live terminal dashboard")
+    .description("Live terminal dashboard [experimental]")
     .option("--interval <seconds>", "Refresh interval in seconds", "10")
     .action(async (options: IDashboardOptions) => {
       const projectDir = process.cwd();
