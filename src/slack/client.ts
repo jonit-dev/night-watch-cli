@@ -10,6 +10,7 @@ export interface ISlackMessage {
   ts: string;
   channel: string;
   text: string;
+  username?: string;
 }
 
 export interface ISlackChannel {
@@ -34,9 +35,25 @@ export function getFallbackAvatarUrl(persona: IAgentPersona): string {
 
 export class SlackClient {
   private readonly _client: WebClient;
+  private readonly _serverBaseUrl: string;
 
-  constructor(botToken: string) {
+  constructor(botToken: string, serverBaseUrl = 'http://localhost:7575') {
     this._client = new WebClient(botToken);
+    this._serverBaseUrl = serverBaseUrl.replace(/\/$/, '');
+  }
+
+  /**
+   * Resolve an avatar URL: relative paths (e.g. /avatars/maya.webp) become
+   * absolute using the server base URL so Slack can fetch them.
+   */
+  private _resolveAvatarUrl(avatarUrl: string | null): string {
+    if (!avatarUrl || avatarUrl.startsWith('data:')) {
+      return '';
+    }
+    if (avatarUrl.startsWith('/')) {
+      return `${this._serverBaseUrl}${avatarUrl}`;
+    }
+    return avatarUrl;
   }
 
   /**
@@ -50,10 +67,8 @@ export class SlackClient {
     threadTs?: string,
   ): Promise<ISlackMessage> {
     // Slack icon_url must be a real HTTP URL — data URIs are not supported
-    const iconUrl =
-      persona.avatarUrl && !persona.avatarUrl.startsWith('data:')
-        ? persona.avatarUrl
-        : getFallbackAvatarUrl(persona);
+    const resolved = this._resolveAvatarUrl(persona.avatarUrl);
+    const iconUrl = resolved || getFallbackAvatarUrl(persona);
 
     const result = await this._client.chat.postMessage({
       channel,
@@ -154,6 +169,7 @@ export class SlackClient {
       ts: m.ts as string,
       channel,
       text: (m.text ?? '') as string,
+      username: (m as unknown as Record<string, unknown>)['username'] as string | undefined,
     }));
   }
 

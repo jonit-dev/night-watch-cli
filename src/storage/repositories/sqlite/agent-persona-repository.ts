@@ -120,15 +120,16 @@ function rowToPersona(row: IAgentPersonaRow, modelConfig: IAgentModelConfig | nu
 }
 
 /**
- * Default avatar URLs for built-in personas.
- * These are permanent hosted images (served via Night Watch or uploaded to a CDN).
- * Update here whenever new avatars are generated.
+ * Default avatar paths for built-in personas.
+ * Images are stored locally in web/public/avatars/ and served by the Night Watch server.
+ * The SlackClient resolves these relative paths to absolute URLs using the configured serverBaseUrl.
+ * To regenerate: run the avatar-generator utility and save new images to web/public/avatars/.
  */
 const DEFAULT_AVATAR_URLS: Record<string, string> = {
-  Maya: 'https://replicate.delivery/xezq/28PC6kGRP9IzF1s0gHyXBU1MZDVNKK9tC1pZIljcVnlCcWiF/tmpac7z7jau.webp',
-  Carlos: 'https://replicate.delivery/xezq/hWLRUOgBjJ56BNpUjLipJnVCHGP8y2srUx4aeicRUsmG4sELA/tmp37dkg511.webp',
-  Priya: 'https://replicate.delivery/xezq/g4ZtYdRgWMpfCqOeAfbvoq4avSIHShLvsk2HtvMBPH5igzSsA/tmpdxxc93jx.webp',
-  Dev: 'https://replicate.delivery/xezq/T6dKn1VlEL49B1CbhHMN84GlLEtac5HsF7jHnf4eosEUwZJWA/tmpxndgvawn.webp',
+  Maya: '/avatars/maya.webp',
+  Carlos: '/avatars/carlos.webp',
+  Priya: '/avatars/priya.webp',
+  Dev: '/avatars/dev.webp',
 };
 
 // Default personas to seed on first run
