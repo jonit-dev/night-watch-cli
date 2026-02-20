@@ -62,10 +62,10 @@ export function prsCommand(program: Command): void {
     .command("prs")
     .description("List matching PRs with CI status and review scores")
     .option("--json", "Output PRs as JSON")
-    .option("--debug", "Enable debug logging to show raw API data")
+    .option("--debug", "Enable debug logging for CI status and review score derivation")
     .action(async (options: IPrsOptions) => {
       try {
-        // Enable debug mode if requested
+        // Enable debug mode via environment variable
         if (options.debug) {
           process.env.DEBUG_PR_DATA = "1";
         }
