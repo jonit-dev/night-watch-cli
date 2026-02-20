@@ -576,7 +576,8 @@ export class SlackInteractionListener {
   constructor(config: INightWatchConfig) {
     this._config = config;
     const token = config.slack?.botToken ?? '';
-    this._slackClient = new SlackClient(token);
+    const serverBaseUrl = config.slack?.serverBaseUrl ?? 'http://localhost:7575';
+    this._slackClient = new SlackClient(token, serverBaseUrl);
     this._engine = new DeliberationEngine(this._slackClient, config);
   }
 
@@ -836,6 +837,32 @@ export class SlackInteractionListener {
       personaId,
       expiresAt: Date.now() + AD_HOC_THREAD_MEMORY_MS,
     });
+  }
+
+  /**
+   * Recover the persona that last replied in a thread by scanning its history.
+   * Used as a fallback when in-memory state was lost (e.g. after a server restart).
+   * Matches message `username` fields against known persona names.
+   */
+  private async _recoverPersonaFromThreadHistory(
+    channel: string,
+    threadTs: string,
+    personas: IAgentPersona[],
+  ): Promise<IAgentPersona | null> {
+    try {
+      const history = await this._slackClient.getChannelHistory(channel, threadTs, 50);
+      // Walk backwards to find the most recent message sent by a persona
+      for (const msg of [...history].reverse()) {
+        if (!msg.username) continue;
+        const matched = personas.find(
+          (p) => p.name.toLowerCase() === msg.username!.toLowerCase(),
+        );
+        if (matched) return matched;
+      }
+    } catch {
+      // Ignore — treat as no prior context
+    }
+    return null;
   }
 
   private _getRememberedAdHocPersona(
@@ -1435,6 +1462,20 @@ export class SlackInteractionListener {
       this._markPersonaReply(channel, threadTs, followUpPersona.id);
       this._rememberAdHocThreadPersona(channel, threadTs, followUpPersona.id);
       return;
+    }
+
+    // In-memory state was lost (e.g. server restart) — recover persona from thread history.
+    if (threadTs) {
+      const recoveredPersona = await this._recoverPersonaFromThreadHistory(channel, threadTs, personas);
+      if (recoveredPersona) {
+        const followUpPersona = selectFollowUpPersona(recoveredPersona, personas, text);
+        console.log(`[slack] recovered ad-hoc thread persona ${recoveredPersona.name} from history, replying as ${followUpPersona.name}`);
+        await this._applyHumanResponseTiming(channel, ts, followUpPersona);
+        await this._engine.replyAsAgent(channel, threadTs, text, followUpPersona, projectContext);
+        this._markPersonaReply(channel, threadTs, followUpPersona.id);
+        this._rememberAdHocThreadPersona(channel, threadTs, followUpPersona.id);
+        return;
+      }
     }
 
     // Keep the channel alive: direct mentions and ambient greetings get a random responder.

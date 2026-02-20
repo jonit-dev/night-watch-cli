@@ -165,6 +165,7 @@ export interface ISlackBotConfig {
   autoCreateProjectChannels: boolean;
   discussionEnabled: boolean;
   replicateApiToken?: string;  // For AI-generated persona avatars (Flux)
+  serverBaseUrl?: string;      // Public base URL of the Night Watch server (e.g. https://my-ngrok.io) used to serve local avatar images to Slack
 }
 
 // ==================== Agent Personas ====================
