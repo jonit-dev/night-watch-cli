@@ -69,4 +69,23 @@ describe("global server agent routes", () => {
     expect(seed.status).toBe(200);
     expect(seed.body.message).toContain("seeded");
   });
+
+  it("serves project-scoped Slack channel routes", async () => {
+    const projects = await request(app).get("/api/projects");
+    expect(projects.status).toBe(200);
+    const projectName = projects.body[0]?.name as string;
+    const projectId = encodeProjectId(projectName);
+
+    const listChannels = await request(app).post(
+      `/api/projects/${projectId}/slack/channels`,
+    ).send({});
+    expect(listChannels.status).toBe(400);
+    expect(listChannels.body.error).toContain("botToken is required");
+
+    const createChannel = await request(app).post(
+      `/api/projects/${projectId}/slack/channels/create`,
+    ).send({});
+    expect(createChannel.status).toBe(400);
+    expect(createChannel.body.error).toContain("botToken is required");
+  });
 });
