@@ -434,6 +434,7 @@ export function useStatusStream(
     return () => {
       es.close();
     };
+    // deps intentionally excludes onChange - we don't want to re-subscribe on every render
   }, [enabled, ...deps]);
 }
 
