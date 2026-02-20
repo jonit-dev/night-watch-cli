@@ -13,7 +13,7 @@ import cors from 'cors';
 import express, { Express, NextFunction, Request, Response } from 'express';
 
 import { loadConfig } from '@night-watch/core/config.js';
-import { createSlackStack, type ISlackStack } from '@night-watch/slack/factory.js';
+import { type ISlackStack, createSlackStack } from '@night-watch/slack/factory.js';
 import { collectPrInfo } from '@night-watch/core/utils/status-data.js';
 import { loadRegistry, validateRegistry } from '@night-watch/core/utils/registry.js';
 import { getRoadmapStatus, scanRoadmap } from '@night-watch/core/utils/roadmap-scanner.js';
