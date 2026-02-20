@@ -653,6 +653,9 @@ export function getScriptPath(scriptName) {
     const configFilePath = fileURLToPath(import.meta.url);
     const baseDir = path.dirname(configFilePath);
     const candidates = [
+        // CLI binary (process.argv[1] = packages/cli/bin/night-watch.mjs) -> ../scripts
+        // Works for both local dev (via packages/cli/scripts symlink) and npm-installed packages
+        ...(process.argv[1] ? [path.resolve(path.dirname(process.argv[1]), "..", "scripts", scriptName)] : []),
         // Dev (tsx): src/config.ts -> ../scripts
         path.resolve(baseDir, "..", "scripts", scriptName),
         // Built package (dist/src/config.js): ../../scripts
