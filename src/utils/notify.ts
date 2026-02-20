@@ -11,6 +11,9 @@ import { SlackClient } from "../slack/client.js";
 import { DeliberationEngine } from "../slack/deliberation.js";
 import { getRepositories } from "../storage/repositories/index.js";
 
+// Alias for backwards compatibility with existing test imports
+export type NotificationContext = INotificationContext;
+
 export interface INotificationContext {
   event: NotificationEvent;
   projectName: string;
@@ -265,20 +268,84 @@ function buildQaNotificationText(ctx: INotificationContext): string {
   return `I ran QA on ${prRef} for ${project}, but it failed. I'll check the logs.`;
 }
 
+function pickRandom<T>(arr: readonly T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)] as T;
+}
+
 export function buildNotificationText(ctx: INotificationContext): string {
   if (ctx.event === "qa_completed") {
     return buildQaNotificationText(ctx);
   }
 
-  const emoji = getEventEmoji(ctx.event);
-  const title = getEventTitle(ctx.event);
-  const parts: string[] = [`${emoji} *${title}*`, `Project: ${ctx.projectName}`];
-  if (ctx.prdName) parts.push(`PRD: ${ctx.prdName}`);
-  if (ctx.branchName) parts.push(`Branch: ${ctx.branchName}`);
-  if (ctx.prNumber !== undefined) parts.push(`PR: #${ctx.prNumber}`);
-  if (ctx.prUrl) parts.push(`<${ctx.prUrl}|View PR>`);
-  if (ctx.duration !== undefined) parts.push(`Duration: ${ctx.duration}s`);
-  return parts.join(" | ");
+  const prRef = ctx.prNumber !== undefined ? `#${ctx.prNumber}` : null;
+  const prLink = ctx.prUrl && prRef
+    ? `<${ctx.prUrl}|${prRef}>`
+    : prRef ?? null;
+  const project = ctx.projectName;
+
+  switch (ctx.event) {
+    case "run_succeeded":
+      if (prLink) {
+        return pickRandom([
+          `Done. Opened ${prLink}.`,
+          `PRD wrapped — ${prLink} is up.`,
+          `Shipped it — ${prLink}.`,
+          `Finished the run. ${prLink}.`,
+        ]);
+      }
+      return pickRandom([
+        `Run finished on ${project}.`,
+        `PRD wrapped for ${project}.`,
+        `Done with the run on ${project}.`,
+      ]);
+
+    case "run_started":
+      return pickRandom([
+        `Starting the run on ${project}.`,
+        `Kicking off the PRD for ${project}.`,
+        `Picking up ${project} now.`,
+      ]);
+
+    case "run_failed":
+      return pickRandom([
+        `Run failed on ${project}. Looking into it.`,
+        `Something broke on the run for ${project}. Checking.`,
+        `Hit a snag on ${project}. I'll dig in.`,
+        `PRD run failed for ${project}. On it.`,
+      ]);
+
+    case "run_timeout":
+      return pickRandom([
+        `Run timed out on ${project}.`,
+        `Timed out waiting on the run for ${project}.`,
+        `${project} run hit the timeout. Needs a look.`,
+      ]);
+
+    case "review_completed":
+      if (prLink) {
+        return pickRandom([
+          `Left my notes on ${prLink}.`,
+          `Reviewed ${prLink}. Check the comments.`,
+          `Done with the review — ${prLink}.`,
+          `Wrapped up ${prLink}.`,
+        ]);
+      }
+      return `Wrapped up the review on ${project}.`;
+
+    case "pr_auto_merged":
+      return prLink
+        ? pickRandom([`Merged ${prLink}.`, `Auto-merged ${prLink}.`, `${prLink} is in.`])
+        : `Auto-merged on ${project}.`;
+
+    case "rate_limit_fallback":
+      return pickRandom([
+        `Rate limited, switching providers.`,
+        `Hit the rate limit — falling back to another provider.`,
+      ]);
+
+    default:
+      return `${getEventTitle(ctx.event)} for ${project}${prLink ? ` — ${prLink}` : ''}.`;
+  }
 }
 
 /**

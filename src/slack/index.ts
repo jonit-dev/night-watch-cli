@@ -15,6 +15,7 @@ export type { IHumanizeSlackReplyOptions } from './humanizer.js';
 export {
   sleep,
   buildCurrentCliInvocation,
+  getNightWatchTsconfigPath,
   formatCommandForLog,
   normalizeText,
   extractErrorMessage,
