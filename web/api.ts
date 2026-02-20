@@ -434,7 +434,7 @@ export function useStatusStream(
     return () => {
       es.close();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // deps intentionally excludes onChange - we don't want to re-subscribe on every render
   }, [enabled, ...deps]);
 }
 
