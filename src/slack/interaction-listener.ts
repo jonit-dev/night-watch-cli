@@ -6,6 +6,7 @@
 
 import { SocketModeClient } from '@slack/socket-mode';
 import { IAgentPersona } from '../../shared/types.js';
+import { getDb } from '../storage/sqlite/client.js';
 import { getRepositories } from '../storage/repositories/index.js';
 import { INightWatchConfig } from '../types.js';
 import { DeliberationEngine } from './deliberation.js';
@@ -153,6 +154,7 @@ export class SlackInteractionListener {
     await socket.start();
     this._socketClient = socket;
     console.log('Slack interaction listener started (Socket Mode)');
+    void this._postPersonaIntros();
   }
 
   async stop(): Promise<void> {
@@ -170,6 +172,48 @@ export class SlackInteractionListener {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`Slack interaction listener shutdown failed: ${msg}`);
+    }
+  }
+
+  /**
+   * Post a self-introduction message for each active persona that hasn't
+   * introduced themselves to the eng channel yet. Tracked persistently in
+   * schema_meta so it only fires once per persona across restarts.
+   */
+  private async _postPersonaIntros(): Promise<void> {
+    const channelId = this._config.slack?.channels?.eng;
+    if (!channelId) return;
+
+    const db = getDb();
+    const metaRow = db
+      .prepare(`SELECT value FROM schema_meta WHERE key = 'slack_persona_intros'`)
+      .get() as { value: string } | undefined;
+    const introduced = new Set<string>(
+      metaRow ? (JSON.parse(metaRow.value) as string[]) : [],
+    );
+
+    const repos = getRepositories();
+    const personas = repos.agentPersona.getActive();
+
+    for (const persona of personas) {
+      if (introduced.has(persona.id)) continue;
+
+      const whoIAm = persona.soul?.whoIAm?.trim() ?? '';
+      const intro = whoIAm
+        ? `👋 Hey! I'm *${persona.name}*, ${persona.role}. ${whoIAm}`
+        : `👋 Hey! I'm *${persona.name}*, ${persona.role}. Ready to collaborate!`;
+
+      try {
+        await this._slackClient.postAsAgent(channelId, intro, persona);
+        introduced.add(persona.id);
+        db.prepare(
+          `INSERT INTO schema_meta (key, value) VALUES ('slack_persona_intros', ?)
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+        ).run(JSON.stringify(Array.from(introduced)));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`Slack persona intro failed for ${persona.name}: ${msg}`);
+      }
     }
   }
 
