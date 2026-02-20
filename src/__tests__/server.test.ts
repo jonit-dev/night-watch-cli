@@ -128,11 +128,11 @@ describe("server API", () => {
     const logDir = path.join(tempDir, "logs");
     fs.mkdirSync(logDir, { recursive: true });
     fs.writeFileSync(
-      path.join(logDir, "night-watch.log"),
+      path.join(logDir, "executor.log"),
       "Executor log line 1\nExecutor log line 2\nExecutor log line 3"
     );
     fs.writeFileSync(
-      path.join(logDir, "night-watch-pr-reviewer.log"),
+      path.join(logDir, "reviewer.log"),
       "Reviewer log line 1\nReviewer log line 2\nReviewer log line 3"
     );
 

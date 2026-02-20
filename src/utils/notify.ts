@@ -339,11 +339,16 @@ export async function sendWebhook(webhook: IWebhookConfig, ctx: INotificationCon
       }
     }
 
-    await fetch(url, {
+    const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body,
     });
+
+    // Check for non-2xx responses and treat as failure
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     warn(`Notification failed (${webhook.type}): ${message}`);

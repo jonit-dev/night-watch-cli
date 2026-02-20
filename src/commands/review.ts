@@ -9,7 +9,7 @@ import { executeScriptWithOutput } from "../utils/shell.js";
 import { sendNotifications } from "../utils/notify.js";
 import { type IPrDetails, fetchPrDetailsByNumber, fetchReviewedPrDetails } from "../utils/github.js";
 import { PROVIDER_COMMANDS } from "../constants.js";
-import { execSync } from "child_process";
+import { execFileSync } from "child_process";
 import * as path from "path";
 import { parseScriptResult } from "../utils/script-result.js";
 import {
@@ -124,17 +124,17 @@ export function applyCliOverrides(config: INightWatchConfig, options: IReviewOpt
  */
 function getOpenPrsNeedingWork(branchPatterns: string[]): { number: number; title: string; branch: string }[] {
   try {
-    // Build the search query for PRs matching branch patterns
-    const headFilter = branchPatterns.map((p) => `--head "${p}"`).join(" ");
+    // Build args array for safe shell execution
+    const args = ["pr", "list", "--state", "open", "--json", "number,title,headRefName"];
+    for (const pattern of branchPatterns) {
+      args.push("--head", pattern);
+    }
 
-    // Get open PRs as JSON
-    const result = execSync(
-      `gh pr list --state open --json number,title,headRefName ${headFilter} 2>/dev/null || echo "[]"`,
-      {
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
-      }
-    );
+    // Get open PRs as JSON using execFileSync for safe argument handling
+    const result = execFileSync("gh", args, {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
 
     const prs = JSON.parse(result.trim() || "[]");
     return prs.map((pr: { number: number; title: string; headRefName: string }) => ({

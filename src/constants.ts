@@ -129,8 +129,12 @@ export const LOG_DIR = "logs";
 export const CLAIM_FILE_EXTENSION = ".claim";
 
 // Log file names (must match what executor/reviewer create)
-export const EXECUTOR_LOG_NAME = "night-watch";
-export const REVIEWER_LOG_NAME = "night-watch-pr-reviewer";
+export const EXECUTOR_LOG_NAME = "executor";
+export const REVIEWER_LOG_NAME = "reviewer";
+
+// Log file extensions
+export const EXECUTOR_LOG_FILE = "executor.log";
+export const REVIEWER_LOG_FILE = "reviewer.log";
 
 // Mapping from logical API names to actual file names
 export const LOG_FILE_NAMES: Record<string, string> = {

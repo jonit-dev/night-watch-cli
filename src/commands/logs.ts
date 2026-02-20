@@ -7,7 +7,7 @@ import { Command } from "commander";
 import { spawn } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
-import { LOG_DIR } from "../constants.js";
+import { EXECUTOR_LOG_FILE, LOG_DIR, REVIEWER_LOG_FILE } from "../constants.js";
 import { dim, header } from "../utils/ui.js";
 
 export interface ILogsOptions {
@@ -74,8 +74,8 @@ export function logsCommand(program: Command): void {
         const logDir = path.join(projectDir, LOG_DIR);
         const lineCount = parseInt(options.lines || "50", 10);
 
-        const executorLog = path.join(logDir, "executor.log");
-        const reviewerLog = path.join(logDir, "reviewer.log");
+        const executorLog = path.join(logDir, EXECUTOR_LOG_FILE);
+        const reviewerLog = path.join(logDir, REVIEWER_LOG_FILE);
 
         // Determine which logs to show
         const logType = options.type?.toLowerCase() || "all";
