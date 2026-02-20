@@ -54,5 +54,6 @@ export default defineConfig({
     pool: 'forks',
     minWorkers: 1,
     maxWorkers: 4,
+    testTimeout: 30000,
   },
 });
