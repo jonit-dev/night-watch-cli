@@ -247,11 +247,7 @@ export function startServer(projectDir: string, port: number): void {
     console.log(`Provider        ${config.provider}`);
     const slack = config.slack;
     if (slack?.enabled && slack.botToken) {
-      console.log(
-        `Slack           enabled — channels: ${Object.entries(slack.channels ?? {})
-          .map(([k, v]) => `#${k}=${v}`)
-          .join(', ')}`,
-      );
+      console.log(`Slack           enabled — channels auto-created per project`);
       if (slack.replicateApiToken) console.log(`Avatar gen      Replicate Flux enabled`);
     } else {
       console.log(`Slack           not configured`);

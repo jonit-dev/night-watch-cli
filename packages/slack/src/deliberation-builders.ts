@@ -3,7 +3,7 @@
  * Extracted from deliberation.ts to separate message-construction concerns from orchestration logic.
  */
 
-import { IAgentPersona, IDiscussionTrigger, INightWatchConfig } from '@night-watch/core';
+import { IAgentPersona, IDiscussionTrigger, getRepositories } from '@night-watch/core';
 import { execFileSync } from 'node:child_process';
 import { type ISlackMessage } from './client.js';
 import { findCarlos } from './personas.js';
@@ -189,29 +189,18 @@ export function humanDelay(): number {
 }
 
 /**
- * Determine which Slack channel to use for a trigger type
+ * Resolve which Slack channel to use for a trigger.
+ * All trigger types now route to the project's own channel.
  */
-export function getChannelForTrigger(
-  trigger: IDiscussionTrigger,
-  config: INightWatchConfig,
+export function getChannelForProject(
+  projectPath: string,
+  channelIdOverride?: string,
 ): string {
-  const slack = config.slack;
-  if (!slack) return '';
-  if (trigger.channelId) return trigger.channelId;
-  switch (trigger.type) {
-    case 'pr_review':
-      return slack.channels.prs;
-    case 'build_failure':
-      return slack.channels.incidents;
-    case 'prd_kickoff':
-      return slack.channels.eng;
-    case 'code_watch':
-      return slack.channels.eng;
-    case 'issue_review':
-      return slack.channels.eng;
-    default:
-      return slack.channels.eng;
-  }
+  if (channelIdOverride) return channelIdOverride;
+  const repos = getRepositories();
+  const projects = repos.projectRegistry.getAll();
+  const project = projects.find((p) => p.path === projectPath);
+  return project?.slackChannelId ?? '';
 }
 
 export function loadPrDiffExcerpt(projectPath: string, ref: string): string {

@@ -121,8 +121,7 @@ export const AUDIT_LOG_NAME = "audit";
 export const DEFAULT_SLACK_BOT_CONFIG: ISlackBotConfig = {
   enabled: false,
   botToken: '',
-  channels: { eng: '', prs: '', incidents: '', releases: '' },
-  autoCreateProjectChannels: false,
+  autoCreateProjectChannels: true,
   discussionEnabled: false,
 };
 

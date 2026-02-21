@@ -142,13 +142,18 @@ export class SlackInteractionListener {
     const slack = this.config.slack;
     if (!slack) return;
 
-    // Join all configured channels so the bot receives messages in them
-    const channelIds = Object.values(slack.channels ?? {}).filter(Boolean);
-    for (const channelId of channelIds) {
+    // Join all project channels so the bot receives messages in them
+    const repos = getRepositories();
+    const projectChannelIds = repos.projectRegistry
+      .getAll()
+      .map((p) => p.slackChannelId)
+      .filter(Boolean) as string[];
+
+    for (const channelId of projectChannelIds) {
       this.state.markChannelActivity(channelId);
     }
 
-    for (const channelId of channelIds) {
+    for (const channelId of projectChannelIds) {
       try {
         await this.slackClient.joinChannel(channelId);
         log.info('joined channel', { channel: channelId });
@@ -157,8 +162,8 @@ export class SlackInteractionListener {
       }
     }
 
-    const engChannelId = slack.channels?.eng;
-    if (!engChannelId) return;
+    const introChannelId = projectChannelIds[0];
+    if (!introChannelId) return;
 
     const db = getDb();
     const metaRow = db
@@ -166,7 +171,6 @@ export class SlackInteractionListener {
       .get() as { value: string } | undefined;
     const introduced = new Set<string>(metaRow ? (JSON.parse(metaRow.value) as string[]) : []);
 
-    const repos = getRepositories();
     const personas = repos.agentPersona.getActive();
     const newPersonas = personas.filter((p) => !introduced.has(p.id));
     if (newPersonas.length === 0) {
@@ -209,7 +213,7 @@ export class SlackInteractionListener {
         : `*${currentPersona.name}* — ${currentPersona.role}.\n\n${howToTag}`;
 
       try {
-        await this.slackClient.postAsAgent(engChannelId, intro, currentPersona);
+        await this.slackClient.postAsAgent(introChannelId, intro, currentPersona);
         introduced.add(persona.id);
         db.prepare(
           `INSERT INTO schema_meta (key, value) VALUES ('slack_persona_intros_v4', ?)

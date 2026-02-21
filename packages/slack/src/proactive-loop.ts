@@ -70,9 +70,8 @@ export class ProactiveLoop {
   }
 
   private resolveProactiveChannelForProject(project: IRegistryEntry): string | null {
-    const slack = this.config.slack;
-    if (!slack) return null;
-    return project.slackChannelId || slack.channels.eng || null;
+    if (!this.config.slack) return null;
+    return project.slackChannelId || null;
   }
 
   private async runProactiveCodeWatch(projects: IRegistryEntry[], now: number): Promise<void> {
@@ -96,9 +95,6 @@ export class ProactiveLoop {
     const slack = this.config.slack;
     if (!slack?.enabled || !slack.discussionEnabled) return;
 
-    const channelIds = Object.values(slack.channels ?? {}).filter(Boolean);
-    if (channelIds.length === 0) return;
-
     const repos = getRepositories();
     const personas = repos.agentPersona.getActive();
     if (personas.length === 0) return;
@@ -107,7 +103,11 @@ export class ProactiveLoop {
     const projects = repos.projectRegistry.getAll();
     await this.runProactiveCodeWatch(projects, now);
 
-    for (const channel of channelIds) {
+    const channelProjects = projects.filter((p) => p.slackChannelId);
+    if (channelProjects.length === 0) return;
+
+    for (const project of channelProjects) {
+      const channel = project.slackChannelId!;
       const lastActivity = this.channelActivityAt.get(channel) ?? now;
       const lastProactive = this.lastProactiveAt.get(channel) ?? 0;
       if (now - lastActivity < PROACTIVE_IDLE_MS) continue;
@@ -118,8 +118,7 @@ export class ProactiveLoop {
 
       const projectContext = this.callbacks.buildProjectContext(channel, projects);
       const roadmapContext = this.callbacks.buildRoadmapContext(channel, projects);
-      const channelProject = projects.find((p) => p.slackChannelId === channel) ?? projects[0];
-      const projectSlug = channelProject ? basename(channelProject.path) : undefined;
+      const projectSlug = basename(project.path);
 
       try {
         await this.engine.postProactiveMessage(

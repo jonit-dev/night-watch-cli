@@ -156,12 +156,6 @@ export interface ISlackBotConfig {
   enabled: boolean;
   botToken: string; // xoxb-...
   appToken?: string; // xapp-... for Socket Mode (optional)
-  channels: {
-    eng: string; // Channel ID for #eng
-    prs: string; // Channel ID for #prs
-    incidents: string; // Channel ID for #incidents
-    releases: string; // Channel ID for #releases
-  };
   autoCreateProjectChannels: boolean;
   discussionEnabled: boolean;
   replicateApiToken?: string; // For AI-generated persona avatars (Flux)
