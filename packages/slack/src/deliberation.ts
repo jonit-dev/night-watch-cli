@@ -860,7 +860,24 @@ Write the prefix and your message. Nothing else.`;
     const resolved = resolvePersonaAIConfig(persona, this.config);
     const useTools = Boolean(projectPathForTools && resolved.provider === 'anthropic');
 
-    const replyProjectSlug = projectPathForTools ? basename(projectPathForTools) : undefined;
+    // For tools: strict project resolution (wrong project = wrong codebase queries)
+    // For memory: best-effort — fall back to the channel's configured project or first registered
+    const replyProjectSlug: string | undefined = (() => {
+      if (projectPathForTools) return basename(projectPathForTools);
+      const repos = getRepositories();
+      const projects = repos.projectRegistry.getAll();
+      const slack = this.config.slack;
+      // Try to match channel against slack.channels config values
+      if (slack?.channels) {
+        const channelEntry = Object.entries(slack.channels).find(([, v]) => v === channel);
+        if (channelEntry) {
+          // Pick the first project that has a matching slackChannelId or fall back to first project
+          const match = projects.find((p) => p.slackChannelId === channel) ?? projects[0];
+          return match ? basename(match.path) : undefined;
+        }
+      }
+      return projects[0] ? basename(projects[0].path) : undefined;
+    })();
     log.info('ad-hoc reply memory probe', {
       agent: persona.name,
       channel,
