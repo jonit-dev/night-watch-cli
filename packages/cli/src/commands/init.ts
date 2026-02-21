@@ -28,10 +28,25 @@ import {
   error as uiError,
 } from '@night-watch/core';
 
-// Get templates directory path
+// Get templates directory path.
+// Walk up from __dirname to find the package root (the directory that contains
+// a package.json AND a templates/ folder).  This works whether the code runs
+// from the TypeScript source tree (src/commands/), the compiled dist tree
+// (dist/commands/), or as a single esbuild bundle (dist/).
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const TEMPLATES_DIR = join(__dirname, '..', '..', 'templates');
+function findTemplatesDir(startDir: string): string {
+  let d = startDir;
+  for (let i = 0; i < 8; i++) {
+    const candidate = join(d, 'templates');
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+      return candidate;
+    }
+    d = dirname(d);
+  }
+  return join(startDir, 'templates'); // fallback
+}
+const TEMPLATES_DIR = findTemplatesDir(__dirname);
 
 interface IInitOptions {
   force: boolean;
