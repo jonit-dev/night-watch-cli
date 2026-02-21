@@ -24,6 +24,8 @@ const log = createLogger('consensus-evaluator');
 const HUMAN_DELAY_MIN_MS = 20_000;
 const HUMAN_DELAY_MAX_MS = 60_000;
 const MAX_AGENT_THREAD_REPLIES = 4;
+/** Hard ceiling for loop iterations to prevent CPU spinning. Slightly above MAX_ROUNDS for safety margin. */
+const MAX_ITERATIONS = MAX_ROUNDS + 3;
 
 function humanDelay(): number {
   return HUMAN_DELAY_MIN_MS + Math.random() * (HUMAN_DELAY_MAX_MS - HUMAN_DELAY_MIN_MS);
@@ -65,9 +67,11 @@ export class ConsensusEvaluator {
     callbacks: IConsensusCallbacks,
   ): Promise<void> {
     const repos = getRepositories();
+    let iterations = 0;
 
     // Re-check state each round; stop when consensus/blocked or discussion disappears.
-    while (true) {
+    // Hard iteration ceiling prevents CPU spinning if external state checks fail.
+    while (iterations++ < MAX_ITERATIONS) {
       const discussion = repos.slackDiscussion.getById(discussionId);
       if (!discussion || discussion.status !== 'active') return;
 
@@ -234,6 +238,15 @@ Write the prefix and your message. Nothing else.`;
       });
       return;
     }
+
+    // Safety guard: if we exited the loop due to hitting the iteration ceiling,
+    // mark the discussion as blocked to prevent silent failure.
+    log.error('consensus loop exceeded iteration limit', {
+      discussionId,
+      iterations,
+      trigger: trigger.type,
+    });
+    repos.slackDiscussion.updateStatus(discussionId, 'blocked', 'iteration_limit_exceeded');
   }
 
   /**

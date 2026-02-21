@@ -243,7 +243,11 @@ export type UpdateAgentPersonaInput = Partial<CreateAgentPersonaInput & { isActi
 // ==================== Slack Deliberation ====================
 
 export type DiscussionStatus = 'active' | 'consensus' | 'blocked' | 'closed';
-export type ConsensusResult = 'approved' | 'changes_requested' | 'human_needed';
+export type ConsensusResult =
+  | 'approved'
+  | 'changes_requested'
+  | 'human_needed'
+  | 'iteration_limit_exceeded';
 export type TriggerType =
   | 'pr_review'
   | 'build_failure'

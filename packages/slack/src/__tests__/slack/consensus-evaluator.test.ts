@@ -1109,4 +1109,51 @@ describe('ConsensusEvaluator', () => {
       expect(board.triggerIssueOpener).not.toHaveBeenCalled();
     });
   });
+
+  // --- evaluateConsensus — iteration safety guard -----------------------------
+
+  describe('evaluateConsensus — iteration safety guard', () => {
+    it('terminates with blocked status when loop exceeds iteration ceiling', async () => {
+      const carlos = buildPersona();
+      const callbacks = buildCallbacks();
+
+      // Mock discussion that always returns as active (simulates stuck state)
+      const getByIdMock = vi.fn().mockReturnValue(buildDiscussion({ round: 1, status: 'active' }));
+
+      vi.mocked(getRepositories).mockReturnValue({
+        agentPersona: { getActive: vi.fn().mockReturnValue([carlos]) },
+        slackDiscussion: {
+          getById: getByIdMock,
+          updateStatus: vi.fn(),
+          updateRound: vi.fn(),
+        },
+        projectRegistry: { getAll: vi.fn().mockReturnValue([]) },
+      } as unknown as ReturnType<typeof getRepositories>);
+
+      vi.mocked(findCarlos).mockReturnValue(carlos);
+      vi.mocked(findDev).mockReturnValue(null);
+      vi.mocked(getParticipatingPersonas).mockReturnValue([carlos]);
+
+      // AI always returns CHANGES, which would normally continue the loop
+      vi.mocked(callAIForContribution).mockResolvedValue('CHANGES: Need more work.');
+
+      // Only 1 message so repliesLeft=4 >= 3, allowing another round
+      vi.mocked(slackClient.getChannelHistory).mockResolvedValue([
+        { ts: '1.0', channel: 'C01', text: 'Opening message', username: 'Dev' },
+      ]);
+
+      await evaluator.evaluateConsensus('disc-1', buildTrigger(), callbacks);
+
+      // Should have hit iteration ceiling and marked as blocked
+      expect(getByIdMock.mock.calls.length).toBeLessThanOrEqual(6); // MAX_ITERATIONS = MAX_ROUNDS + 3 = 5
+      const statusCalls = vi.mocked(
+        (
+          (await getRepositories()) as {
+            slackDiscussion: { updateStatus: ReturnType<typeof vi.fn> };
+          }
+        ).slackDiscussion.updateStatus,
+      );
+      expect(statusCalls).toHaveBeenCalledWith('disc-1', 'blocked', 'iteration_limit_exceeded');
+    });
+  });
 });
