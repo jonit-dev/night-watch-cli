@@ -276,3 +276,22 @@ export interface IDiscussionTrigger {
   openingMessage?: string; // Override the generated opening message (e.g., AI-authored observation)
   threadTs?: string; // If set, skip opener post and anchor discussion in this existing thread
 }
+
+// ==================== Agent Memory ====================
+
+export interface IMemoryEntry {
+  date: string; // ISO date string e.g. "2026-02-20"
+  persona: string;
+  project: string;
+  lessons: string[];
+}
+
+export interface IReflectionContext {
+  triggerType: TriggerType;
+  outcome: string;
+  summary: string;
+  filesChanged?: string[];
+}
+
+// LlmCaller — injected by callers (slack package) to avoid circular deps
+export type LlmCaller = (systemPrompt: string, userPrompt: string) => Promise<string>;

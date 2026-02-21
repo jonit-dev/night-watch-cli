@@ -6,6 +6,7 @@
 import { IAgentPersona, INightWatchConfig, getRepositories } from '@night-watch/core';
 import type { IRegistryEntry } from '@night-watch/core';
 import * as fs from 'fs';
+import { basename } from 'node:path';
 import { injectable } from 'tsyringe';
 import { DeliberationEngine } from './deliberation.js';
 import { JobSpawner } from './job-spawner.js';
@@ -115,9 +116,17 @@ export class ProactiveLoop {
 
       const projectContext = this.callbacks.buildProjectContext(channel, projects);
       const roadmapContext = this.callbacks.buildRoadmapContext(channel, projects);
+      const channelProject = projects.find((p) => p.slackChannelId === channel) ?? projects[0];
+      const projectSlug = channelProject ? basename(channelProject.path) : undefined;
 
       try {
-        await this.engine.postProactiveMessage(channel, persona, projectContext, roadmapContext);
+        await this.engine.postProactiveMessage(
+          channel,
+          persona,
+          projectContext,
+          roadmapContext,
+          projectSlug,
+        );
         this.lastProactiveAt.set(channel, now);
         this.callbacks.markChannelActivity(channel);
         console.log(`[slack] proactive message posted by ${persona.name} in ${channel}`);
