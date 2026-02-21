@@ -3,10 +3,17 @@
  * Extracted from deliberation.ts to separate message-construction concerns from orchestration logic.
  */
 
-import { IAgentPersona, IDiscussionTrigger, INightWatchConfig } from '@night-watch/core';
+import {
+  IAgentPersona,
+  IDiscussionTrigger,
+  INightWatchConfig,
+  createLogger,
+} from '@night-watch/core';
 import { execFileSync } from 'node:child_process';
 import { type ISlackMessage } from './client.js';
 import { findCarlos } from './personas.js';
+
+const log = createLogger('deliberation-builders');
 
 /** Maximum number of deliberation rounds per discussion. */
 export const MAX_ROUNDS = 2;
@@ -220,7 +227,16 @@ export function loadPrDiffExcerpt(projectPath: string, ref: string): string {
     const excerpt = diff.split('\n').slice(0, 160).join('\n').trim();
     if (!excerpt) return '';
     return `PR diff excerpt (first 160 lines):\n\`\`\`diff\n${excerpt}\n\`\`\``;
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // Don't log for expected "PR not found" (404) cases
+    if (!msg.includes('ENOENT') && !msg.includes('404') && !msg.includes('Not Found')) {
+      log.warn('gh pr diff failed — check gh auth status', {
+        pr: prNumber,
+        projectPath,
+        error: msg,
+      });
+    }
     return '';
   }
 }
