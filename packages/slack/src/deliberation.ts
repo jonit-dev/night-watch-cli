@@ -9,13 +9,19 @@ import {
   IBoardProviderConfig,
   IDiscussionTrigger,
   INightWatchConfig,
+  IReflectionContext,
   ISlackDiscussion,
+  MemoryService,
   createBoardProvider,
+  createLogger,
   getRepositories,
   loadConfig,
 } from '@night-watch/core';
+
+const log = createLogger('deliberation');
 import { type ISlackMessage, SlackClient } from './client.js';
 import { execFileSync } from 'node:child_process';
+import { basename } from 'node:path';
 import {
   buildCurrentCliInvocation,
   formatCommandForLog,
@@ -132,12 +138,14 @@ function chooseRoundContributors(personas: IAgentPersona[], maxCount: number): I
 export class DeliberationEngine {
   private readonly slackClient: SlackClient;
   private readonly config: INightWatchConfig;
+  private readonly memoryService: MemoryService;
   private readonly humanResumeTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly emojiCadenceCounter = new Map<string, number>();
 
   constructor(slackClient: SlackClient, config: INightWatchConfig) {
     this.slackClient = slackClient;
     this.config = config;
+    this.memoryService = new MemoryService();
   }
 
   private resolveReplyProjectPath(channel: string, threadTs: string): string | null {
@@ -294,6 +302,13 @@ export class DeliberationEngine {
       participants: initialParticipants,
       consensusResult: null,
     });
+    log.info('discussion started', {
+      discussionId: discussion.id,
+      trigger: trigger.type,
+      ref: trigger.ref,
+      channel,
+      participants: participants.map((p) => p.name).join(', '),
+    });
 
     // Run first round of contributions
     // When using an existing thread, all participants contribute (no opener was posted)
@@ -345,7 +360,7 @@ export class DeliberationEngine {
     try {
       message = await callAIForContribution(persona, this.config, contributionPrompt);
     } catch (err) {
-      console.error(`[deliberation] callAIForContribution failed for ${persona.name}:`, err);
+      log.error('callAIForContribution failed', { agent: persona.name, error: String(err) });
       message = `[Contribution from ${persona.name} unavailable — AI provider not configured]`;
     }
 
@@ -460,6 +475,8 @@ export class DeliberationEngine {
     );
     let posted = 0;
 
+    const projectSlug = basename(trigger.projectPath);
+
     for (const persona of contributors) {
       if (posted >= reviewerBudget) break;
 
@@ -473,12 +490,26 @@ export class DeliberationEngine {
         updatedDiscussion.round,
       );
 
+      // Fetch persona memory to inject into the system prompt (optional — ignore errors)
+      let memory: string | undefined;
+      try {
+        memory = await this.memoryService.getMemory(persona.name, projectSlug);
+      } catch {
+        // Memory is optional — never block a contribution due to a read failure
+      }
+
       let message: string;
       try {
-        message = await callAIForContribution(persona, this.config, contributionPrompt);
+        message = await callAIForContribution(
+          persona,
+          this.config,
+          contributionPrompt,
+          undefined,
+          memory,
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[deliberation] AI contribution failed for ${persona.name}: ${msg}`);
+        log.warn('AI contribution failed', { agent: persona.name, error: msg });
         message = '';
       }
 
@@ -504,6 +535,26 @@ export class DeliberationEngine {
       repos.slackDiscussion.addParticipant(discussionId, persona.id);
       seenMessages.add(normalized);
       posted += 1;
+      log.info('agent contributed', {
+        agent: persona.name,
+        discussionId,
+        channel: discussion.channelId,
+        round: updatedDiscussion.round,
+        trigger: trigger.type,
+      });
+
+      // Fire-and-forget reflection after each successful post
+      const reflectionContext: IReflectionContext = {
+        triggerType: trigger.type,
+        outcome: 'contributed',
+        summary: finalMessage.slice(0, 200),
+        filesChanged: [],
+      };
+      const llmCaller = (_sysPrompt: string, userPrompt: string): Promise<string> =>
+        callAIForContribution(persona, this.config, userPrompt).catch(() => '');
+      void this.memoryService
+        .reflect(persona, projectSlug, reflectionContext, llmCaller)
+        .catch((err: unknown) => log.warn('memory reflect failed', { error: String(err) }));
 
       history = [
         ...history,
@@ -586,7 +637,7 @@ Write the prefix and your message. Nothing else.`;
         decision = await callAIForContribution(carlos, this.config, consensusPrompt);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[deliberation] AI consensus evaluation failed: ${msg}`);
+        log.warn('AI consensus evaluation failed', { error: msg });
         decision = 'HUMAN: AI evaluation failed — needs manual review';
       }
 
@@ -604,9 +655,10 @@ Write the prefix and your message. Nothing else.`;
           );
         }
         repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'approved');
+        log.info('consensus reached', { discussionId, result: 'approved', trigger: trigger.type });
         if (trigger.type === 'code_watch') {
           await this.triggerIssueOpener(discussionId, trigger).catch((e: unknown) =>
-            console.warn('Issue opener failed:', String(e)),
+            log.warn('issue opener failed', { error: String(e) }),
           );
         }
         return;
@@ -659,10 +711,15 @@ Write the prefix and your message. Nothing else.`;
           );
         }
         repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'changes_requested');
+        log.info('consensus reached', {
+          discussionId,
+          result: 'changes_requested',
+          trigger: trigger.type,
+        });
 
         if (discussion.triggerType === 'pr_review') {
           await this.triggerPRRefinement(discussionId, changesSummary, discussion.triggerRef).catch(
-            (e) => console.warn('PR refinement trigger failed:', e),
+            (e) => log.warn('PR refinement trigger failed', { error: String(e) }),
           );
         }
         return;
@@ -685,6 +742,11 @@ Write the prefix and your message. Nothing else.`;
         );
       }
       repos.slackDiscussion.updateStatus(discussionId, 'blocked', 'human_needed');
+      log.info('consensus reached', {
+        discussionId,
+        result: 'human_needed',
+        trigger: trigger.type,
+      });
       return;
     }
   }
@@ -719,9 +781,10 @@ Write the prefix and your message. Nothing else.`;
     const feedback = JSON.stringify({ discussionId, prNumber, changes: changesSummary });
     const invocationArgs = buildCurrentCliInvocation(['review']);
     if (!invocationArgs) {
-      console.warn(
-        `[slack][job] triggerPRRefinement reviewer spawn failed via ${actor} pr=${prNumber}: CLI entry path unavailable`,
-      );
+      log.warn('PR refinement reviewer spawn failed — CLI path unavailable', {
+        actor,
+        pr: prNumber,
+      });
       if (carlos) {
         await this.slackClient.postAsAgent(
           discussion.channelId,
@@ -732,9 +795,11 @@ Write the prefix and your message. Nothing else.`;
       }
       return;
     }
-    console.log(
-      `[slack][job] triggerPRRefinement reviewer spawn via ${actor} pr=${prNumber} cmd=${formatCommandForLog(process.execPath, invocationArgs)}`,
-    );
+    log.info('PR refinement reviewer spawned', {
+      actor,
+      pr: prNumber,
+      cmd: formatCommandForLog(process.execPath, invocationArgs),
+    });
 
     // Spawn the reviewer as a detached process
     const tsconfigPath = getNightWatchTsconfigPath();
@@ -795,6 +860,31 @@ Write the prefix and your message. Nothing else.`;
     const resolved = resolvePersonaAIConfig(persona, this.config);
     const useTools = Boolean(projectPathForTools && resolved.provider === 'anthropic');
 
+    const replyProjectSlug = projectPathForTools ? basename(projectPathForTools) : undefined;
+    log.info('ad-hoc reply memory probe', {
+      agent: persona.name,
+      channel,
+      projectPath: projectPathForTools,
+      projectSlug: replyProjectSlug ?? '(none)',
+    });
+
+    // Fetch persona memory to inject into system prompt (optional — ignore errors)
+    let replyMemory: string | undefined;
+    if (replyProjectSlug) {
+      try {
+        replyMemory = await this.memoryService.getMemory(persona.name, replyProjectSlug);
+        if (replyMemory) {
+          log.info('memory injected for ad-hoc reply', {
+            agent: persona.name,
+            project: replyProjectSlug,
+            chars: replyMemory.length,
+          });
+        }
+      } catch {
+        // Memory is optional — never block a reply due to a read failure
+      }
+    }
+
     const codebaseGuidance = useTools
       ? `- You have a query_codebase tool. Before pointing at any file or making a code claim, call it and read the actual output. Then drop the specific line or snippet directly into your message — like a teammate who pulled it up in their editor, not a bot filing a report. Short inline backtick or a 2-3 line block is fine.\n`
       : `- If you make a specific code claim, back it up with a snippet from context. If you don't have it, ask for it.\n`;
@@ -852,10 +942,10 @@ Write the prefix and your message. Nothing else.`;
         message = await callAIWithTools(persona, this.config, prompt, tools, registry);
       } else {
         // Allow up to 1024 tokens for ad-hoc replies so agents can write substantive responses
-        message = await callAIForContribution(persona, this.config, prompt, 1024);
+        message = await callAIForContribution(persona, this.config, prompt, 1024, replyMemory);
       }
     } catch (err) {
-      console.error(`[deliberation] reply failed for ${persona.name}:`, err);
+      log.error('ad-hoc reply failed', { agent: persona.name, error: String(err) });
       message = `[Reply from ${persona.name} unavailable — AI provider not configured]`;
     }
 
@@ -865,6 +955,27 @@ Write the prefix and your message. Nothing else.`;
       const normalized = normalizeText(finalMessage);
       if (!normalized || historySet.has(normalized)) return '';
       await this.slackClient.postAsAgent(channel, finalMessage, persona, threadTs);
+
+      // Fire-and-forget reflection after ad-hoc reply
+      if (replyProjectSlug) {
+        const llmCaller = (_sysPrompt: string, userPrompt: string): Promise<string> =>
+          callAIForContribution(persona, this.config, userPrompt).catch(() => '');
+        const reflectionContext: IReflectionContext = {
+          triggerType: 'slack_message',
+          outcome: 'replied',
+          summary: `Ad-hoc Slack reply in channel ${channel}: "${incomingText.slice(0, 200)}"`,
+        };
+        log.info('triggering memory reflect for ad-hoc reply', {
+          agent: persona.name,
+          project: replyProjectSlug,
+        });
+        void this.memoryService
+          .reflect(persona, replyProjectSlug, reflectionContext, llmCaller)
+          .catch((err: unknown) =>
+            log.warn('ad-hoc memory reflect failed', { error: String(err) }),
+          );
+      }
+
       return finalMessage;
     }
     return '';
@@ -881,6 +992,7 @@ Write the prefix and your message. Nothing else.`;
     persona: IAgentPersona,
     projectContext: string,
     roadmapContext: string,
+    projectSlug?: string,
   ): Promise<void> {
     const prompt =
       `You are ${persona.name}, ${persona.role}.\n` +
@@ -921,6 +1033,22 @@ Write the prefix and your message. Nothing else.`;
     const finalMessage = this.humanizeForPost(channel, dummyTs, persona, message);
     if (finalMessage) {
       await this.slackClient.postAsAgent(channel, finalMessage, persona);
+      log.info('proactive message posted', { agent: persona.name, channel, project: projectSlug });
+      if (projectSlug) {
+        const reflectionContext: IReflectionContext = {
+          triggerType: 'code_watch',
+          outcome: 'proactive_observation',
+          summary: finalMessage.slice(0, 200),
+          filesChanged: [],
+        };
+        const llmCaller = (_sysPrompt: string, userPrompt: string): Promise<string> =>
+          callAIForContribution(persona, this.config, userPrompt).catch(() => '');
+        void this.memoryService
+          .reflect(persona, projectSlug, reflectionContext, llmCaller)
+          .catch((err: unknown) =>
+            log.warn('proactive memory reflect failed', { error: String(err) }),
+          );
+      }
     }
   }
 
@@ -1053,7 +1181,7 @@ ${trigger.context}`;
     }
 
     if (!triage || triage.trim().toUpperCase() === 'SKIP' || !/^FILE:/i.test(triage.trim())) {
-      console.log(`[deliberation][audit] Dev skipped filing for ${projectName}`);
+      log.info('audit: dev skipped filing', { project: projectName });
       return;
     }
 
@@ -1088,11 +1216,13 @@ ${trigger.context}`;
           column: 'Ready',
         });
         issueUrl = issue.url;
-        console.log(
-          `[deliberation][audit] filed issue #${issue.number} for ${projectName}: ${issueUrl}`,
-        );
+        log.info('audit: filed issue', {
+          project: projectName,
+          issue: issue.number,
+          url: issueUrl,
+        });
       } catch (err) {
-        console.warn('[deliberation][audit] failed to create GitHub issue:', err);
+        log.warn('audit: failed to create GitHub issue', { error: String(err) });
       }
     }
 
@@ -1105,7 +1235,7 @@ ${trigger.context}`;
       await this.slackClient.postAsAgent(channel, slackMsg, devPersona);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[deliberation][audit] failed to post Slack notification: ${msg}`);
+      log.warn('audit: failed to post Slack notification', { error: msg });
     }
   }
 
@@ -1155,7 +1285,7 @@ Be concise and decisive. No recap of the whole thread. Write the prefix and your
       decision = await callAIForContribution(lead, this.config, consensusPrompt);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[deliberation][issue-review] consensus evaluation failed: ${msg}`);
+      log.warn('issue-review: consensus evaluation failed', { error: msg });
       decision = 'DRAFT: AI evaluation failed — leaving in Draft for manual review';
     }
 
@@ -1174,7 +1304,7 @@ Be concise and decisive. No recap of the whole thread. Write the prefix and your
       }
       repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'approved');
       await this.triggerIssueStatusUpdate('ready', discussionId, trigger).catch((e: unknown) =>
-        console.warn('[issue-review] status update failed:', String(e)),
+        log.warn('issue-review: status update failed', { error: String(e) }),
       );
       return;
     }
@@ -1194,7 +1324,7 @@ Be concise and decisive. No recap of the whole thread. Write the prefix and your
       }
       repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'approved');
       await this.triggerIssueStatusUpdate('close', discussionId, trigger).catch((e: unknown) =>
-        console.warn('[issue-review] status update failed:', String(e)),
+        log.warn('issue-review: status update failed', { error: String(e) }),
       );
       return;
     }
@@ -1231,7 +1361,7 @@ Be concise and decisive. No recap of the whole thread. Write the prefix and your
     // Expect trigger.ref in the form "{owner}/{repo}#{number}"
     const refMatch = trigger.ref.match(/^([^/]+)\/([^#]+)#(\d+)$/);
     if (!refMatch) {
-      console.warn(`[issue-review] unexpected trigger.ref format: ${trigger.ref}`);
+      log.warn('issue-review: unexpected trigger.ref format', { ref: trigger.ref });
       return;
     }
     const [, owner, repo, issueNumber] = refMatch;
@@ -1251,7 +1381,9 @@ Be concise and decisive. No recap of the whole thread. Write the prefix and your
           );
           return;
         } catch (err) {
-          console.warn('[issue-review] board moveIssue failed, trying CLI fallback:', err);
+          log.warn('issue-review: board moveIssue failed, trying CLI fallback', {
+            error: String(err),
+          });
         }
       }
       // CLI fallback
@@ -1276,7 +1408,7 @@ Be concise and decisive. No recap of the whole thread. Write the prefix and your
             discussion.threadTs,
           );
         } catch {
-          console.warn('[issue-review] CLI board fallback also failed');
+          log.warn('issue-review: CLI board fallback also failed');
         }
       }
     } else if (verdict === 'close') {
@@ -1293,7 +1425,7 @@ Be concise and decisive. No recap of the whole thread. Write the prefix and your
           discussion.threadTs,
         );
       } catch (err) {
-        console.warn('[issue-review] gh issue close failed:', err);
+        log.warn('issue-review: gh issue close failed', { error: String(err) });
       }
     }
   }
@@ -1336,7 +1468,7 @@ Be concise and decisive. No recap of the whole thread. Write the prefix and your
           discussion.threadTs,
         );
       } catch (err) {
-        console.warn('[issue_opener] board createIssue failed:', err);
+        log.warn('issue opener: board createIssue failed', { error: String(err) });
         await this.slackClient.postAsAgent(
           discussion.channelId,
           `Couldn't open the issue automatically — board might not be configured. Here's the writeup:\n\n${body.slice(0, 600)}`,

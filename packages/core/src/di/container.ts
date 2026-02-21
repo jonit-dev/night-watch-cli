@@ -17,6 +17,7 @@ import 'reflect-metadata';
 
 import { container } from 'tsyringe';
 
+import { MemoryService } from '@/memory/memory-service.js';
 import { SqliteAgentPersonaRepository } from '@/storage/repositories/sqlite/agent-persona.repository.js';
 import { SqliteExecutionHistoryRepository } from '@/storage/repositories/sqlite/execution-history.repository.js';
 import { SqlitePrdStateRepository } from '@/storage/repositories/sqlite/prd-state.repository.js';
@@ -61,6 +62,9 @@ export function initContainer(projectDir: string): void {
   container.registerSingleton(SqliteProjectRegistryRepository);
   container.registerSingleton(SqliteRoadmapStateRepository);
   container.registerSingleton(SqliteSlackDiscussionRepository);
+
+  // Register MemoryService as a singleton — no DB dependency, pure filesystem.
+  container.registerSingleton(MemoryService);
 }
 
 /**

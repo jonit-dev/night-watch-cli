@@ -17,8 +17,9 @@ export async function callAIForContribution(
   config: INightWatchConfig,
   contributionPrompt: string,
   maxTokensOverride?: number,
+  memory?: string,
 ): Promise<string> {
-  const soulPrompt = compileSoul(persona);
+  const soulPrompt = compileSoul(persona, memory);
   const resolved = resolvePersonaAIConfig(persona, config);
   const maxTokens = maxTokensOverride ?? resolved.maxTokens;
 

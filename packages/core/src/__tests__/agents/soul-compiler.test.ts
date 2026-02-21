@@ -65,5 +65,21 @@ describe('compileSoul', () => {
     expect(prompt).toContain('State decision first');
     expect(prompt).toContain('### Emoji Context: Use 🚀 only for approvals.');
   });
-});
 
+  it('should include memory section when memory is provided', () => {
+    const memory = 'Always validate input before processing.';
+    const prompt = compileSoul(buildPersona(), memory);
+    expect(prompt).toContain('## Memory');
+    expect(prompt).toContain('Always validate input before processing.');
+  });
+
+  it('should omit memory section when memory is empty string', () => {
+    const prompt = compileSoul(buildPersona(), '');
+    expect(prompt).not.toContain('## Memory');
+  });
+
+  it('should omit memory section when memory is undefined', () => {
+    const prompt = compileSoul(buildPersona());
+    expect(prompt).not.toContain('## Memory');
+  });
+});
