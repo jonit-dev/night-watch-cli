@@ -3,23 +3,20 @@
  * Scans ROADMAP.md files and generates PRD skeleton files
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import { spawn } from "child_process";
-import { INightWatchConfig, Provider } from "../types.js";
-import { getNextPrdNumber, slugify } from "./prd-utils.js";
-import { IRoadmapItem, parseRoadmap } from "./roadmap-parser.js";
+import * as fs from 'fs';
+import * as path from 'path';
+import { spawn } from 'child_process';
+import { INightWatchConfig, Provider } from '../types.js';
+import { getNextPrdNumber, slugify } from './prd-utils.js';
+import { IRoadmapItem, parseRoadmap } from './roadmap-parser.js';
 import {
   IRoadmapStateItem,
   isItemProcessed,
   loadRoadmapState,
   markItemProcessed,
   saveRoadmapState,
-} from "./roadmap-state.js";
-import {
-  createSlicerPromptVars,
-  renderSlicerPrompt,
-} from "../templates/slicer-prompt.js";
+} from './roadmap-state.js';
+import { createSlicerPromptVars, renderSlicerPrompt } from '../templates/slicer-prompt.js';
 
 /**
  * Status of the roadmap scanner
@@ -36,7 +33,7 @@ export interface IRoadmapStatus {
   /** Number of items pending processing */
   pendingItems: number;
   /** Current status of the scanner */
-  status: "idle" | "scanning" | "complete" | "disabled" | "no-roadmap";
+  status: 'idle' | 'scanning' | 'complete' | 'disabled' | 'no-roadmap';
   /** All roadmap items with processing status */
   items: Array<IRoadmapItem & { processed: boolean; prdFile?: string }>;
 }
@@ -74,10 +71,7 @@ export interface ISliceResult {
  * @param config - The Night Watch configuration
  * @returns The roadmap scanner status
  */
-export function getRoadmapStatus(
-  projectDir: string,
-  config: INightWatchConfig
-): IRoadmapStatus {
+export function getRoadmapStatus(projectDir: string, config: INightWatchConfig): IRoadmapStatus {
   const roadmapPath = path.join(projectDir, config.roadmapScanner.roadmapPath);
 
   // Check if enabled
@@ -88,7 +82,7 @@ export function getRoadmapStatus(
       totalItems: 0,
       processedItems: 0,
       pendingItems: 0,
-      status: "disabled",
+      status: 'disabled',
       items: [],
     };
   }
@@ -101,13 +95,13 @@ export function getRoadmapStatus(
       totalItems: 0,
       processedItems: 0,
       pendingItems: 0,
-      status: "no-roadmap",
+      status: 'no-roadmap',
       items: [],
     };
   }
 
   // Parse roadmap
-  const content = fs.readFileSync(roadmapPath, "utf-8");
+  const content = fs.readFileSync(roadmapPath, 'utf-8');
   const items = parseRoadmap(content);
 
   // Load state
@@ -135,16 +129,14 @@ export function getRoadmapStatus(
 
   // Count processed and pending
   const processedItems = statusItems.filter((item) => item.processed).length;
-  const pendingItems = statusItems.filter(
-    (item) => !item.processed && !item.checked
-  ).length;
+  const pendingItems = statusItems.filter((item) => !item.processed && !item.checked).length;
 
   // Determine status
-  let status: IRoadmapStatus["status"];
+  let status: IRoadmapStatus['status'];
   if (pendingItems === 0 && statusItems.length > 0) {
-    status = "complete";
+    status = 'complete';
   } else {
-    status = "idle";
+    status = 'idle';
   }
 
   return {
@@ -171,7 +163,7 @@ function scanExistingPrdSlugs(prdDir: string): Set<string> {
   const files = fs.readdirSync(prdDir);
   for (const file of files) {
     // Skip non-markdown files and special files
-    if (!file.endsWith(".md") || file === "NIGHT-WATCH-SUMMARY.md") {
+    if (!file.endsWith('.md') || file === 'NIGHT-WATCH-SUMMARY.md') {
       continue;
     }
 
@@ -195,11 +187,11 @@ function scanExistingPrdSlugs(prdDir: string): Set<string> {
  * Build provider CLI arguments based on provider type
  */
 function buildProviderArgs(provider: Provider, prompt: string): string[] {
-  if (provider === "codex") {
-    return ["--quiet", "--yolo", "--prompt", prompt];
+  if (provider === 'codex') {
+    return ['--quiet', '--yolo', '--prompt', prompt];
   }
   // Default: claude
-  return ["-p", prompt, "--dangerously-skip-permissions"];
+  return ['-p', prompt, '--dangerously-skip-permissions'];
 }
 
 /**
@@ -215,7 +207,7 @@ export async function sliceRoadmapItem(
   projectDir: string,
   prdDir: string,
   item: IRoadmapItem,
-  config: INightWatchConfig
+  config: INightWatchConfig,
 ): Promise<ISliceResult> {
   // Check for duplicate by slug
   const itemSlug = slugify(item.title);
@@ -231,7 +223,7 @@ export async function sliceRoadmapItem(
 
   // Compute next PRD number and filename
   const nextNum = getNextPrdNumber(prdDir);
-  const padded = String(nextNum).padStart(2, "0");
+  const padded = String(nextNum).padStart(2, '0');
   const filename = `${padded}-${itemSlug}.md`;
   const filePath = path.join(prdDir, filename);
 
@@ -246,7 +238,7 @@ export async function sliceRoadmapItem(
     item.section,
     item.description,
     prdDir,
-    filename
+    filename,
   );
   const prompt = renderSlicerPrompt(promptVars);
 
@@ -254,16 +246,16 @@ export async function sliceRoadmapItem(
   const providerArgs = buildProviderArgs(config.provider, prompt);
 
   // Create log file for stdout/stderr
-  const logDir = path.join(projectDir, "logs");
+  const logDir = path.join(projectDir, 'logs');
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true });
   }
   const logFile = path.join(logDir, `slicer-${itemSlug}.log`);
-  const logStream = fs.createWriteStream(logFile, { flags: "w" });
+  const logStream = fs.createWriteStream(logFile, { flags: 'w' });
 
-  // Handle log stream errors silently (don't fail the slice on logging errors)
-  logStream.on("error", () => {
-    // Silently ignore log file errors - the main operation is more important
+  // Handle log stream errors - log warning but don't fail the slice
+  logStream.on('error', (error: Error) => {
+    console.warn(`[roadmap-scanner] Log stream error: ${error.message}`);
   });
 
   return new Promise((resolve) => {
@@ -276,21 +268,21 @@ export async function sliceRoadmapItem(
     const child = spawn(config.provider, providerArgs, {
       env: childEnv,
       cwd: projectDir,
-      stdio: ["inherit", "pipe", "pipe"],
+      stdio: ['inherit', 'pipe', 'pipe'],
     });
 
     // Pipe stdout to log file
-    child.stdout?.on("data", (data: Buffer) => {
+    child.stdout?.on('data', (data: Buffer) => {
       logStream.write(data);
     });
 
     // Pipe stderr to log file
-    child.stderr?.on("data", (data: Buffer) => {
+    child.stderr?.on('data', (data: Buffer) => {
       logStream.write(data);
     });
 
     // Handle process errors
-    child.on("error", (error: Error) => {
+    child.on('error', (error: Error) => {
       logStream.end();
       resolve({
         sliced: false,
@@ -300,7 +292,7 @@ export async function sliceRoadmapItem(
     });
 
     // Handle process completion
-    child.on("close", (code: number | null) => {
+    child.on('close', (code: number | null) => {
       logStream.end();
 
       if (code !== 0) {
@@ -340,13 +332,13 @@ export async function sliceRoadmapItem(
  */
 export async function sliceNextItem(
   projectDir: string,
-  config: INightWatchConfig
+  config: INightWatchConfig,
 ): Promise<ISliceResult> {
   // Check if scanner is enabled
   if (!config.roadmapScanner.enabled) {
     return {
       sliced: false,
-      error: "Roadmap scanner is disabled",
+      error: 'Roadmap scanner is disabled',
     };
   }
 
@@ -356,18 +348,18 @@ export async function sliceNextItem(
   if (!fs.existsSync(roadmapPath)) {
     return {
       sliced: false,
-      error: "ROADMAP.md not found",
+      error: 'ROADMAP.md not found',
     };
   }
 
   // Parse roadmap
-  const content = fs.readFileSync(roadmapPath, "utf-8");
+  const content = fs.readFileSync(roadmapPath, 'utf-8');
   const items = parseRoadmap(content);
 
   if (items.length === 0) {
     return {
       sliced: false,
-      error: "No items in roadmap",
+      error: 'No items in roadmap',
     };
   }
 
@@ -406,7 +398,7 @@ export async function sliceNextItem(
   if (!targetItem) {
     return {
       sliced: false,
-      error: "No pending items to process",
+      error: 'No pending items to process',
     };
   }
 
@@ -438,7 +430,7 @@ export async function sliceNextItem(
  */
 export async function scanRoadmap(
   projectDir: string,
-  config: INightWatchConfig
+  config: INightWatchConfig,
 ): Promise<IScanResult> {
   const result: IScanResult = {
     created: [],
@@ -453,11 +445,11 @@ export async function scanRoadmap(
     result.created.push(sliceResult.file);
   } else if (sliceResult.item) {
     // Item was found but not sliced
-    if (sliceResult.error?.includes("checked")) {
+    if (sliceResult.error?.includes('checked')) {
       result.skipped.push(`${sliceResult.item.title} (checked)`);
-    } else if (sliceResult.error?.includes("processed")) {
+    } else if (sliceResult.error?.includes('processed')) {
       result.skipped.push(`${sliceResult.item.title} (processed)`);
-    } else if (sliceResult.error?.includes("duplicate")) {
+    } else if (sliceResult.error?.includes('duplicate')) {
       result.skipped.push(`${sliceResult.item.title} (duplicate)`);
     } else if (sliceResult.error) {
       result.errors.push(`${sliceResult.item.title}: ${sliceResult.error}`);
@@ -471,10 +463,7 @@ export async function scanRoadmap(
 /**
  * Check if there are new (unprocessed) items in the roadmap
  */
-export function hasNewItems(
-  projectDir: string,
-  config: INightWatchConfig
-): boolean {
+export function hasNewItems(projectDir: string, config: INightWatchConfig): boolean {
   const status = getRoadmapStatus(projectDir, config);
   return status.pendingItems > 0;
 }

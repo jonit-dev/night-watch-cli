@@ -24,6 +24,7 @@ const log = createLogger('consensus-evaluator');
 const HUMAN_DELAY_MIN_MS = 20_000;
 const HUMAN_DELAY_MAX_MS = 60_000;
 const MAX_AGENT_THREAD_REPLIES = 4;
+const MAX_DELIBERATION_ROUNDS = 10; // Safety limit to prevent infinite loops
 
 function humanDelay(): number {
   return HUMAN_DELAY_MIN_MS + Math.random() * (HUMAN_DELAY_MAX_MS - HUMAN_DELAY_MIN_MS);
@@ -67,7 +68,15 @@ export class ConsensusEvaluator {
     const repos = getRepositories();
 
     // Re-check state each round; stop when consensus/blocked or discussion disappears.
+    let iterations = 0;
     while (true) {
+      iterations++;
+      if (iterations > MAX_DELIBERATION_ROUNDS) {
+        throw new Error(
+          `Max deliberation iterations exceeded (${MAX_DELIBERATION_ROUNDS}) - possible infinite loop detected`,
+        );
+      }
+
       const discussion = repos.slackDiscussion.getById(discussionId);
       if (!discussion || discussion.status !== 'active') return;
 

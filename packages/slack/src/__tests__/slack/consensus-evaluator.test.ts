@@ -1109,4 +1109,101 @@ describe('ConsensusEvaluator', () => {
       expect(board.triggerIssueOpener).not.toHaveBeenCalled();
     });
   });
+
+  // --- evaluateConsensus — loop guard --------------------------------------
+
+  describe('evaluateConsensus — loop guard', () => {
+    it('throws error when max deliberation iterations exceeded', async () => {
+      const carlos = buildPersona();
+      const repos = buildRepos({ round: 1 });
+      const callbacks = buildCallbacks();
+
+      // Create a mock that always returns active discussion with round 1,
+      // and AI always returns CHANGES with conditions for another round
+      const getByIdMock = vi.fn().mockReturnValue(buildDiscussion({ round: 1, status: 'active' }));
+
+      vi.mocked(getRepositories).mockReturnValue({
+        ...repos,
+        slackDiscussion: { ...repos.slackDiscussion, getById: getByIdMock },
+      } as unknown as ReturnType<typeof getRepositories>);
+      vi.mocked(findCarlos).mockReturnValue(carlos);
+      vi.mocked(findDev).mockReturnValue(null);
+      vi.mocked(getParticipatingPersonas).mockReturnValue([carlos]);
+      // Always return CHANGES to force the loop to continue
+      vi.mocked(callAIForContribution).mockResolvedValue('CHANGES: Need more work.');
+
+      // Keep replies low so condition for another round is always met
+      vi.mocked(slackClient.getChannelHistory).mockResolvedValue([
+        { ts: '1.0', channel: 'C01', text: 'Original', username: 'Dev' },
+      ]);
+
+      // Should throw after MAX_DELIBERATION_ROUNDS (10) iterations
+      await expect(
+        evaluator.evaluateConsensus('disc-1', buildTrigger(), callbacks),
+      ).rejects.toThrow(
+        'Max deliberation iterations exceeded (10) - possible infinite loop detected',
+      );
+
+      // Verify the loop actually ran multiple times
+      expect(getByIdMock.mock.calls.length).toBeGreaterThan(5);
+    });
+
+    it('exits normally when consensus reached without hitting max iterations', async () => {
+      const carlos = buildPersona();
+      const repos = buildRepos({ round: 1 });
+      const callbacks = buildCallbacks();
+
+      // Two iterations: first CHANGES, second APPROVE
+      const getByIdMock = vi
+        .fn()
+        .mockReturnValueOnce(buildDiscussion({ round: 1, status: 'active' }))
+        .mockReturnValueOnce(buildDiscussion({ round: 2, status: 'active' }));
+
+      vi.mocked(getRepositories).mockReturnValue({
+        ...repos,
+        slackDiscussion: { ...repos.slackDiscussion, getById: getByIdMock },
+      } as unknown as ReturnType<typeof getRepositories>);
+      vi.mocked(findCarlos).mockReturnValue(carlos);
+      vi.mocked(findDev).mockReturnValue(null);
+      vi.mocked(getParticipatingPersonas).mockReturnValue([carlos]);
+      vi.mocked(callAIForContribution)
+        .mockResolvedValueOnce('CHANGES: Need fixes.')
+        .mockResolvedValueOnce('APPROVE: All good now.');
+
+      vi.mocked(slackClient.getChannelHistory).mockResolvedValue([
+        { ts: '1.0', channel: 'C01', text: 'Original', username: 'Dev' },
+      ]);
+
+      // Should complete successfully without throwing
+      await evaluator.evaluateConsensus('disc-1', buildTrigger(), callbacks);
+
+      // Should have called getById exactly 2 times (normal flow, no loop guard triggered)
+      expect(getByIdMock).toHaveBeenCalledTimes(2);
+      expect(repos.slackDiscussion.updateStatus).toHaveBeenCalledWith(
+        'disc-1',
+        'consensus',
+        'approved',
+      );
+    });
+
+    it('exits immediately on first iteration when APPROVE received', async () => {
+      const carlos = buildPersona();
+      const repos = buildRepos();
+      vi.mocked(getRepositories).mockReturnValue(
+        repos as unknown as ReturnType<typeof getRepositories>,
+      );
+      vi.mocked(findCarlos).mockReturnValue(carlos);
+      vi.mocked(callAIForContribution).mockResolvedValue('APPROVE: Clean. Ship it.');
+
+      await evaluator.evaluateConsensus('disc-1', buildTrigger(), buildCallbacks());
+
+      // Only 1 AI call = 1 iteration, no loop guard triggered
+      expect(callAIForContribution).toHaveBeenCalledTimes(1);
+      expect(repos.slackDiscussion.updateStatus).toHaveBeenCalledWith(
+        'disc-1',
+        'consensus',
+        'approved',
+      );
+    });
+  });
 });
