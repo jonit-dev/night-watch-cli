@@ -15,6 +15,7 @@ import { DeliberationEngine } from './deliberation.js';
 import type { ISlackProviderRequest, TSlackJobName } from './message-parser.js';
 import {
   buildCurrentCliInvocation,
+  buildSubprocessEnv,
   formatCommandForLog,
   getNightWatchTsconfigPath,
 } from './utils.js';
@@ -80,8 +81,7 @@ export class JobSpawner {
     const tsconfigPath = getNightWatchTsconfigPath();
     const child = spawn(process.execPath, invocationArgs, {
       cwd: project.path,
-      env: {
-        ...process.env,
+      env: buildSubprocessEnv({
         NW_EXECUTION_CONTEXT: 'agent',
         ...(tsconfigPath ? { TSX_TSCONFIG_PATH: tsconfigPath } : {}),
         ...(opts?.prNumber ? { NW_TARGET_PR: opts.prNumber } : {}),
@@ -96,7 +96,7 @@ export class JobSpawner {
               }),
             }
           : {}),
-      },
+      }),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     console.log(
@@ -186,11 +186,10 @@ export class JobSpawner {
 
     const child = spawn(request.provider, args, {
       cwd: project.path,
-      env: {
-        ...process.env,
+      env: buildSubprocessEnv({
         ...(this.config.providerEnv ?? {}),
         NW_EXECUTION_CONTEXT: 'agent',
-      },
+      }),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     console.log(
@@ -285,11 +284,10 @@ export class JobSpawner {
     const tsconfigPath = getNightWatchTsconfigPath();
     const child = spawn(process.execPath, invocationArgs, {
       cwd: project.path,
-      env: {
-        ...process.env,
+      env: buildSubprocessEnv({
         NW_EXECUTION_CONTEXT: 'agent',
         ...(tsconfigPath ? { TSX_TSCONFIG_PATH: tsconfigPath } : {}),
-      },
+      }),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 

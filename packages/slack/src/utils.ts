@@ -16,11 +16,84 @@ export function sleep(ms: number): Promise<void> {
 /**
  * Build command-line invocation for spawning Night Watch processes.
  * Returns null if CLI entry path is unavailable.
+ *
+ * Strips tsx watch-mode execArgv flags (--require preflight.cjs, --import loader.mjs)
+ * so that subprocesses run as plain Node.js rather than tsx-instrumented processes.
+ * Carrying tsx flags into child processes causes the tsx preflight to attempt IPC
+ * reconnection to the parent watch server, which produces stream errors on failure.
  */
 export function buildCurrentCliInvocation(args: string[]): string[] | null {
   const cliEntry = process.argv[1];
   if (!cliEntry) return null;
-  return [...process.execArgv, cliEntry, ...args];
+  const filteredExecArgv = filterTsxExecArgv(process.execArgv);
+  return [...filteredExecArgv, cliEntry, ...args];
+}
+
+/**
+ * Strip tsx watch-mode flags from execArgv so child processes don't inherit
+ * tsx's IPC infrastructure.  tsx adds pairs like:
+ *   --require .../tsx/dist/preflight.cjs
+ *   --import  file://.../tsx/dist/loader.mjs
+ * We drop any flag whose associated value references a tsx dist file.
+ */
+function filterTsxExecArgv(execArgv: string[]): string[] {
+  const filtered: string[] = [];
+  let i = 0;
+  while (i < execArgv.length) {
+    const flag = execArgv[i];
+    const next = execArgv[i + 1] ?? '';
+    // Drop paired flags whose value points into the tsx dist directory.
+    if (
+      (flag === '--require' || flag === '--import') &&
+      (next.includes('/tsx/dist/') || next.includes('\\tsx\\dist\\'))
+    ) {
+      i += 2; // skip both the flag and its value
+      continue;
+    }
+    filtered.push(flag);
+    i += 1;
+  }
+  return filtered;
+}
+
+/**
+ * Build a clean environment for subprocess spawning.
+ *
+ * Inherits the full process environment but removes:
+ * - Claude Code session markers (CLAUDECODE, CLAUDE_CODE_*) — these cause the
+ *   claude CLI to refuse to start when launched inside an existing Claude Code
+ *   session ("Claude Code cannot be launched inside another Claude Code session").
+ * - Claude session-specific vars that could confuse provider invocations.
+ *
+ * Any caller-supplied overrides are merged in last and take precedence.
+ */
+export function buildSubprocessEnv(
+  overrides: Record<string, string | undefined> = {},
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+
+  // Strip Claude Code session vars that block nested claude invocations.
+  const claudeSessionVars = [
+    'CLAUDECODE',
+    'CLAUDE_CODE_SSE_PORT',
+    'CLAUDE_CODE_ENTRYPOINT',
+    'CLAUDE_CODE_IDE_PORT',
+    'CLAUDE_CODE_CLI_PATH',
+  ];
+  for (const key of claudeSessionVars) {
+    delete env[key];
+  }
+
+  // Apply caller overrides (undefined values delete the key).
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value === undefined) {
+      delete env[key];
+    } else {
+      env[key] = value;
+    }
+  }
+
+  return env;
 }
 
 /**
@@ -38,7 +111,7 @@ export function getNightWatchTsconfigPath(): string | null {
   if (!cliEntry) return null;
   const srcDir = path.dirname(cliEntry);
   const candidates = [
-    path.resolve(srcDir, '..', 'tsconfig.json'),       // dev:   src/ -> root
+    path.resolve(srcDir, '..', 'tsconfig.json'), // dev:   src/ -> root
     path.resolve(srcDir, '..', '..', 'tsconfig.json'), // built: dist/src/ -> root
   ];
   return candidates.find((c) => fs.existsSync(c)) ?? null;
@@ -62,10 +135,7 @@ export interface INormalizeTextOptions {
  * Normalize text for comparison or parsing.
  * Consolidates normalizeForComparison and normalizeForParsing into a single function with options.
  */
-export function normalizeText(
-  text: string,
-  options: INormalizeTextOptions = {},
-): string {
+export function normalizeText(text: string, options: INormalizeTextOptions = {}): string {
   const { aggressive = true, preservePaths = false } = options;
 
   let result = text.toLowerCase();

@@ -24,6 +24,7 @@ import { execFileSync } from 'node:child_process';
 import { basename } from 'node:path';
 import {
   buildCurrentCliInvocation,
+  buildSubprocessEnv,
   formatCommandForLog,
   getNightWatchTsconfigPath,
   normalizeText,
@@ -807,12 +808,11 @@ Write the prefix and your message. Nothing else.`;
     const reviewer = spawn(process.execPath, invocationArgs, {
       detached: true,
       stdio: 'ignore',
-      env: {
-        ...process.env,
+      env: buildSubprocessEnv({
         NW_SLACK_FEEDBACK: feedback,
         NW_TARGET_PR: prNumber,
         ...(tsconfigPath ? { TSX_TSCONFIG_PATH: tsconfigPath } : {}),
-      },
+      }),
     });
     reviewer.unref();
   }
