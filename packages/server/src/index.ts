@@ -53,18 +53,28 @@ import { createSlackRoutes } from './routes/slack.routes.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-function findMonorepoRoot(dir: string): string {
-  let d = dir;
+function resolveWebDistPath(): string {
+  // 1. Bundled/published mode: web assets copied into dist/web/ by build.mjs
+  const bundled = path.join(__dirname, 'web');
+  if (fs.existsSync(path.join(bundled, 'index.html'))) return bundled;
+
+  // 2. Dev mode: monorepo root has web/dist/
+  let d = __dirname;
   for (let i = 0; i < 8; i++) {
-    if (fs.existsSync(path.join(d, 'turbo.json'))) return d;
+    if (fs.existsSync(path.join(d, 'turbo.json'))) {
+      const dev = path.join(d, 'web/dist');
+      if (fs.existsSync(path.join(dev, 'index.html'))) return dev;
+      break;
+    }
     d = dirname(d);
   }
-  return dir;
+
+  // Fallback — return the bundled path (will show "not found" message)
+  return bundled;
 }
-const __monorepoRoot = findMonorepoRoot(__dirname);
 
 function setupStaticFiles(app: Express): void {
-  const webDistPath = path.join(__monorepoRoot, 'web/dist');
+  const webDistPath = resolveWebDistPath();
   if (fs.existsSync(webDistPath)) {
     app.use(express.static(webDistPath));
   }
@@ -80,7 +90,14 @@ function setupStaticFiles(app: Express): void {
         if (err) next();
       });
     } else {
-      next();
+      res.status(200).send(
+        `<html><body style="font-family:monospace;padding:2rem">
+          <h2>Night Watch API Server</h2>
+          <p>The server is running. API endpoints are available at <a href="/api">/api</a>.</p>
+          <p style="color:#888">Web UI not found at <code>${webDistPath}</code>.<br>
+          Build it with <code>yarn build:web</code> from the repo root, or upgrade to a release that bundles the UI.</p>
+        </body></html>`,
+      );
     }
   });
 }
