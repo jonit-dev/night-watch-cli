@@ -8,13 +8,13 @@
 // Priority Labels
 // ---------------------------------------------------------------------------
 
-export const PRIORITY_LABELS = ["P0", "P1", "P2"] as const;
+export const PRIORITY_LABELS = ['P0', 'P1', 'P2'] as const;
 export type PriorityLabel = (typeof PRIORITY_LABELS)[number];
 
 export const PRIORITY_LABEL_INFO: Record<PriorityLabel, { name: string; description: string }> = {
-  P0: { name: "P0", description: "Critical - requires immediate attention" },
-  P1: { name: "P1", description: "High - important, should be prioritized" },
-  P2: { name: "P2", description: "Normal - standard priority" },
+  P0: { name: 'P0', description: 'Critical - requires immediate attention' },
+  P1: { name: 'P1', description: 'High - important, should be prioritized' },
+  P2: { name: 'P2', description: 'Normal - standard priority' },
 };
 
 // ---------------------------------------------------------------------------
@@ -22,55 +22,55 @@ export const PRIORITY_LABEL_INFO: Record<PriorityLabel, { name: string; descript
 // ---------------------------------------------------------------------------
 
 export const CATEGORY_LABELS = [
-  "reliability", // Roadmap §1 — error handling, logs, claim files
-  "quality", // Roadmap §2 — CI, coverage, shellcheck
-  "product", // Roadmap §3 — history cmd, doctor, scheduling
-  "ux", // Roadmap §4 — PRD lifecycle, real-time stream, logs UX
-  "provider", // Roadmap §5 — Gemini, cost tracking, TS strategy
-  "team", // Roadmap §6 — global mode, profiles, collaboration
-  "platform", // Roadmap §7 — policy engine, auth, audit
-  "intelligence", // Roadmap §8 — PRD decomposition, post-run review
-  "ecosystem", // Roadmap §9 — GitHub Action, SLOs, playbooks
+  'reliability', // Roadmap §1 — error handling, logs, claim files
+  'quality', // Roadmap §2 — CI, coverage, shellcheck
+  'product', // Roadmap §3 — history cmd, doctor, scheduling
+  'ux', // Roadmap §4 — PRD lifecycle, real-time stream, logs UX
+  'provider', // Roadmap §5 — Gemini, cost tracking, TS strategy
+  'team', // Roadmap §6 — global mode, profiles, collaboration
+  'platform', // Roadmap §7 — policy engine, auth, audit
+  'intelligence', // Roadmap §8 — PRD decomposition, post-run review
+  'ecosystem', // Roadmap §9 — GitHub Action, SLOs, playbooks
 ] as const;
 
 export type CategoryLabel = (typeof CATEGORY_LABELS)[number];
 
 export const CATEGORY_LABEL_INFO: Record<CategoryLabel, { name: string; description: string }> = {
   reliability: {
-    name: "reliability",
-    description: "Reliability and correctness hardening (Roadmap §1)",
+    name: 'reliability',
+    description: 'Reliability and correctness hardening (Roadmap §1)',
   },
   quality: {
-    name: "quality",
-    description: "Quality gates and developer workflow (Roadmap §2)",
+    name: 'quality',
+    description: 'Quality gates and developer workflow (Roadmap §2)',
   },
   product: {
-    name: "product",
-    description: "Product completeness for core operators (Roadmap §3)",
+    name: 'product',
+    description: 'Product completeness for core operators (Roadmap §3)',
   },
   ux: {
-    name: "ux",
-    description: "Unified operations experience (Roadmap §4)",
+    name: 'ux',
+    description: 'Unified operations experience (Roadmap §4)',
   },
   provider: {
-    name: "provider",
-    description: "Provider and execution platform expansion (Roadmap §5)",
+    name: 'provider',
+    description: 'Provider and execution platform expansion (Roadmap §5)',
   },
   team: {
-    name: "team",
-    description: "Team and multi-project ergonomics (Roadmap §6)",
+    name: 'team',
+    description: 'Team and multi-project ergonomics (Roadmap §6)',
   },
   platform: {
-    name: "platform",
-    description: "Platformization and enterprise readiness (Roadmap §7)",
+    name: 'platform',
+    description: 'Platformization and enterprise readiness (Roadmap §7)',
   },
   intelligence: {
-    name: "intelligence",
-    description: "Intelligence and autonomous planning (Roadmap §8)",
+    name: 'intelligence',
+    description: 'Intelligence and autonomous planning (Roadmap §8)',
   },
   ecosystem: {
-    name: "ecosystem",
-    description: "Ecosystem and adoption (Roadmap §9)",
+    name: 'ecosystem',
+    description: 'Ecosystem and adoption (Roadmap §9)',
   },
 };
 
@@ -78,13 +78,13 @@ export const CATEGORY_LABEL_INFO: Record<CategoryLabel, { name: string; descript
 // Horizon Labels
 // ---------------------------------------------------------------------------
 
-export const HORIZON_LABELS = ["short-term", "medium-term", "long-term"] as const;
+export const HORIZON_LABELS = ['short-term', 'medium-term', 'long-term'] as const;
 export type HorizonLabel = (typeof HORIZON_LABELS)[number];
 
 export const HORIZON_LABEL_INFO: Record<HorizonLabel, { name: string; description: string }> = {
-  "short-term": { name: "short-term", description: "0-6 weeks delivery window" },
-  "medium-term": { name: "medium-term", description: "6 weeks - 4 months delivery window" },
-  "long-term": { name: "long-term", description: "4-12 months delivery window" },
+  'short-term': { name: 'short-term', description: '0-6 weeks delivery window' },
+  'medium-term': { name: 'medium-term', description: '6 weeks - 4 months delivery window' },
+  'long-term': { name: 'long-term', description: '4-12 months delivery window' },
 };
 
 // ---------------------------------------------------------------------------
@@ -100,30 +100,36 @@ export interface ILabelDefinition {
 /**
  * All Night Watch labels with their GitHub color assignments.
  */
+const PRIORITY_COLORS: Record<string, string> = {
+  P0: 'b60205',
+  P1: 'd93f0b',
+  P2: 'fbca04',
+};
+
 export const NIGHT_WATCH_LABELS: ILabelDefinition[] = [
   // Priority labels
   ...PRIORITY_LABELS.map(
     (p): ILabelDefinition => ({
       name: PRIORITY_LABEL_INFO[p].name,
       description: PRIORITY_LABEL_INFO[p].description,
-      color: p === "P0" ? "b60205" : p === "P1" ? "d93f0b" : "fbca04",
-    })
+      color: PRIORITY_COLORS[p] ?? 'fbca04',
+    }),
   ),
   // Category labels
   ...CATEGORY_LABELS.map(
     (c): ILabelDefinition => ({
       name: CATEGORY_LABEL_INFO[c].name,
       description: CATEGORY_LABEL_INFO[c].description,
-      color: "1d76db",
-    })
+      color: '1d76db',
+    }),
   ),
   // Horizon labels
   ...HORIZON_LABELS.map(
     (h): ILabelDefinition => ({
       name: HORIZON_LABEL_INFO[h].name,
       description: HORIZON_LABEL_INFO[h].description,
-      color: "5319e7",
-    })
+      color: '5319e7',
+    }),
   ),
 ];
 
@@ -147,7 +153,7 @@ export function isValidHorizon(value: string): value is HorizonLabel {
 // Label extraction from issue
 // ---------------------------------------------------------------------------
 
-import type { IBoardIssue } from "./types.js";
+import type { IBoardIssue } from './types.js';
 
 /**
  * Extract priority label from issue labels, if present.
@@ -189,9 +195,9 @@ export function extractHorizon(issue: IBoardIssue): HorizonLabel | null {
  * Get display name for priority (with description).
  */
 export function getPriorityDisplayName(priority: PriorityLabel | null): string {
-  if (!priority) return "";
+  if (!priority) return '';
   const info = PRIORITY_LABEL_INFO[priority];
-  return `${info.name} — ${info.description.split(" — ")[0]}`;
+  return `${info.name} — ${info.description.split(' — ')[0]}`;
 }
 
 /**

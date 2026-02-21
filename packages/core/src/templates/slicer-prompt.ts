@@ -6,8 +6,8 @@
  * runtime values from the roadmap item being processed.
  */
 
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Variables needed to render the slicer prompt
@@ -126,16 +126,17 @@ export function loadSlicerTemplate(templateDir?: string): string {
 
   // Determine the template file path
   const templatePath = templateDir
-    ? path.join(templateDir, "night-watch-slicer.md")
-    : path.resolve(__dirname, "..", "..", "templates", "night-watch-slicer.md");
+    ? path.join(templateDir, 'night-watch-slicer.md')
+    : path.resolve(__dirname, '..', '..', 'templates', 'night-watch-slicer.md');
 
   try {
-    cachedTemplate = fs.readFileSync(templatePath, "utf-8");
+    cachedTemplate = fs.readFileSync(templatePath, 'utf-8');
     return cachedTemplate;
-  } catch (_error) {
+  } catch (error) {
     // Fall back to the default template
     console.warn(
-      `Warning: Could not load slicer template from ${templatePath}, using default`,
+      `Warning: Could not load slicer template from ${templatePath}, using default:`,
+      error instanceof Error ? error.message : String(error),
     );
     return DEFAULT_SLICER_TEMPLATE;
   }
@@ -155,10 +156,7 @@ export function clearTemplateCache(): void {
  * @param customTemplate - Optional custom template to use instead of the default
  * @returns The rendered prompt string
  */
-export function renderSlicerPrompt(
-  vars: ISlicerPromptVars,
-  customTemplate?: string,
-): string {
+export function renderSlicerPrompt(vars: ISlicerPromptVars, customTemplate?: string): string {
   const template = customTemplate ?? loadSlicerTemplate();
 
   let result = template;
@@ -193,7 +191,7 @@ export function createSlicerPromptVars(
   return {
     title,
     section,
-    description: description || "(No description provided)",
+    description: description || '(No description provided)',
     outputFilePath: path.join(prdDir, prdFilename),
     prdDir,
   };

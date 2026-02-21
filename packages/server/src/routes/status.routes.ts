@@ -58,6 +58,15 @@ export interface IScheduleInfoRoutesDeps {
   getConfig: () => INightWatchConfig;
 }
 
+function computeNextRun(cronExpr: string): string | null {
+  try {
+    const interval = CronExpressionParser.parse(cronExpr);
+    return interval.next().toISOString();
+  } catch {
+    return null;
+  }
+}
+
 export function createScheduleInfoRoutes(deps: IScheduleInfoRoutesDeps): Router {
   const { projectDir, getConfig } = deps;
   const router = Router();
@@ -68,15 +77,6 @@ export function createScheduleInfoRoutes(deps: IScheduleInfoRoutesDeps): Router 
       const snapshot = fetchStatusSnapshot(projectDir, config);
       const installed = snapshot.crontab.installed;
       const entries = snapshot.crontab.entries;
-
-      const computeNextRun = (cronExpr: string): string | null => {
-        try {
-          const interval = CronExpressionParser.parse(cronExpr);
-          return interval.next().toISOString();
-        } catch {
-          return null;
-        }
-      };
 
       res.json({
         executor: {
@@ -170,15 +170,6 @@ export function createProjectSseRoutes(deps: {
       const snapshot = fetchStatusSnapshot(projectDir, config);
       const installed = snapshot.crontab.installed;
       const entries = snapshot.crontab.entries;
-
-      const computeNextRun = (cronExpr: string): string | null => {
-        try {
-          const interval = CronExpressionParser.parse(cronExpr);
-          return interval.next().toISOString();
-        } catch {
-          return null;
-        }
-      };
 
       res.json({
         executor: {

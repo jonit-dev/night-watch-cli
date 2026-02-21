@@ -3,7 +3,7 @@
  * Parses ROADMAP.md files into structured items
  */
 
-import * as crypto from "crypto";
+import * as crypto from 'crypto';
 
 /**
  * Represents a single item parsed from ROADMAP.md
@@ -27,7 +27,7 @@ export interface IRoadmapItem {
  */
 export function generateItemHash(title: string): string {
   const normalizedTitle = title.toLowerCase().trim();
-  return crypto.createHash("sha256").update(normalizedTitle).digest("hex").slice(0, 8);
+  return crypto.createHash('sha256').update(normalizedTitle).digest('hex').slice(0, 8);
 }
 
 /**
@@ -43,14 +43,15 @@ export function generateItemHash(title: string): string {
  */
 export function parseRoadmap(content: string): IRoadmapItem[] {
   const items: IRoadmapItem[] = [];
-  const lines = content.split("\n");
+  const lines = content.split('\n');
 
-  let currentSection = "General";
+  let currentSection = 'General';
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     // Track section headers (## headings)
+    // eslint-disable-next-line sonarjs/slow-regex
     const sectionMatch = line.match(/^##\s+(.+)$/);
     if (sectionMatch) {
       currentSection = sectionMatch[1].trim();
@@ -58,9 +59,10 @@ export function parseRoadmap(content: string): IRoadmapItem[] {
     }
 
     // Parse checklist items: - [ ] Title or - [x] Title
+    // eslint-disable-next-line sonarjs/slow-regex
     const checklistMatch = line.match(/^-\s+\[([ xX])\]\s+(.+)$/);
     if (checklistMatch) {
-      const checked = checklistMatch[1].toLowerCase() === "x";
+      const checked = checklistMatch[1].toLowerCase() === 'x';
       const title = checklistMatch[2].trim();
 
       // Collect description from following indented lines
@@ -77,6 +79,7 @@ export function parseRoadmap(content: string): IRoadmapItem[] {
     }
 
     // Parse heading-based items: ### Title followed by body
+    // eslint-disable-next-line sonarjs/slow-regex
     const headingMatch = line.match(/^###\s+(.+)$/);
     if (headingMatch) {
       const title = headingMatch[1].trim();
@@ -91,7 +94,6 @@ export function parseRoadmap(content: string): IRoadmapItem[] {
         checked: false, // Heading-based items are never checked
         section: currentSection,
       });
-      continue;
     }
   }
 
@@ -109,12 +111,12 @@ function collectDescription(lines: string[], startIndex: number): string {
     const line = lines[i];
 
     // Stop at empty line
-    if (line.trim() === "") {
+    if (line.trim() === '') {
       break;
     }
 
     // Stop at non-indented line (including headings, other list items)
-    if (!line.startsWith("  ") && !line.startsWith("\t")) {
+    if (!line.startsWith('  ') && !line.startsWith('\t')) {
       break;
     }
 
@@ -122,7 +124,7 @@ function collectDescription(lines: string[], startIndex: number): string {
     descriptionLines.push(line.trim());
   }
 
-  return descriptionLines.join("\n");
+  return descriptionLines.join('\n');
 }
 
 /**
@@ -141,7 +143,7 @@ function collectDescriptionUntilNextHeading(lines: string[], startIndex: number)
     }
 
     // Stop at empty line followed by another heading
-    if (line.trim() === "") {
+    if (line.trim() === '') {
       // Look ahead for heading
       if (i + 1 < lines.length && lines[i + 1].match(/^#{1,3}\s+/)) {
         break;
@@ -152,7 +154,7 @@ function collectDescriptionUntilNextHeading(lines: string[], startIndex: number)
   }
 
   // Trim trailing empty lines and join
-  const result = descriptionLines.join("\n").trim();
+  const result = descriptionLines.join('\n').trim();
   return result;
 }
 
