@@ -43,9 +43,13 @@ export function readCrontab(): string[] {
       .trim()
       .split('\n')
       .filter((line) => line.length > 0);
-  } catch {
+  } catch (error) {
     // crontab -l returns error if no crontab exists
     // This is expected and should return empty array
+    console.warn(
+      '[crontab] Failed to read crontab:',
+      error instanceof Error ? error.message : String(error),
+    );
     return [];
   }
 }
@@ -73,8 +77,11 @@ export function writeCrontab(lines: string[]): void {
         encoding: 'utf-8',
       });
     }
-  } catch {
-    // Ignore backup errors
+  } catch (error) {
+    console.warn(
+      '[crontab] Failed to create backup:',
+      error instanceof Error ? error.message : String(error),
+    );
   }
 
   // Write new crontab via temp file to avoid shell line length limits
@@ -89,8 +96,11 @@ export function writeCrontab(lines: string[]): void {
   } finally {
     try {
       fs.unlinkSync(tmpFile);
-    } catch {
-      /* ignore cleanup errors */
+    } catch (error) {
+      console.warn(
+        '[crontab] Failed to cleanup temp file:',
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 }
