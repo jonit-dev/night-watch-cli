@@ -1,10 +1,49 @@
 import eslint from '@eslint/js';
 import globals from 'globals';
+import sonarjs from 'eslint-plugin-sonarjs';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   eslint.configs.recommended,
+  sonarjs.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    rules: {
+      // Style/micro-optimisation rules — too noisy, not real smells
+      'sonarjs/prefer-immediate-return': 'off',
+      'sonarjs/no-collapsible-if': 'off',
+      'sonarjs/prefer-single-boolean-return': 'off',
+      'sonarjs/no-redundant-boolean': 'off',
+      'sonarjs/no-negated-condition': 'off',
+
+      // CLI tool intentionally runs OS commands — not a security smell here
+      'sonarjs/no-os-command-from-path': 'off',
+      'sonarjs/os-command': 'off',
+
+      // Math.random() is used for persona humanization, not crypto
+      'sonarjs/pseudo-random': 'off',
+
+      // void fn() is a valid fire-and-forget pattern in async Slack handlers
+      'sonarjs/void-use': 'off',
+
+      // Intentional app setup — not actionable smells
+      'sonarjs/cors': 'off',
+      'sonarjs/hashing': 'off',
+      'sonarjs/publicly-writable-directories': 'off',
+
+      // Too common and not a meaningful smell in template-heavy code
+      'sonarjs/no-nested-template-literals': 'off',
+
+      // Pedantic style preference
+      'sonarjs/no-small-switch': 'off',
+
+      // Duplicate string: only flag egregious repetition (≥5 occurrences)
+      'sonarjs/no-duplicate-string': ['warn', { threshold: 5 }],
+
+      // Complexity: warn at 20 (default 15 is too aggressive)
+      'sonarjs/cognitive-complexity': ['warn', 20],
+    },
+  },
   {
     languageOptions: {
       globals: {

@@ -141,6 +141,7 @@ export class MessageParser {
         normalized,
       );
 
+    // eslint-disable-next-line sonarjs/slow-regex
     const match = normalized.match(/\b(run|review|qa)\b(?:\s+(?:for|on)?\s*([a-z0-9./_-]+))?/i);
     if (!match && !prUrlMatch && !prHashMatch) return null;
 
@@ -227,6 +228,7 @@ export class MessageParser {
     // Explicit direct-provider invocation from Slack, e.g.:
     // "claude fix the flaky tests", "run codex on repo-x: investigate CI failures"
     const prefixMatch = withoutMentions.match(
+      // eslint-disable-next-line sonarjs/regex-complexity
       /^\s*(?:can\s+(?:you|someone|anyone)\s+)?(?:please\s+)?(?:(?:run|use|invoke|trigger|ask)\s+)?(claude|codex)\b[\s:,-]*/i,
     );
     if (!prefixMatch) return null;

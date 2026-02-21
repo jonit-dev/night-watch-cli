@@ -141,7 +141,7 @@ describe('DeliberationEngine board routing', () => {
     } as INightWatchConfig;
 
     const engine = new DeliberationEngine(slackClient, globalConfig);
-    vi.spyOn(engine as any, 'generateIssueBody').mockResolvedValue('Issue details');
+    vi.spyOn((engine as any).board, 'generateIssueBody').mockResolvedValue('Issue details');
 
     await engine.triggerIssueOpener('disc-1', buildTrigger(targetProjectPath));
 
@@ -184,7 +184,7 @@ describe('DeliberationEngine board routing', () => {
     } as INightWatchConfig;
 
     const engine = new DeliberationEngine(slackClient, globalConfig);
-    vi.spyOn(engine as any, 'generateIssueBody').mockResolvedValue('Issue details');
+    vi.spyOn((engine as any).board, 'generateIssueBody').mockResolvedValue('Issue details');
 
     await engine.triggerIssueOpener('disc-1', buildTrigger(targetProjectPath));
 

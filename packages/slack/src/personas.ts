@@ -77,24 +77,16 @@ export function getParticipatingPersonas(
 
   switch (triggerType) {
     case 'pr_review':
+    case 'code_watch':
       add(dev);
       add(carlos);
       add(maya);
       add(priya);
       break;
     case 'build_failure':
-      add(dev);
-      add(carlos);
-      break;
     case 'prd_kickoff':
       add(dev);
       add(carlos);
-      break;
-    case 'code_watch':
-      add(dev);
-      add(carlos);
-      add(maya);
-      add(priya);
       break;
     case 'issue_review':
       add(carlos);
