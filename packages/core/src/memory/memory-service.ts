@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { injectable } from 'tsyringe';
 
 import { IAgentPersona, IMemoryEntry, IReflectionContext, LlmCaller } from '@/shared/types.js';
+import { createLogger } from '@/utils/logger.js';
 
 import {
   COMPACTION_SYSTEM_PROMPT,
@@ -24,6 +25,8 @@ import {
   NIGHT_WATCH_DIR,
 } from './memory-constants.js';
 import { buildCompactionPrompt, buildReflectionPrompt } from './reflection-prompts.js';
+
+const log = createLogger('memory');
 
 @injectable()
 export class MemoryService {
@@ -92,6 +95,11 @@ export class MemoryService {
     const section = `## ${entry.date}\n${bullets}\n\n`;
 
     await writeFile(filePath, section, { flag: 'a', encoding: 'utf-8' });
+    log.info('memory reflection appended', {
+      agent: personaName,
+      project: projectSlug,
+      lessons: entry.lessons.length,
+    });
   }
 
   /**
@@ -122,6 +130,7 @@ export class MemoryService {
 
     const condensed = await llmCaller(systemPrompt, userPrompt);
     await writeFile(filePath, condensed, { encoding: 'utf-8' });
+    log.info('memory compacted', { agent: personaName, project: projectSlug });
   }
 
   /**
@@ -153,8 +162,21 @@ export class MemoryService {
       .filter((lesson) => lesson.length > 0);
 
     if (lessons.length === 0) {
+      log.debug('reflect: no lessons extracted', {
+        agent: persona.name,
+        project: projectSlug,
+        trigger: context.triggerType,
+      });
       return;
     }
+
+    log.info('agent reflection', {
+      agent: persona.name,
+      project: projectSlug,
+      trigger: context.triggerType,
+      outcome: context.outcome,
+      lessons: lessons.length,
+    });
 
     const entry: IMemoryEntry = {
       date: new Date().toISOString().split('T')[0],
