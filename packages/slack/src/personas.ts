@@ -96,6 +96,12 @@ export function getParticipatingPersonas(
       add(maya);
       add(priya);
       break;
+    case 'issue_review':
+      add(carlos);
+      add(maya);
+      add(priya);
+      add(dev);
+      break;
     default:
       add(carlos);
       break;

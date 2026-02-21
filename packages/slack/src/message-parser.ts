@@ -59,6 +59,14 @@ export interface IAdHocThreadState {
   expiresAt: number;
 }
 
+export interface ISlackIssueReviewable {
+  issueUrl: string;
+  issueRef: string; // '{owner}/{repo}#{number}'
+  owner: string;
+  repo: string;
+  issueNumber: string;
+}
+
 export interface IInboundSlackEvent {
   type?: string;
   subtype?: string;
@@ -252,6 +260,27 @@ export class MessageParser {
     if (event.bot_id) return true;
     if (botUserId && event.user === botUserId) return true;
     return false;
+  }
+
+  /**
+   * Parse a GitHub issue URL from message text (NOT pull requests).
+   * Returns structured data for triggering an issue review, or null if not found.
+   */
+  parseSlackIssueReviewable(text: string): ISlackIssueReviewable | null {
+    const compactForUrl = text.replace(/\s+/g, '');
+    const match = compactForUrl.match(
+      /https?:\/\/github\.com\/([^/\s<>]+)\/([^/\s<>]+)\/issues\/(\d+)/i,
+    );
+    if (!match) return null;
+
+    const [issueUrl, owner, repo, issueNumber] = match;
+    return {
+      issueUrl,
+      issueRef: `${owner}/${repo}#${issueNumber}`,
+      owner,
+      repo,
+      issueNumber,
+    };
   }
 
   /**

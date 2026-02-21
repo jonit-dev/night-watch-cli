@@ -88,6 +88,8 @@ function getChannelForTrigger(trigger: IDiscussionTrigger, config: INightWatchCo
       return slack.channels.eng; // Callers should populate trigger.channelId with proj channel
     case 'code_watch':
       return slack.channels.eng;
+    case 'issue_review':
+      return slack.channels.eng;
     default:
       return slack.channels.eng;
   }
@@ -264,11 +266,21 @@ export class DeliberationEngine {
       throw new Error('No active agent personas found');
     }
 
-    // Post opening message to start the thread
+    // Decide thread anchor: use existing thread ts or create new opening post
     const openingText = trigger.openingMessage ?? buildOpeningMessage(resolvedTrigger);
-    const openingMsg = await this.slackClient.postAsAgent(channel, openingText, devPersona);
+    let discussionThreadTs: string;
+    let initialParticipants: string[];
 
-    await sleep(humanDelay());
+    if (resolvedTrigger.threadTs) {
+      // Thread already exists (e.g., reply anchored on a human-posted message)
+      discussionThreadTs = resolvedTrigger.threadTs;
+      initialParticipants = [];
+    } else {
+      const openingMsg = await this.slackClient.postAsAgent(channel, openingText, devPersona);
+      await sleep(humanDelay());
+      discussionThreadTs = openingMsg.ts;
+      initialParticipants = [devPersona.id];
+    }
 
     // Create discussion record
     const discussion = repos.slackDiscussion.create({
@@ -276,15 +288,18 @@ export class DeliberationEngine {
       triggerType: trigger.type,
       triggerRef: trigger.ref,
       channelId: channel,
-      threadTs: openingMsg.ts,
+      threadTs: discussionThreadTs,
       status: 'active',
       round: 1,
-      participants: [devPersona.id],
+      participants: initialParticipants,
       consensusResult: null,
     });
 
-    // Run first round of contributions (excluding Dev who already posted)
-    const reviewers = participants.filter((p) => p.id !== devPersona.id);
+    // Run first round of contributions
+    // When using an existing thread, all participants contribute (no opener was posted)
+    const reviewers = resolvedTrigger.threadTs
+      ? participants
+      : participants.filter((p) => p.id !== devPersona.id);
 
     await this.runContributionRound(discussion.id, reviewers, resolvedTrigger, openingText);
 
@@ -519,6 +534,12 @@ export class DeliberationEngine {
     while (true) {
       const discussion = repos.slackDiscussion.getById(discussionId);
       if (!discussion || discussion.status !== 'active') return;
+
+      // issue_review uses READY/CLOSE/DRAFT evaluation logic — handle separately
+      if (trigger.type === 'issue_review') {
+        await this.evaluateIssueReviewConsensus(discussionId, trigger);
+        return;
+      }
 
       const personas = repos.agentPersona.getActive();
       const carlos = findCarlos(personas);
@@ -1085,6 +1106,195 @@ ${trigger.context}`;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[deliberation][audit] failed to post Slack notification: ${msg}`);
+    }
+  }
+
+  /**
+   * Evaluate issue_review discussions using READY/CLOSE/DRAFT verdict logic.
+   * The lead persona (tech lead role) makes the triage call; no multi-round loop.
+   */
+  private async evaluateIssueReviewConsensus(
+    discussionId: string,
+    trigger: IDiscussionTrigger,
+  ): Promise<void> {
+    const repos = getRepositories();
+    const discussion = repos.slackDiscussion.getById(discussionId);
+    if (!discussion || discussion.status !== 'active') return;
+
+    const personas = repos.agentPersona.getActive();
+    const lead = findCarlos(personas);
+
+    if (!lead) {
+      repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'approved');
+      return;
+    }
+
+    const history = await this.slackClient.getChannelHistory(
+      discussion.channelId,
+      discussion.threadTs,
+      20,
+    );
+    const historyText = formatThreadHistory(history);
+
+    const consensusPrompt = `You are ${lead.name}, ${lead.role}. You're wrapping up a team issue review.
+
+Thread:
+${historyText || '(No thread history available)'}
+
+Based on the discussion above, make the triage call for this issue.
+
+Respond with EXACTLY one of these formats (include the prefix):
+- READY: [why — move to Ready column, issue is valid and prioritized]
+- CLOSE: [why — invalid, duplicate, or won't fix]
+- DRAFT: [why — valid but needs more context or lower priority]
+
+Be concise and decisive. No recap of the whole thread. Write the prefix and your message. Nothing else.`;
+
+    let decision: string;
+    try {
+      decision = await callAIForContribution(lead, this.config, consensusPrompt);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[deliberation][issue-review] consensus evaluation failed: ${msg}`);
+      decision = 'DRAFT: AI evaluation failed — leaving in Draft for manual review';
+    }
+
+    if (decision.startsWith('READY')) {
+      const message = humanizeSlackReply(
+        decision.replace(/^READY:\s*/, '').trim() || 'Looks good — moving to Ready.',
+        { allowEmoji: false, maxSentences: 1 },
+      );
+      if (!isSkipMessage(message)) {
+        await this.slackClient.postAsAgent(
+          discussion.channelId,
+          message,
+          lead,
+          discussion.threadTs,
+        );
+      }
+      repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'approved');
+      await this.triggerIssueStatusUpdate('ready', discussionId, trigger).catch((e: unknown) =>
+        console.warn('[issue-review] status update failed:', String(e)),
+      );
+      return;
+    }
+
+    if (decision.startsWith('CLOSE')) {
+      const message = humanizeSlackReply(
+        decision.replace(/^CLOSE:\s*/, '').trim() || 'Closing this — not worth tracking.',
+        { allowEmoji: false, maxSentences: 1 },
+      );
+      if (!isSkipMessage(message)) {
+        await this.slackClient.postAsAgent(
+          discussion.channelId,
+          message,
+          lead,
+          discussion.threadTs,
+        );
+      }
+      repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'approved');
+      await this.triggerIssueStatusUpdate('close', discussionId, trigger).catch((e: unknown) =>
+        console.warn('[issue-review] status update failed:', String(e)),
+      );
+      return;
+    }
+
+    // DRAFT or fallback
+    const message = humanizeSlackReply(
+      decision.replace(/^DRAFT:\s*/, '').trim() || 'Leaving in Draft — needs more context.',
+      { allowEmoji: false, maxSentences: 1 },
+    );
+    if (!isSkipMessage(message)) {
+      await this.slackClient.postAsAgent(discussion.channelId, message, lead, discussion.threadTs);
+    }
+    repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'approved');
+  }
+
+  /**
+   * Execute the board/GitHub action for an issue_review verdict.
+   * - ready: moves the issue to the Ready column on the board
+   * - close: closes the issue via `gh issue close`
+   */
+  private async triggerIssueStatusUpdate(
+    verdict: 'ready' | 'close',
+    discussionId: string,
+    trigger: IDiscussionTrigger,
+  ): Promise<void> {
+    const repos = getRepositories();
+    const discussion = repos.slackDiscussion.getById(discussionId);
+    if (!discussion) return;
+
+    const personas = repos.agentPersona.getActive();
+    const executor = findDev(personas) ?? findCarlos(personas) ?? personas[0];
+    if (!executor) return;
+
+    // Expect trigger.ref in the form "{owner}/{repo}#{number}"
+    const refMatch = trigger.ref.match(/^([^/]+)\/([^#]+)#(\d+)$/);
+    if (!refMatch) {
+      console.warn(`[issue-review] unexpected trigger.ref format: ${trigger.ref}`);
+      return;
+    }
+    const [, owner, repo, issueNumber] = refMatch;
+    const repoArg = `${owner}/${repo}`;
+
+    if (verdict === 'ready') {
+      const boardConfig = this.resolveBoardConfig(trigger.projectPath);
+      if (boardConfig) {
+        try {
+          const provider = createBoardProvider(boardConfig, trigger.projectPath);
+          await provider.moveIssue(Number(issueNumber), 'Ready');
+          await this.slackClient.postAsAgent(
+            discussion.channelId,
+            `Moved #${issueNumber} to Ready.`,
+            executor,
+            discussion.threadTs,
+          );
+          return;
+        } catch (err) {
+          console.warn('[issue-review] board moveIssue failed, trying CLI fallback:', err);
+        }
+      }
+      // CLI fallback
+      const boardArgs = buildCurrentCliInvocation([
+        'board',
+        'move-issue',
+        issueNumber,
+        '--column',
+        'Ready',
+      ]);
+      if (boardArgs) {
+        try {
+          execFileSync(process.execPath, boardArgs, {
+            cwd: trigger.projectPath,
+            timeout: 15_000,
+            stdio: ['ignore', 'pipe', 'pipe'],
+          });
+          await this.slackClient.postAsAgent(
+            discussion.channelId,
+            `Moved #${issueNumber} to Ready.`,
+            executor,
+            discussion.threadTs,
+          );
+        } catch {
+          console.warn('[issue-review] CLI board fallback also failed');
+        }
+      }
+    } else if (verdict === 'close') {
+      try {
+        execFileSync('gh', ['issue', 'close', issueNumber, '-R', repoArg], {
+          cwd: trigger.projectPath,
+          timeout: 15_000,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        await this.slackClient.postAsAgent(
+          discussion.channelId,
+          `Closed #${issueNumber}.`,
+          executor,
+          discussion.threadTs,
+        );
+      } catch (err) {
+        console.warn('[issue-review] gh issue close failed:', err);
+      }
     }
   }
 
