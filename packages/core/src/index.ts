@@ -15,6 +15,7 @@ export * from './storage/sqlite/migrations.js';
 export * from './storage/json-state-migrator.js';
 export * from './di/container.js';
 export * from './agents/soul-compiler.js';
+export * from './memory/index.js';
 export * from './utils/avatar-generator.js';
 export * from './utils/cancel.js';
 export * from './utils/checks.js';
@@ -51,4 +52,7 @@ export type {
   DiscussionStatus,
   ConsensusResult,
   TriggerType,
+  IMemoryEntry,
+  IReflectionContext,
+  LlmCaller,
 } from './shared/types.js';

@@ -3,7 +3,7 @@
  * Compiles SOUL + STYLE + SKILL JSON into a system prompt for the AI provider.
  */
 
-import { IAgentPersona } from "@/shared/types.js";
+import { IAgentPersona } from '@/shared/types.js';
 
 const AIISH_WORDS_TO_AVOID = [
   'additionally',
@@ -29,8 +29,9 @@ const CANNED_CHATBOT_PHRASES = [
 /**
  * Compile an agent persona's soul layers into a system prompt string.
  * If systemPromptOverride is set, returns it directly.
+ * If memory is provided and non-empty, appends a ## Memory section at the end.
  */
-export function compileSoul(persona: IAgentPersona): string {
+export function compileSoul(persona: IAgentPersona, memory?: string): string {
   if (persona.systemPromptOverride) {
     return persona.systemPromptOverride;
   }
@@ -145,17 +146,25 @@ export function compileSoul(persona: IAgentPersona): string {
   lines.push(`- Avoid AI filler words: ${AIISH_WORDS_TO_AVOID.join(', ')}.`);
   lines.push('- No formulaic rhetoric ("not just X, but Y"), no triads, no hype.');
   lines.push('- Contractions are normal. Sentence fragments are fine. Vary your rhythm.');
-  lines.push('- Say concrete things. "The auth middleware is missing rate limiting" beats "we should consider security improvements."');
-  lines.push('- If you have nothing to add, say so in 3 words or fewer. Don\'t pad.');
-  lines.push('- When uncertain, name exactly what\'s unclear. Don\'t hedge with "perhaps" or "might consider."');
+  lines.push(
+    '- Say concrete things. "The auth middleware is missing rate limiting" beats "we should consider security improvements."',
+  );
+  lines.push("- If you have nothing to add, say so in 3 words or fewer. Don't pad.");
+  lines.push(
+    '- When uncertain, name exactly what\'s unclear. Don\'t hedge with "perhaps" or "might consider."',
+  );
   lines.push('- No markdown formatting in Slack messages — no headings, no bullets, no bold.');
   lines.push('');
 
   lines.push('## Operating Rules');
-  lines.push('- Never break character. Never say "as an AI", "I don\'t have opinions", or "I\'m happy to help."');
+  lines.push(
+    '- Never break character. Never say "as an AI", "I don\'t have opinions", or "I\'m happy to help."',
+  );
   lines.push('- You have opinions. Use them. If your worldview says something, say it.');
   lines.push('- Keep messages to 1-2 sentences. Only go longer if someone asked you for detail.');
-  lines.push('- Emojis: use sparingly. One max per message, only when it genuinely fits. Default to none.');
+  lines.push(
+    '- Emojis: use sparingly. One max per message, only when it genuinely fits. Default to none.',
+  );
   lines.push('- You can tag teammates by name when their expertise is relevant.');
   if (emojiList) {
     lines.push(`- If you do use an emoji, prefer: ${emojiList}`);
@@ -173,6 +182,12 @@ export function compileSoul(persona: IAgentPersona): string {
     for (const [mode, behavior] of Object.entries(skill.modes)) {
       lines.push(`- **${mode}**: ${behavior}`);
     }
+  }
+
+  if (memory && memory.trim()) {
+    lines.push('');
+    lines.push('## Memory');
+    lines.push(memory.trim());
   }
 
   return lines.join('\n');

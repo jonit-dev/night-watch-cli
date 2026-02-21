@@ -9,13 +9,16 @@ import {
   IBoardProviderConfig,
   IDiscussionTrigger,
   INightWatchConfig,
+  IReflectionContext,
   ISlackDiscussion,
+  MemoryService,
   createBoardProvider,
   getRepositories,
   loadConfig,
 } from '@night-watch/core';
 import { type ISlackMessage, SlackClient } from './client.js';
 import { execFileSync } from 'node:child_process';
+import { basename } from 'node:path';
 import {
   buildCurrentCliInvocation,
   formatCommandForLog,
@@ -132,12 +135,14 @@ function chooseRoundContributors(personas: IAgentPersona[], maxCount: number): I
 export class DeliberationEngine {
   private readonly slackClient: SlackClient;
   private readonly config: INightWatchConfig;
+  private readonly memoryService: MemoryService;
   private readonly humanResumeTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly emojiCadenceCounter = new Map<string, number>();
 
   constructor(slackClient: SlackClient, config: INightWatchConfig) {
     this.slackClient = slackClient;
     this.config = config;
+    this.memoryService = new MemoryService();
   }
 
   private resolveReplyProjectPath(channel: string, threadTs: string): string | null {
@@ -460,6 +465,8 @@ export class DeliberationEngine {
     );
     let posted = 0;
 
+    const projectSlug = basename(trigger.projectPath);
+
     for (const persona of contributors) {
       if (posted >= reviewerBudget) break;
 
@@ -473,9 +480,23 @@ export class DeliberationEngine {
         updatedDiscussion.round,
       );
 
+      // Fetch persona memory to inject into the system prompt (optional — ignore errors)
+      let memory: string | undefined;
+      try {
+        memory = await this.memoryService.getMemory(persona.name, projectSlug);
+      } catch {
+        // Memory is optional — never block a contribution due to a read failure
+      }
+
       let message: string;
       try {
-        message = await callAIForContribution(persona, this.config, contributionPrompt);
+        message = await callAIForContribution(
+          persona,
+          this.config,
+          contributionPrompt,
+          undefined,
+          memory,
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.warn(`[deliberation] AI contribution failed for ${persona.name}: ${msg}`);
@@ -504,6 +525,19 @@ export class DeliberationEngine {
       repos.slackDiscussion.addParticipant(discussionId, persona.id);
       seenMessages.add(normalized);
       posted += 1;
+
+      // Fire-and-forget reflection after each successful post
+      const reflectionContext: IReflectionContext = {
+        triggerType: trigger.type,
+        outcome: 'contributed',
+        summary: finalMessage.slice(0, 200),
+        filesChanged: [],
+      };
+      const llmCaller = (_sysPrompt: string, userPrompt: string): Promise<string> =>
+        callAIForContribution(persona, this.config, userPrompt).catch(() => '');
+      void this.memoryService
+        .reflect(persona, projectSlug, reflectionContext, llmCaller)
+        .catch((err: unknown) => console.warn('[deliberation][memory] reflect failed:', err));
 
       history = [
         ...history,
@@ -881,6 +915,7 @@ Write the prefix and your message. Nothing else.`;
     persona: IAgentPersona,
     projectContext: string,
     roadmapContext: string,
+    projectSlug?: string,
   ): Promise<void> {
     const prompt =
       `You are ${persona.name}, ${persona.role}.\n` +
@@ -921,6 +956,21 @@ Write the prefix and your message. Nothing else.`;
     const finalMessage = this.humanizeForPost(channel, dummyTs, persona, message);
     if (finalMessage) {
       await this.slackClient.postAsAgent(channel, finalMessage, persona);
+      if (projectSlug) {
+        const reflectionContext: IReflectionContext = {
+          triggerType: 'code_watch',
+          outcome: 'proactive_observation',
+          summary: finalMessage.slice(0, 200),
+          filesChanged: [],
+        };
+        const llmCaller = (_sysPrompt: string, userPrompt: string): Promise<string> =>
+          callAIForContribution(persona, this.config, userPrompt).catch(() => '');
+        void this.memoryService
+          .reflect(persona, projectSlug, reflectionContext, llmCaller)
+          .catch((err: unknown) =>
+            console.warn('[deliberation][memory] proactive reflect failed:', err),
+          );
+      }
     }
   }
 
