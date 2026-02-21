@@ -3,11 +3,25 @@
  * Loads config from: defaults -> config file -> environment variables
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import { fileURLToPath } from "url";
-import { BoardProviderType, IBoardProviderConfig } from "./board/types.js";
-import { ClaudeModel, IAuditConfig, INightWatchConfig, INotificationConfig, IQaConfig, IRoadmapScannerConfig, ISlackBotConfig, IWebhookConfig, MergeMethod, NotificationEvent, Provider, QaArtifacts, WebhookType } from "./types.js";
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
+import { BoardProviderType, IBoardProviderConfig } from './board/types.js';
+import {
+  ClaudeModel,
+  IAuditConfig,
+  INightWatchConfig,
+  INotificationConfig,
+  IQaConfig,
+  IRoadmapScannerConfig,
+  ISlackBotConfig,
+  IWebhookConfig,
+  MergeMethod,
+  NotificationEvent,
+  Provider,
+  QaArtifacts,
+  WebhookType,
+} from './types.js';
 import {
   CONFIG_FILE_NAME,
   DEFAULT_AUDIT,
@@ -40,7 +54,7 @@ import {
   VALID_CLAUDE_MODELS,
   VALID_MERGE_METHODS,
   VALID_PROVIDERS,
-} from "./constants.js";
+} from './constants.js';
 
 /**
  * Get the default configuration values
@@ -87,7 +101,6 @@ export function getDefaultConfig(): INightWatchConfig {
     autoMerge: DEFAULT_AUTO_MERGE,
     autoMergeMethod: DEFAULT_AUTO_MERGE_METHOD,
 
-
     // Rate-limit fallback
     fallbackOnRateLimit: DEFAULT_FALLBACK_ON_RATE_LIMIT,
     claudeModel: DEFAULT_CLAUDE_MODEL,
@@ -112,7 +125,7 @@ function loadConfigFile(configPath: string): Partial<INightWatchConfig> | null {
       return null;
     }
 
-    const content = fs.readFileSync(configPath, "utf-8");
+    const content = fs.readFileSync(configPath, 'utf-8');
     const rawConfig = JSON.parse(content) as Record<string, unknown>;
 
     return normalizeConfig(rawConfig);
@@ -121,7 +134,7 @@ function loadConfigFile(configPath: string): Partial<INightWatchConfig> | null {
     console.warn(
       `Warning: Could not parse config file at ${configPath}: ${
         error instanceof Error ? error.message : String(error)
-      }`
+      }`,
     );
     return null;
   }
@@ -135,47 +148,38 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   const normalized: Partial<INightWatchConfig> = {};
 
   const readString = (value: unknown): string | undefined =>
-    typeof value === "string" ? value : undefined;
+    typeof value === 'string' ? value : undefined;
   const readNumber = (value: unknown): number | undefined =>
-    typeof value === "number" && !Number.isNaN(value) ? value : undefined;
+    typeof value === 'number' && !Number.isNaN(value) ? value : undefined;
   const readBoolean = (value: unknown): boolean | undefined =>
-    typeof value === "boolean" ? value : undefined;
+    typeof value === 'boolean' ? value : undefined;
   const readStringArray = (value: unknown): string[] | undefined =>
-    Array.isArray(value) && value.every((v) => typeof v === "string")
+    Array.isArray(value) && value.every((v) => typeof v === 'string')
       ? (value as string[])
       : undefined;
   const readObject = (value: unknown): Record<string, unknown> | undefined =>
-    value !== null && typeof value === "object" ? (value as Record<string, unknown>) : undefined;
+    value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
 
   const cron = readObject(rawConfig.cron);
   const review = readObject(rawConfig.review);
   const logging = readObject(rawConfig.logging);
 
   normalized.defaultBranch = readString(rawConfig.defaultBranch);
-  normalized.prdDir =
-    readString(rawConfig.prdDir) ??
-    readString(rawConfig.prdDirectory);
+  normalized.prdDir = readString(rawConfig.prdDir) ?? readString(rawConfig.prdDirectory);
   normalized.maxRuntime = readNumber(rawConfig.maxRuntime);
   normalized.reviewerMaxRuntime = readNumber(rawConfig.reviewerMaxRuntime);
   normalized.branchPrefix = readString(rawConfig.branchPrefix);
   normalized.branchPatterns =
-    readStringArray(rawConfig.branchPatterns) ??
-    readStringArray(review?.branchPatterns);
-  normalized.minReviewScore =
-    readNumber(rawConfig.minReviewScore) ??
-    readNumber(review?.minScore);
-  normalized.maxLogSize =
-    readNumber(rawConfig.maxLogSize) ??
-    readNumber(logging?.maxLogSize);
+    readStringArray(rawConfig.branchPatterns) ?? readStringArray(review?.branchPatterns);
+  normalized.minReviewScore = readNumber(rawConfig.minReviewScore) ?? readNumber(review?.minScore);
+  normalized.maxLogSize = readNumber(rawConfig.maxLogSize) ?? readNumber(logging?.maxLogSize);
   normalized.cronSchedule =
-    readString(rawConfig.cronSchedule) ??
-    readString(cron?.executorSchedule);
+    readString(rawConfig.cronSchedule) ?? readString(cron?.executorSchedule);
   normalized.reviewerSchedule =
-    readString(rawConfig.reviewerSchedule) ??
-    readString(cron?.reviewerSchedule);
+    readString(rawConfig.reviewerSchedule) ?? readString(cron?.reviewerSchedule);
   normalized.cronScheduleOffset = readNumber(rawConfig.cronScheduleOffset);
   normalized.maxRetries = readNumber(rawConfig.maxRetries);
-  normalized.provider = validateProvider(String(rawConfig.provider ?? "")) ?? undefined;
+  normalized.provider = validateProvider(String(rawConfig.provider ?? '')) ?? undefined;
   normalized.reviewerEnabled = readBoolean(rawConfig.reviewerEnabled);
 
   // providerEnv: Record<string, string> of extra env vars for the provider CLI
@@ -183,7 +187,7 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   if (rawProviderEnv) {
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(rawProviderEnv)) {
-      if (typeof value === "string") {
+      if (typeof value === 'string') {
         env[key] = value;
       }
     }
@@ -198,15 +202,15 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     const rawWebhooks = Array.isArray(rawNotifications.webhooks) ? rawNotifications.webhooks : [];
     const webhooks: IWebhookConfig[] = [];
     for (const wh of rawWebhooks) {
-      if (wh && typeof wh === "object" && "type" in wh && "events" in wh) {
+      if (wh && typeof wh === 'object' && 'type' in wh && 'events' in wh) {
         const whObj = wh as Record<string, unknown>;
         webhooks.push({
           type: String(whObj.type) as WebhookType,
-          url: typeof whObj.url === "string" ? whObj.url : undefined,
-          botToken: typeof whObj.botToken === "string" ? whObj.botToken : undefined,
-          chatId: typeof whObj.chatId === "string" ? whObj.chatId : undefined,
+          url: typeof whObj.url === 'string' ? whObj.url : undefined,
+          botToken: typeof whObj.botToken === 'string' ? whObj.botToken : undefined,
+          chatId: typeof whObj.chatId === 'string' ? whObj.chatId : undefined,
           events: Array.isArray(whObj.events)
-            ? (whObj.events.filter((e: unknown) => typeof e === "string") as NotificationEvent[])
+            ? (whObj.events.filter((e: unknown) => typeof e === 'string') as NotificationEvent[])
             : [],
         });
       }
@@ -223,9 +227,12 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     const roadmapScanner: IRoadmapScannerConfig = {
       enabled: readBoolean(rawRoadmapScanner.enabled) ?? DEFAULT_ROADMAP_SCANNER.enabled,
       roadmapPath: readString(rawRoadmapScanner.roadmapPath) ?? DEFAULT_ROADMAP_SCANNER.roadmapPath,
-      autoScanInterval: readNumber(rawRoadmapScanner.autoScanInterval) ?? DEFAULT_ROADMAP_SCANNER.autoScanInterval,
-      slicerSchedule: readString(rawRoadmapScanner.slicerSchedule) ?? DEFAULT_ROADMAP_SCANNER.slicerSchedule,
-      slicerMaxRuntime: readNumber(rawRoadmapScanner.slicerMaxRuntime) ?? DEFAULT_ROADMAP_SCANNER.slicerMaxRuntime,
+      autoScanInterval:
+        readNumber(rawRoadmapScanner.autoScanInterval) ?? DEFAULT_ROADMAP_SCANNER.autoScanInterval,
+      slicerSchedule:
+        readString(rawRoadmapScanner.slicerSchedule) ?? DEFAULT_ROADMAP_SCANNER.slicerSchedule,
+      slicerMaxRuntime:
+        readNumber(rawRoadmapScanner.slicerMaxRuntime) ?? DEFAULT_ROADMAP_SCANNER.slicerMaxRuntime,
     };
     // Validate autoScanInterval has minimum of 30 seconds
     if (roadmapScanner.autoScanInterval < 30) {
@@ -242,12 +249,14 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   if (rawBoardProvider) {
     const bp: IBoardProviderConfig = {
       enabled: readBoolean(rawBoardProvider.enabled) ?? DEFAULT_BOARD_PROVIDER.enabled,
-      provider: (readString(rawBoardProvider.provider) as BoardProviderType) ?? DEFAULT_BOARD_PROVIDER.provider,
+      provider:
+        (readString(rawBoardProvider.provider) as BoardProviderType) ??
+        DEFAULT_BOARD_PROVIDER.provider,
     };
-    if (typeof rawBoardProvider.projectNumber === "number") {
+    if (typeof rawBoardProvider.projectNumber === 'number') {
       bp.projectNumber = rawBoardProvider.projectNumber;
     }
-    if (typeof rawBoardProvider.repo === "string") {
+    if (typeof rawBoardProvider.repo === 'string') {
       bp.repo = rawBoardProvider.repo;
     }
     normalized.boardProvider = bp;
@@ -286,7 +295,7 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
       discussionEnabled:
         readBoolean(rawSlack.discussionEnabled) ?? DEFAULT_SLACK_BOT_CONFIG.discussionEnabled,
     };
-    if (typeof rawSlack.appToken === "string") {
+    if (typeof rawSlack.appToken === 'string') {
       slack.appToken = rawSlack.appToken;
     }
     normalized.slack = slack;
@@ -296,9 +305,10 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   const rawQa = readObject(rawConfig.qa);
   if (rawQa) {
     const artifactsValue = readString(rawQa.artifacts);
-    const artifacts = artifactsValue && ["screenshot", "video", "both"].includes(artifactsValue)
-      ? (artifactsValue as QaArtifacts)
-      : DEFAULT_QA.artifacts;
+    const artifacts =
+      artifactsValue && ['screenshot', 'video', 'both'].includes(artifactsValue)
+        ? (artifactsValue as QaArtifacts)
+        : DEFAULT_QA.artifacts;
 
     const qa: IQaConfig = {
       enabled: readBoolean(rawQa.enabled) ?? DEFAULT_QA.enabled,
@@ -307,7 +317,8 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
       branchPatterns: readStringArray(rawQa.branchPatterns) ?? DEFAULT_QA.branchPatterns,
       artifacts,
       skipLabel: readString(rawQa.skipLabel) ?? DEFAULT_QA.skipLabel,
-      autoInstallPlaywright: readBoolean(rawQa.autoInstallPlaywright) ?? DEFAULT_QA.autoInstallPlaywright,
+      autoInstallPlaywright:
+        readBoolean(rawQa.autoInstallPlaywright) ?? DEFAULT_QA.autoInstallPlaywright,
     };
     normalized.qa = qa;
   }
@@ -331,10 +342,10 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
  */
 function parseBoolean(value: string): boolean | null {
   const normalized = value.toLowerCase().trim();
-  if (normalized === "true" || normalized === "1") {
+  if (normalized === 'true' || normalized === '1') {
     return true;
   }
-  if (normalized === "false" || normalized === "0") {
+  if (normalized === 'false' || normalized === '0') {
     return false;
   }
   return null;
@@ -378,7 +389,7 @@ function sanitizeMaxRetries(value: number, fallback: number): number {
 function mergeConfigs(
   base: INightWatchConfig,
   fileConfig: Partial<INightWatchConfig> | null,
-  envConfig: Partial<INightWatchConfig>
+  envConfig: Partial<INightWatchConfig>,
 ): INightWatchConfig {
   const merged: INightWatchConfig = { ...base };
 
@@ -405,23 +416,26 @@ function mergeConfigs(
       merged.reviewerEnabled = fileConfig.reviewerEnabled;
     if (fileConfig.providerEnv !== undefined)
       merged.providerEnv = { ...merged.providerEnv, ...fileConfig.providerEnv };
-    if (fileConfig.notifications !== undefined)
-      merged.notifications = fileConfig.notifications;
-    if (fileConfig.prdPriority !== undefined)
-      merged.prdPriority = [...fileConfig.prdPriority];
+    if (fileConfig.notifications !== undefined) merged.notifications = fileConfig.notifications;
+    if (fileConfig.prdPriority !== undefined) merged.prdPriority = [...fileConfig.prdPriority];
     if (fileConfig.roadmapScanner !== undefined)
       merged.roadmapScanner = { ...fileConfig.roadmapScanner };
     if (fileConfig.templatesDir !== undefined) merged.templatesDir = fileConfig.templatesDir;
     if (fileConfig.boardProvider !== undefined)
       merged.boardProvider = { ...merged.boardProvider, ...fileConfig.boardProvider };
     if (fileConfig.autoMerge !== undefined) merged.autoMerge = fileConfig.autoMerge;
-    if (fileConfig.autoMergeMethod !== undefined) merged.autoMergeMethod = fileConfig.autoMergeMethod;
-    if (fileConfig.fallbackOnRateLimit !== undefined) merged.fallbackOnRateLimit = fileConfig.fallbackOnRateLimit;
+    if (fileConfig.autoMergeMethod !== undefined)
+      merged.autoMergeMethod = fileConfig.autoMergeMethod;
+    if (fileConfig.fallbackOnRateLimit !== undefined)
+      merged.fallbackOnRateLimit = fileConfig.fallbackOnRateLimit;
     if (fileConfig.claudeModel !== undefined) merged.claudeModel = fileConfig.claudeModel;
-    if (fileConfig.qa !== undefined)
-      merged.qa = { ...merged.qa, ...fileConfig.qa };
+    if (fileConfig.qa !== undefined) merged.qa = { ...merged.qa, ...fileConfig.qa };
     if (fileConfig.slack !== undefined)
-      merged.slack = { ...merged.slack, ...fileConfig.slack, channels: { ...merged.slack?.channels, ...fileConfig.slack.channels } };
+      merged.slack = {
+        ...merged.slack,
+        ...fileConfig.slack,
+        channels: { ...merged.slack?.channels, ...fileConfig.slack.channels },
+      };
   }
 
   // Merge env config (takes precedence)
@@ -441,14 +455,11 @@ function mergeConfigs(
     merged.cronScheduleOffset = envConfig.cronScheduleOffset;
   if (envConfig.maxRetries !== undefined) merged.maxRetries = envConfig.maxRetries;
   if (envConfig.provider !== undefined) merged.provider = envConfig.provider;
-  if (envConfig.reviewerEnabled !== undefined)
-    merged.reviewerEnabled = envConfig.reviewerEnabled;
+  if (envConfig.reviewerEnabled !== undefined) merged.reviewerEnabled = envConfig.reviewerEnabled;
   if (envConfig.providerEnv !== undefined)
     merged.providerEnv = { ...merged.providerEnv, ...envConfig.providerEnv };
-  if (envConfig.notifications !== undefined)
-    merged.notifications = envConfig.notifications;
-  if (envConfig.prdPriority !== undefined)
-    merged.prdPriority = [...envConfig.prdPriority];
+  if (envConfig.notifications !== undefined) merged.notifications = envConfig.notifications;
+  if (envConfig.prdPriority !== undefined) merged.prdPriority = [...envConfig.prdPriority];
   if (envConfig.roadmapScanner !== undefined)
     merged.roadmapScanner = { ...envConfig.roadmapScanner };
   if (envConfig.templatesDir !== undefined) merged.templatesDir = envConfig.templatesDir;
@@ -456,12 +467,16 @@ function mergeConfigs(
     merged.boardProvider = { ...merged.boardProvider, ...envConfig.boardProvider };
   if (envConfig.autoMerge !== undefined) merged.autoMerge = envConfig.autoMerge;
   if (envConfig.autoMergeMethod !== undefined) merged.autoMergeMethod = envConfig.autoMergeMethod;
-  if (envConfig.fallbackOnRateLimit !== undefined) merged.fallbackOnRateLimit = envConfig.fallbackOnRateLimit;
+  if (envConfig.fallbackOnRateLimit !== undefined)
+    merged.fallbackOnRateLimit = envConfig.fallbackOnRateLimit;
   if (envConfig.claudeModel !== undefined) merged.claudeModel = envConfig.claudeModel;
-  if (envConfig.qa !== undefined)
-    merged.qa = { ...merged.qa, ...envConfig.qa };
+  if (envConfig.qa !== undefined) merged.qa = { ...merged.qa, ...envConfig.qa };
   if (envConfig.slack !== undefined)
-    merged.slack = { ...merged.slack, ...envConfig.slack, channels: { ...merged.slack?.channels, ...envConfig.slack.channels } };
+    merged.slack = {
+      ...merged.slack,
+      ...envConfig.slack,
+      channels: { ...merged.slack?.channels, ...envConfig.slack.channels },
+    };
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
 
@@ -518,7 +533,7 @@ export function loadConfig(projectDir: string): INightWatchConfig {
       envConfig.branchPatterns = JSON.parse(process.env.NW_BRANCH_PATTERNS);
     } catch {
       // If not valid JSON, treat as comma-separated
-      envConfig.branchPatterns = process.env.NW_BRANCH_PATTERNS.split(",").map((s) => s.trim());
+      envConfig.branchPatterns = process.env.NW_BRANCH_PATTERNS.split(',').map((s) => s.trim());
     }
   }
 
@@ -579,7 +594,7 @@ export function loadConfig(projectDir: string): INightWatchConfig {
   if (process.env.NW_NOTIFICATIONS) {
     try {
       const parsed = JSON.parse(process.env.NW_NOTIFICATIONS);
-      if (parsed && typeof parsed === "object") {
+      if (parsed && typeof parsed === 'object') {
         envConfig.notifications = parsed as INotificationConfig;
       }
     } catch {
@@ -686,7 +701,7 @@ export function loadConfig(projectDir: string): INightWatchConfig {
 
   if (process.env.NW_QA_ARTIFACTS) {
     const artifacts = process.env.NW_QA_ARTIFACTS;
-    if (["screenshot", "video", "both"].includes(artifacts)) {
+    if (['screenshot', 'video', 'both'].includes(artifacts)) {
       envConfig.qa = {
         ...qaBaseConfig(),
         artifacts: artifacts as QaArtifacts,
@@ -712,7 +727,9 @@ export function loadConfig(projectDir: string): INightWatchConfig {
   }
 
   if (process.env.NW_QA_BRANCH_PATTERNS) {
-    const patterns = process.env.NW_QA_BRANCH_PATTERNS.split(",").map((s) => s.trim()).filter(Boolean);
+    const patterns = process.env.NW_QA_BRANCH_PATTERNS.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (patterns.length > 0) {
       envConfig.qa = {
         ...qaBaseConfig(),
@@ -755,15 +772,29 @@ export function getScriptPath(scriptName: string): string {
   const baseDir = path.dirname(configFilePath);
 
   const candidates = [
+    // Bundled package: import.meta.url = dist/cli.js → scripts are co-located in dist/scripts/.
+    // This is the canonical location for npm-installed packages (global, npx, volta, etc.).
+    path.resolve(baseDir, 'scripts', scriptName),
     // CLI binary (process.argv[1] = packages/cli/bin/night-watch.mjs) -> ../scripts
-    // Works for both local dev (via packages/cli/scripts symlink) and npm-installed packages
-    ...(process.argv[1] ? [path.resolve(path.dirname(process.argv[1]), "..", "scripts", scriptName)] : []),
+    // Resolve symlinks so that a global install (bin symlink in ~/.nvm/…/bin/) correctly
+    // maps back to the package directory instead of the nvm bin directory.
+    ...(process.argv[1]
+      ? (() => {
+          let argv1 = process.argv[1];
+          try {
+            argv1 = fs.realpathSync(argv1);
+          } catch {
+            /* keep original on failure */
+          }
+          return [path.resolve(path.dirname(argv1), '..', 'scripts', scriptName)];
+        })()
+      : []),
     // Dev (tsx): src/config.ts -> ../scripts
-    path.resolve(baseDir, "..", "scripts", scriptName),
+    path.resolve(baseDir, '..', 'scripts', scriptName),
     // Built package (dist/src/config.js): ../../scripts
-    path.resolve(baseDir, "..", "..", "scripts", scriptName),
+    path.resolve(baseDir, '..', '..', 'scripts', scriptName),
     // Fallback for unusual launch contexts
-    path.resolve(process.cwd(), "scripts", scriptName),
+    path.resolve(process.cwd(), 'scripts', scriptName),
   ];
 
   for (const candidate of candidates) {

@@ -11,6 +11,8 @@
  * binary that cannot be bundled.
  */
 
+import { cpSync, existsSync } from 'fs';
+
 import * as esbuild from 'esbuild';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
@@ -66,3 +68,22 @@ await esbuild.build({
 });
 
 console.log('Bundle complete: dist/cli.js');
+
+// Copy web UI assets into the CLI dist so they ship with the npm package.
+// The server resolves __dirname/web/ at runtime when no monorepo root is found.
+const webSrc = resolve(__dirname, '../../web/dist');
+const webDest = resolve(__dirname, 'dist/web');
+if (existsSync(webSrc)) {
+  cpSync(webSrc, webDest, { recursive: true });
+  console.log('Web UI copied: dist/web/');
+} else {
+  console.warn('Warning: web/dist not found — web UI will not be bundled.');
+}
+
+// Copy shell scripts into dist/scripts/ so they are always available regardless
+// of how the package is installed (global npm, nvm, volta, etc.).
+// getScriptPath() checks dist/scripts/ first when running from the bundle.
+const scriptsSrc = resolve(__dirname, '../../scripts');
+const scriptsDest = resolve(__dirname, 'dist/scripts');
+cpSync(scriptsSrc, scriptsDest, { recursive: true, dereference: true });
+console.log('Scripts copied: dist/scripts/');
