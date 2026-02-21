@@ -186,8 +186,7 @@ export function compileSoul(persona: IAgentPersona, memory?: string): string {
 
   if (memory && memory.trim()) {
     lines.push('');
-    lines.push('## Memory');
-    lines.push(memory.trim());
+    lines.push(memory.trim()); // Already formatted as ## Core Lessons + ## Working Memory
   }
 
   return lines.join('\n');

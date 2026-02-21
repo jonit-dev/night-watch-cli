@@ -62,7 +62,7 @@ function roleFraming(role: string, contextDescription: string): string {
 
 /**
  * Build a role-flavored reflection prompt for a persona given an interaction context.
- * The LLM is instructed to respond with 1-3 bullet points starting with `- `.
+ * The LLM is instructed to respond with 1-5 categorized bullet points.
  */
 export function buildReflectionPrompt(persona: IAgentPersona, context: IReflectionContext): string {
   const contextDescription = describeContext(context);
@@ -71,14 +71,30 @@ export function buildReflectionPrompt(persona: IAgentPersona, context: IReflecti
   return (
     `You are ${persona.name}.\n\n` +
     `${framing}\n\n` +
-    'Respond with 1-3 concise bullet points (each starting with "- ") capturing the most important lessons. ' +
-    'No preamble, no explanation outside the bullets. Be specific and actionable.'
+    'Respond with 1-5 categorized bullet points. Each bullet MUST follow this format:\n' +
+    '- [CATEGORY] lesson text (ref: path/to/file.ts#L42-L45)\n\n' +
+    'Categories:\n' +
+    '- PATTERN: recurring code pattern or convention discovered\n' +
+    '- DECISION: architectural or design choice made and why\n' +
+    '- OBSERVATION: something noticed that may need attention later\n' +
+    '- HYPOTHESIS: untested theory about a potential issue\n' +
+    '- TODO: concrete follow-up action needed\n\n' +
+    'Examples of GOOD lessons:\n' +
+    '- [PATTERN] Auth middleware validates JWT but skips expiry check on refresh tokens (ref: src/auth/middleware.ts#L23-L30)\n' +
+    '- [DECISION] Chose event sourcing over simple logging for audit trail — compliance requires full replay (ref: src/events/store.ts#L5-L15)\n' +
+    '- [OBSERVATION] The retry logic in queue-worker uses fixed 1s delay, no exponential backoff (ref: src/queue/worker.ts#L88-L95)\n\n' +
+    'Examples of BAD lessons (too vague — never write these):\n' +
+    '- Consider improving error handling\n' +
+    '- The code could use better testing\n' +
+    '- Security should be reviewed\n\n' +
+    'If a file reference is unknown, omit the (ref: ...) part — but be as specific as possible about the location.\n' +
+    'No preamble, no explanation outside the bullets.'
   );
 }
 
 /**
  * Build a compaction prompt asking the persona to condense their memory to the top lessons.
- * The LLM is instructed to respond with a compact markdown bullet list.
+ * The LLM is instructed to respond with a compact markdown bullet list preserving category tags and refs.
  */
 export function buildCompactionPrompt(persona: IAgentPersona, currentMemory: string): string {
   const maxBullets = Math.floor(COMPACTION_TARGET_LINES / 2);
@@ -88,6 +104,12 @@ export function buildCompactionPrompt(persona: IAgentPersona, currentMemory: str
     `---\n${currentMemory}\n---\n\n` +
     `Condense this into your top lessons — at most ${String(maxBullets)} bullet points starting with "- ". ` +
     'Keep the most important, actionable insights. Drop redundant or low-value entries. ' +
-    'Respond only with the bullet list, no headers, no preamble.'
+    'Respond only with the bullet list, no headers, no preamble.\n\n' +
+    'Rules for compaction:\n' +
+    '- Keep all [CATEGORY] tags intact\n' +
+    '- Preserve (ref: path#L42) references — these are the most valuable part\n' +
+    '- Merge related lessons: if 3 bullets say similar things, combine into 1 rich bullet\n' +
+    '- Drop entries that are vague or lack specifics\n' +
+    '- Favor lessons that mention specific files, functions, or patterns'
   );
 }

@@ -122,7 +122,8 @@ Ask yourself honestly:
 2. Is there something concrete and NEW I can add that hasn't already been said?
 3. Do I have real evidence from the context (a file path, diff hunk, log line, or symbol)?
 
-If the answer to ANY of these is no → reply with exactly: SKIP
+If you answer no to ALL three → reply with exactly: SKIP
+If at least one is yes, speak — but stick to what you actually know.
 
 Silence is the right call when: the trigger is outside your expertise, teammates already covered it, or you'd just be echoing someone else. Do not post to fill space.
 
@@ -130,7 +131,8 @@ Silence is the right call when: the trigger is outside your expertise, teammates
 Write a short Slack message — 1 to 2 sentences max, under ~180 chars when possible.
 ${isFirstRound ? '- First round: give your initial take from your angle. Be specific.' : '- Follow-up round: respond to what others said. Agree, push back, or add something new.'}
 - React to one specific point already in the thread (use teammate names when available).
-- Back your take with one concrete artifact from context (file path, symbol, diff hunk, or log line).
+- When referencing code, use GitHub permalink format: \`path/to/file.ts#L42-L45\` followed by a short inline snippet. Example: "\`src/auth/middleware.ts#L23-L25\` — the token check skips expiry validation."
+- Every code claim MUST include a file path reference. No vague "the auth module" — name the exact file and line range.
 - Talk like a teammate, not an assistant. No pleasantries, no filler.
 - Stay in your lane — only comment on your domain unless something crosses into it.
 - You can name-drop teammates when handing off ("Maya should look at the auth here").
@@ -147,7 +149,12 @@ Issue Review Guidance:
 - Is this issue actually valid? Does the codebase have this problem, or is it already fixed?
 - Is it worth tracking? Consider: Ready (prioritize now), Draft (valid but not urgent), or Close (invalid/duplicate/won't fix).
 - Use query_codebase to verify code claims before making them.
-- End your message with a clear lean toward READY, CLOSE, or DRAFT.`
+- End your message with a clear lean toward READY, CLOSE, or DRAFT.
+
+Examples of good verdicts:
+- "The N+1 query in \`src/api/users.ts#L88-L92\` is real — each list call fires 50 sub-selects. READY."
+- "Already fixed in PR #42, merged last week. The pagination was added at \`src/api/list.ts#L30\`. CLOSE."
+- "Valid concern but need to profile first — could be acceptable for our current scale. DRAFT."`
     : ''
 }
 

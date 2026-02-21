@@ -153,7 +153,7 @@ describe('DeliberationEngine board routing', () => {
     expect(provider.createIssue).toHaveBeenCalledWith({
       title: expect.any(String),
       body: 'Issue details',
-      column: 'In Progress',
+      column: 'Draft',
     });
   });
 

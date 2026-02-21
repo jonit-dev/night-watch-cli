@@ -228,7 +228,7 @@ ${trigger.context}`;
         log.warn('issue opener: board createIssue failed', { error: String(err) });
         await this.slackClient.postAsAgent(
           discussion.channelId,
-          `Couldn't open the issue automatically — board might not be configured. Here's the writeup:\n\n${body.slice(0, 600)}`,
+          `Couldn't open the issue automatically — board might not be configured. Here's the writeup:\n\n${body.slice(0, 1200)}`,
           devPersona,
           discussion.threadTs,
         );
@@ -237,7 +237,7 @@ ${trigger.context}`;
       // No board configured — post the writeup in thread so it's not lost
       await this.slackClient.postAsAgent(
         discussion.channelId,
-        `No board configured, dropping the writeup here:\n\n${body.slice(0, 600)}`,
+        `No board configured, dropping the writeup here:\n\n${body.slice(0, 1200)}`,
         devPersona,
         discussion.threadTs,
       );
@@ -334,12 +334,9 @@ ${trigger.context}`;
       ref: `audit-${Date.now()}`,
       context: `Project: ${projectName}\n\nAudit report:\n${report.slice(0, 2000)}`,
     };
-    const issueTitle = `fix: ${slackOneliner
-      .toLowerCase()
-      // eslint-disable-next-line sonarjs/slow-regex
-      .replace(/[.!?]+$/, '')
-      .replace(/^(found|noticed|flagging|caught)\s+/i, '')
-      .slice(0, 80)}`;
+    const titlePrompt = `Convert this one-liner into a clean imperative-mood Git issue title (max 80 chars). No prefix like "fix:" — just the action.\nOne-liner: "${slackOneliner}"\nExamples:\n- "add timeout to auth middleware"\n- "remove duplicate validation in signup flow"\n- "fix N+1 query in user list endpoint"\nWrite only the title.`;
+    const generatedTitle = await callAIForContribution(devPersona, this.config, titlePrompt, 64);
+    const issueTitle = `fix: ${generatedTitle.toLowerCase().replace(/[.!?]+$/, '').slice(0, 80)}`;
     const issueBody = await this.generateIssueBody(fakeTrigger, devPersona).catch(() =>
       report.slice(0, 1200),
     );

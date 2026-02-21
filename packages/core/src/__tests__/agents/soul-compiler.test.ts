@@ -66,20 +66,31 @@ describe('compileSoul', () => {
     expect(prompt).toContain('### Emoji Context: Use 🚀 only for approvals.');
   });
 
-  it('should include memory section when memory is provided', () => {
-    const memory = 'Always validate input before processing.';
+  it('should inject tiered memory sections when memory is provided', () => {
+    const memory =
+      '## Core Lessons\n- [PATTERN] Always validate input before processing.\n\n## Working Memory\n- [OBSERVATION] Retry logic lacks backoff';
     const prompt = compileSoul(buildPersona(), memory);
-    expect(prompt).toContain('## Memory');
+    expect(prompt).toContain('## Core Lessons');
+    expect(prompt).toContain('## Working Memory');
     expect(prompt).toContain('Always validate input before processing.');
+  });
+
+  it('should not add an extra ## Memory header when injecting tiered memory', () => {
+    const memory = '## Core Lessons\n- core lesson\n\n## Working Memory\n- working lesson';
+    const prompt = compileSoul(buildPersona(), memory);
+    expect(prompt).not.toContain('## Memory\n## Core Lessons');
+    expect(prompt).not.toContain('## Memory\n');
   });
 
   it('should omit memory section when memory is empty string', () => {
     const prompt = compileSoul(buildPersona(), '');
-    expect(prompt).not.toContain('## Memory');
+    expect(prompt).not.toContain('## Core Lessons');
+    expect(prompt).not.toContain('## Working Memory');
   });
 
   it('should omit memory section when memory is undefined', () => {
     const prompt = compileSoul(buildPersona());
-    expect(prompt).not.toContain('## Memory');
+    expect(prompt).not.toContain('## Core Lessons');
+    expect(prompt).not.toContain('## Working Memory');
   });
 });

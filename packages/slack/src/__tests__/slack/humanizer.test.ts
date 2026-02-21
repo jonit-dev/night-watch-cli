@@ -212,6 +212,20 @@ describe('humanizer utilities', () => {
       }
     });
 
+    it('should keep "Of course" when followed by substantive content', () => {
+      // File path reference after the opener — not a generic filler — should be kept
+      const result = humanizeSlackReply(
+        'Of course, middleware.ts#L23 skips expiry validation.',
+        defaultOptions,
+      );
+      expect(result).toContain('Of course');
+    });
+
+    it('should strip "Of course" when followed by generic filler', () => {
+      const result = humanizeSlackReply('Of course, I think we should consider...', defaultOptions);
+      expect(result).not.toMatch(/^Of course/);
+    });
+
     it('limits sentence count', () => {
       const input =
         'First sentence. Second sentence. Third sentence. Fourth sentence. Fifth sentence.';

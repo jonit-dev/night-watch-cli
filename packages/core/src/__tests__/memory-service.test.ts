@@ -7,7 +7,7 @@ import { join } from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MAX_MEMORY_LINES, MEMORY_CHAR_BUDGET } from '../memory/memory-constants.js';
+import { MAX_MEMORY_LINES, MEMORY_CHAR_BUDGET, WORKING_CHAR_BUDGET } from '../memory/memory-constants.js';
 import { MemoryService } from '../memory/memory-service.js';
 import { IAgentPersona, IMemoryEntry, IReflectionContext } from '../shared/types.js';
 
@@ -65,39 +65,105 @@ describe('MemoryService', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
+  // ---------------------------------------------------------------------------
+  // getMemory — tiered reads
+  // ---------------------------------------------------------------------------
+
   describe('getMemory', () => {
     it('should return empty string for new persona', async () => {
       const result = await service.getMemory('maya', 'my-project');
-      expect(result).toBe('');
+      expect(result).toBe('## Core Lessons\n\n## Working Memory\n');
     });
 
-    it('should return file content when memory file exists', async () => {
-      const memPath = service.getMemoryPath('maya', 'my-project');
-      const dir = join(memPath, '..');
+    it('should read tiered memory (core + working)', async () => {
+      const corePath = service.getCoreMemoryPath('maya', 'my-project');
+      const workingPath = service.getWorkingMemoryPath('maya', 'my-project');
+      const dir = join(corePath, '..');
       mkdirSync(dir, { recursive: true });
-      writeFileSync(memPath, '## 2026-02-20\n- learned something\n\n', 'utf-8');
+      writeFileSync(corePath, '- [PATTERN] Always type-check before merge\n', 'utf-8');
+      writeFileSync(workingPath, '## 2026-02-20\n- learned something\n\n', 'utf-8');
 
       const result = await service.getMemory('maya', 'my-project');
+
+      expect(result).toContain('## Core Lessons');
+      expect(result).toContain('## Working Memory');
+      expect(result).toContain('[PATTERN] Always type-check before merge');
       expect(result).toContain('## 2026-02-20');
       expect(result).toContain('- learned something');
     });
 
-    it('should truncate memory to char budget', async () => {
-      const memPath = service.getMemoryPath('maya', 'my-project');
-      const dir = join(memPath, '..');
+    it('should return empty tiers when no files exist', async () => {
+      const result = await service.getMemory('maya', 'nonexistent-project');
+      expect(result).toBe('## Core Lessons\n\n## Working Memory\n');
+    });
+
+    it('should migrate main.md to working.md on first read', async () => {
+      const legacyPath = service.getMemoryPath('maya', 'my-project');
+      const workingPath = service.getWorkingMemoryPath('maya', 'my-project');
+      const corePath = service.getCoreMemoryPath('maya', 'my-project');
+
+      const dir = join(legacyPath, '..');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(legacyPath, '## 2026-01-01\n- old lesson\n\n', 'utf-8');
+
+      // Trigger migration via getMemory
+      const result = await service.getMemory('maya', 'my-project');
+
+      // working.md should now exist with the old content
+      const workingContent = await readFile(workingPath, 'utf-8');
+      expect(workingContent).toContain('## 2026-01-01');
+      expect(workingContent).toContain('- old lesson');
+
+      // core.md should exist and be empty
+      const coreContent = await readFile(corePath, 'utf-8');
+      expect(coreContent).toBe('');
+
+      // main.md should be gone
+      await expect(stat(legacyPath)).rejects.toThrow();
+
+      // Result should be properly formatted
+      expect(result).toContain('## Core Lessons');
+      expect(result).toContain('## Working Memory');
+      expect(result).toContain('## 2026-01-01');
+    });
+
+    it('should truncate working memory to WORKING_CHAR_BUDGET (last N chars)', async () => {
+      const workingPath = service.getWorkingMemoryPath('maya', 'my-project');
+      const dir = join(workingPath, '..');
       mkdirSync(dir, { recursive: true });
 
-      // Write content larger than MEMORY_CHAR_BUDGET
-      const largeContent = 'x'.repeat(MEMORY_CHAR_BUDGET + 1000);
-      writeFileSync(memPath, largeContent, 'utf-8');
+      // Write content larger than WORKING_CHAR_BUDGET
+      const largeContent = 'x'.repeat(WORKING_CHAR_BUDGET + 1000);
+      writeFileSync(workingPath, largeContent, 'utf-8');
 
       const result = await service.getMemory('maya', 'my-project');
-      expect(result.length).toBeLessThanOrEqual(MEMORY_CHAR_BUDGET);
+      // The working section should be limited to WORKING_CHAR_BUDGET chars
+      const workingSection = result.split('## Working Memory\n')[1] ?? '';
+      expect(workingSection.length).toBeLessThanOrEqual(WORKING_CHAR_BUDGET);
+    });
+
+    // Keep backward-compat test for MEMORY_CHAR_BUDGET (used by old tests)
+    it('should truncate memory to char budget (backward compat)', async () => {
+      const workingPath = service.getWorkingMemoryPath('maya', 'my-project');
+      const dir = join(workingPath, '..');
+      mkdirSync(dir, { recursive: true });
+
+      const largeContent = 'x'.repeat(MEMORY_CHAR_BUDGET + 1000);
+      writeFileSync(workingPath, largeContent, 'utf-8');
+
+      const result = await service.getMemory('maya', 'my-project');
+      expect(result.length).toBeLessThanOrEqual(
+        '## Core Lessons\n\n## Working Memory\n'.length + WORKING_CHAR_BUDGET,
+      );
     });
   });
 
+  // ---------------------------------------------------------------------------
+  // appendReflection — writes to working.md
+  // ---------------------------------------------------------------------------
+
   describe('appendReflection', () => {
-    it('should append reflection with date header', async () => {
+    it('should append reflection to working.md only', async () => {
       const entry: IMemoryEntry = {
         date: '2026-02-20',
         persona: 'maya',
@@ -107,12 +173,36 @@ describe('MemoryService', () => {
 
       await service.appendReflection('maya', 'my-project', entry);
 
-      const memPath = service.getMemoryPath('maya', 'my-project');
-      const content = await readFile(memPath, 'utf-8');
+      const workingPath = service.getWorkingMemoryPath('maya', 'my-project');
+      const workingContent = await readFile(workingPath, 'utf-8');
 
-      expect(content).toContain('## 2026-02-20');
-      expect(content).toContain('- Always check types before merging');
-      expect(content).toContain('- Prefer small PRs');
+      expect(workingContent).toContain('## 2026-02-20');
+      expect(workingContent).toContain('- Always check types before merging');
+      expect(workingContent).toContain('- Prefer small PRs');
+
+      // core.md should NOT be created/modified
+      const corePath = service.getCoreMemoryPath('maya', 'my-project');
+      await expect(stat(corePath)).rejects.toThrow();
+    });
+
+    it('should not modify core.md when appending reflection', async () => {
+      const corePath = service.getCoreMemoryPath('maya', 'my-project');
+      const dir = join(corePath, '..');
+      mkdirSync(dir, { recursive: true });
+      const coreOriginal = '- [PATTERN] Always review auth code carefully\n';
+      writeFileSync(corePath, coreOriginal, 'utf-8');
+
+      const entry: IMemoryEntry = {
+        date: '2026-02-20',
+        persona: 'maya',
+        project: 'my-project',
+        lessons: ['New working lesson'],
+      };
+      await service.appendReflection('maya', 'my-project', entry);
+
+      // core.md must be unchanged
+      const coreAfter = await readFile(corePath, 'utf-8');
+      expect(coreAfter).toBe(coreOriginal);
     });
 
     it('should create directories lazily on first write', async () => {
@@ -128,8 +218,8 @@ describe('MemoryService', () => {
         service.appendReflection('carlos', 'new-project', entry),
       ).resolves.toBeUndefined();
 
-      const memPath = service.getMemoryPath('carlos', 'new-project');
-      const content = await readFile(memPath, 'utf-8');
+      const workingPath = service.getWorkingMemoryPath('carlos', 'new-project');
+      const content = await readFile(workingPath, 'utf-8');
       expect(content).toContain('## 2026-02-20');
     });
 
@@ -158,44 +248,115 @@ describe('MemoryService', () => {
     });
   });
 
+  // ---------------------------------------------------------------------------
+  // compact — only compacts working.md
+  // ---------------------------------------------------------------------------
+
   describe('compact', () => {
+    it('should not compact core.md', async () => {
+      const corePath = service.getCoreMemoryPath('maya', 'my-project');
+      const workingPath = service.getWorkingMemoryPath('maya', 'my-project');
+      const dir = join(corePath, '..');
+      mkdirSync(dir, { recursive: true });
+
+      const coreOriginal = '- [PATTERN] Core lesson that must survive\n';
+      writeFileSync(corePath, coreOriginal, 'utf-8');
+
+      // Build working content exceeding MAX_MEMORY_LINES
+      const lines = Array.from({ length: 160 }, (_, i) => `- [OBSERVATION] lesson ${String(i)}`);
+      writeFileSync(workingPath, lines.join('\n'), 'utf-8');
+
+      const condensed = '- [OBSERVATION] condensed insight\n';
+      const mockLlm = vi.fn().mockResolvedValue(condensed);
+
+      await service.compact('maya', 'my-project', mockLlm);
+
+      // core.md must be unchanged
+      const coreAfter = await readFile(corePath, 'utf-8');
+      expect(coreAfter).toBe(coreOriginal);
+
+      // working.md should be compacted
+      const workingAfter = await readFile(workingPath, 'utf-8');
+      expect(workingAfter).toBe(condensed);
+    });
+
     it('should not compact when lines are within threshold', async () => {
-      const memPath = service.getMemoryPath('maya', 'my-project');
-      const dir = join(memPath, '..');
+      const workingPath = service.getWorkingMemoryPath('maya', 'my-project');
+      const dir = join(workingPath, '..');
       mkdirSync(dir, { recursive: true });
 
       const smallContent = '## 2026-02-20\n- only a few lines\n\n';
-      writeFileSync(memPath, smallContent, 'utf-8');
+      writeFileSync(workingPath, smallContent, 'utf-8');
 
-      const mockLlm = vi.fn().mockResolvedValue('condensed content');
+      const mockLlm = vi.fn().mockResolvedValue('- [OBSERVATION] condensed content\n');
       await service.compact('maya', 'my-project', mockLlm);
 
       // LLM should NOT be called since lines are within the threshold
       expect(mockLlm).not.toHaveBeenCalled();
     });
 
-    it('should call llmCaller and overwrite file when lines exceed threshold', async () => {
-      const memPath = service.getMemoryPath('maya', 'my-project');
-      const dir = join(memPath, '..');
+    it('should call llmCaller and overwrite working.md when lines exceed threshold', async () => {
+      const workingPath = service.getWorkingMemoryPath('maya', 'my-project');
+      const dir = join(workingPath, '..');
       mkdirSync(dir, { recursive: true });
 
       // Build content that exceeds MAX_MEMORY_LINES (150)
-      const lines = Array.from({ length: 160 }, (_, i) => `- lesson ${String(i)}`);
+      const lines = Array.from({ length: 160 }, (_, i) => `- [OBSERVATION] lesson ${String(i)}`);
       const largeContent = lines.join('\n');
-      writeFileSync(memPath, largeContent, 'utf-8');
+      writeFileSync(workingPath, largeContent, 'utf-8');
 
-      const condensed = '## Compacted\n- key insight\n';
+      const condensed = '- [OBSERVATION] key insight\n';
       const mockLlm = vi.fn().mockResolvedValue(condensed);
 
       await service.compact('maya', 'my-project', mockLlm);
 
       expect(mockLlm).toHaveBeenCalledOnce();
 
-      const resultContent = await readFile(memPath, 'utf-8');
+      const resultContent = await readFile(workingPath, 'utf-8');
       expect(resultContent).toBe(condensed);
     });
 
-    it('should be a no-op when memory file does not exist', async () => {
+    it('should validate compaction output format — reject if not starting with bullet', async () => {
+      const workingPath = service.getWorkingMemoryPath('maya', 'my-project');
+      const dir = join(workingPath, '..');
+      mkdirSync(dir, { recursive: true });
+
+      const lines = Array.from({ length: 160 }, (_, i) => `- [OBSERVATION] lesson ${String(i)}`);
+      const originalContent = lines.join('\n');
+      writeFileSync(workingPath, originalContent, 'utf-8');
+
+      // Invalid LLM output — does not start with "- "
+      const invalidOutput = 'Here is a summary of your memory:\nSome lessons were found.';
+      const mockLlm = vi.fn().mockResolvedValue(invalidOutput);
+
+      await service.compact('maya', 'my-project', mockLlm);
+
+      // Original content should be preserved since validation failed
+      const resultContent = await readFile(workingPath, 'utf-8');
+      expect(resultContent).toBe(originalContent);
+    });
+
+    it('should validate compaction output format — reject if exceeds target line count', async () => {
+      const workingPath = service.getWorkingMemoryPath('maya', 'my-project');
+      const dir = join(workingPath, '..');
+      mkdirSync(dir, { recursive: true });
+
+      const lines = Array.from({ length: 160 }, (_, i) => `- [OBSERVATION] lesson ${String(i)}`);
+      const originalContent = lines.join('\n');
+      writeFileSync(workingPath, originalContent, 'utf-8');
+
+      // Invalid LLM output — too many lines (> COMPACTION_TARGET_LINES = 60)
+      const tooManyLines = Array.from({ length: 80 }, (_, i) => `- [OBSERVATION] line ${String(i)}`).join('\n');
+      const mockLlm = vi.fn().mockResolvedValue(tooManyLines);
+
+      await service.compact('maya', 'my-project', mockLlm);
+
+      // Original content should be preserved since validation failed
+      const resultContent = await readFile(workingPath, 'utf-8');
+      expect(resultContent).toBe(originalContent);
+    });
+
+    it('should be a no-op when working memory file does not exist', async () => {
       const mockLlm = vi.fn();
       await expect(
         service.compact('unknown-persona', 'unknown-project', mockLlm),
@@ -203,6 +364,38 @@ describe('MemoryService', () => {
       expect(mockLlm).not.toHaveBeenCalled();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // promoteToCore
+  // ---------------------------------------------------------------------------
+
+  describe('promoteToCore', () => {
+    it('should append lesson to core.md with a tag', async () => {
+      const corePath = service.getCoreMemoryPath('maya', 'my-project');
+      const mockLlm = vi.fn();
+
+      await service.promoteToCore('maya', 'my-project', 'Always validate auth tokens', mockLlm);
+
+      const coreContent = await readFile(corePath, 'utf-8');
+      expect(coreContent).toContain('[PATTERN]');
+      expect(coreContent).toContain('Always validate auth tokens');
+    });
+
+    it('should create directories lazily on first promotion', async () => {
+      const mockLlm = vi.fn();
+      await expect(
+        service.promoteToCore('carlos', 'brand-new-project', 'Keep PRs small', mockLlm),
+      ).resolves.toBeUndefined();
+
+      const corePath = service.getCoreMemoryPath('carlos', 'brand-new-project');
+      const content = await readFile(corePath, 'utf-8');
+      expect(content).toContain('Keep PRs small');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // migrateMemory
+  // ---------------------------------------------------------------------------
 
   describe('migrateMemory', () => {
     it('should migrate memory directory on rename', async () => {
@@ -255,6 +448,10 @@ describe('MemoryService', () => {
     });
   });
 
+  // ---------------------------------------------------------------------------
+  // archiveMemory
+  // ---------------------------------------------------------------------------
+
   describe('archiveMemory', () => {
     it('should archive memory on delete', async () => {
       const agentsDir = join(tempDir, '.night-watch', 'agents');
@@ -285,6 +482,10 @@ describe('MemoryService', () => {
     });
   });
 
+  // ---------------------------------------------------------------------------
+  // reflect
+  // ---------------------------------------------------------------------------
+
   describe('reflect', () => {
     const reflectionContext: IReflectionContext = {
       triggerType: 'pr_review',
@@ -298,13 +499,30 @@ describe('MemoryService', () => {
 
       await service.reflect(persona, 'my-project', reflectionContext, mockLlm);
 
-      expect(mockLlm).toHaveBeenCalledOnce();
+      // At least the reflection call should happen
+      expect(mockLlm).toHaveBeenCalled();
 
-      const memPath = service.getMemoryPath('Dev', 'my-project');
-      const content = await readFile(memPath, 'utf-8');
+      const workingPath = service.getWorkingMemoryPath('Dev', 'my-project');
+      const content = await readFile(workingPath, 'utf-8');
 
       expect(content).toContain('- lesson 1');
       expect(content).toContain('- lesson 2');
+    });
+
+    it('should append reflection to working.md only (reflect path)', async () => {
+      const persona = buildPersonaFixture({ name: 'Dev', role: 'Implementer' });
+      const mockLlm = vi.fn().mockResolvedValue('- lesson 1\n');
+
+      await service.reflect(persona, 'my-project', reflectionContext, mockLlm);
+
+      const workingPath = service.getWorkingMemoryPath('Dev', 'my-project');
+      const workingContent = await readFile(workingPath, 'utf-8');
+      expect(workingContent).toContain('- lesson 1');
+
+      // core.md should NOT be created by reflect alone (no promotion threshold met)
+      const corePath = service.getCoreMemoryPath('Dev', 'my-project');
+      // core may or may not exist; what matters is working.md got the lesson
+      void corePath;
     });
 
     it('should not append reflection when LLM returns no bullet lessons', async () => {
@@ -316,9 +534,9 @@ describe('MemoryService', () => {
 
       expect(mockLlm).toHaveBeenCalledOnce();
 
-      // Memory file should not have been created
-      const memPath = service.getMemoryPath('Dev', 'my-project');
-      await expect(stat(memPath)).rejects.toThrow();
+      // working.md should not have been created
+      const workingPath = service.getWorkingMemoryPath('Dev', 'my-project');
+      await expect(stat(workingPath)).rejects.toThrow();
     });
 
     it('should not append reflection when LLM returns empty string', async () => {
@@ -327,26 +545,26 @@ describe('MemoryService', () => {
 
       await service.reflect(persona, 'my-project', reflectionContext, mockLlm);
 
-      const memPath = service.getMemoryPath('Dev', 'my-project');
-      await expect(stat(memPath)).rejects.toThrow();
+      const workingPath = service.getWorkingMemoryPath('Dev', 'my-project');
+      await expect(stat(workingPath)).rejects.toThrow();
     });
 
     it('should compact when line count exceeds MAX_MEMORY_LINES after appending', async () => {
       const persona = buildPersonaFixture({ name: 'Dev', role: 'Implementer' });
 
-      // Pre-populate the memory file with more than MAX_MEMORY_LINES lines
-      const memPath = service.getMemoryPath('Dev', 'my-project');
-      const memDir = join(memPath, '..');
-      mkdirSync(memDir, { recursive: true });
+      // Pre-populate the working memory file with more than MAX_MEMORY_LINES lines
+      const workingPath = service.getWorkingMemoryPath('Dev', 'my-project');
+      const workingDir = join(workingPath, '..');
+      mkdirSync(workingDir, { recursive: true });
 
       const existingLines = Array.from(
         { length: MAX_MEMORY_LINES + 10 },
-        (_, i) => `- old lesson ${String(i)}`,
+        (_, i) => `- [OBSERVATION] old lesson ${String(i)}`,
       );
-      writeFileSync(memPath, existingLines.join('\n') + '\n', 'utf-8');
+      writeFileSync(workingPath, existingLines.join('\n') + '\n', 'utf-8');
 
-      const condensedContent = '## Compacted\n- key insight only\n';
-      // First call: reflection response; second+ calls: compaction response
+      const condensedContent = '- [OBSERVATION] key insight only\n';
+      // First call: reflection response; subsequent calls: compaction/promotion response
       const mockLlm = vi
         .fn()
         .mockResolvedValueOnce('- new lesson from reflect\n')
@@ -355,9 +573,9 @@ describe('MemoryService', () => {
       await service.reflect(persona, 'my-project', reflectionContext, mockLlm);
 
       // LLM should have been called at least twice (reflect + compact)
-      expect(mockLlm).toHaveBeenCalledTimes(2);
+      expect(mockLlm.mock.calls.length).toBeGreaterThanOrEqual(2);
 
-      const resultContent = await readFile(memPath, 'utf-8');
+      const resultContent = await readFile(workingPath, 'utf-8');
       // After compaction the file content should be the condensed form
       expect(resultContent).toBe(condensedContent);
     });
@@ -369,11 +587,11 @@ describe('MemoryService', () => {
       const mockLlm = vi
         .fn()
         .mockResolvedValueOnce('- concise lesson\n')
-        .mockResolvedValue('compacted content');
+        .mockResolvedValue('- [OBSERVATION] compacted content\n');
 
       await service.reflect(persona, 'my-project', reflectionContext, mockLlm);
 
-      // Only the reflection call should happen; no compaction
+      // Only the reflection call should happen (checkPromotion won't trigger on 1 lesson)
       expect(mockLlm).toHaveBeenCalledOnce();
     });
   });

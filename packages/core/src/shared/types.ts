@@ -285,6 +285,7 @@ export interface IMemoryEntry {
   persona: string;
   project: string;
   lessons: string[];
+  category?: string;
 }
 
 export interface IReflectionContext {

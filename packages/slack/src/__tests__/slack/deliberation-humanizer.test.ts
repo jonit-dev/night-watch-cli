@@ -2,14 +2,22 @@ import { describe, expect, it } from 'vitest';
 import { humanizeSlackReply } from '../../deliberation.js';
 
 describe('humanizeSlackReply', () => {
-  it('removes canned assistant openers and keeps reply short', () => {
+  it('removes canned assistant openers when followed by generic filler and keeps reply short', () => {
     const result = humanizeSlackReply(
-      'Great question! Of course, we can do that. First we should check CI. Then we should fix tests. Finally we should re-run everything.',
+      'Great question! I think we should check CI. Then we should fix tests. Finally we should re-run everything.',
     );
 
     expect(result.startsWith('Great question')).toBe(false);
-    expect(result.startsWith('Of course')).toBe(false);
     expect(result.split(/(?<=[.!?])\s+/).length).toBeLessThanOrEqual(3);
+  });
+
+  it('keeps canned opener when followed by substantive non-filler content', () => {
+    // "Of course" followed by a file path — not a generic filler word — should be kept
+    const result = humanizeSlackReply(
+      'Of course, middleware.ts#L23 skips expiry validation.',
+    );
+
+    expect(result).toContain('Of course');
   });
 
   it('limits emoji spam to at most one emoji', () => {

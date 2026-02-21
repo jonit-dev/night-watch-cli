@@ -256,6 +256,25 @@ describe('deliberation-builders', () => {
       expect(prompt).not.toContain('Issue Review Guidance');
     });
 
+    it('should include citation format rule in contribution prompt', () => {
+      const trigger = buildTrigger('pr_review');
+      const prompt = buildContributionPrompt(buildPersona(), trigger, '', 1);
+      expect(prompt).toContain('path/to/file.ts#L');
+    });
+
+    it('should use relaxed skip logic (ALL three no)', () => {
+      const trigger = buildTrigger('pr_review');
+      const prompt = buildContributionPrompt(buildPersona(), trigger, '', 1);
+      expect(prompt).toContain('answer no to ALL three');
+    });
+
+    it('should include verdict examples for issue_review', () => {
+      const trigger = buildTrigger('issue_review');
+      const prompt = buildContributionPrompt(buildPersona(), trigger, '', 1);
+      expect(prompt).toContain('READY.');
+      expect(prompt).toContain('CLOSE.');
+    });
+
     it('triggers context to max length', () => {
       const longContext = 'x'.repeat(5000);
       const trigger = buildTrigger('pr_review', { context: longContext });

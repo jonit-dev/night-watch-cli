@@ -15,12 +15,13 @@ export interface IHumanizeSlackReplyOptions {
   maxChars?: number;
 }
 
+// Only strip if followed by generic continuation (comma + filler), not substantive content.
 const CANNED_PHRASE_PREFIXES = [
-  /^great question[,.! ]*/i,
-  /^of course[,.! ]*/i,
-  /^certainly[,.! ]*/i,
+  /^great question[,.! ]+(?=(?:i|we|let|the|this|here|so)\b)/i,
+  /^of course[,.! ]+(?=(?:i|we|let|the|this|here|so)\b)/i,
+  /^certainly[,.! ]+(?=(?:i|we|let|the|this|here|so)\b)/i,
   // eslint-disable-next-line sonarjs/duplicates-in-character-class
-  /^you['']re absolutely right[,.! ]*/i,
+  /^you['']re absolutely right[,.! ]+/i,
   /^i hope this helps[,.! ]*/i,
 ];
 
