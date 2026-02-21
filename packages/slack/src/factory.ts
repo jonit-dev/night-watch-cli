@@ -4,7 +4,7 @@
  * from a single config object.
  */
 
-import { INightWatchConfig } from '@night-watch/core/types.js';
+import { INightWatchConfig } from '@night-watch/core';
 
 import { SlackClient } from './client.js';
 import { DeliberationEngine } from './deliberation.js';

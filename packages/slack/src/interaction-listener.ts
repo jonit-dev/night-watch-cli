@@ -4,13 +4,15 @@
  * and applies loop-protection safeguards.
  */
 
-import { IAgentPersona } from '@night-watch/core/shared/types.js';
-import { getRepositories } from '@night-watch/core/storage/repositories/index.js';
-import { getDb } from '@night-watch/core/storage/sqlite/client.js';
-import { INightWatchConfig } from '@night-watch/core/types.js';
-import { generatePersonaAvatar } from '@night-watch/core/utils/avatar-generator.js';
-import type { IRegistryEntry } from '@night-watch/core/utils/registry.js';
-import { getRoadmapStatus } from '@night-watch/core/utils/roadmap-scanner.js';
+import {
+  IAgentPersona,
+  INightWatchConfig,
+  generatePersonaAvatar,
+  getDb,
+  getRepositories,
+  getRoadmapStatus,
+} from '@night-watch/core';
+import type { IRegistryEntry } from '@night-watch/core';
 import { SocketModeClient } from '@slack/socket-mode';
 import { execFileSync } from 'child_process';
 import { SlackClient } from './client.js';

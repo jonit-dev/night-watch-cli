@@ -2,23 +2,25 @@
  * QA command - executes the QA cron script for PR test generation
  */
 
-import { Command } from "commander";
-import { getScriptPath, loadConfig } from "@night-watch/core/config.js";
-import { INightWatchConfig } from "@night-watch/core/types.js";
-import { executeScriptWithOutput } from "@night-watch/core/utils/shell.js";
-import { sendNotifications } from "@night-watch/core/utils/notify.js";
-import { PROVIDER_COMMANDS } from "@night-watch/core/constants.js";
-import { fetchPrDetailsByNumber } from "@night-watch/core/utils/github.js";
-import * as path from "path";
-import { parseScriptResult } from "@night-watch/core/utils/script-result.js";
+import { Command } from 'commander';
 import {
+  INightWatchConfig,
+  PROVIDER_COMMANDS,
   createSpinner,
   createTable,
   dim,
+  executeScriptWithOutput,
+  fetchPrDetailsByNumber,
+  getScriptPath,
   header,
   info,
+  loadConfig,
+  parseScriptResult,
+  sendNotifications,
   error as uiError,
-} from "@night-watch/core/utils/ui.js";
+} from '@night-watch/core';
+import { sendSlackBotNotification } from '@night-watch/slack/notify.js';
+import * as path from 'path';
 
 /**
  * Options for the qa command
@@ -36,7 +38,7 @@ export function shouldSendQaNotification(scriptStatus?: string): boolean {
   if (!scriptStatus) {
     return true;
   }
-  return !scriptStatus.startsWith("skip_");
+  return !scriptStatus.startsWith('skip_');
 }
 
 /**
@@ -47,8 +49,8 @@ export function parseQaPrNumbers(prsRaw?: string): number[] {
 
   const seen = new Set<number>();
   const numbers: number[] = [];
-  for (const token of prsRaw.split(",")) {
-    const parsed = parseInt(token.trim().replace(/^#/, ""), 10);
+  for (const token of prsRaw.split(',')) {
+    const parsed = parseInt(token.trim().replace(/^#/, ''), 10);
     if (Number.isNaN(parsed) || seen.has(parsed)) {
       continue;
     }
@@ -61,7 +63,10 @@ export function parseQaPrNumbers(prsRaw?: string): number[] {
 /**
  * Build environment variables map from config and CLI options for QA
  */
-export function buildEnvVars(config: INightWatchConfig, options: IQaOptions): Record<string, string> {
+export function buildEnvVars(
+  config: INightWatchConfig,
+  options: IQaOptions,
+): Record<string, string> {
   const env: Record<string, string> = {};
 
   // Provider command - the actual CLI binary to call
@@ -76,15 +81,14 @@ export function buildEnvVars(config: INightWatchConfig, options: IQaOptions): Re
   env.NW_QA_MAX_RUNTIME = String(config.qa.maxRuntime);
 
   // Branch patterns: use qa-specific if non-empty, else top-level
-  const branchPatterns = config.qa.branchPatterns.length > 0
-    ? config.qa.branchPatterns
-    : config.branchPatterns;
-  env.NW_BRANCH_PATTERNS = branchPatterns.join(",");
+  const branchPatterns =
+    config.qa.branchPatterns.length > 0 ? config.qa.branchPatterns : config.branchPatterns;
+  env.NW_BRANCH_PATTERNS = branchPatterns.join(',');
 
   // QA-specific settings
   env.NW_QA_SKIP_LABEL = config.qa.skipLabel;
   env.NW_QA_ARTIFACTS = config.qa.artifacts;
-  env.NW_QA_AUTO_INSTALL_PLAYWRIGHT = config.qa.autoInstallPlaywright ? "1" : "0";
+  env.NW_QA_AUTO_INSTALL_PLAYWRIGHT = config.qa.autoInstallPlaywright ? '1' : '0';
 
   // Provider environment variables (API keys, base URLs, etc.)
   if (config.providerEnv) {
@@ -93,11 +97,11 @@ export function buildEnvVars(config: INightWatchConfig, options: IQaOptions): Re
 
   // Dry run flag
   if (options.dryRun) {
-    env.NW_DRY_RUN = "1";
+    env.NW_DRY_RUN = '1';
   }
 
   // Sandbox flag -- prevents the agent from modifying crontab during execution
-  env.NW_EXECUTION_CONTEXT = "agent";
+  env.NW_EXECUTION_CONTEXT = 'agent';
 
   return env;
 }
@@ -105,7 +109,10 @@ export function buildEnvVars(config: INightWatchConfig, options: IQaOptions): Re
 /**
  * Apply CLI flag overrides to the config for QA
  */
-export function applyCliOverrides(config: INightWatchConfig, options: IQaOptions): INightWatchConfig {
+export function applyCliOverrides(
+  config: INightWatchConfig,
+  options: IQaOptions,
+): INightWatchConfig {
   const overridden = { ...config, qa: { ...config.qa } };
 
   if (options.timeout) {
@@ -116,7 +123,7 @@ export function applyCliOverrides(config: INightWatchConfig, options: IQaOptions
   }
 
   if (options.provider) {
-    overridden.provider = options.provider as INightWatchConfig["provider"];
+    overridden.provider = options.provider as INightWatchConfig['provider'];
   }
 
   return overridden;
@@ -127,11 +134,11 @@ export function applyCliOverrides(config: INightWatchConfig, options: IQaOptions
  */
 export function qaCommand(program: Command): void {
   program
-    .command("qa")
-    .description("Run QA process now")
-    .option("--dry-run", "Show what would be executed without running")
-    .option("--timeout <seconds>", "Override max runtime in seconds for QA")
-    .option("--provider <string>", "AI provider to use (claude or codex)")
+    .command('qa')
+    .description('Run QA process now')
+    .option('--dry-run', 'Show what would be executed without running')
+    .option('--timeout <seconds>', 'Override max runtime in seconds for QA')
+    .option('--provider <string>', 'AI provider to use (claude or codex)')
     .action(async (options: IQaOptions) => {
       // Get the project directory (current working directory)
       const projectDir = process.cwd();
@@ -146,34 +153,39 @@ export function qaCommand(program: Command): void {
       const envVars = buildEnvVars(config, options);
 
       // Get the script path
-      const scriptPath = getScriptPath("night-watch-qa-cron.sh");
+      const scriptPath = getScriptPath('night-watch-qa-cron.sh');
 
       if (options.dryRun) {
-        header("Dry Run: QA Process");
+        header('Dry Run: QA Process');
 
         // Configuration section with table
-        header("Configuration");
-        const configTable = createTable({ head: ["Setting", "Value"] });
-        configTable.push(["Provider", config.provider]);
-        configTable.push(["Provider CLI", PROVIDER_COMMANDS[config.provider]]);
-        configTable.push(["Max Runtime", `${config.qa.maxRuntime}s (${Math.floor(config.qa.maxRuntime / 60)}min)`]);
-        const branchPatterns = config.qa.branchPatterns.length > 0
-          ? config.qa.branchPatterns
-          : config.branchPatterns;
-        configTable.push(["Branch Patterns", branchPatterns.join(", ")]);
-        configTable.push(["Skip Label", config.qa.skipLabel]);
-        configTable.push(["Artifacts", config.qa.artifacts]);
-        configTable.push(["Auto-install Playwright", config.qa.autoInstallPlaywright ? "Yes" : "No"]);
+        header('Configuration');
+        const configTable = createTable({ head: ['Setting', 'Value'] });
+        configTable.push(['Provider', config.provider]);
+        configTable.push(['Provider CLI', PROVIDER_COMMANDS[config.provider]]);
+        configTable.push([
+          'Max Runtime',
+          `${config.qa.maxRuntime}s (${Math.floor(config.qa.maxRuntime / 60)}min)`,
+        ]);
+        const branchPatterns =
+          config.qa.branchPatterns.length > 0 ? config.qa.branchPatterns : config.branchPatterns;
+        configTable.push(['Branch Patterns', branchPatterns.join(', ')]);
+        configTable.push(['Skip Label', config.qa.skipLabel]);
+        configTable.push(['Artifacts', config.qa.artifacts]);
+        configTable.push([
+          'Auto-install Playwright',
+          config.qa.autoInstallPlaywright ? 'Yes' : 'No',
+        ]);
         console.log(configTable.toString());
 
         // Environment variables
-        header("Environment Variables");
+        header('Environment Variables');
         for (const [key, value] of Object.entries(envVars)) {
           dim(`  ${key}=${value}`);
         }
 
         // Full command that would be executed
-        header("Command");
+        header('Command');
         dim(`  bash ${scriptPath} ${projectDir}`);
         console.log();
 
@@ -181,18 +193,22 @@ export function qaCommand(program: Command): void {
       }
 
       // Execute the script with spinner
-      const spinner = createSpinner("Running QA process...");
+      const spinner = createSpinner('Running QA process...');
       spinner.start();
 
       try {
-        const { exitCode, stdout, stderr } = await executeScriptWithOutput(scriptPath, [projectDir], envVars);
+        const { exitCode, stdout, stderr } = await executeScriptWithOutput(
+          scriptPath,
+          [projectDir],
+          envVars,
+        );
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
 
         if (exitCode === 0) {
-          if (scriptResult?.status?.startsWith("skip_")) {
-            spinner.succeed("QA process completed (no PRs needed QA)");
+          if (scriptResult?.status?.startsWith('skip_')) {
+            spinner.succeed('QA process completed (no PRs needed QA)');
           } else {
-            spinner.succeed("QA process completed successfully");
+            spinner.succeed('QA process completed successfully');
           }
         } else {
           spinner.fail(`QA process exited with code ${exitCode}`);
@@ -203,23 +219,21 @@ export function qaCommand(program: Command): void {
           const skipNotification = !shouldSendQaNotification(scriptResult?.status);
 
           if (skipNotification) {
-            info("Skipping QA notification (no actionable QA result)");
+            info('Skipping QA notification (no actionable QA result)');
           }
 
           if (!skipNotification) {
             const qaPrNumbers = parseQaPrNumbers(scriptResult?.data.prs);
             const primaryQaPr = qaPrNumbers[0];
-            const prDetails = primaryQaPr
-              ? fetchPrDetailsByNumber(primaryQaPr, projectDir)
-              : null;
+            const prDetails = primaryQaPr ? fetchPrDetailsByNumber(primaryQaPr, projectDir) : null;
             const repo = scriptResult?.data.repo;
             const fallbackPrUrl =
               !prDetails?.url && primaryQaPr && repo
                 ? `https://github.com/${repo}/pull/${primaryQaPr}`
                 : undefined;
 
-            await sendNotifications(config, {
-              event: "qa_completed",
+            const _qaCtx = {
+              event: 'qa_completed' as const,
               projectName: path.basename(projectDir),
               exitCode,
               provider: config.provider,
@@ -230,13 +244,17 @@ export function qaCommand(program: Command): void {
               filesChanged: prDetails?.changedFiles,
               additions: prDetails?.additions,
               deletions: prDetails?.deletions,
-            });
+            };
+            await Promise.allSettled([
+              sendNotifications(config, _qaCtx),
+              sendSlackBotNotification(config, _qaCtx),
+            ]);
           }
         }
 
         process.exit(exitCode);
       } catch (err) {
-        spinner.fail("Failed to execute QA command");
+        spinner.fail('Failed to execute QA command');
         uiError(`${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
       }

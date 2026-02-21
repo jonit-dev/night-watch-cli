@@ -9,19 +9,25 @@ Night Watch CLI is an autonomous PRD executor that uses AI provider CLIs (Claude
 ```mermaid
 graph TB
     subgraph User["User Interface"]
-        CLI["night-watch CLI<br/>(Commander.js)"]
+        CLI["packages/cli<br/>(Commander.js)"]
+        WebUI["packages/web<br/>(React + Vite)"]
     end
 
-    subgraph Core["Node.js Core"]
+    subgraph Core["packages/core"]
         Config["Config Loader<br/>(defaults + file + env)"]
         Shell["Shell Executor<br/>(child_process.spawn)"]
-        Crontab["Crontab Manager<br/>(read/write/marker)"]
+        Repos["Repository Layer<br/>(SQLite via tsyringe)"]
+        Notify["Notification Utils<br/>(webhooks)"]
     end
 
-    subgraph Scripts["Bash Scripts"]
-        Executor["night-watch-cron.sh<br/>(PRD Executor)"]
-        Reviewer["night-watch-pr-reviewer-cron.sh<br/>(PR Reviewer)"]
-        Helpers["night-watch-helpers.sh<br/>(Shared Utilities)"]
+    subgraph Server["packages/server"]
+        API["Express REST API<br/>(+ SSE)"]
+    end
+
+    subgraph SlackPkg["packages/slack"]
+        Bot["Slack Bot<br/>(Socket Mode)"]
+        DelibEngine["DeliberationEngine<br/>(multi-agent)"]
+        SlackNotify["Slack Notifications<br/>(Bot API)"]
     end
 
     subgraph External["External Tools"]
@@ -29,35 +35,33 @@ graph TB
         GH["GitHub CLI (gh)"]
         Git["Git"]
         CronDaemon["Cron Daemon"]
+        SlackAPI["Slack API"]
     end
 
-    subgraph Storage["File System"]
+    subgraph Storage["Persistence"]
+        DB[("~/.night-watch/state.db<br/>(SQLite)")]
         PRDs["docs/PRDs/night-watch/<br/>(pending PRDs)"]
-        Done["docs/PRDs/night-watch/done/<br/>(completed PRDs)"]
-        Logs["logs/<br/>(executor.log, reviewer.log)"]
         Lock["/tmp/night-watch-*.lock"]
-        ConfigFile["night-watch.config.json"]
     end
 
     CLI --> Config
     CLI --> Shell
-    CLI --> Crontab
-    Config --> ConfigFile
-    Shell --> Executor
-    Shell --> Reviewer
-    Executor --> Helpers
-    Reviewer --> Helpers
-    Executor --> Provider
-    Reviewer --> Provider
-    Executor --> GH
-    Reviewer --> GH
-    Executor --> Git
-    Helpers --> Lock
-    Helpers --> Logs
-    Helpers --> PRDs
-    Helpers --> Done
-    Crontab --> CronDaemon
+    CLI --> Repos
+    CLI --> Notify
+    WebUI -->|HTTP/SSE| API
+    API --> Config
+    API --> Repos
+    API --> SlackNotify
+    Shell --> Provider
+    Shell --> GH
+    Shell --> Git
+    Bot --> DelibEngine
+    Bot --> SlackAPI
+    SlackNotify --> SlackAPI
+    Repos --> DB
     CronDaemon -.->|scheduled| CLI
+    Shell --> Lock
+    Shell --> PRDs
 ```
 
 ---
@@ -70,17 +74,19 @@ graph LR
     NW --> Init["init<br/>Setup project"]
     NW --> Run["run<br/>Execute PRD now"]
     NW --> Review["review<br/>Review PRs now"]
-    NW --> Install["install<br/>Add crontab entries"]
-    NW --> Uninstall["uninstall<br/>Remove crontab entries"]
-    NW --> Status["status<br/>Show dashboard"]
+    NW --> QA["qa<br/>QA run"]
+    NW --> Serve["serve<br/>Start web server"]
+    NW --> Board["board<br/>Ticket board"]
+    NW --> State["state<br/>State management"]
     NW --> LogsCmd["logs<br/>View log files"]
 
     Init --> |creates| Dirs["directories + config<br/>+ slash commands"]
-    Run --> |spawns| ExecScript["night-watch-cron.sh"]
-    Review --> |spawns| RevScript["night-watch-pr-reviewer-cron.sh"]
-    Install --> |writes| CronTab["user crontab"]
-    Uninstall --> |removes from| CronTab
-    Status --> |reads| LockFiles["lock files + PRDs<br/>+ PRs + logs"]
+    Run --> |spawns| Provider["AI Provider CLI<br/>(claude/codex)"]
+    Review --> |spawns| Provider
+    QA --> |spawns| Provider
+    Serve --> |starts| API["packages/server<br/>(Express + SSE)"]
+    Board --> |reads| DB[("state.db")]
+    State --> |reads/writes| DB
     LogsCmd --> |tails| LogFiles["logs/"]
 ```
 
@@ -189,7 +195,7 @@ sequenceDiagram
 
 ```mermaid
 graph TD
-    D["Hardcoded Defaults<br/>(src/constants.ts)"] -->|lowest priority| M["Merged Config"]
+    D["Hardcoded Defaults<br/>(packages/core/src/constants.ts)"] -->|lowest priority| M["Merged Config"]
     F["Config File<br/>(night-watch.config.json)"] -->|overrides defaults| M
     E["Environment Variables<br/>(NW_* prefix)"] -->|overrides file| M
     C["CLI Flags<br/>(--timeout, --provider)"] -->|highest priority| M
@@ -259,37 +265,46 @@ stateDiagram-v2
 ## Directory Structure
 
 ```
-night-watch-cli/
-├── bin/
-│   └── night-watch.mjs            # ESM entry point (shebang)
-├── src/
-│   ├── cli.ts                     # Commander.js program setup
-│   ├── types.ts                   # INightWatchConfig, Provider type
-│   ├── constants.ts               # Defaults, PROVIDER_COMMANDS map
-│   ├── config.ts                  # Hierarchical config loader
-│   ├── commands/
-│   │   ├── init.ts                # Project scaffolding
-│   │   ├── run.ts                 # PRD executor dispatch
-│   │   ├── review.ts              # PR reviewer dispatch
-│   │   ├── install.ts             # Crontab entry creation
-│   │   ├── uninstall.ts           # Crontab entry removal
-│   │   ├── status.ts              # Health dashboard
-│   │   └── logs.ts                # Log viewer (tail -f)
-│   └── utils/
-│       ├── shell.ts               # Bash subprocess wrapper
-│       └── crontab.ts             # Crontab CRUD operations
-├── scripts/
-│   ├── night-watch-cron.sh        # PRD executor logic
-│   ├── night-watch-pr-reviewer-cron.sh  # PR reviewer logic
-│   └── night-watch-helpers.sh     # Shared bash functions
-├── templates/
-│   ├── night-watch.md             # Slash command for executor
-│   ├── night-watch-pr-reviewer.md # Slash command for reviewer
-│   └── night-watch.config.json    # Config template
-├── docs/PRDs/                     # PRD storage
-├── logs/                          # Runtime logs
-├── package.json
-├── tsconfig.json
+night-watch-cli/                    # Yarn workspaces monorepo
+├── packages/
+│   ├── core/                       # Domain logic (private)
+│   │   └── src/
+│   │       ├── agents/             # Soul/Style/Skill compiler → system prompts
+│   │       ├── board/              # Roadmap + ticket management
+│   │       ├── config.ts           # Hierarchical config loader
+│   │       ├── constants.ts        # DEFAULT_*, VALID_* constants
+│   │       ├── di/
+│   │       │   └── container.ts    # tsyringe composition root
+│   │       ├── storage/
+│   │       │   ├── repositories/   # Interfaces + SQLite implementations
+│   │       │   └── sqlite/         # DB client + migrations
+│   │       ├── templates/          # PRD/slicer prompt templates
+│   │       ├── types.ts            # Shared TypeScript interfaces
+│   │       └── utils/              # notify, shell, registry, roadmap…
+│   ├── cli/                        # Published npm package
+│   │   └── src/
+│   │       ├── cli.ts              # Commander.js program setup
+│   │       └── commands/           # init, run, review, qa, serve, board…
+│   ├── server/                     # REST API + SSE (private)
+│   │   └── src/
+│   │       ├── index.ts            # startServer / startGlobalServer
+│   │       ├── middleware/         # error-handler, graceful-shutdown, SSE
+│   │       ├── routes/             # agents, prds, board, slack…
+│   │       └── services/           # notification.service
+│   ├── slack/                      # Slack bot (private)
+│   │   └── src/
+│   │       ├── client.ts           # SlackClient (WebClient wrapper)
+│   │       ├── deliberation.ts     # DeliberationEngine
+│   │       ├── factory.ts          # createSlackStack()
+│   │       ├── interaction-listener/ # Socket Mode event routing
+│   │       ├── notify.ts           # sendSlackBotNotification()
+│   │       └── proactive-loop.ts   # Proactive message scheduler
+│   └── web/                        # React SPA source (private)
+├── web/                            # Vite build root → web/dist/ (served by server)
+├── docs/PRDs/                      # PRD storage (pending + done/)
+├── logs/                           # Runtime logs
+├── package.json                    # Workspace root
+├── turbo.json                      # Turbo build pipeline
 └── vitest.config.ts
 ```
 
@@ -333,23 +348,23 @@ flowchart LR
 
 ## Key Design Decisions
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| CLI framework | Commander.js | Lightweight, well-established, single dependency |
-| Core logic | Bash scripts | Battle-tested for process management, git ops, lock files |
-| Node.js wrapper | TypeScript | Distribution via npm, config management, type safety |
-| Scheduling | System crontab | No daemon to manage, works on any Unix system |
-| Isolation | Git worktrees | Parallel execution without polluting the main tree |
-| Concurrency control | PID lock files | Simple, reliable, auto-cleanup via bash trap |
-| Provider abstraction | Strategy pattern | Easy to add new AI provider CLIs |
-| Config hierarchy | Defaults < File < Env < Flags | Standard precedence, 12-factor friendly |
-| Persistence layer | SQLite via repository pattern | Structured state with enforced architectural boundary |
+| Decision             | Choice                        | Rationale                                                 |
+| -------------------- | ----------------------------- | --------------------------------------------------------- |
+| CLI framework        | Commander.js                  | Lightweight, well-established, single dependency          |
+| Core logic           | Bash scripts                  | Battle-tested for process management, git ops, lock files |
+| Node.js wrapper      | TypeScript                    | Distribution via npm, config management, type safety      |
+| Scheduling           | System crontab                | No daemon to manage, works on any Unix system             |
+| Isolation            | Git worktrees                 | Parallel execution without polluting the main tree        |
+| Concurrency control  | PID lock files                | Simple, reliable, auto-cleanup via bash trap              |
+| Provider abstraction | Strategy pattern              | Easy to add new AI provider CLIs                          |
+| Config hierarchy     | Defaults < File < Env < Flags | Standard precedence, 12-factor friendly                   |
+| Persistence layer    | SQLite via repository pattern | Structured state with enforced architectural boundary     |
 
 ---
 
 ## Persistence Architecture
 
-Night Watch uses a layered persistence architecture backed by SQLite. All SQL operations are confined to `src/storage/**` and enforced at lint time.
+Night Watch uses a layered persistence architecture backed by SQLite. All SQL operations are confined to `packages/core/src/storage/**` and enforced at lint time.
 
 ```mermaid
 flowchart LR
@@ -362,14 +377,14 @@ flowchart LR
 
 ### Layers
 
-| Layer | Location | Responsibility |
-|-------|----------|----------------|
-| Commands / Server | `src/commands/**`, `src/server/**` | User-facing logic; calls utility functions only |
-| Utility Functions | `src/utils/**` | Business logic; accesses state via repository interfaces |
-| Repository Interfaces | `src/storage/repositories/interfaces.ts` | Persistence contracts; no SQL |
-| SQLite Implementations | `src/storage/repositories/sqlite/**` | Concrete SQL implementations of the repository interfaces |
-| SQLite Client | `src/storage/sqlite/client.ts` | Database connection and setup |
-| Migrations | `src/storage/sqlite/migrations.ts` | Schema versioning |
+| Layer                  | Location                                                 | Responsibility                                           |
+| ---------------------- | -------------------------------------------------------- | -------------------------------------------------------- |
+| Commands / Server      | `packages/cli/src/commands/**`, `packages/server/src/**` | User-facing logic; calls utility functions only          |
+| Utility Functions      | `packages/core/src/utils/**`                             | Business logic; accesses state via repository interfaces |
+| Repository Interfaces  | `packages/core/src/storage/repositories/interfaces.ts`   | Persistence contracts; no SQL                            |
+| SQLite Implementations | `packages/core/src/storage/repositories/sqlite/**`       | Concrete SQL implementations                             |
+| SQLite Client          | `packages/core/src/storage/sqlite/client.ts`             | Database connection and setup                            |
+| Migrations             | `packages/core/src/storage/sqlite/migrations.ts`         | Schema versioning                                        |
 
 ### Repository Interfaces
 
@@ -380,17 +395,17 @@ flowchart LR
 
 ### Boundary Enforcement
 
-- All `better-sqlite3` imports are restricted to `src/storage/**` by an ESLint `no-restricted-imports` rule in `eslint.config.js`
-- Any attempt to import `better-sqlite3` outside `src/storage/**` will produce a lint error:
+- All `better-sqlite3` imports are restricted to `packages/core/src/storage/**` by an ESLint `no-restricted-imports` rule in `eslint.config.js`
+- Any attempt to import `better-sqlite3` outside the storage layer will produce a lint error:
   `SQL access is restricted to src/storage/**. Use repository interfaces instead.`
-- The `state migrate` command (`src/commands/state.ts`) performs one-time migration of legacy JSON state files into SQLite and writes directly to the database through the storage layer
+- The `state` command (`packages/cli/src/commands/state.ts`) manages SQLite state operations
 
 ### Verifying the Boundary
 
 Run the following to confirm no raw SQL or `better-sqlite3` imports exist outside the storage layer:
 
 ```bash
-rg -n "SELECT|INSERT|UPDATE|DELETE|better-sqlite3" src --glob '!src/storage/**'
+rg -n "SELECT|INSERT|UPDATE|DELETE|better-sqlite3" packages/core/src --glob '!packages/core/src/storage/**'
 ```
 
 This should return zero results.

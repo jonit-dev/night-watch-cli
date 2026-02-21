@@ -3,7 +3,7 @@
  * Consolidated from deliberation.ts and interaction-listener.ts to eliminate DRY violations.
  */
 
-import type { IAgentPersona } from '@night-watch/core/shared/types.js';
+import type { IAgentPersona } from '@night-watch/core';
 import { normalizeHandle, normalizeText, stripSlackUserMentions } from './utils.js';
 
 type TPersonaDomain = 'security' | 'qa' | 'lead' | 'dev' | 'general';
@@ -16,7 +16,9 @@ export function findPersona(
   names: string[],
   roleKeywords: string[],
 ): IAgentPersona | null {
-  const byName = personas.find((p) => names.some((name) => p.name.toLowerCase() === name.toLowerCase()));
+  const byName = personas.find((p) =>
+    names.some((name) => p.name.toLowerCase() === name.toLowerCase()),
+  );
   if (byName) return byName;
 
   return (
@@ -31,35 +33,38 @@ export function findPersona(
  * Find the Dev (implementer/executor) persona.
  */
 export function findDev(personas: IAgentPersona[]): IAgentPersona | null {
-  return findPersona(personas, ["Dev"], ["implementer", "executor", "developer"]);
+  return findPersona(personas, ['Dev'], ['implementer', 'executor', 'developer']);
 }
 
 /**
  * Find the Carlos (tech lead/architect) persona.
  */
 export function findCarlos(personas: IAgentPersona[]): IAgentPersona | null {
-  return findPersona(personas, ["Carlos"], ["tech lead", "architect", "lead"]);
+  return findPersona(personas, ['Carlos'], ['tech lead', 'architect', 'lead']);
 }
 
 /**
  * Find Maya (security reviewer) persona.
  */
 export function findMaya(personas: IAgentPersona[]): IAgentPersona | null {
-  return findPersona(personas, ["Maya"], ["security reviewer", "security"]);
+  return findPersona(personas, ['Maya'], ['security reviewer', 'security']);
 }
 
 /**
  * Find Priya (QA) persona.
  */
 export function findPriya(personas: IAgentPersona[]): IAgentPersona | null {
-  return findPersona(personas, ["Priya"], ["qa", "quality assurance", "test"]);
+  return findPersona(personas, ['Priya'], ['qa', 'quality assurance', 'test']);
 }
 
 /**
  * Determine which personas should participate based on trigger type.
  * Uses role-based fallback so renamed personas still participate.
  */
-export function getParticipatingPersonas(triggerType: string, personas: IAgentPersona[]): IAgentPersona[] {
+export function getParticipatingPersonas(
+  triggerType: string,
+  personas: IAgentPersona[],
+): IAgentPersona[] {
   const dev = findDev(personas);
   const carlos = findCarlos(personas);
   const maya = findMaya(personas);
@@ -133,9 +138,13 @@ export function scorePersonaForText(text: string, persona: IAgentPersona): numbe
     score += 12;
   }
 
-  const securitySignal = /\b(security|auth|vuln|owasp|xss|csrf|token|permission|exploit|threat)\b/.test(normalized);
+  const securitySignal =
+    /\b(security|auth|vuln|owasp|xss|csrf|token|permission|exploit|threat)\b/.test(normalized);
   const qaSignal = /\b(qa|test|testing|bug|e2e|playwright|regression|flaky)\b/.test(normalized);
-  const leadSignal = /\b(architecture|architect|design|scalability|performance|tech debt|tradeoff|strategy)\b/.test(normalized);
+  const leadSignal =
+    /\b(architecture|architect|design|scalability|performance|tech debt|tradeoff|strategy)\b/.test(
+      normalized,
+    );
   const devSignal = /\b(implement|implementation|code|build|fix|patch|ship|pr)\b/.test(normalized);
 
   if (securitySignal && domain === 'security') score += 8;
@@ -144,7 +153,10 @@ export function scorePersonaForText(text: string, persona: IAgentPersona): numbe
   if (devSignal && domain === 'dev') score += 8;
 
   const personaTokens = new Set([
-    ...persona.role.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3),
+    ...persona.role
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length >= 3),
     ...(persona.soul?.expertise ?? [])
       .flatMap((s) => s.toLowerCase().split(/[^a-z0-9]+/))
       .filter((t) => t.length >= 3),
@@ -215,10 +227,7 @@ export function extractMentionHandles(text: string): string[] {
  * Resolve mention handles to active personas by display name.
  * Matches @-prefixed handles in text (e.g. "@maya").
  */
-export function resolveMentionedPersonas(
-  text: string,
-  personas: IAgentPersona[],
-): IAgentPersona[] {
+export function resolveMentionedPersonas(text: string, personas: IAgentPersona[]): IAgentPersona[] {
   const handles = extractMentionHandles(text);
   if (handles.length === 0) return [];
 

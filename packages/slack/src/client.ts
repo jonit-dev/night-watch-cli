@@ -4,7 +4,7 @@
  */
 
 import { WebClient } from '@slack/web-api';
-import { IAgentPersona } from '@night-watch/core/shared/types.js';
+import { IAgentPersona } from '@night-watch/core';
 
 export interface ISlackMessage {
   ts: string;

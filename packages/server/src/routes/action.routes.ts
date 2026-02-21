@@ -8,17 +8,17 @@ import { spawn } from 'child_process';
 
 import { Request, Response, Router } from 'express';
 
-import { performCancel } from '@night-watch/core/utils/cancel.js';
-import { CLAIM_FILE_EXTENSION } from '@night-watch/core/constants.js';
-import { loadConfig } from '@night-watch/core/config.js';
-import { INightWatchConfig } from '@night-watch/core/types.js';
-import { sendNotifications } from '@night-watch/core/utils/notify.js';
 import {
+  CLAIM_FILE_EXTENSION,
+  INightWatchConfig,
   checkLockFile,
   executorLockPath,
   fetchStatusSnapshot,
+  loadConfig,
+  performCancel,
   reviewerLockPath,
-} from '@night-watch/core/utils/status-data.js';
+  sendNotifications,
+} from '@night-watch/core';
 import { SseClientSet, broadcastSSE } from '../middleware/sse.middleware.js';
 import { validatePrdName } from '../helpers.js';
 
@@ -82,10 +82,7 @@ function spawnAction(
       }
     }
 
-    const prdName =
-      command[0] === 'run'
-        ? (req.body?.prdName as string | undefined)
-        : undefined;
+    const prdName = command[0] === 'run' ? (req.body?.prdName as string | undefined) : undefined;
 
     const extraEnv: NodeJS.ProcessEnv = {};
     if (prdName) {
@@ -122,16 +119,12 @@ function spawnAction(
 
       res.json({ started: true, pid: child.pid });
     } else {
-      res
-        .status(500)
-        .json({ error: 'Failed to spawn process: no PID assigned' });
+      res.status(500).json({ error: 'Failed to spawn process: no PID assigned' });
     }
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        error: error instanceof Error ? error.message : String(error),
-      });
+    res.status(500).json({
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }
 
@@ -181,11 +174,9 @@ export function createActionRoutes(deps: IActionRoutesDeps): Router {
       const hasFailure = results.some((r) => !r.success);
       res.status(hasFailure ? 500 : 200).json({ results });
     } catch (error) {
-      res
-        .status(500)
-        .json({
-          error: error instanceof Error ? error.message : String(error),
-        });
+      res.status(500).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   });
 
@@ -215,20 +206,16 @@ export function createActionRoutes(deps: IActionRoutesDeps): Router {
       }
 
       if (!fs.existsSync(donePath)) {
-        res
-          .status(404)
-          .json({ error: `PRD "${normalized}" not found in done/` });
+        res.status(404).json({ error: `PRD "${normalized}" not found in done/` });
         return;
       }
 
       fs.renameSync(donePath, pendingPath);
       res.json({ message: `Moved "${normalized}" back to pending` });
     } catch (error) {
-      res
-        .status(500)
-        .json({
-          error: error instanceof Error ? error.message : String(error),
-        });
+      res.status(500).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   });
 
@@ -239,9 +226,7 @@ export function createActionRoutes(deps: IActionRoutesDeps): Router {
       const lock = checkLockFile(lockPath);
 
       if (lock.running) {
-        res
-          .status(409)
-          .json({ error: 'Executor is actively running — use Stop instead' });
+        res.status(409).json({ error: 'Executor is actively running — use Stop instead' });
         return;
       }
 
@@ -254,19 +239,13 @@ export function createActionRoutes(deps: IActionRoutesDeps): Router {
         cleanOrphanedClaims(prdDir);
       }
 
-      broadcastSSE(
-        sseClients,
-        'status_changed',
-        fetchStatusSnapshot(projectDir, config),
-      );
+      broadcastSSE(sseClients, 'status_changed', fetchStatusSnapshot(projectDir, config));
 
       res.json({ cleared: true });
     } catch (error) {
-      res
-        .status(500)
-        .json({
-          error: error instanceof Error ? error.message : String(error),
-        });
+      res.status(500).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   });
 
@@ -300,42 +279,34 @@ export function createProjectActionRoutes(deps: {
     spawnAction(req.projectDir!, ['install'], req, res);
   });
 
-  router.post(
-    '/actions/uninstall-cron',
-    (req: Request, res: Response): void => {
-      spawnAction(req.projectDir!, ['uninstall'], req, res);
-    },
-  );
+  router.post('/actions/uninstall-cron', (req: Request, res: Response): void => {
+    spawnAction(req.projectDir!, ['uninstall'], req, res);
+  });
 
-  router.post(
-    '/actions/cancel',
-    async (req: Request, res: Response): Promise<void> => {
-      try {
-        const projectDir = req.projectDir!;
-        const { type = 'all' } = req.body as { type?: string };
-        const validTypes = ['run', 'review', 'all'];
-        if (!validTypes.includes(type)) {
-          res.status(400).json({
-            error: `Invalid type. Must be one of: ${validTypes.join(', ')}`,
-          });
-          return;
-        }
-
-        const results = await performCancel(projectDir, {
-          type: type as 'run' | 'review' | 'all',
-          force: true,
+  router.post('/actions/cancel', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const projectDir = req.projectDir!;
+      const { type = 'all' } = req.body as { type?: string };
+      const validTypes = ['run', 'review', 'all'];
+      if (!validTypes.includes(type)) {
+        res.status(400).json({
+          error: `Invalid type. Must be one of: ${validTypes.join(', ')}`,
         });
-        const hasFailure = results.some((r) => !r.success);
-        res.status(hasFailure ? 500 : 200).json({ results });
-      } catch (error) {
-        res
-          .status(500)
-          .json({
-            error: error instanceof Error ? error.message : String(error),
-          });
+        return;
       }
-    },
-  );
+
+      const results = await performCancel(projectDir, {
+        type: type as 'run' | 'review' | 'all',
+        force: true,
+      });
+      const hasFailure = results.some((r) => !r.success);
+      res.status(hasFailure ? 500 : 200).json({ results });
+    } catch (error) {
+      res.status(500).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
 
   router.post('/actions/retry', (req: Request, res: Response): void => {
     try {
@@ -364,20 +335,16 @@ export function createProjectActionRoutes(deps: {
       }
 
       if (!fs.existsSync(donePath)) {
-        res
-          .status(404)
-          .json({ error: `PRD "${normalized}" not found in done/` });
+        res.status(404).json({ error: `PRD "${normalized}" not found in done/` });
         return;
       }
 
       fs.renameSync(donePath, pendingPath);
       res.json({ message: `Moved "${normalized}" back to pending` });
     } catch (error) {
-      res
-        .status(500)
-        .json({
-          error: error instanceof Error ? error.message : String(error),
-        });
+      res.status(500).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   });
 
@@ -389,9 +356,7 @@ export function createProjectActionRoutes(deps: {
       const lock = checkLockFile(lockPath);
 
       if (lock.running) {
-        res
-          .status(409)
-          .json({ error: 'Executor is actively running — use Stop instead' });
+        res.status(409).json({ error: 'Executor is actively running — use Stop instead' });
         return;
       }
 
@@ -405,19 +370,13 @@ export function createProjectActionRoutes(deps: {
       }
 
       const clients = projectSseClients.get(projectDir) ?? new Set();
-      broadcastSSE(
-        clients,
-        'status_changed',
-        fetchStatusSnapshot(projectDir, config),
-      );
+      broadcastSSE(clients, 'status_changed', fetchStatusSnapshot(projectDir, config));
 
       res.json({ cleared: true });
     } catch (error) {
-      res
-        .status(500)
-        .json({
-          error: error instanceof Error ? error.message : String(error),
-        });
+      res.status(500).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
     }
   });
 

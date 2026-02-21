@@ -3,19 +3,10 @@
  * Validates environment setup and system health
  */
 
-import { Command } from "commander";
-import { loadConfig } from "@night-watch/core/config.js";
-import { IWebhookConfig, NotificationEvent } from "@night-watch/core/types.js";
+import { Command } from 'commander';
 import {
-  header,
-  info,
-  label,
-  step,
-  success,
-  error as uiError,
-  warn,
-} from "@night-watch/core/utils/ui.js";
-import {
+  IWebhookConfig,
+  NotificationEvent,
   checkConfigFile,
   checkCrontabAccess,
   checkGhCli,
@@ -24,8 +15,16 @@ import {
   checkNodeVersion,
   checkPrdDirectory,
   checkProviderCli,
-} from "@night-watch/core/utils/checks.js";
-import type { ICheckResult } from "@night-watch/core/utils/checks.js";
+  header,
+  info,
+  label,
+  loadConfig,
+  step,
+  success,
+  error as uiError,
+  warn,
+} from '@night-watch/core';
+import type { ICheckResult } from '@night-watch/core';
 
 /**
  * Validate a single webhook configuration and return a list of issues.
@@ -36,17 +35,17 @@ export function validateWebhook(webhook: IWebhookConfig): string[] {
 
   // Validate events
   if (!webhook.events || webhook.events.length === 0) {
-    issues.push("No events configured");
+    issues.push('No events configured');
   } else {
     const validEvents: NotificationEvent[] = [
-      "run_started",
-      "run_succeeded",
-      "run_failed",
-      "run_timeout",
-      "review_completed",
-      "pr_auto_merged",
-      "rate_limit_fallback",
-      "qa_completed",
+      'run_started',
+      'run_succeeded',
+      'run_failed',
+      'run_timeout',
+      'review_completed',
+      'pr_auto_merged',
+      'rate_limit_fallback',
+      'qa_completed',
     ];
     for (const event of webhook.events) {
       if (!validEvents.includes(event)) {
@@ -57,28 +56,26 @@ export function validateWebhook(webhook: IWebhookConfig): string[] {
 
   // Platform-specific validation
   switch (webhook.type) {
-    case "slack":
+    case 'slack':
       if (!webhook.url) {
-        issues.push("Missing URL");
-      } else if (!webhook.url.startsWith("https://hooks.slack.com/")) {
-        issues.push("URL should start with https://hooks.slack.com/");
+        issues.push('Missing URL');
+      } else if (!webhook.url.startsWith('https://hooks.slack.com/')) {
+        issues.push('URL should start with https://hooks.slack.com/');
       }
       break;
-    case "discord":
+    case 'discord':
       if (!webhook.url) {
-        issues.push("Missing URL");
-      } else if (
-        !webhook.url.startsWith("https://discord.com/api/webhooks/")
-      ) {
-        issues.push("URL should start with https://discord.com/api/webhooks/");
+        issues.push('Missing URL');
+      } else if (!webhook.url.startsWith('https://discord.com/api/webhooks/')) {
+        issues.push('URL should start with https://discord.com/api/webhooks/');
       }
       break;
-    case "telegram":
+    case 'telegram':
       if (!webhook.botToken) {
-        issues.push("Missing botToken");
+        issues.push('Missing botToken');
       }
       if (!webhook.chatId) {
-        issues.push("Missing chatId");
+        issues.push('Missing chatId');
       }
       break;
     default:
@@ -103,7 +100,7 @@ function runCheck(
   total: number,
   checkName: string,
   checkFn: () => ICheckResult,
-  options: IDoctorOptions
+  options: IDoctorOptions,
 ): { passed: boolean; fixed: boolean } {
   step(checkNum, total, `Checking ${checkName}...`);
   const result = checkFn();
@@ -140,9 +137,9 @@ function runCheck(
  */
 export function doctorCommand(program: Command): void {
   program
-    .command("doctor")
-    .description("Check Night Watch configuration and system health")
-    .option("--fix", "Automatically fix fixable issues")
+    .command('doctor')
+    .description('Check Night Watch configuration and system health')
+    .option('--fix', 'Automatically fix fixable issues')
     .action(async (options: IDoctorOptions) => {
       const projectDir = process.cwd();
       const config = loadConfig(projectDir);
@@ -151,15 +148,15 @@ export function doctorCommand(program: Command): void {
       let passedChecks = 0;
       let fixedChecks = 0;
 
-      header("Night Watch Doctor");
+      header('Night Watch Doctor');
 
       // Check 1: Node.js version
       const nodeResult = runCheck(
         checkNum++,
         totalChecks,
-        "Node.js version",
+        'Node.js version',
         () => checkNodeVersion(18),
-        options
+        options,
       );
       if (nodeResult.passed) passedChecks++;
       if (nodeResult.fixed) fixedChecks++;
@@ -168,21 +165,15 @@ export function doctorCommand(program: Command): void {
       const gitResult = runCheck(
         checkNum++,
         totalChecks,
-        "git repository",
+        'git repository',
         () => checkGitRepo(projectDir),
-        options
+        options,
       );
       if (gitResult.passed) passedChecks++;
       if (gitResult.fixed) fixedChecks++;
 
       // Check 3: GitHub CLI
-      const ghResult = runCheck(
-        checkNum++,
-        totalChecks,
-        "GitHub CLI",
-        () => checkGhCli(),
-        options
-      );
+      const ghResult = runCheck(checkNum++, totalChecks, 'GitHub CLI', () => checkGhCli(), options);
       if (ghResult.passed) passedChecks++;
       if (ghResult.fixed) fixedChecks++;
 
@@ -190,9 +181,9 @@ export function doctorCommand(program: Command): void {
       const providerResult = runCheck(
         checkNum++,
         totalChecks,
-        "provider CLI",
+        'provider CLI',
         () => checkProviderCli(config.provider),
-        options
+        options,
       );
       if (providerResult.passed) passedChecks++;
       if (providerResult.fixed) fixedChecks++;
@@ -201,9 +192,9 @@ export function doctorCommand(program: Command): void {
       const configResult = runCheck(
         checkNum++,
         totalChecks,
-        "config file",
+        'config file',
         () => checkConfigFile(projectDir),
-        options
+        options,
       );
       if (configResult.passed) passedChecks++;
       if (configResult.fixed) fixedChecks++;
@@ -212,9 +203,9 @@ export function doctorCommand(program: Command): void {
       const prdResult = runCheck(
         checkNum++,
         totalChecks,
-        "PRD directory",
+        'PRD directory',
         () => checkPrdDirectory(projectDir, config.prdDir),
-        options
+        options,
       );
       if (prdResult.passed) passedChecks++;
       if (prdResult.fixed) fixedChecks++;
@@ -223,20 +214,17 @@ export function doctorCommand(program: Command): void {
       const logsResult = runCheck(
         checkNum++,
         totalChecks,
-        "logs directory",
+        'logs directory',
         () => checkLogsDirectory(projectDir),
-        options
+        options,
       );
       if (logsResult.passed) passedChecks++;
       if (logsResult.fixed) fixedChecks++;
 
       // Check 8: Webhook configuration
-      step(checkNum, totalChecks, "Checking webhook configuration...");
-      if (
-        !config.notifications ||
-        config.notifications.webhooks.length === 0
-      ) {
-        info("No webhooks configured (optional)");
+      step(checkNum, totalChecks, 'Checking webhook configuration...');
+      if (!config.notifications || config.notifications.webhooks.length === 0) {
+        info('No webhooks configured (optional)');
         passedChecks++;
       } else {
         let webhookErrors = 0;
@@ -252,9 +240,7 @@ export function doctorCommand(program: Command): void {
           }
         }
         if (webhookErrors === 0) {
-          success(
-            `All ${config.notifications.webhooks.length} webhook(s) valid`
-          );
+          success(`All ${config.notifications.webhooks.length} webhook(s) valid`);
           passedChecks++;
         }
       }
@@ -265,19 +251,17 @@ export function doctorCommand(program: Command): void {
 
       // Summary
       console.log();
-      header("Summary");
-      label("Checks passed", `${passedChecks}/${totalChecks}`);
+      header('Summary');
+      label('Checks passed', `${passedChecks}/${totalChecks}`);
       if (fixedChecks > 0) {
-        label("Issues fixed", `${fixedChecks}`);
+        label('Issues fixed', `${fixedChecks}`);
       }
       console.log();
 
       if (passedChecks === totalChecks) {
-        success("All checks passed");
+        success('All checks passed');
       } else {
-        uiError(
-          "Issues found — fix errors above before running Night Watch"
-        );
+        uiError('Issues found — fix errors above before running Night Watch');
         process.exit(1);
       }
     });

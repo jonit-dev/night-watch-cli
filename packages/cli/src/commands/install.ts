@@ -3,28 +3,26 @@
  * Adds crontab entries for automated PRD execution
  */
 
-import { Command } from "commander";
-import { execSync } from "child_process";
-import * as path from "path";
-import * as fs from "fs";
-import { loadConfig } from "@night-watch/core/config.js";
-import { INightWatchConfig } from "@night-watch/core/types.js";
-import { LOG_DIR } from "@night-watch/core/constants.js";
+import { Command } from 'commander';
+import { execSync } from 'child_process';
+import * as path from 'path';
+import * as fs from 'fs';
 import {
+  INightWatchConfig,
+  LOG_DIR,
+  dim,
   generateMarker,
   getEntries,
   getProjectEntries,
-  readCrontab,
-  writeCrontab,
-} from "@night-watch/core/utils/crontab.js";
-import {
-  dim,
+  getProjectName,
   header,
+  loadConfig,
+  readCrontab,
   success,
   error as uiError,
   warn,
-} from "@night-watch/core/utils/ui.js";
-import { getProjectName } from "@night-watch/core/utils/status-data.js";
+  writeCrontab,
+} from '@night-watch/core';
 
 export interface IInstallOptions {
   schedule?: string;
@@ -50,8 +48,8 @@ function shellQuote(value: string): string {
 function getNightWatchBinPath(): string {
   // Try to find night-watch in npm global bin
   try {
-    const npmBin = execSync("npm bin -g", { encoding: "utf-8" }).trim();
-    const binPath = path.join(npmBin, "night-watch");
+    const npmBin = execSync('npm bin -g', { encoding: 'utf-8' }).trim();
+    const binPath = path.join(npmBin, 'night-watch');
     if (fs.existsSync(binPath)) {
       return binPath;
     }
@@ -61,10 +59,10 @@ function getNightWatchBinPath(): string {
 
   // Try which command
   try {
-    return execSync("which night-watch", { encoding: "utf-8" }).trim();
+    return execSync('which night-watch', { encoding: 'utf-8' }).trim();
   } catch {
     // Fall back to assuming it's in PATH
-    return "night-watch";
+    return 'night-watch';
   }
 }
 
@@ -75,10 +73,10 @@ function getNightWatchBinPath(): string {
  */
 function getNodeBinDir(): string {
   try {
-    const nodePath = execSync("which node", { encoding: "utf-8" }).trim();
+    const nodePath = execSync('which node', { encoding: 'utf-8' }).trim();
     return path.dirname(nodePath);
   } catch {
-    return "";
+    return '';
   }
 }
 
@@ -86,16 +84,15 @@ function getNodeBinDir(): string {
  * Build PATH export for cron entries using relevant binary directories.
  */
 export function buildCronPathPrefix(nodeBinDir: string, nightWatchBin: string): string {
-  const nightWatchBinDir = (nightWatchBin.includes("/") || nightWatchBin.includes("\\"))
-    ? path.dirname(nightWatchBin)
-    : "";
+  const nightWatchBinDir =
+    nightWatchBin.includes('/') || nightWatchBin.includes('\\') ? path.dirname(nightWatchBin) : '';
   const pathParts = Array.from(
-    new Set([nodeBinDir, nightWatchBinDir].filter((part) => part.length > 0))
+    new Set([nodeBinDir, nightWatchBinDir].filter((part) => part.length > 0)),
   );
   if (pathParts.length === 0) {
-    return "";
+    return '';
   }
-  return `export PATH="${pathParts.join(":")}:$PATH" && `;
+  return `export PATH="${pathParts.join(':')}:$PATH" && `;
 }
 
 /**
@@ -111,7 +108,7 @@ export function applyScheduleOffset(schedule: string, offset: number): string {
   // Only replace if minute field is a plain number
   if (/^\d+$/.test(parts[0])) {
     parts[0] = String(offset);
-    return parts.join(" ");
+    return parts.join(' ');
   }
   return schedule;
 }
@@ -129,12 +126,25 @@ export interface IInstallResult {
 export function performInstall(
   projectDir: string,
   config: INightWatchConfig,
-  options?: { schedule?: string; reviewerSchedule?: string; noReviewer?: boolean; noSlicer?: boolean; noQa?: boolean; qa?: boolean; noAudit?: boolean; audit?: boolean; force?: boolean }
+  options?: {
+    schedule?: string;
+    reviewerSchedule?: string;
+    noReviewer?: boolean;
+    noSlicer?: boolean;
+    noQa?: boolean;
+    qa?: boolean;
+    noAudit?: boolean;
+    audit?: boolean;
+    force?: boolean;
+  },
 ): IInstallResult {
   try {
     const offset = config.cronScheduleOffset ?? 0;
     const executorSchedule = applyScheduleOffset(options?.schedule || config.cronSchedule, offset);
-    const reviewerSchedule = applyScheduleOffset(options?.reviewerSchedule || config.reviewerSchedule, offset);
+    const reviewerSchedule = applyScheduleOffset(
+      options?.reviewerSchedule || config.reviewerSchedule,
+      offset,
+    );
     const nightWatchBin = getNightWatchBinPath();
     const projectName = getProjectName(projectDir);
     const marker = generateMarker(projectName);
@@ -144,16 +154,20 @@ export function performInstall(
       fs.mkdirSync(logDir, { recursive: true });
     }
 
-    const executorLog = path.join(logDir, "executor.log");
-    const reviewerLog = path.join(logDir, "reviewer.log");
+    const executorLog = path.join(logDir, 'executor.log');
+    const reviewerLog = path.join(logDir, 'reviewer.log');
 
     // Check if already installed (unless force)
     if (!options?.force) {
       const existingEntries = Array.from(
-        new Set([...getEntries(marker), ...getProjectEntries(projectDir)])
+        new Set([...getEntries(marker), ...getProjectEntries(projectDir)]),
       );
       if (existingEntries.length > 0) {
-        return { success: false, entries: existingEntries, error: "Already installed. Uninstall first or use force." };
+        return {
+          success: false,
+          entries: existingEntries,
+          error: 'Already installed. Uninstall first or use force.',
+        };
       }
     }
 
@@ -162,12 +176,12 @@ export function performInstall(
     const pathPrefix = buildCronPathPrefix(nodeBinDir, nightWatchBin);
     const cliBinPrefix = `export NW_CLI_BIN=${shellQuote(nightWatchBin)} && `;
 
-    let providerEnvPrefix = "";
+    let providerEnvPrefix = '';
     if (config.providerEnv && Object.keys(config.providerEnv).length > 0) {
       const exports = Object.entries(config.providerEnv)
         .map(([key, value]) => `export ${key}=${shellQuote(value)}`)
-        .join(" && ");
-      providerEnvPrefix = exports + " && ";
+        .join(' && ');
+      providerEnvPrefix = exports + ' && ';
     }
 
     const executorEntry = `${executorSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
@@ -183,7 +197,7 @@ export function performInstall(
     const installSlicer = options?.noSlicer === true ? false : config.roadmapScanner.enabled;
     if (installSlicer) {
       const slicerSchedule = applyScheduleOffset(config.roadmapScanner.slicerSchedule, offset);
-      const slicerLog = path.join(logDir, "slicer.log");
+      const slicerLog = path.join(logDir, 'slicer.log');
       const slicerEntry = `${slicerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} slice >> ${shellQuote(slicerLog)} 2>&1  ${marker}`;
       entries.push(slicerEntry);
     }
@@ -193,7 +207,7 @@ export function performInstall(
     const installQa = disableQa ? false : config.qa.enabled;
     if (installQa) {
       const qaSchedule = applyScheduleOffset(config.qa.schedule, offset);
-      const qaLog = path.join(logDir, "qa.log");
+      const qaLog = path.join(logDir, 'qa.log');
       const qaEntry = `${qaSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} qa >> ${shellQuote(qaLog)} 2>&1  ${marker}`;
       entries.push(qaEntry);
     }
@@ -203,7 +217,7 @@ export function performInstall(
     const installAudit = disableAudit ? false : config.audit.enabled;
     if (installAudit) {
       const auditSchedule = applyScheduleOffset(config.audit.schedule, offset);
-      const auditLog = path.join(logDir, "audit.log");
+      const auditLog = path.join(logDir, 'audit.log');
       const auditEntry = `${auditSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} audit >> ${shellQuote(auditLog)} 2>&1  ${marker}`;
       entries.push(auditEntry);
     }
@@ -227,14 +241,14 @@ export function performInstall(
  */
 export function installCommand(program: Command): void {
   program
-    .command("install")
-    .description("Add crontab entries for automated execution")
-    .option("-s, --schedule <cron>", "Cron schedule for PRD executor")
-    .option("--reviewer-schedule <cron>", "Cron schedule for reviewer")
-    .option("--no-reviewer", "Skip installing reviewer cron")
-    .option("--no-slicer", "Skip installing slicer cron")
-    .option("--no-qa", "Skip installing QA cron")
-    .option("--no-audit", "Skip installing audit cron")
+    .command('install')
+    .description('Add crontab entries for automated execution')
+    .option('-s, --schedule <cron>', 'Cron schedule for PRD executor')
+    .option('--reviewer-schedule <cron>', 'Cron schedule for reviewer')
+    .option('--no-reviewer', 'Skip installing reviewer cron')
+    .option('--no-slicer', 'Skip installing slicer cron')
+    .option('--no-qa', 'Skip installing QA cron')
+    .option('--no-audit', 'Skip installing audit cron')
     .action(async (options: IInstallOptions) => {
       try {
         // Get project directory
@@ -245,8 +259,14 @@ export function installCommand(program: Command): void {
 
         // Get schedule from options or config, applying offset
         const offset = config.cronScheduleOffset ?? 0;
-        const executorSchedule = applyScheduleOffset(options.schedule || config.cronSchedule, offset);
-        const reviewerSchedule = applyScheduleOffset(options.reviewerSchedule || config.reviewerSchedule, offset);
+        const executorSchedule = applyScheduleOffset(
+          options.schedule || config.cronSchedule,
+          offset,
+        );
+        const reviewerSchedule = applyScheduleOffset(
+          options.reviewerSchedule || config.reviewerSchedule,
+          offset,
+        );
 
         // Get paths
         const nightWatchBin = getNightWatchBinPath();
@@ -259,17 +279,17 @@ export function installCommand(program: Command): void {
           fs.mkdirSync(logDir, { recursive: true });
         }
 
-        const executorLog = path.join(logDir, "executor.log");
-        const reviewerLog = path.join(logDir, "reviewer.log");
+        const executorLog = path.join(logDir, 'executor.log');
+        const reviewerLog = path.join(logDir, 'reviewer.log');
 
         // Check if already installed
         const existingEntries = Array.from(
-          new Set([...getEntries(marker), ...getProjectEntries(projectDir)])
+          new Set([...getEntries(marker), ...getProjectEntries(projectDir)]),
         );
         if (existingEntries.length > 0) {
           warn(`Night Watch is already installed for ${projectName}.`);
           console.log();
-          dim("Existing crontab entries:");
+          dim('Existing crontab entries:');
           existingEntries.forEach((entry) => dim(`  ${entry}`));
           console.log();
           dim("Run 'night-watch uninstall' first to reinstall.");
@@ -285,12 +305,12 @@ export function installCommand(program: Command): void {
         const cliBinPrefix = `export NW_CLI_BIN=${shellQuote(nightWatchBin)} && `;
 
         // Build providerEnv export prefix for cron entries
-        let providerEnvPrefix = "";
+        let providerEnvPrefix = '';
         if (config.providerEnv && Object.keys(config.providerEnv).length > 0) {
           const exports = Object.entries(config.providerEnv)
             .map(([key, value]) => `export ${key}=${shellQuote(value)}`)
-            .join(" && ");
-          providerEnvPrefix = exports + " && ";
+            .join(' && ');
+          providerEnvPrefix = exports + ' && ';
         }
 
         // Executor entry
@@ -314,7 +334,7 @@ export function installCommand(program: Command): void {
         // Slicer entry (if roadmap scanner enabled)
         let slicerLog: string | undefined;
         if (installSlicer) {
-          slicerLog = path.join(logDir, "slicer.log");
+          slicerLog = path.join(logDir, 'slicer.log');
           const slicerSchedule = applyScheduleOffset(config.roadmapScanner.slicerSchedule, offset);
           const slicerEntry = `${slicerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} slice >> ${shellQuote(slicerLog)} 2>&1  ${marker}`;
           entries.push(slicerEntry);
@@ -327,7 +347,7 @@ export function installCommand(program: Command): void {
         // QA entry (if enabled)
         let qaLog: string | undefined;
         if (installQa) {
-          qaLog = path.join(logDir, "qa.log");
+          qaLog = path.join(logDir, 'qa.log');
           const qaSchedule = applyScheduleOffset(config.qa.schedule, offset);
           const qaEntry = `${qaSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} qa >> ${shellQuote(qaLog)} 2>&1  ${marker}`;
           entries.push(qaEntry);
@@ -340,7 +360,7 @@ export function installCommand(program: Command): void {
         // Audit entry (if enabled)
         let auditLog: string | undefined;
         if (installAudit) {
-          auditLog = path.join(logDir, "audit.log");
+          auditLog = path.join(logDir, 'audit.log');
           const auditSchedule = applyScheduleOffset(config.audit.schedule, offset);
           const auditEntry = `${auditSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} audit >> ${shellQuote(auditLog)} 2>&1  ${marker}`;
           entries.push(auditEntry);
@@ -354,10 +374,10 @@ export function installCommand(program: Command): void {
         // Success message
         success(`Night Watch installed successfully for ${projectName}!`);
         console.log();
-        header("Crontab Entries Added");
+        header('Crontab Entries Added');
         entries.forEach((entry) => dim(`  ${entry}`));
         console.log();
-        header("Log Files");
+        header('Log Files');
         dim(`  Executor: ${executorLog}`);
         if (installReviewer) {
           dim(`  Reviewer: ${reviewerLog}`);
@@ -372,11 +392,11 @@ export function installCommand(program: Command): void {
           dim(`  Audit: ${auditLog}`);
         }
         console.log();
-        dim("To uninstall, run: night-watch uninstall");
-        dim("To check status, run: night-watch status");
+        dim('To uninstall, run: night-watch uninstall');
+        dim('To check status, run: night-watch status');
       } catch (err) {
         uiError(
-          `Error installing Night Watch: ${err instanceof Error ? err.message : String(err)}`
+          `Error installing Night Watch: ${err instanceof Error ? err.message : String(err)}`,
         );
         process.exit(1);
       }

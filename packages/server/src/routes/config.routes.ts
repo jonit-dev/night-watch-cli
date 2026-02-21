@@ -4,17 +4,12 @@
 
 import { Request, Response, Router } from 'express';
 
-import { validateWebhook } from '@night-watch/core/utils/webhook-validator.js';
-import { loadConfig } from '@night-watch/core/config.js';
-import { INightWatchConfig } from '@night-watch/core/types.js';
-import { saveConfig } from '@night-watch/core/utils/config-writer.js';
+import { INightWatchConfig, loadConfig, saveConfig, validateWebhook } from '@night-watch/core';
 
 /**
  * Validates config changes and returns an error string if invalid, null if valid.
  */
-function validateConfigChanges(
-  changes: Partial<INightWatchConfig>,
-): string | null {
+function validateConfigChanges(changes: Partial<INightWatchConfig>): string | null {
   if (typeof changes !== 'object' || changes === null) {
     return 'Invalid request body';
   }
@@ -26,10 +21,7 @@ function validateConfigChanges(
     }
   }
 
-  if (
-    changes.reviewerEnabled !== undefined &&
-    typeof changes.reviewerEnabled !== 'boolean'
-  ) {
+  if (changes.reviewerEnabled !== undefined && typeof changes.reviewerEnabled !== 'boolean') {
     return 'reviewerEnabled must be a boolean';
   }
 
@@ -42,8 +34,7 @@ function validateConfigChanges(
 
   if (
     changes.reviewerMaxRuntime !== undefined &&
-    (typeof changes.reviewerMaxRuntime !== 'number' ||
-      changes.reviewerMaxRuntime < 60)
+    (typeof changes.reviewerMaxRuntime !== 'number' || changes.reviewerMaxRuntime < 60)
   ) {
     return 'reviewerMaxRuntime must be a number >= 60';
   }
@@ -82,16 +73,14 @@ function validateConfigChanges(
 
   if (
     changes.cronSchedule !== undefined &&
-    (typeof changes.cronSchedule !== 'string' ||
-      changes.cronSchedule.trim().length === 0)
+    (typeof changes.cronSchedule !== 'string' || changes.cronSchedule.trim().length === 0)
   ) {
     return 'cronSchedule must be a non-empty string';
   }
 
   if (
     changes.reviewerSchedule !== undefined &&
-    (typeof changes.reviewerSchedule !== 'string' ||
-      changes.reviewerSchedule.trim().length === 0)
+    (typeof changes.reviewerSchedule !== 'string' || changes.reviewerSchedule.trim().length === 0)
   ) {
     return 'reviewerSchedule must be a non-empty string';
   }
@@ -151,9 +140,7 @@ export function createConfigRoutes(deps: IConfigRoutesDeps): Router {
     try {
       res.json(getConfig());
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -175,9 +162,7 @@ export function createConfigRoutes(deps: IConfigRoutesDeps): Router {
       reloadConfig();
       res.json(getConfig());
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -194,9 +179,7 @@ export function createProjectConfigRoutes(): Router {
     try {
       res.json(req.projectConfig!);
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -219,9 +202,7 @@ export function createProjectConfigRoutes(): Router {
 
       res.json(loadConfig(projectDir));
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 

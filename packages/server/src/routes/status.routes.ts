@@ -6,13 +6,8 @@ import { Request, Response, Router } from 'express';
 
 import { CronExpressionParser } from 'cron-parser';
 
-import { INightWatchConfig } from '@night-watch/core/types.js';
-import { fetchStatusSnapshot } from '@night-watch/core/utils/status-data.js';
-import {
-  SseClientSet,
-  broadcastSSE,
-  startSseStatusWatcher,
-} from '../middleware/sse.middleware.js';
+import { INightWatchConfig, fetchStatusSnapshot } from '@night-watch/core';
+import { SseClientSet, broadcastSSE, startSseStatusWatcher } from '../middleware/sse.middleware.js';
 
 export interface IStatusRoutesDeps {
   projectDir: string;
@@ -51,9 +46,7 @@ export function createStatusRoutes(deps: IStatusRoutesDeps): Router {
       const snapshot = fetchStatusSnapshot(projectDir, getConfig());
       res.json(snapshot);
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -65,9 +58,7 @@ export interface IScheduleInfoRoutesDeps {
   getConfig: () => INightWatchConfig;
 }
 
-export function createScheduleInfoRoutes(
-  deps: IScheduleInfoRoutesDeps,
-): Router {
+export function createScheduleInfoRoutes(deps: IScheduleInfoRoutesDeps): Router {
   const { projectDir, getConfig } = deps;
   const router = Router();
 
@@ -97,25 +88,18 @@ export function createScheduleInfoRoutes(
           schedule: config.reviewerSchedule,
           installed: installed && config.reviewerEnabled,
           nextRun:
-            installed && config.reviewerEnabled
-              ? computeNextRun(config.reviewerSchedule)
-              : null,
+            installed && config.reviewerEnabled ? computeNextRun(config.reviewerSchedule) : null,
         },
         qa: {
           schedule: config.qa.schedule,
           installed: installed && config.qa.enabled,
-          nextRun:
-            installed && config.qa.enabled
-              ? computeNextRun(config.qa.schedule)
-              : null,
+          nextRun: installed && config.qa.enabled ? computeNextRun(config.qa.schedule) : null,
         },
         paused: !installed,
         entries,
       });
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -145,9 +129,7 @@ export function createProjectSseRoutes(deps: {
 
     // Start watcher for this project if not already running
     if (!projectSseWatchers.has(projectDir)) {
-      const watcher = startSseStatusWatcher(clients, projectDir, () =>
-        req.projectConfig!,
-      );
+      const watcher = startSseStatusWatcher(clients, projectDir, () => req.projectConfig!);
       projectSseWatchers.set(projectDir, watcher);
     }
 
@@ -177,9 +159,7 @@ export function createProjectSseRoutes(deps: {
       const snapshot = fetchStatusSnapshot(req.projectDir!, req.projectConfig!);
       res.json(snapshot);
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -210,25 +190,18 @@ export function createProjectSseRoutes(deps: {
           schedule: config.reviewerSchedule,
           installed: installed && config.reviewerEnabled,
           nextRun:
-            installed && config.reviewerEnabled
-              ? computeNextRun(config.reviewerSchedule)
-              : null,
+            installed && config.reviewerEnabled ? computeNextRun(config.reviewerSchedule) : null,
         },
         qa: {
           schedule: config.qa.schedule,
           installed: installed && config.qa.enabled,
-          nextRun:
-            installed && config.qa.enabled
-              ? computeNextRun(config.qa.schedule)
-              : null,
+          nextRun: installed && config.qa.enabled ? computeNextRun(config.qa.schedule) : null,
         },
         paused: !installed,
         entries,
       });
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 

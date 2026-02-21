@@ -7,8 +7,8 @@ import { Request, Response, Router } from 'express';
 import {
   CreateAgentPersonaInput,
   UpdateAgentPersonaInput,
-} from '@night-watch/core/shared/types.js';
-import { getRepositories } from '@night-watch/core/storage/repositories/index.js';
+  getRepositories,
+} from '@night-watch/core';
 import { maskPersonaSecrets } from '../helpers.js';
 
 export function createAgentRoutes(): Router {
@@ -47,18 +47,21 @@ export function createAgentRoutes(): Router {
     }
   });
 
-  router.get('/:id/prompt', async (req: Request, res: Response): Promise<ReturnType<typeof res.json>> => {
-    try {
-      const repos = getRepositories();
-      const persona = repos.agentPersona.getById(req.params.id as string);
-      if (!persona) return res.status(404).json({ error: 'Agent not found' });
-      const { compileSoul } = await import('@night-watch/core/agents/soul-compiler.js');
-      const prompt = compileSoul(persona);
-      return res.json({ prompt });
-    } catch (err) {
-      return res.status(500).json({ error: (err as Error).message });
-    }
-  });
+  router.get(
+    '/:id/prompt',
+    async (req: Request, res: Response): Promise<ReturnType<typeof res.json>> => {
+      try {
+        const repos = getRepositories();
+        const persona = repos.agentPersona.getById(req.params.id as string);
+        if (!persona) return res.status(404).json({ error: 'Agent not found' });
+        const { compileSoul } = await import('@night-watch/core');
+        const prompt = compileSoul(persona);
+        return res.json({ prompt });
+      } catch (err) {
+        return res.status(500).json({ error: (err as Error).message });
+      }
+    },
+  );
 
   router.post('/', (req: Request, res: Response): ReturnType<typeof res.json> => {
     try {
@@ -84,8 +87,7 @@ export function createAgentRoutes(): Router {
       return res.json(maskPersonaSecrets(persona));
     } catch (err) {
       const msg = (err as Error).message;
-      if (msg.includes('not found'))
-        return res.status(404).json({ error: msg });
+      if (msg.includes('not found')) return res.status(404).json({ error: msg });
       return res.status(500).json({ error: msg });
     }
   });
@@ -104,16 +106,14 @@ export function createAgentRoutes(): Router {
     try {
       const repos = getRepositories();
       const { avatarUrl } = req.body as { avatarUrl: string };
-      if (!avatarUrl)
-        return res.status(400).json({ error: 'avatarUrl is required' });
+      if (!avatarUrl) return res.status(400).json({ error: 'avatarUrl is required' });
       const persona = repos.agentPersona.update(req.params.id as string, {
         avatarUrl,
       });
       return res.json(maskPersonaSecrets(persona));
     } catch (err) {
       const msg = (err as Error).message;
-      if (msg.includes('not found'))
-        return res.status(404).json({ error: msg });
+      if (msg.includes('not found')) return res.status(404).json({ error: msg });
       return res.status(500).json({ error: msg });
     }
   });

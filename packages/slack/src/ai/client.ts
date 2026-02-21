@@ -2,9 +2,8 @@
  * AI client for making calls to Anthropic and OpenAI APIs.
  */
 
-import type { IAgentPersona } from '@night-watch/core/shared/types.js';
-import type { INightWatchConfig } from '@night-watch/core/types.js';
-import { compileSoul } from '@night-watch/core/agents/soul-compiler.js';
+import { compileSoul } from '@night-watch/core';
+import type { IAgentPersona, INightWatchConfig } from '@night-watch/core';
 import { joinBaseUrl, resolvePersonaAIConfig } from './provider.js';
 import type { IAnthropicTool, ToolRegistry } from './tools.js';
 

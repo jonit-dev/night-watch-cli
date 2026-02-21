@@ -59,6 +59,11 @@ export default tseslint.config(
               regex: '^\\.\\./\\.\\.[\\/]',
               message: 'Avoid deep relative imports (../../). Use @/* path aliases instead.',
             },
+            {
+              regex: '^@night-watch/core/.+',
+              message:
+                "Import from '@night-watch/core' barrel instead of deep paths (e.g. import { X } from '@night-watch/core').",
+            },
           ],
         },
       ],

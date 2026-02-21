@@ -4,7 +4,7 @@
 
 import { Request, Response, Router } from 'express';
 
-import { getRepositories } from '@night-watch/core/storage/repositories/index.js';
+import { getRepositories } from '@night-watch/core';
 
 export interface IDiscussionRoutesDeps {
   projectDir: string;
@@ -27,11 +27,8 @@ export function createDiscussionRoutes(deps: IDiscussionRoutesDeps): Router {
   router.get('/:id', (req: Request, res: Response): ReturnType<typeof res.json> => {
     try {
       const repos = getRepositories();
-      const discussion = repos.slackDiscussion.getById(
-        req.params.id as string,
-      );
-      if (!discussion)
-        return res.status(404).json({ error: 'Discussion not found' });
+      const discussion = repos.slackDiscussion.getById(req.params.id as string);
+      if (!discussion) return res.status(404).json({ error: 'Discussion not found' });
       return res.json(discussion);
     } catch (err) {
       return res.status(500).json({ error: (err as Error).message });
@@ -60,11 +57,8 @@ export function createProjectDiscussionRoutes(): Router {
   router.get('/discussions/:id', (req: Request, res: Response): ReturnType<typeof res.json> => {
     try {
       const repos = getRepositories();
-      const discussion = repos.slackDiscussion.getById(
-        req.params.id as string,
-      );
-      if (!discussion)
-        return res.status(404).json({ error: 'Discussion not found' });
+      const discussion = repos.slackDiscussion.getById(req.params.id as string);
+      if (!discussion) return res.status(404).json({ error: 'Discussion not found' });
       return res.json(discussion);
     } catch (err) {
       return res.status(500).json({ error: (err as Error).message });

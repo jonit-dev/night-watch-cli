@@ -12,11 +12,19 @@ import { fileURLToPath } from 'url';
 import cors from 'cors';
 import express, { Express, NextFunction, Request, Response } from 'express';
 
-import { loadConfig } from '@night-watch/core/config.js';
+import {
+  SqliteAgentPersonaRepository,
+  collectPrInfo,
+  container,
+  getDbPath,
+  getRoadmapStatus,
+  initContainer,
+  loadConfig,
+  loadRegistry,
+  scanRoadmap,
+  validateRegistry,
+} from '@night-watch/core';
 import { type ISlackStack, createSlackStack } from '@night-watch/slack/factory.js';
-import { collectPrInfo } from '@night-watch/core/utils/status-data.js';
-import { loadRegistry, validateRegistry } from '@night-watch/core/utils/registry.js';
-import { getRoadmapStatus, scanRoadmap } from '@night-watch/core/utils/roadmap-scanner.js';
 
 import { errorHandler } from './middleware/error-handler.middleware.js';
 import { setupGracefulShutdown } from './middleware/graceful-shutdown.middleware.js';
@@ -45,18 +53,18 @@ import { createSlackRoutes } from './routes/slack.routes.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-function findPackageRoot(dir: string): string {
+function findMonorepoRoot(dir: string): string {
   let d = dir;
-  for (let i = 0; i < 5; i++) {
-    if (fs.existsSync(path.join(d, 'package.json'))) return d;
+  for (let i = 0; i < 8; i++) {
+    if (fs.existsSync(path.join(d, 'turbo.json'))) return d;
     d = dirname(d);
   }
   return dir;
 }
-const __packageRoot = findPackageRoot(__dirname);
+const __monorepoRoot = findMonorepoRoot(__dirname);
 
 function setupStaticFiles(app: Express): void {
-  const webDistPath = path.join(__packageRoot, 'web/dist');
+  const webDistPath = path.join(__monorepoRoot, 'web/dist');
   if (fs.existsSync(webDistPath)) {
     app.use(express.static(webDistPath));
   }
@@ -199,7 +207,19 @@ export function createGlobalApp(): Express {
 
 // ==================== Server Startup ====================
 
+/**
+ * Initialize the DI container with the global state database and seed default personas.
+ * Idempotent — safe to call multiple times.
+ */
+function bootContainer(): void {
+  initContainer(path.dirname(getDbPath()));
+  const personaRepo = container.resolve(SqliteAgentPersonaRepository);
+  personaRepo.seedDefaultsOnFirstRun();
+  personaRepo.patchDefaultAvatarUrls();
+}
+
 export function startServer(projectDir: string, port: number): void {
+  bootContainer();
   const config = loadConfig(projectDir);
   const app = createApp(projectDir);
   const { listener } = createSlackStack(config);
@@ -234,6 +254,7 @@ export function startServer(projectDir: string, port: number): void {
 }
 
 export function startGlobalServer(port: number): void {
+  bootContainer();
   const entries = loadRegistry();
 
   if (entries.length === 0) {

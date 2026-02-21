@@ -3,10 +3,8 @@
  * Periodically sends idle-channel messages and code-watch audits.
  */
 
-import { IAgentPersona } from '@night-watch/core/shared/types.js';
-import { getRepositories } from '@night-watch/core/storage/repositories/index.js';
-import { INightWatchConfig } from '@night-watch/core/types.js';
-import type { IRegistryEntry } from '@night-watch/core/utils/registry.js';
+import { IAgentPersona, INightWatchConfig, getRepositories } from '@night-watch/core';
+import type { IRegistryEntry } from '@night-watch/core';
 import * as fs from 'fs';
 import { injectable } from 'tsyringe';
 import { DeliberationEngine } from './deliberation.js';

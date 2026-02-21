@@ -3,12 +3,11 @@
  * View log output from executor and reviewer
  */
 
-import { Command } from "commander";
-import { spawn } from "child_process";
-import * as path from "path";
-import * as fs from "fs";
-import { EXECUTOR_LOG_FILE, LOG_DIR, REVIEWER_LOG_FILE } from "@night-watch/core/constants.js";
-import { dim, header } from "@night-watch/core/utils/ui.js";
+import { Command } from 'commander';
+import { spawn } from 'child_process';
+import * as path from 'path';
+import * as fs from 'fs';
+import { EXECUTOR_LOG_FILE, LOG_DIR, REVIEWER_LOG_FILE, dim, header } from '@night-watch/core';
 
 export interface ILogsOptions {
   lines?: string;
@@ -25,9 +24,9 @@ function getLastLines(filePath: string, lineCount: number): string {
   }
 
   try {
-    const content = fs.readFileSync(filePath, "utf-8");
-    const lines = content.trim().split("\n");
-    return lines.slice(-lineCount).join("\n");
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const lines = content.trim().split('\n');
+    return lines.slice(-lineCount).join('\n');
   } catch (error) {
     return `Error reading log file: ${error instanceof Error ? error.message : String(error)}`;
   }
@@ -39,20 +38,20 @@ function getLastLines(filePath: string, lineCount: number): string {
 function followLog(filePath: string): void {
   if (!fs.existsSync(filePath)) {
     console.log(`Log file not found: ${filePath}`);
-    console.log("The log file will be created when the first execution runs.");
+    console.log('The log file will be created when the first execution runs.');
     return;
   }
 
-  const tail = spawn("tail", ["-f", filePath], {
-    stdio: "inherit",
+  const tail = spawn('tail', ['-f', filePath], {
+    stdio: 'inherit',
   });
 
-  tail.on("error", (error) => {
+  tail.on('error', (error) => {
     console.error(`Error following log: ${error.message}`);
   });
 
   // Handle Ctrl+C gracefully
-  process.on("SIGINT", () => {
+  process.on('SIGINT', () => {
     tail.kill();
     process.exit(0);
   });
@@ -63,30 +62,30 @@ function followLog(filePath: string): void {
  */
 export function logsCommand(program: Command): void {
   program
-    .command("logs")
-    .description("View night-watch log output")
-    .option("-n, --lines <count>", "Number of lines to show", "50")
-    .option("-f, --follow", "Follow log output (tail -f)")
-    .option("-t, --type <type>", "Log type to view (run|review|all)", "all")
+    .command('logs')
+    .description('View night-watch log output')
+    .option('-n, --lines <count>', 'Number of lines to show', '50')
+    .option('-f, --follow', 'Follow log output (tail -f)')
+    .option('-t, --type <type>', 'Log type to view (run|review|all)', 'all')
     .action(async (options: ILogsOptions) => {
       try {
         const projectDir = process.cwd();
         const logDir = path.join(projectDir, LOG_DIR);
-        const lineCount = parseInt(options.lines || "50", 10);
+        const lineCount = parseInt(options.lines || '50', 10);
 
         const executorLog = path.join(logDir, EXECUTOR_LOG_FILE);
         const reviewerLog = path.join(logDir, REVIEWER_LOG_FILE);
 
         // Determine which logs to show
-        const logType = options.type?.toLowerCase() || "all";
-        const showExecutor = logType === "all" || logType === "run" || logType === "executor";
-        const showReviewer = logType === "all" || logType === "review" || logType === "reviewer";
+        const logType = options.type?.toLowerCase() || 'all';
+        const showExecutor = logType === 'all' || logType === 'run' || logType === 'executor';
+        const showReviewer = logType === 'all' || logType === 'review' || logType === 'reviewer';
 
         // Handle --follow mode
         if (options.follow) {
-          if (logType === "all") {
-            dim("Note: Following all logs is not supported. Showing executor log.");
-            dim("Use --type review to follow reviewer log.\n");
+          if (logType === 'all') {
+            dim('Note: Following all logs is not supported. Showing executor log.');
+            dim('Use --type review to follow reviewer log.\n');
           }
 
           const targetLog = showReviewer ? reviewerLog : executorLog;
@@ -98,14 +97,14 @@ export function logsCommand(program: Command): void {
         console.log();
 
         if (showExecutor) {
-          header("Executor Log");
+          header('Executor Log');
           dim(`File: ${executorLog}`);
           console.log();
           console.log(getLastLines(executorLog, lineCount));
         }
 
         if (showReviewer) {
-          header("Reviewer Log");
+          header('Reviewer Log');
           dim(`File: ${reviewerLog}`);
           console.log();
           console.log(getLastLines(reviewerLog, lineCount));
@@ -113,13 +112,11 @@ export function logsCommand(program: Command): void {
 
         // Add tip
         console.log();
-        dim("---");
-        dim("Tip: Use -f to follow logs in real-time");
-        dim("     Use --type run or --type review to view specific logs");
+        dim('---');
+        dim('Tip: Use -f to follow logs in real-time');
+        dim('     Use --type run or --type review to view specific logs');
       } catch (err) {
-        console.error(
-          `Error reading logs: ${err instanceof Error ? err.message : String(err)}`
-        );
+        console.error(`Error reading logs: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
       }
     });

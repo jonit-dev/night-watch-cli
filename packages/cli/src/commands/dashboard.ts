@@ -3,16 +3,15 @@
  * Tabbed TUI with Status, Config, Schedules, Actions, and Logs tabs
  */
 
-import { Command } from "commander";
-import blessed from "blessed";
-import { loadConfig } from "@night-watch/core/config.js";
-import { fetchStatusSnapshot } from "@night-watch/core/utils/status-data.js";
-import { ITab, ITabContext } from "./dashboard/types.js";
-import { createStatusTab } from "./dashboard/tab-status.js";
-import { createConfigTab } from "./dashboard/tab-config.js";
-import { createSchedulesTab } from "./dashboard/tab-schedules.js";
-import { createActionsTab } from "./dashboard/tab-actions.js";
-import { createLogsTab } from "./dashboard/tab-logs.js";
+import { Command } from 'commander';
+import blessed from 'blessed';
+import { fetchStatusSnapshot, loadConfig } from '@night-watch/core';
+import { ITab, ITabContext } from './dashboard/types.js';
+import { createStatusTab } from './dashboard/tab-status.js';
+import { createConfigTab } from './dashboard/tab-config.js';
+import { createSchedulesTab } from './dashboard/tab-schedules.js';
+import { createActionsTab } from './dashboard/tab-actions.js';
+import { createLogsTab } from './dashboard/tab-logs.js';
 
 // Re-export render functions for backward compatibility (used by tests)
 export {
@@ -20,7 +19,7 @@ export {
   renderProcessPane,
   renderPrPane,
   renderLogPane,
-} from "./dashboard/tab-status.js";
+} from './dashboard/tab-status.js';
 
 export interface IDashboardOptions {
   interval: string; // refresh interval in seconds
@@ -32,19 +31,19 @@ export interface IDashboardOptions {
 function showMessage(
   screen: blessed.Widgets.Screen,
   text: string,
-  type: "success" | "error" | "info",
-  durationMs: number = 2000
+  type: 'success' | 'error' | 'info',
+  durationMs: number = 2000,
 ): void {
-  const colors: Record<string, string> = { success: "green", error: "red", info: "cyan" };
+  const colors: Record<string, string> = { success: 'green', error: 'red', info: 'cyan' };
   const msgBox = blessed.box({
-    top: "center",
-    left: "center",
+    top: 'center',
+    left: 'center',
     width: Math.min(60, text.length + 6),
     height: 3,
     content: `{center}${text}{/center}`,
     tags: true,
-    border: { type: "line" },
-    style: { border: { fg: colors[type] }, fg: "white", bg: "black" },
+    border: { type: 'line' },
+    style: { border: { fg: colors[type] }, fg: 'white', bg: 'black' },
   });
   screen.append(msgBox);
   screen.render();
@@ -56,9 +55,9 @@ function showMessage(
 
 export function dashboardCommand(program: Command): void {
   program
-    .command("dashboard")
-    .description("Live terminal dashboard [experimental]")
-    .option("--interval <seconds>", "Refresh interval in seconds", "10")
+    .command('dashboard')
+    .description('Live terminal dashboard [experimental]')
+    .option('--interval <seconds>', 'Refresh interval in seconds', '10')
     .action(async (options: IDashboardOptions) => {
       const projectDir = process.cwd();
       let config = loadConfig(projectDir);
@@ -66,7 +65,7 @@ export function dashboardCommand(program: Command): void {
       // Create blessed screen
       const screen = blessed.screen({
         smartCSR: true,
-        title: "Night Watch Dashboard",
+        title: 'Night Watch Dashboard',
         fullUnicode: true,
       });
 
@@ -75,41 +74,41 @@ export function dashboardCommand(program: Command): void {
       const headerBox = blessed.box({
         top: 0,
         left: 0,
-        width: "100%",
+        width: '100%',
         height: 1,
-        content: "{center}Night Watch Dashboard{/center}",
+        content: '{center}Night Watch Dashboard{/center}',
         tags: true,
-        style: { fg: "cyan", bold: true },
+        style: { fg: 'cyan', bold: true },
       });
 
       // Tab bar: row 1, height 1
       const tabBar = blessed.box({
         top: 1,
         left: 0,
-        width: "100%",
+        width: '100%',
         height: 1,
         tags: true,
-        style: { fg: "white", bg: "black" },
-        content: "",
+        style: { fg: 'white', bg: 'black' },
+        content: '',
       });
 
       // Content area: rows 2..n-2
       const contentArea = blessed.box({
         top: 2,
         left: 0,
-        width: "100%",
-        height: "100%-4",
+        width: '100%',
+        height: '100%-4',
       });
 
       // Footer: bottom row
       const footerBox = blessed.box({
         bottom: 0,
         left: 0,
-        width: "100%",
+        width: '100%',
         height: 1,
-        content: "",
+        content: '',
         tags: true,
-        style: { fg: "white", bg: "blue" },
+        style: { fg: 'white', bg: 'blue' },
       });
 
       screen.append(headerBox);
@@ -155,7 +154,7 @@ export function dashboardCommand(program: Command): void {
         setFooter: (text: string) => {
           footerBox.setContent(text);
         },
-        showMessage: (text: string, type: "success" | "error" | "info", durationMs?: number) => {
+        showMessage: (text: string, type: 'success' | 'error' | 'info', durationMs?: number) => {
           showMessage(screen, text, type, durationMs);
         },
         setEditing: (editing: boolean) => {
@@ -172,7 +171,7 @@ export function dashboardCommand(program: Command): void {
           }
           return ` {blue-fg}${num}:${tab.name}{/blue-fg} `;
         });
-        tabBar.setContent(parts.join(""));
+        tabBar.setContent(parts.join(''));
       }
 
       // --- Tab switching ---
@@ -199,7 +198,7 @@ export function dashboardCommand(program: Command): void {
 
       function updateHeader() {
         headerBox.setContent(
-          `{center}Night Watch: ${snapshot.projectName} | Provider: ${config.provider} | Last: ${snapshot.timestamp.toLocaleTimeString()} | Next: ${countdown}s{/center}`
+          `{center}Night Watch: ${snapshot.projectName} | Provider: ${config.provider} | Last: ${snapshot.timestamp.toLocaleTimeString()} | Next: ${countdown}s{/center}`,
         );
       }
 
@@ -226,7 +225,7 @@ export function dashboardCommand(program: Command): void {
       }, 1000);
 
       // --- Global keyboard handlers ---
-      screen.key(["q", "escape"], () => {
+      screen.key(['q', 'escape'], () => {
         if (isEditing) return;
         clearInterval(timer);
         for (const tab of tabs) {
@@ -236,7 +235,7 @@ export function dashboardCommand(program: Command): void {
         process.exit(0);
       });
 
-      screen.key(["r"], () => {
+      screen.key(['r'], () => {
         if (isEditing) return;
         refreshData();
       });
@@ -252,7 +251,7 @@ export function dashboardCommand(program: Command): void {
 
       // Tab cycling is handled per-tab (Status tab uses Tab for pane focus)
       // Shift+Tab always cycles tabs
-      screen.key(["S-tab"], () => {
+      screen.key(['S-tab'], () => {
         if (isEditing) return;
         const newIndex = (activeTabIndex - 1 + tabs.length) % tabs.length;
         switchTab(newIndex);

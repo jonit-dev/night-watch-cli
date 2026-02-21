@@ -3,19 +3,17 @@
  * Shows current status including lock files, PRDs, PRs, and logs
  */
 
-import { Command } from "commander";
-import chalk from "chalk";
-import { loadConfig } from "@night-watch/core/config.js";
-import {
-  fetchStatusSnapshot,
-} from "@night-watch/core/utils/status-data.js";
+import { Command } from 'commander';
+import chalk from 'chalk';
 import {
   createTable,
   dim,
+  fetchStatusSnapshot,
   formatInstalledStatus,
   formatRunningStatus,
   header,
-} from "@night-watch/core/utils/ui.js";
+  loadConfig,
+} from '@night-watch/core';
 
 export interface IStatusOptions {
   verbose?: boolean;
@@ -69,9 +67,9 @@ interface IStatusInfo {
  * Format bytes to human-readable size
  */
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
+  if (bytes === 0) return '0 B';
   const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
+  const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
@@ -81,10 +79,10 @@ function formatBytes(bytes: number): string {
  */
 export function statusCommand(program: Command): void {
   program
-    .command("status")
-    .description("Show current night-watch status")
-    .option("-v, --verbose", "Show detailed status information")
-    .option("--json", "Output status as JSON")
+    .command('status')
+    .description('Show current night-watch status')
+    .option('-v, --verbose', 'Show detailed status information')
+    .option('--json', 'Output status as JSON')
     .action(async (options: IStatusOptions) => {
       try {
         const projectDir = process.cwd();
@@ -92,14 +90,16 @@ export function statusCommand(program: Command): void {
         const snapshot = fetchStatusSnapshot(projectDir, config);
 
         // Derive legacy status shape from snapshot for backward-compatible JSON output
-        const executorProc = snapshot.processes.find((p) => p.name === "executor");
-        const reviewerProc = snapshot.processes.find((p) => p.name === "reviewer");
-        const executorLog = snapshot.logs.find((l) => l.name === "executor");
-        const reviewerLog = snapshot.logs.find((l) => l.name === "reviewer");
+        const executorProc = snapshot.processes.find((p) => p.name === 'executor');
+        const reviewerProc = snapshot.processes.find((p) => p.name === 'reviewer');
+        const executorLog = snapshot.logs.find((l) => l.name === 'executor');
+        const reviewerLog = snapshot.logs.find((l) => l.name === 'reviewer');
 
-        const pendingPrds = snapshot.prds.filter((p) => p.status === "ready" || p.status === "blocked").length;
-        const claimedPrds = snapshot.prds.filter((p) => p.status === "in-progress").length;
-        const donePrds = snapshot.prds.filter((p) => p.status === "done").length;
+        const pendingPrds = snapshot.prds.filter(
+          (p) => p.status === 'ready' || p.status === 'blocked',
+        ).length;
+        const claimedPrds = snapshot.prds.filter((p) => p.status === 'in-progress').length;
+        const donePrds = snapshot.prds.filter((p) => p.status === 'done').length;
 
         const status: IStatusInfo = {
           projectName: snapshot.projectName,
@@ -114,8 +114,22 @@ export function statusCommand(program: Command): void {
           prs: { open: snapshot.prs.length },
           crontab: snapshot.crontab,
           logs: {
-            executor: executorLog ? { path: executorLog.path, lastLines: executorLog.lastLines, exists: executorLog.exists, size: executorLog.size } : undefined,
-            reviewer: reviewerLog ? { path: reviewerLog.path, lastLines: reviewerLog.lastLines, exists: reviewerLog.exists, size: reviewerLog.size } : undefined,
+            executor: executorLog
+              ? {
+                  path: executorLog.path,
+                  lastLines: executorLog.lastLines,
+                  exists: executorLog.exists,
+                  size: executorLog.size,
+                }
+              : undefined,
+            reviewer: reviewerLog
+              ? {
+                  path: reviewerLog.path,
+                  lastLines: reviewerLog.lastLines,
+                  exists: reviewerLog.exists,
+                  size: reviewerLog.size,
+                }
+              : undefined,
           },
         };
 
@@ -128,64 +142,73 @@ export function statusCommand(program: Command): void {
         // Print formatted status dashboard
         console.log();
         console.log(chalk.bold.cyan(`Night Watch Status: ${status.projectName}`));
-        console.log(chalk.dim("─".repeat(40)));
+        console.log(chalk.dim('─'.repeat(40)));
         console.log();
         dim(`Project Directory: ${status.projectDir}`);
 
         // Configuration section with table
-        header("Configuration");
-        const configTable = createTable({ head: ["Setting", "Value"] });
-        configTable.push(["Provider", status.provider]);
-        configTable.push(["Reviewer", status.reviewerEnabled ? "Enabled" : "Disabled"]);
-        configTable.push(["Auto-merge", status.autoMerge ? `Enabled (${status.autoMergeMethod})` : "Disabled"]);
+        header('Configuration');
+        const configTable = createTable({ head: ['Setting', 'Value'] });
+        configTable.push(['Provider', status.provider]);
+        configTable.push(['Reviewer', status.reviewerEnabled ? 'Enabled' : 'Disabled']);
+        configTable.push([
+          'Auto-merge',
+          status.autoMerge ? `Enabled (${status.autoMergeMethod})` : 'Disabled',
+        ]);
         console.log(configTable.toString());
 
         // Process status section with colored indicators
-        header("Process Status");
-        const processTable = createTable({ head: ["Process", "Status"] });
-        processTable.push(["Executor", formatRunningStatus(status.executor.running, status.executor.pid)]);
-        processTable.push(["Reviewer", formatRunningStatus(status.reviewer.running, status.reviewer.pid)]);
+        header('Process Status');
+        const processTable = createTable({ head: ['Process', 'Status'] });
+        processTable.push([
+          'Executor',
+          formatRunningStatus(status.executor.running, status.executor.pid),
+        ]);
+        processTable.push([
+          'Reviewer',
+          formatRunningStatus(status.reviewer.running, status.reviewer.pid),
+        ]);
         console.log(processTable.toString());
 
         // PRD status section with table
-        header("PRD Status");
-        const prdTable = createTable({ head: ["Status", "Count"] });
-        prdTable.push(["Pending", String(status.prds.pending)]);
-        prdTable.push(["Claimed", String(status.prds.claimed)]);
-        prdTable.push(["Completed", String(status.prds.done)]);
+        header('PRD Status');
+        const prdTable = createTable({ head: ['Status', 'Count'] });
+        prdTable.push(['Pending', String(status.prds.pending)]);
+        prdTable.push(['Claimed', String(status.prds.claimed)]);
+        prdTable.push(['Completed', String(status.prds.done)]);
         console.log(prdTable.toString());
 
         // PR status section with table
-        header("PR Status");
-        const prTable = createTable({ head: ["Type", "Count"] });
-        prTable.push(["Open PRs (night-watch/feat branches)", String(status.prs.open)]);
+        header('PR Status');
+        const prTable = createTable({ head: ['Type', 'Count'] });
+        prTable.push(['Open PRs (night-watch/feat branches)', String(status.prs.open)]);
         console.log(prTable.toString());
 
         // Crontab status section with colored output
-        header("Crontab Status");
+        header('Crontab Status');
         console.log(`  ${formatInstalledStatus(status.crontab.installed)}`);
         if (status.crontab.installed && options.verbose) {
           console.log();
-          dim("  Entries:");
+          dim('  Entries:');
           status.crontab.entries.forEach((entry) => dim(`    ${entry}`));
         }
         console.log();
 
         // Log status section with table
-        header("Log Files");
-        const logTable = createTable({ head: ["Log", "Size", "Status"] });
+        header('Log Files');
+        const logTable = createTable({ head: ['Log', 'Size', 'Status'] });
         if (status.logs.executor) {
           logTable.push([
-            "Executor",
-            status.logs.executor.exists ? formatBytes(status.logs.executor.size) : "-",
-            status.logs.executor.exists ? "Exists" : "Not found",
+            'Executor',
+            status.logs.executor.exists ? formatBytes(status.logs.executor.size) : '-',
+            status.logs.executor.exists ? 'Exists' : 'Not found',
           ]);
         }
         if (status.logs.reviewer) {
           logTable.push([
-            "Reviewer",
-            status.logs.reviewer.exists ? formatBytes(status.logs.reviewer.size) : "-",
-            status.logs.reviewer.exists ? "Exists" : "Not found",
+            'Reviewer',
+            status.logs.reviewer.exists ? formatBytes(status.logs.reviewer.size) : '-',
+            status.logs.reviewer.exists ? 'Exists' : 'Not found',
           ]);
         }
         console.log(logTable.toString());
@@ -193,25 +216,25 @@ export function statusCommand(program: Command): void {
         // Show last lines in verbose mode
         if (options.verbose) {
           if (status.logs.executor?.exists && status.logs.executor.lastLines.length > 0) {
-            dim("  Executor last 5 lines:");
+            dim('  Executor last 5 lines:');
             status.logs.executor.lastLines.forEach((line) => dim(`    ${line}`));
           }
           if (status.logs.reviewer?.exists && status.logs.reviewer.lastLines.length > 0) {
-            dim("  Reviewer last 5 lines:");
+            dim('  Reviewer last 5 lines:');
             status.logs.reviewer.lastLines.forEach((line) => dim(`    ${line}`));
           }
         }
 
         // Tips section with dim styling
-        header("Commands");
-        dim("  night-watch install  - Install crontab entries");
-        dim("  night-watch logs     - View logs");
-        dim("  night-watch run      - Run executor now");
-        dim("  night-watch review   - Run reviewer now");
+        header('Commands');
+        dim('  night-watch install  - Install crontab entries');
+        dim('  night-watch logs     - View logs');
+        dim('  night-watch run      - Run executor now');
+        dim('  night-watch review   - Run reviewer now');
         console.log();
       } catch (error) {
         console.error(
-          `Error getting status: ${error instanceof Error ? error.message : String(error)}`
+          `Error getting status: ${error instanceof Error ? error.message : String(error)}`,
         );
         process.exit(1);
       }

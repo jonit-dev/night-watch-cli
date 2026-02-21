@@ -3,21 +3,22 @@
  * Gracefully stops a running executor or reviewer process
  */
 
-import { Command } from "commander";
-import * as fs from "fs";
-import * as readline from "readline";
-import { LOCK_FILE_PREFIX } from "@night-watch/core/constants.js";
-import { checkLockFile, projectRuntimeKey } from "@night-watch/core/utils/status-data.js";
+import { Command } from 'commander';
+import * as fs from 'fs';
+import * as readline from 'readline';
 import {
+  LOCK_FILE_PREFIX,
+  checkLockFile,
   dim,
   info,
+  projectRuntimeKey,
   success,
   error as uiError,
   warn,
-} from "@night-watch/core/utils/ui.js";
+} from '@night-watch/core';
 
 export interface ICancelOptions {
-  type: "run" | "review" | "all";
+  type: 'run' | 'review' | 'all';
   force?: boolean;
 }
 
@@ -52,7 +53,7 @@ export async function promptConfirmation(prompt: string): Promise<boolean> {
     rl.question(`${prompt} `, (answer) => {
       rl.close();
       const normalized = answer.toLowerCase().trim();
-      resolve(normalized === "y" || normalized === "yes");
+      resolve(normalized === 'y' || normalized === 'yes');
     });
   });
 }
@@ -86,9 +87,9 @@ export interface ICancelResult {
  * Attempt to cancel a single process
  */
 export async function cancelProcess(
-  processType: "executor" | "reviewer",
+  processType: 'executor' | 'reviewer',
   lockPath: string,
-  force: boolean = false
+  force: boolean = false,
 ): Promise<ICancelResult> {
   const lockStatus = checkLockFile(lockPath);
 
@@ -131,12 +132,12 @@ export async function cancelProcess(
       };
     }
   } else {
-    dim(confirmPrompt + " y (forced)");
+    dim(confirmPrompt + ' y (forced)');
   }
 
   // Send SIGTERM
   try {
-    process.kill(pid, "SIGTERM");
+    process.kill(pid, 'SIGTERM');
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     return {
@@ -173,7 +174,7 @@ export async function cancelProcess(
   if (!force) {
     shouldKill = await promptConfirmation(killPrompt);
   } else {
-    dim(killPrompt + " y (forced)");
+    dim(killPrompt + ' y (forced)');
     shouldKill = true;
   }
 
@@ -186,7 +187,7 @@ export async function cancelProcess(
 
   // Send SIGKILL
   try {
-    process.kill(pid, "SIGKILL");
+    process.kill(pid, 'SIGKILL');
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     return {
@@ -223,19 +224,19 @@ export async function cancelProcess(
  */
 export async function performCancel(
   projectDir: string,
-  options: ICancelOptions
+  options: ICancelOptions,
 ): Promise<ICancelResult[]> {
   const lockPaths = getLockFilePaths(projectDir);
   const results: ICancelResult[] = [];
   const force = options.force ?? false;
 
-  if (options.type === "run" || options.type === "all") {
-    const result = await cancelProcess("executor", lockPaths.executor, force);
+  if (options.type === 'run' || options.type === 'all') {
+    const result = await cancelProcess('executor', lockPaths.executor, force);
     results.push(result);
   }
 
-  if (options.type === "review" || options.type === "all") {
-    const result = await cancelProcess("reviewer", lockPaths.reviewer, force);
+  if (options.type === 'review' || options.type === 'all') {
+    const result = await cancelProcess('reviewer', lockPaths.reviewer, force);
     results.push(result);
   }
 
@@ -247,27 +248,21 @@ export async function performCancel(
  */
 export function cancelCommand(program: Command): void {
   program
-    .command("cancel")
-    .description("Cancel running executor or reviewer processes")
-    .option(
-      "-t, --type <type>",
-      "Process type to cancel: 'run', 'review', or 'all'",
-      "all"
-    )
-    .option("-f, --force", "Skip confirmation prompts")
+    .command('cancel')
+    .description('Cancel running executor or reviewer processes')
+    .option('-t, --type <type>', "Process type to cancel: 'run', 'review', or 'all'", 'all')
+    .option('-f, --force', 'Skip confirmation prompts')
     .action(async (options: { type: string; force?: boolean }) => {
       try {
         // Validate type option
-        const validTypes = ["run", "review", "all"];
+        const validTypes = ['run', 'review', 'all'];
         if (!validTypes.includes(options.type)) {
-          uiError(
-            `Invalid type '${options.type}'. Must be one of: ${validTypes.join(", ")}`
-          );
+          uiError(`Invalid type '${options.type}'. Must be one of: ${validTypes.join(', ')}`);
           process.exit(1);
         }
 
         const cancelOptions: ICancelOptions = {
-          type: options.type as "run" | "review" | "all",
+          type: options.type as 'run' | 'review' | 'all',
           force: options.force,
         };
 
@@ -289,9 +284,7 @@ export function cancelCommand(program: Command): void {
           process.exit(1);
         }
       } catch (err) {
-        uiError(
-          `Error cancelling processes: ${err instanceof Error ? err.message : String(err)}`
-        );
+        uiError(`Error cancelling processes: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
       }
     });
