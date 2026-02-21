@@ -41,8 +41,12 @@ export class BoardIntegration {
       if (boardConfig?.enabled && typeof boardConfig.projectNumber === 'number') {
         return boardConfig;
       }
-    } catch {
-      // Ignore config loading failures and treat as board-not-configured.
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log.debug('resolveBoardConfig: config load failed, treating as board-not-configured', {
+        projectPath,
+        error: msg,
+      });
     }
     return null;
   }

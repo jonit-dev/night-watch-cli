@@ -3,16 +3,37 @@
  * Covers opening message generation, contribution prompts, and context formatting.
  */
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import type { IDiscussionTrigger } from '@night-watch/core';
+import { execFileSync } from 'node:child_process';
 import {
   buildOpeningMessage,
   buildIssueTitleFromTrigger,
   hasConcreteCodeContext,
   buildContributionPrompt,
   formatThreadHistory,
+  loadPrDiffExcerpt,
   MAX_ROUNDS,
 } from '../../deliberation-builders.js';
+
+// Mock child_process
+vi.mock('node:child_process', () => ({
+  execFileSync: vi.fn(),
+}));
+
+// Mock logger
+vi.mock('@night-watch/core', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@night-watch/core')>();
+  return {
+    ...actual,
+    createLogger: () => ({
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    }),
+  };
+});
 
 function buildTrigger(
   type: IDiscussionTrigger['type'],
@@ -302,6 +323,67 @@ describe('deliberation-builders', () => {
 
     it('handles empty array', () => {
       expect(formatThreadHistory([])).toBe('');
+    });
+  });
+
+  describe('loadPrDiffExcerpt', () => {
+    beforeEach(() => {
+      vi.resetAllMocks();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('returns empty string when ref is not a number', () => {
+      const result = loadPrDiffExcerpt('/project', 'not-a-number');
+      expect(result).toBe('');
+      expect(execFileSync).not.toHaveBeenCalled();
+    });
+
+    it('returns formatted diff excerpt on success', () => {
+      const mockDiff = 'diff --git a/file.ts b/file.ts\n' + '--- a/file.ts\n' + '+++ b/file.ts\n';
+      vi.mocked(execFileSync).mockReturnValue(mockDiff);
+
+      const result = loadPrDiffExcerpt('/project', '42');
+
+      expect(execFileSync).toHaveBeenCalledWith(
+        'gh',
+        ['pr', 'diff', '42', '--color=never'],
+        expect.objectContaining({ cwd: '/project' }),
+      );
+      expect(result).toContain('PR diff excerpt');
+      expect(result).toContain('```diff');
+      expect(result).toContain('diff --git');
+    });
+
+    it('returns empty string on gh command failure', () => {
+      vi.mocked(execFileSync).mockImplementation(() => {
+        throw new Error('gh: authentication required');
+      });
+
+      const result = loadPrDiffExcerpt('/project', '42');
+
+      expect(result).toBe('');
+    });
+
+    it('returns empty string on empty diff', () => {
+      vi.mocked(execFileSync).mockReturnValue('');
+
+      const result = loadPrDiffExcerpt('/project', '42');
+
+      expect(result).toBe('');
+    });
+
+    it('truncates diff to first 160 lines', () => {
+      const lines = Array(200).fill('line of code').join('\n');
+      vi.mocked(execFileSync).mockReturnValue(lines);
+
+      const result = loadPrDiffExcerpt('/project', '42');
+
+      // Should contain approximately 160 lines
+      const lineCount = result.split('\n').length;
+      expect(lineCount).toBeLessThanOrEqual(165); // Allow for header lines
     });
   });
 });
