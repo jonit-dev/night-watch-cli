@@ -175,7 +175,11 @@ export class SqliteAgentPersonaRepository implements IAgentPersonaRepository {
       decipher.setAuthTag(tag);
       const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
       return decrypted.toString('utf8');
-    } catch {
+    } catch (error) {
+      console.warn(
+        '[agent-persona] Failed to decrypt secret:',
+        error instanceof Error ? error.message : String(error),
+      );
       return '';
     }
   }

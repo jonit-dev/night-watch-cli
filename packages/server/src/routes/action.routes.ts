@@ -103,8 +103,11 @@ function spawnAction(
           projectName: path.basename(projectDir),
           exitCode: 0,
           provider: config.provider,
-        }).catch(() => {
-          /* silently ignore notification errors */
+        }).catch((error) => {
+          console.warn(
+            '[action.routes] Failed to send run_started notification:',
+            error instanceof Error ? error.message : String(error),
+          );
         });
       }
 
