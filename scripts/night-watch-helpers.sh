@@ -350,6 +350,12 @@ resolve_worktree_base_ref() {
     return 0
   fi
 
+  # Final fallback: use current HEAD (handles local-only repos with no remote)
+  if git -C "${project_dir}" rev-parse --verify --quiet HEAD >/dev/null; then
+    printf "%s" "HEAD"
+    return 0
+  fi
+
   return 1
 }
 
