@@ -17,16 +17,75 @@ export function sleep(ms: number): Promise<void> {
  * Build command-line invocation for spawning Night Watch processes.
  * Returns null if CLI entry path is unavailable.
  *
- * Strips tsx watch-mode execArgv flags (--require preflight.cjs, --import loader.mjs)
- * so that subprocesses run as plain Node.js rather than tsx-instrumented processes.
- * Carrying tsx flags into child processes causes the tsx preflight to attempt IPC
- * reconnection to the parent watch server, which produces stream errors on failure.
+ * Handles three scenarios:
+ * 1. Dev mode via tsx CLI: process.argv[1] is tsx/dist/cli.mjs, actual entry is argv[2]
+ * 2. Dev mode direct .ts: process.argv[1] is a .ts file
+ * 3. Production mode: process.argv[1] is a .js file
+ *
+ * In all dev scenarios, spawn via tsx CLI (fresh process, no watch-server IPC)
+ * to avoid stream errors from IPC reconnection attempts.
  */
 export function buildCurrentCliInvocation(args: string[]): string[] | null {
   const cliEntry = process.argv[1];
   if (!cliEntry) return null;
+
+  // Scenario 1: Running via tsx CLI (tsx --watch packages/cli/src/cli.ts serve)
+  // In this case, process.argv[1] is tsx/dist/cli.mjs, and actual entry is argv[2]
+  if (isTsxInvokerPath(cliEntry)) {
+    const actualEntry = process.argv[2];
+    if (actualEntry) {
+      // If actual entry is a .ts file, spawn via tsx CLI
+      if (actualEntry.endsWith('.ts')) {
+        const tsxCli = findTsxCliPath(actualEntry);
+        if (tsxCli) {
+          return [tsxCli, actualEntry, ...args];
+        }
+      }
+      // If actual entry is a .js file, run directly with filtered flags
+      const filteredExecArgv = filterTsxExecArgv(process.execArgv);
+      return [...filteredExecArgv, actualEntry, ...args];
+    }
+  }
+
+  // Scenario 2: Direct .ts entry (tsx packages/cli/src/cli.ts serve)
+  // Spawn via tsx CLI to get a fresh process without watch-server IPC
+  if (cliEntry.endsWith('.ts')) {
+    const tsxCli = findTsxCliPath(cliEntry);
+    if (tsxCli) {
+      return [tsxCli, cliEntry, ...args];
+    }
+  }
+
+  // Scenario 3: Production mode (.js entry)
+  // Strip ALL tsx flags (preflight + loader) that would attempt IPC reconnection
   const filteredExecArgv = filterTsxExecArgv(process.execArgv);
   return [...filteredExecArgv, cliEntry, ...args];
+}
+
+/**
+ * Check if the given path is a tsx invoker CLI (e.g., tsx/dist/cli.mjs)
+ */
+function isTsxInvokerPath(entryPath: string): boolean {
+  return (
+    entryPath.includes('/tsx/dist/cli.') ||
+    entryPath.includes('\\tsx\\dist\\cli.') ||
+    entryPath.endsWith('/tsx/cli.mjs') ||
+    entryPath.endsWith('\\tsx\\cli.mjs')
+  );
+}
+
+/**
+ * Locate the tsx CLI entry point (cli.mjs) relative to the current CLI file.
+ * Returns null if not found (e.g. production builds where tsx isn't installed).
+ */
+function findTsxCliPath(cliEntry: string): string | null {
+  const dir = path.dirname(cliEntry);
+  const candidates = [
+    path.resolve(dir, '..', '..', '..', 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+    path.resolve(dir, '..', '..', '..', '..', 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+    path.resolve(process.cwd(), 'node_modules', 'tsx', 'dist', 'cli.mjs'),
+  ];
+  return candidates.find((c) => fs.existsSync(c)) ?? null;
 }
 
 /**
@@ -34,7 +93,8 @@ export function buildCurrentCliInvocation(args: string[]): string[] | null {
  * tsx's IPC infrastructure.  tsx adds pairs like:
  *   --require .../tsx/dist/preflight.cjs
  *   --import  file://.../tsx/dist/loader.mjs
- * We drop any flag whose associated value references a tsx dist file.
+ * Both flags must be dropped: the preflight sets up the IPC back-channel, and the
+ * loader also attempts to reconnect to the parent watch server on startup.
  */
 function filterTsxExecArgv(execArgv: string[]): string[] {
   const filtered: string[] = [];
@@ -185,4 +245,12 @@ export function stripSlackUserMentions(text: string): string {
  */
 export function normalizeHandle(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Return a random integer in the inclusive range [min, max].
+ */
+export function randomInt(min: number, max: number): number {
+  if (max <= min) return min;
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }

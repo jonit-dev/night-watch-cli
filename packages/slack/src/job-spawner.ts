@@ -140,12 +140,14 @@ export class JobSpawner {
       const detail = extractLastMeaningfulLines(output);
 
       if (code === 0) {
-        const doneMessage =
-          job === 'review'
-            ? `Review done${prRef ? ` on${prRef}` : ''}.`
-            : job === 'qa'
-              ? `QA pass done${prRef ? ` on${prRef}` : ''}.`
-              : `Run finished${prRef ? ` for${prRef}` : ''}.`;
+        let doneMessage: string;
+        if (job === 'review') {
+          doneMessage = `Review done${prRef ? ` on${prRef}` : ''}.`;
+        } else if (job === 'qa') {
+          doneMessage = `QA pass done${prRef ? ` on${prRef}` : ''}.`;
+        } else {
+          doneMessage = `Run finished${prRef ? ` for${prRef}` : ''}.`;
+        }
         await this.slackClient.postAsAgent(channel, doneMessage, persona, threadTs);
       } else {
         if (detail) {
@@ -198,6 +200,7 @@ export class JobSpawner {
 
     let output = '';
     let errored = false;
+    // eslint-disable-next-line sonarjs/no-identical-functions
     const appendOutput = (chunk: Buffer): void => {
       output += chunk.toString();
       if (output.length > MAX_JOB_OUTPUT_CHARS) {
@@ -295,6 +298,7 @@ export class JobSpawner {
       `[slack][codewatch] audit spawned for ${project.name} pid=${child.pid ?? 'unknown'}`,
     );
     let output = '';
+    // eslint-disable-next-line sonarjs/no-identical-functions
     const appendOutput = (chunk: Buffer): void => {
       output += chunk.toString();
       if (output.length > MAX_JOB_OUTPUT_CHARS) {

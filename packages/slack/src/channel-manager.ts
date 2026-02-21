@@ -11,11 +11,14 @@ import { SlackClient } from './client.js';
  * Channel names: lowercase, hyphens, max 80 chars, no special chars.
  */
 function slugify(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 73); // "proj-" prefix = 5 chars, leaving 75 for name (80 total)
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      // eslint-disable-next-line sonarjs/slow-regex
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 73)
+  ); // "proj-" prefix = 5 chars, leaving 75 for name (80 total)
 }
 
 export class ChannelManager {

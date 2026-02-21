@@ -18,6 +18,7 @@ export interface IResolvedAIConfig {
  * Join a base URL with a route path, handling trailing slashes.
  */
 export function joinBaseUrl(baseUrl: string, route: string): string {
+  // eslint-disable-next-line sonarjs/slow-regex
   return `${baseUrl.replace(/\/+$/, '')}${route}`;
 }
 

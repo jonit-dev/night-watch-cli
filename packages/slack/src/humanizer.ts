@@ -19,6 +19,7 @@ const CANNED_PHRASE_PREFIXES = [
   /^great question[,.! ]*/i,
   /^of course[,.! ]*/i,
   /^certainly[,.! ]*/i,
+  // eslint-disable-next-line sonarjs/duplicates-in-character-class
   /^you['']re absolutely right[,.! ]*/i,
   /^i hope this helps[,.! ]*/i,
 ];
@@ -56,7 +57,7 @@ export function dedupeRepeatedSentences(text: string): string {
  */
 export function limitEmojiCount(text: string, maxEmojis: number): string {
   let seen = 0;
-  return text.replace(/[\p{Extended_Pictographic}]/gu, (m) => {
+  return text.replace(/\p{Extended_Pictographic}/gu, (m) => {
     seen += 1;
     return seen <= maxEmojis ? m : '';
   });
@@ -78,20 +79,20 @@ export function applyEmojiPolicy(
   allowNonFacialEmoji: boolean,
 ): string {
   if (!allowEmoji) {
-    return text.replace(/[\p{Extended_Pictographic}]/gu, '');
+    return text.replace(/\p{Extended_Pictographic}/gu, '');
   }
 
-  const emojis = Array.from(text.matchAll(/[\p{Extended_Pictographic}]/gu)).map((m) => m[0]);
+  const emojis = Array.from(text.matchAll(/\p{Extended_Pictographic}/gu)).map((m) => m[0]);
   if (emojis.length === 0) return text;
 
   const chosenFacial = emojis.find((e) => isFacialEmoji(e));
   const chosen = chosenFacial ?? (allowNonFacialEmoji ? emojis[0] : null);
   if (!chosen) {
-    return text.replace(/[\p{Extended_Pictographic}]/gu, '');
+    return text.replace(/\p{Extended_Pictographic}/gu, '');
   }
 
   let kept = false;
-  return text.replace(/[\p{Extended_Pictographic}]/gu, (e) => {
+  return text.replace(/\p{Extended_Pictographic}/gu, (e) => {
     if (!kept && e === chosen) {
       kept = true;
       return e;
@@ -131,6 +132,7 @@ export function humanizeSlackReply(raw: string, options: IHumanizeSlackReplyOpti
   // Remove markdown formatting artifacts that look templated in chat.
   text = text
     .replace(/^#{1,6}\s+/gm, '')
+    // eslint-disable-next-line sonarjs/slow-regex
     .replace(/^\s*[-*]\s+/gm, '')
     .replace(/\*\*(.*?)\*\*/g, '$1')
     .replace(/\s+/g, ' ')

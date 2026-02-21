@@ -3,8 +3,10 @@
  * Extracted from deliberation.ts to separate message-construction concerns from orchestration logic.
  */
 
-import { IAgentPersona, IDiscussionTrigger } from '@night-watch/core';
+import { IAgentPersona, IDiscussionTrigger, INightWatchConfig } from '@night-watch/core';
+import { execFileSync } from 'node:child_process';
 import { type ISlackMessage } from './client.js';
+import { findCarlos } from './personas.js';
 
 /** Maximum number of deliberation rounds per discussion. */
 export const MAX_ROUNDS = 2;
@@ -114,19 +116,24 @@ ${trigger.context.slice(0, 2000)}
 ## Thread So Far
 ${threadHistory || '(Thread just started)'}
 
-## How to respond
+## Step 1 — Decide whether to speak
+Ask yourself honestly:
+1. Does this topic actually touch my domain (${persona.role})?
+2. Is there something concrete and NEW I can add that hasn't already been said?
+3. Do I have real evidence from the context (a file path, diff hunk, log line, or symbol)?
+
+If the answer to ANY of these is no → reply with exactly: SKIP
+
+Silence is the right call when: the trigger is outside your expertise, teammates already covered it, or you'd just be echoing someone else. Do not post to fill space.
+
+## Step 2 — If you do have something worth saying
 Write a short Slack message — 1 to 2 sentences max, under ~180 chars when possible.
 ${isFirstRound ? '- First round: give your initial take from your angle. Be specific.' : '- Follow-up round: respond to what others said. Agree, push back, or add something new.'}
 - React to one specific point already in the thread (use teammate names when available).
-- Never repeat a point that's already been made in similar words.
 - Back your take with one concrete artifact from context (file path, symbol, diff hunk, or log line).
-- If context lacks concrete code evidence, ask for the exact file/diff and use SKIP.
-- If you have no new signal to add, reply with exactly: SKIP
 - Talk like a teammate, not an assistant. No pleasantries, no filler.
 - Stay in your lane — only comment on your domain unless something crosses into it.
 - You can name-drop teammates when handing off ("Maya should look at the auth here").
-- If nothing concerns you, use SKIP instead of posting filler.
-- If you have a concern, name it specifically and suggest a direction.
 - No markdown formatting. No bullet lists. No headings. Just a message.
 - Emojis: use one only if it genuinely fits. Default to none.
 - Never start with "Great question", "Of course", "I hope this helps", or similar.
@@ -144,7 +151,7 @@ Issue Review Guidance:
     : ''
 }
 
-Write ONLY your message. No name prefix, no labels.`;
+Write ONLY your message or SKIP. No name prefix, no labels.`;
 }
 
 export function formatThreadHistory(messages: ISlackMessage[]): string {
@@ -157,4 +164,89 @@ export function formatThreadHistory(messages: ISlackMessage[]): string {
     })
     .filter(Boolean)
     .join('\n');
+}
+
+export const HUMAN_DELAY_MIN_MS = 20_000; // Minimum pause between agent replies (20s)
+export const HUMAN_DELAY_MAX_MS = 60_000; // Maximum pause between agent replies (60s)
+
+export function discussionStartKey(trigger: IDiscussionTrigger): string {
+  return `${trigger.projectPath}:${trigger.type}:${trigger.ref}`;
+}
+
+/**
+ * Return a random delay in the human-like range so replies don't arrive
+ * in an obviously robotic cadence.
+ */
+export function humanDelay(): number {
+  return HUMAN_DELAY_MIN_MS + Math.random() * (HUMAN_DELAY_MAX_MS - HUMAN_DELAY_MIN_MS);
+}
+
+/**
+ * Determine which Slack channel to use for a trigger type
+ */
+export function getChannelForTrigger(
+  trigger: IDiscussionTrigger,
+  config: INightWatchConfig,
+): string {
+  const slack = config.slack;
+  if (!slack) return '';
+  if (trigger.channelId) return trigger.channelId;
+  switch (trigger.type) {
+    case 'pr_review':
+      return slack.channels.prs;
+    case 'build_failure':
+      return slack.channels.incidents;
+    case 'prd_kickoff':
+      return slack.channels.eng;
+    case 'code_watch':
+      return slack.channels.eng;
+    case 'issue_review':
+      return slack.channels.eng;
+    default:
+      return slack.channels.eng;
+  }
+}
+
+export function loadPrDiffExcerpt(projectPath: string, ref: string): string {
+  const prNumber = Number.parseInt(ref, 10);
+  if (Number.isNaN(prNumber)) return '';
+  try {
+    const diff = execFileSync('gh', ['pr', 'diff', String(prNumber), '--color=never'], {
+      cwd: projectPath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: 2 * 1024 * 1024,
+    });
+    const excerpt = diff.split('\n').slice(0, 160).join('\n').trim();
+    if (!excerpt) return '';
+    return `PR diff excerpt (first 160 lines):\n\`\`\`diff\n${excerpt}\n\`\`\``;
+  } catch {
+    return '';
+  }
+}
+
+export function countThreadReplies(messages: ISlackMessage[]): number {
+  return Math.max(0, messages.length - 1);
+}
+
+/**
+ * Vary sentence length naturally — some messages are punchy (1-2), others fuller (3).
+ */
+export function pickMaxSentences(): number {
+  const roll = Math.random();
+  if (roll < 0.35) return 1;
+  if (roll < 0.6) return 2;
+  return 3;
+}
+
+export function chooseRoundContributors(
+  personas: IAgentPersona[],
+  maxCount: number,
+): IAgentPersona[] {
+  if (maxCount <= 0) return [];
+  const lead = findCarlos(personas);
+  if (!lead) return personas.slice(0, maxCount);
+  const nonLead = personas.filter((persona) => persona.id !== lead.id);
+  const candidates = nonLead.length >= 2 ? nonLead : personas;
+  return candidates.slice(0, maxCount);
 }
