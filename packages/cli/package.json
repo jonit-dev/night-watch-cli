@@ -1,6 +1,6 @@
 {
   "name": "@jonit-dev/night-watch-cli",
-  "version": "1.7.31",
+  "version": "1.7.32",
   "description": "Autonomous PRD execution using AI Provider CLIs + cron",
   "type": "module",
   "bin": {
@@ -20,7 +20,7 @@
     "templates/"
   ],
   "scripts": {
-    "build": "tsc --build tsconfig.json && tsc-alias -p tsconfig.json",
+    "build": "tsc --build tsconfig.json && tsc-alias -p tsconfig.json && node build.mjs",
     "verify": "tsc --build tsconfig.json --dry",
     "test": "vitest run",
     "prepublishOnly": "yarn build && yarn test"
@@ -46,20 +46,26 @@
     "url": "https://github.com/jonit-dev/night-watch-cli/issues"
   },
   "dependencies": {
-    "@night-watch/core": "*",
-    "@night-watch/server": "*",
-    "@night-watch/slack": "*",
+    "@slack/socket-mode": "^2.0.3",
+    "@slack/web-api": "^7.14.1",
+    "better-sqlite3": "^12.6.2",
     "blessed": "^0.1.81",
     "chalk": "^5.6.2",
     "cli-table3": "^0.6.5",
     "commander": "^12.0.0",
     "concurrently": "^9.2.1",
+    "cors": "^2.8.6",
+    "cron-parser": "^5.5.0",
+    "cronstrue": "^3.12.0",
+    "express": "^5.2.1",
     "ora": "^9.3.0",
-    "reflect-metadata": "^0.2.2"
+    "reflect-metadata": "^0.2.2",
+    "tsyringe": "^4.10.0"
   },
   "devDependencies": {
     "@types/blessed": "^0.1.27",
     "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
     "tsc-alias": "^1.8.16",
     "tsx": "^4.19.0",
     "typescript": "^5.3.0",
