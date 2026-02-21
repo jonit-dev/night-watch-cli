@@ -3,12 +3,12 @@
  * Starts the HTTP API server for the Web UI
  */
 
-import * as fs from "fs";
-import { Command } from "commander";
-import { LOCK_FILE_PREFIX } from "@night-watch/core/constants.js";
-import { startGlobalServer, startServer } from "@night-watch/server";
+import * as fs from 'fs';
+import { Command } from 'commander';
+import { LOCK_FILE_PREFIX } from '@night-watch/core';
+import { startGlobalServer, startServer } from '@night-watch/server';
 
-type TServeMode = "global" | "local";
+type TServeMode = 'global' | 'local';
 
 interface IServeLockResult {
   acquired: boolean;
@@ -34,7 +34,7 @@ function isProcessRunning(pid: number): boolean {
 function readPid(lockPath: string): number | null {
   try {
     if (!fs.existsSync(lockPath)) return null;
-    const raw = fs.readFileSync(lockPath, "utf-8").trim();
+    const raw = fs.readFileSync(lockPath, 'utf-8').trim();
     const pid = parseInt(raw, 10);
     return Number.isFinite(pid) ? pid : null;
   } catch {
@@ -49,13 +49,13 @@ export function acquireServeLock(mode: TServeMode, port: number): IServeLockResu
   // Two attempts: second after stale lock cleanup.
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const fd = fs.openSync(lockPath, "wx");
+      const fd = fs.openSync(lockPath, 'wx');
       fs.writeFileSync(fd, `${process.pid}\n`);
       fs.closeSync(fd);
       return { acquired: true, lockPath, stalePidCleaned };
     } catch (error) {
       const err = error as NodeJS.ErrnoException;
-      if (err.code !== "EEXIST") {
+      if (err.code !== 'EEXIST') {
         return {
           acquired: false,
           lockPath,
@@ -93,7 +93,7 @@ export function acquireServeLock(mode: TServeMode, port: number): IServeLockResu
   return {
     acquired: false,
     lockPath,
-    message: "failed to acquire serve lock",
+    message: 'failed to acquire serve lock',
   };
 }
 
@@ -113,10 +113,10 @@ export function releaseServeLock(lockPath: string): void {
 
 export function serveCommand(program: Command): void {
   program
-    .command("serve")
-    .description("Start the Night Watch web UI server")
-    .option("-p, --port <number>", "Port to run the server on", "7575")
-    .option("-g, --global", "Start in global mode (manage all registered projects)")
+    .command('serve')
+    .description('Start the Night Watch web UI server')
+    .option('-p, --port <number>', 'Port to run the server on', '7575')
+    .option('-g, --global', 'Start in global mode (manage all registered projects)')
     .action((options) => {
       const port = parseInt(options.port, 10);
       if (isNaN(port) || port < 1 || port > 65535) {
@@ -124,15 +124,17 @@ export function serveCommand(program: Command): void {
         process.exit(1);
       }
 
-      const mode: TServeMode = options.global ? "global" : "local";
+      const mode: TServeMode = options.global ? 'global' : 'local';
       const lock = acquireServeLock(mode, port);
       if (!lock.acquired) {
-        const pidPart = lock.existingPid ? ` (PID ${lock.existingPid})` : "";
-        const detail = lock.message ? `: ${lock.message}` : "";
+        const pidPart = lock.existingPid ? ` (PID ${lock.existingPid})` : '';
+        const detail = lock.message ? `: ${lock.message}` : '';
         console.error(
           `[serve] Another Night Watch ${mode} server is already running on port ${port}${pidPart}${detail}`,
         );
-        console.error("[serve] Stop the existing process first, or use --port with a different value.");
+        console.error(
+          '[serve] Stop the existing process first, or use --port with a different value.',
+        );
         process.exit(1);
       }
 
@@ -142,18 +144,16 @@ export function serveCommand(program: Command): void {
         );
       }
       console.log(`[serve] lock acquired ${lock.lockPath} pid=${process.pid}`);
-      process.on("exit", () => {
+      process.on('exit', () => {
         releaseServeLock(lock.lockPath);
       });
 
       if (options.global) {
-        const execArgv = process.execArgv.length > 0 ? process.execArgv.join(" ") : "(none)";
-        console.log(
-          `[serve] mode=global port=${port} pid=${process.pid} node=${process.version}`,
-        );
+        const execArgv = process.execArgv.length > 0 ? process.execArgv.join(' ') : '(none)';
+        console.log(`[serve] mode=global port=${port} pid=${process.pid} node=${process.version}`);
         console.log(`[serve] execPath=${process.execPath}`);
         console.log(`[serve] execArgv=${execArgv}`);
-        console.log(`[serve] argv=${process.argv.join(" ")}`);
+        console.log(`[serve] argv=${process.argv.join(' ')}`);
       }
 
       if (options.global) {

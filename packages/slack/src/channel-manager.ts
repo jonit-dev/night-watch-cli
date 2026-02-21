@@ -3,9 +3,8 @@
  * Auto-creates and archives project channels based on project lifecycle events.
  */
 
-import { INightWatchConfig } from '@night-watch/core/types.js';
+import { INightWatchConfig, getRepositories } from '@night-watch/core';
 import { SlackClient } from './client.js';
-import { getRepositories } from '@night-watch/core/storage/repositories/index.js';
 
 /**
  * Slugify a project name for use as a Slack channel name.

@@ -11,26 +11,22 @@ import {
   CONFIG_FILE_NAME,
   DEFAULT_PRD_DIR,
   LOG_DIR,
+  Provider,
   VALID_PROVIDERS,
-} from '@night-watch/core/constants.js';
-import { Provider } from '@night-watch/core/types.js';
-import { createBoardProvider } from '@night-watch/core/board/factory.js';
-import {
+  checkGhCli,
+  checkGitRepo,
+  createBoardProvider,
   createTable,
+  detectProviders,
+  getProjectName,
   header,
   info,
   label,
+  loadConfig,
   step,
   success,
   error as uiError,
-} from '@night-watch/core/utils/ui.js';
-import {
-  checkGhCli,
-  checkGitRepo,
-  detectProviders,
-} from '@night-watch/core/utils/checks.js';
-import { loadConfig } from '@night-watch/core/config.js';
-import { getProjectName } from '@night-watch/core/utils/status-data.js';
+} from '@night-watch/core';
 
 // Get templates directory path
 const __filename = fileURLToPath(import.meta.url);
@@ -57,10 +53,10 @@ function hasPlaywrightDependency(cwd: string): boolean {
     };
 
     return Boolean(
-      packageJson.dependencies?.['@playwright/test']
-      || packageJson.dependencies?.playwright
-      || packageJson.devDependencies?.['@playwright/test']
-      || packageJson.devDependencies?.playwright
+      packageJson.dependencies?.['@playwright/test'] ||
+      packageJson.dependencies?.playwright ||
+      packageJson.devDependencies?.['@playwright/test'] ||
+      packageJson.devDependencies?.playwright,
     );
   } catch {
     return false;
@@ -107,7 +103,7 @@ function promptYesNo(question: string, defaultNo: boolean = true): Promise<boole
   return new Promise((resolve) => {
     const rl = readline.createInterface({
       input: process.stdin,
-      output: process.stdout
+      output: process.stdout,
     });
 
     const suffix = defaultNo ? ' [y/N]: ' : ' [Y/n]: ';
@@ -129,13 +125,13 @@ function installPlaywrightForQa(cwd: string): boolean {
     execSync(installCmd, {
       cwd,
       encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     execSync('npx playwright install chromium', {
       cwd,
       encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     return true;
@@ -153,7 +149,7 @@ export function getDefaultBranch(cwd: string): string {
       const timestamp = execSync(`git log -1 --format=%ct ${ref}`, {
         encoding: 'utf-8',
         cwd,
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ['pipe', 'pipe', 'pipe'],
       }).trim();
 
       const parsed = parseInt(timestamp, 10);
@@ -196,7 +192,7 @@ export function getDefaultBranch(cwd: string): string {
     const remoteRef = execSync('git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || echo ""', {
       encoding: 'utf-8',
       cwd,
-      stdio: ['pipe', 'pipe', 'pipe']
+      stdio: ['pipe', 'pipe', 'pipe'],
     }).trim();
 
     if (remoteRef) {
@@ -221,7 +217,7 @@ function promptProviderSelection(providers: Provider[]): Promise<Provider> {
   return new Promise((resolve, reject) => {
     const rl = readline.createInterface({
       input: process.stdin,
-      output: process.stdout
+      output: process.stdout,
     });
 
     console.log('\nMultiple AI providers detected:');
@@ -255,7 +251,7 @@ function ensureDir(dirPath: string): void {
  */
 interface ITemplateResolution {
   path: string;
-  source: "custom" | "bundled";
+  source: 'custom' | 'bundled';
 }
 
 /**
@@ -266,15 +262,15 @@ interface ITemplateResolution {
 export function resolveTemplatePath(
   templateName: string,
   customTemplatesDir: string | null,
-  bundledTemplatesDir: string
+  bundledTemplatesDir: string,
 ): ITemplateResolution {
   if (customTemplatesDir !== null) {
     const customPath = join(customTemplatesDir, templateName);
     if (fs.existsSync(customPath)) {
-      return { path: customPath, source: "custom" };
+      return { path: customPath, source: 'custom' };
     }
   }
-  return { path: join(bundledTemplatesDir, templateName), source: "bundled" };
+  return { path: join(bundledTemplatesDir, templateName), source: 'bundled' };
 }
 
 /**
@@ -286,16 +282,16 @@ function processTemplate(
   replacements: Record<string, string>,
   force: boolean,
   sourcePath?: string,
-  source?: "custom" | "bundled"
-): { created: boolean; source: "custom" | "bundled" } {
+  source?: 'custom' | 'bundled',
+): { created: boolean; source: 'custom' | 'bundled' } {
   // Skip if exists and not forcing
   if (fs.existsSync(targetPath) && !force) {
     console.log(`  Skipped (exists): ${targetPath}`);
-    return { created: false, source: source ?? "bundled" };
+    return { created: false, source: source ?? 'bundled' };
   }
 
   const templatePath = sourcePath ?? join(TEMPLATES_DIR, templateName);
-  const resolvedSource = source ?? "bundled";
+  const resolvedSource = source ?? 'bundled';
   let content = fs.readFileSync(templatePath, 'utf-8');
 
   // Replace placeholders
@@ -315,30 +311,38 @@ function addToGitignore(cwd: string): void {
   const gitignorePath = path.join(cwd, '.gitignore');
 
   const entries = [
-    { pattern: '/logs/', label: '/logs/', check: (c: string) => c.includes('/logs/') || /^logs\//m.test(c) },
-    { pattern: CONFIG_FILE_NAME, label: CONFIG_FILE_NAME, check: (c: string) => c.includes(CONFIG_FILE_NAME) },
+    {
+      pattern: '/logs/',
+      label: '/logs/',
+      check: (c: string) => c.includes('/logs/') || /^logs\//m.test(c),
+    },
+    {
+      pattern: CONFIG_FILE_NAME,
+      label: CONFIG_FILE_NAME,
+      check: (c: string) => c.includes(CONFIG_FILE_NAME),
+    },
     { pattern: '*.claim', label: '*.claim', check: (c: string) => c.includes('*.claim') },
   ];
 
   if (!fs.existsSync(gitignorePath)) {
-    const lines = ['# Night Watch', ...entries.map(e => e.pattern), ''];
+    const lines = ['# Night Watch', ...entries.map((e) => e.pattern), ''];
     fs.writeFileSync(gitignorePath, lines.join('\n'));
     console.log(`  Created: ${gitignorePath} (with Night Watch entries)`);
     return;
   }
 
   const content = fs.readFileSync(gitignorePath, 'utf-8');
-  const missing = entries.filter(e => !e.check(content));
+  const missing = entries.filter((e) => !e.check(content));
 
   if (missing.length === 0) {
     console.log(`  Skipped (exists): Night Watch entries in .gitignore`);
     return;
   }
 
-  const additions = missing.map(e => e.pattern).join('\n');
+  const additions = missing.map((e) => e.pattern).join('\n');
   const newContent = content.trimEnd() + '\n\n# Night Watch\n' + additions + '\n';
   fs.writeFileSync(gitignorePath, newContent);
-  console.log(`  Updated: ${gitignorePath} (added ${missing.map(e => e.label).join(', ')})`);
+  console.log(`  Updated: ${gitignorePath} (added ${missing.map((e) => e.label).join(', ')})`);
 }
 
 /**
@@ -450,7 +454,9 @@ export function initCommand(program: Command): void {
           if (installPlaywrightForQa(cwd)) {
             success('Installed Playwright test runner and Chromium browser.');
           } else {
-            console.warn('  Warning: Failed to install Playwright automatically. You can install it later.');
+            console.warn(
+              '  Warning: Failed to install Playwright automatically. You can install it later.',
+            );
           }
         } else {
           info('Skipping Playwright install. QA can auto-install during execution if enabled.');
@@ -510,10 +516,12 @@ export function initCommand(program: Command): void {
       // Load existing config (if present) to get templatesDir
       const existingConfig = loadConfig(cwd);
       const customTemplatesDirPath = path.join(cwd, existingConfig.templatesDir);
-      const customTemplatesDir = fs.existsSync(customTemplatesDirPath) ? customTemplatesDirPath : null;
+      const customTemplatesDir = fs.existsSync(customTemplatesDirPath)
+        ? customTemplatesDirPath
+        : null;
 
       // Track template sources for summary
-      const templateSources: { name: string; source: "custom" | "bundled" }[] = [];
+      const templateSources: { name: string; source: 'custom' | 'bundled' }[] = [];
 
       // Copy night-watch.md template
       const nwResolution = resolveTemplatePath('night-watch.md', customTemplatesDir, TEMPLATES_DIR);
@@ -523,55 +531,71 @@ export function initCommand(program: Command): void {
         replacements,
         force,
         nwResolution.path,
-        nwResolution.source
+        nwResolution.source,
       );
       templateSources.push({ name: 'night-watch.md', source: nwResult.source });
 
       // Copy prd-executor.md template
-      const peResolution = resolveTemplatePath('prd-executor.md', customTemplatesDir, TEMPLATES_DIR);
+      const peResolution = resolveTemplatePath(
+        'prd-executor.md',
+        customTemplatesDir,
+        TEMPLATES_DIR,
+      );
       const peResult = processTemplate(
         'prd-executor.md',
         path.join(commandsDir, 'prd-executor.md'),
         replacements,
         force,
         peResolution.path,
-        peResolution.source
+        peResolution.source,
       );
       templateSources.push({ name: 'prd-executor.md', source: peResult.source });
 
       // Copy night-watch-pr-reviewer.md template
-      const prResolution = resolveTemplatePath('night-watch-pr-reviewer.md', customTemplatesDir, TEMPLATES_DIR);
+      const prResolution = resolveTemplatePath(
+        'night-watch-pr-reviewer.md',
+        customTemplatesDir,
+        TEMPLATES_DIR,
+      );
       const prResult = processTemplate(
         'night-watch-pr-reviewer.md',
         path.join(commandsDir, 'night-watch-pr-reviewer.md'),
         replacements,
         force,
         prResolution.path,
-        prResolution.source
+        prResolution.source,
       );
       templateSources.push({ name: 'night-watch-pr-reviewer.md', source: prResult.source });
 
       // Copy night-watch-qa.md template
-      const qaResolution = resolveTemplatePath('night-watch-qa.md', customTemplatesDir, TEMPLATES_DIR);
+      const qaResolution = resolveTemplatePath(
+        'night-watch-qa.md',
+        customTemplatesDir,
+        TEMPLATES_DIR,
+      );
       const qaResult = processTemplate(
         'night-watch-qa.md',
         path.join(commandsDir, 'night-watch-qa.md'),
         replacements,
         force,
         qaResolution.path,
-        qaResolution.source
+        qaResolution.source,
       );
       templateSources.push({ name: 'night-watch-qa.md', source: qaResult.source });
 
       // Copy night-watch-audit.md template
-      const auditResolution = resolveTemplatePath('night-watch-audit.md', customTemplatesDir, TEMPLATES_DIR);
+      const auditResolution = resolveTemplatePath(
+        'night-watch-audit.md',
+        customTemplatesDir,
+        TEMPLATES_DIR,
+      );
       const auditResult = processTemplate(
         'night-watch-audit.md',
         path.join(commandsDir, 'night-watch-audit.md'),
         replacements,
         force,
         auditResolution.path,
-        auditResolution.source
+        auditResolution.source,
       );
       templateSources.push({ name: 'night-watch-audit.md', source: auditResult.source });
 
@@ -585,29 +609,29 @@ export function initCommand(program: Command): void {
         // Read and process config template
         let configContent = fs.readFileSync(
           join(TEMPLATES_DIR, 'night-watch.config.json'),
-          'utf-8'
+          'utf-8',
         );
 
         // Replace placeholders with project values
         configContent = configContent.replace(
           '"projectName": ""',
-          `"projectName": "${projectName}"`
+          `"projectName": "${projectName}"`,
         );
         configContent = configContent.replace(
           '"defaultBranch": ""',
-          `"defaultBranch": "${defaultBranch}"`
+          `"defaultBranch": "${defaultBranch}"`,
         );
 
         // Set provider in config
         configContent = configContent.replace(
           /"provider":\s*"[^"]*"/,
-          `"provider": "${selectedProvider}"`
+          `"provider": "${selectedProvider}"`,
         );
 
         // Set reviewerEnabled in config
         configContent = configContent.replace(
           /"reviewerEnabled":\s*(true|false)/,
-          `"reviewerEnabled": ${reviewerEnabled}`
+          `"reviewerEnabled": ${reviewerEnabled}`,
         );
 
         fs.writeFileSync(configPath, configContent);
@@ -616,7 +640,10 @@ export function initCommand(program: Command): void {
 
       // Step 10: Create GitHub Project board (only when repo has a GitHub remote)
       step(10, totalSteps, 'Setting up GitHub Project board...');
-      const existingRaw = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
+      const existingRaw = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<
+        string,
+        unknown
+      >;
       const existingBoard = existingRaw.boardProvider as { projectNumber?: number } | undefined;
       if (existingBoard?.projectNumber && !force) {
         info(`Board already configured (#${existingBoard.projectNumber}), skipping.`);
@@ -625,25 +652,40 @@ export function initCommand(program: Command): void {
         let hasGitHubRemote = false;
         try {
           const remoteUrl = execSync('git remote get-url origin', {
-            cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe']
+            cwd,
+            encoding: 'utf-8',
+            stdio: ['pipe', 'pipe', 'pipe'],
           }).trim();
           hasGitHubRemote = remoteUrl.includes('github.com');
-        } catch { /* no remote */ }
+        } catch {
+          /* no remote */
+        }
 
         if (!hasGitHubRemote) {
-          info('No GitHub remote detected — skipping board setup. Run `night-watch board setup` manually.');
+          info(
+            'No GitHub remote detected — skipping board setup. Run `night-watch board setup` manually.',
+          );
         } else {
           try {
             const provider = createBoardProvider({ enabled: true, provider: 'github' }, cwd);
             const boardTitle = `${projectName} Night Watch`;
             const board = await provider.setupBoard(boardTitle);
             // Update the config file with the projectNumber
-            const rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
-            rawConfig.boardProvider = { enabled: true, provider: 'github', projectNumber: board.number };
+            const rawConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<
+              string,
+              unknown
+            >;
+            rawConfig.boardProvider = {
+              enabled: true,
+              provider: 'github',
+              projectNumber: board.number,
+            };
             fs.writeFileSync(configPath, JSON.stringify(rawConfig, null, 2) + '\n');
             success(`GitHub Project board "${boardTitle}" ready (#${board.number})`);
           } catch (boardErr) {
-            console.warn(`  Warning: Could not set up GitHub Project board: ${boardErr instanceof Error ? boardErr.message : String(boardErr)}`);
+            console.warn(
+              `  Warning: Could not set up GitHub Project board: ${boardErr instanceof Error ? boardErr.message : String(boardErr)}`,
+            );
             info('Run `night-watch board setup` to create the board manually.');
           }
         }
@@ -652,7 +694,7 @@ export function initCommand(program: Command): void {
       // Step 11: Register in global registry
       step(11, totalSteps, 'Registering project in global registry...');
       try {
-        const { registerProject } = await import('@night-watch/core/utils/registry.js');
+        const { registerProject } = await import('@night-watch/core');
         const entry = registerProject(cwd);
         success(`Registered as "${entry.name}" in global registry`);
 
@@ -663,12 +705,14 @@ export function initCommand(program: Command): void {
           const { ChannelManager } = await import('@night-watch/slack/channel-manager.js');
           const slackClient = new SlackClient(currentConfig.slack.botToken);
           const manager = new ChannelManager(slackClient, currentConfig);
-          manager.ensureProjectChannel(entry.path, entry.name).catch((err: unknown) =>
-            console.warn('Channel creation failed:', err)
-          );
+          manager
+            .ensureProjectChannel(entry.path, entry.name)
+            .catch((err: unknown) => console.warn('Channel creation failed:', err));
         }
       } catch (regErr) {
-        console.warn(`  Warning: Could not register in global registry: ${regErr instanceof Error ? regErr.message : String(regErr)}`);
+        console.warn(
+          `  Warning: Could not register in global registry: ${regErr instanceof Error ? regErr.message : String(regErr)}`,
+        );
       }
 
       // Step 12: Print summary
@@ -680,9 +724,15 @@ export function initCommand(program: Command): void {
       filesTable.push(['PRD Directory', `${prdDir}/done/`]);
       filesTable.push(['Summary File', `${prdDir}/NIGHT-WATCH-SUMMARY.md`]);
       filesTable.push(['Logs Directory', `${LOG_DIR}/`]);
-      filesTable.push(['Slash Commands', `.claude/commands/night-watch.md (${templateSources[0].source})`]);
+      filesTable.push([
+        'Slash Commands',
+        `.claude/commands/night-watch.md (${templateSources[0].source})`,
+      ]);
       filesTable.push(['', `.claude/commands/prd-executor.md (${templateSources[1].source})`]);
-      filesTable.push(['', `.claude/commands/night-watch-pr-reviewer.md (${templateSources[2].source})`]);
+      filesTable.push([
+        '',
+        `.claude/commands/night-watch-pr-reviewer.md (${templateSources[2].source})`,
+      ]);
       filesTable.push(['', `.claude/commands/night-watch-qa.md (${templateSources[3].source})`]);
       filesTable.push(['', `.claude/commands/night-watch-audit.md (${templateSources[4].source})`]);
       filesTable.push(['Config File', CONFIG_FILE_NAME]);

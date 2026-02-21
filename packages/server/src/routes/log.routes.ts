@@ -6,8 +6,7 @@ import * as path from 'path';
 
 import { Request, Response, Router } from 'express';
 
-import { LOG_DIR, LOG_FILE_NAMES } from '@night-watch/core/constants.js';
-import { getLastLogLines } from '@night-watch/core/utils/status-data.js';
+import { LOG_DIR, LOG_FILE_NAMES, getLastLogLines } from '@night-watch/core';
 
 export interface ILogRoutesDeps {
   projectDir: string;
@@ -30,10 +29,8 @@ export function createLogRoutes(deps: ILogRoutesDeps): Router {
       }
 
       const linesParam = req.query.lines;
-      const lines =
-        typeof linesParam === 'string' ? parseInt(linesParam, 10) : 200;
-      const linesToRead =
-        isNaN(lines) || lines < 1 ? 200 : Math.min(lines, 10000);
+      const lines = typeof linesParam === 'string' ? parseInt(linesParam, 10) : 200;
+      const linesToRead = isNaN(lines) || lines < 1 ? 200 : Math.min(lines, 10000);
 
       // Map logical name to actual file name
       const fileName = LOG_FILE_NAMES[name as string] || name;
@@ -42,9 +39,7 @@ export function createLogRoutes(deps: ILogRoutesDeps): Router {
 
       res.json({ name, lines: logLines });
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -71,10 +66,8 @@ export function createProjectLogRoutes(): Router {
       }
 
       const linesParam = req.query.lines;
-      const lines =
-        typeof linesParam === 'string' ? parseInt(linesParam, 10) : 200;
-      const linesToRead =
-        isNaN(lines) || lines < 1 ? 200 : Math.min(lines, 10000);
+      const lines = typeof linesParam === 'string' ? parseInt(linesParam, 10) : 200;
+      const linesToRead = isNaN(lines) || lines < 1 ? 200 : Math.min(lines, 10000);
 
       const fileName = LOG_FILE_NAMES[name as string] || name;
       const logPath = path.join(projectDir, LOG_DIR, `${fileName}.log`);
@@ -82,9 +75,7 @@ export function createProjectLogRoutes(): Router {
 
       res.json({ name, lines: logLines });
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 

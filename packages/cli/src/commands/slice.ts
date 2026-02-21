@@ -2,25 +2,25 @@
  * Slice command - executes the roadmap slicer to create PRDs from roadmap items
  */
 
-import { Command } from "commander";
-import { loadConfig } from "@night-watch/core/config.js";
-import { INightWatchConfig, NotificationEvent } from "@night-watch/core/types.js";
-import { sendNotifications } from "@night-watch/core/utils/notify.js";
-import { PROVIDER_COMMANDS } from "@night-watch/core/constants.js";
-import * as path from "path";
+import { Command } from 'commander';
 import {
+  INightWatchConfig,
+  NotificationEvent,
+  PROVIDER_COMMANDS,
   createSpinner,
   createTable,
   dim,
+  getRoadmapStatus,
   header,
   info,
-  error as uiError,
-} from "@night-watch/core/utils/ui.js";
-import {
-  getRoadmapStatus,
+  loadConfig,
+  sendNotifications,
   sliceNextItem,
-} from "@night-watch/core/utils/roadmap-scanner.js";
-import type { ISliceResult } from "@night-watch/core/utils/roadmap-scanner.js";
+  error as uiError,
+} from '@night-watch/core';
+import type { ISliceResult } from '@night-watch/core';
+import { sendSlackBotNotification } from '@night-watch/slack/notify.js';
+import * as path from 'path';
 
 /**
  * Options for the slice command
@@ -34,7 +34,10 @@ export interface ISliceOptions {
 /**
  * Build environment variables map from config and CLI options for slicer
  */
-export function buildEnvVars(config: INightWatchConfig, options: ISliceOptions): Record<string, string> {
+export function buildEnvVars(
+  config: INightWatchConfig,
+  options: ISliceOptions,
+): Record<string, string> {
   const env: Record<string, string> = {};
 
   // Provider command - the actual CLI binary to call
@@ -56,11 +59,11 @@ export function buildEnvVars(config: INightWatchConfig, options: ISliceOptions):
 
   // Dry run flag
   if (options.dryRun) {
-    env.NW_DRY_RUN = "1";
+    env.NW_DRY_RUN = '1';
   }
 
   // Sandbox flag - prevents the agent from modifying crontab during execution
-  env.NW_EXECUTION_CONTEXT = "agent";
+  env.NW_EXECUTION_CONTEXT = 'agent';
 
   return env;
 }
@@ -68,7 +71,10 @@ export function buildEnvVars(config: INightWatchConfig, options: ISliceOptions):
 /**
  * Apply CLI flag overrides to the config for slicer
  */
-export function applyCliOverrides(config: INightWatchConfig, options: ISliceOptions): INightWatchConfig {
+export function applyCliOverrides(
+  config: INightWatchConfig,
+  options: ISliceOptions,
+): INightWatchConfig {
   const overridden = { ...config };
 
   if (options.timeout) {
@@ -82,7 +88,7 @@ export function applyCliOverrides(config: INightWatchConfig, options: ISliceOpti
   }
 
   if (options.provider) {
-    overridden.provider = options.provider as INightWatchConfig["provider"];
+    overridden.provider = options.provider as INightWatchConfig['provider'];
   }
 
   return overridden;
@@ -93,11 +99,11 @@ export function applyCliOverrides(config: INightWatchConfig, options: ISliceOpti
  */
 export function sliceCommand(program: Command): void {
   program
-    .command("slice")
-    .description("Run roadmap slicer to create PRD from next roadmap item")
-    .option("--dry-run", "Show what would be executed without running")
-    .option("--timeout <seconds>", "Override max runtime in seconds for slicer")
-    .option("--provider <string>", "AI provider to use (claude or codex)")
+    .command('slice')
+    .description('Run roadmap slicer to create PRD from next roadmap item')
+    .option('--dry-run', 'Show what would be executed without running')
+    .option('--timeout <seconds>', 'Override max runtime in seconds for slicer')
+    .option('--provider <string>', 'AI provider to use (claude or codex)')
     .action(async (options: ISliceOptions) => {
       // Get the project directory (current working directory)
       const projectDir = process.cwd();
@@ -112,40 +118,45 @@ export function sliceCommand(program: Command): void {
       const envVars = buildEnvVars(config, options);
 
       if (options.dryRun) {
-        header("Dry Run: Roadmap Slicer");
+        header('Dry Run: Roadmap Slicer');
 
         // Configuration section with table
-        header("Configuration");
-        const configTable = createTable({ head: ["Setting", "Value"] });
-        configTable.push(["Provider", config.provider]);
-        configTable.push(["Provider CLI", PROVIDER_COMMANDS[config.provider]]);
-        configTable.push(["PRD Directory", config.prdDir]);
-        configTable.push(["Roadmap Path", config.roadmapScanner.roadmapPath]);
-        configTable.push(["Slicer Max Runtime", `${config.roadmapScanner.slicerMaxRuntime}s (${Math.floor(config.roadmapScanner.slicerMaxRuntime / 60)}min)`]);
-        configTable.push(["Slicer Schedule", config.roadmapScanner.slicerSchedule]);
-        configTable.push(["Scanner Enabled", config.roadmapScanner.enabled ? "Yes" : "No"]);
+        header('Configuration');
+        const configTable = createTable({ head: ['Setting', 'Value'] });
+        configTable.push(['Provider', config.provider]);
+        configTable.push(['Provider CLI', PROVIDER_COMMANDS[config.provider]]);
+        configTable.push(['PRD Directory', config.prdDir]);
+        configTable.push(['Roadmap Path', config.roadmapScanner.roadmapPath]);
+        configTable.push([
+          'Slicer Max Runtime',
+          `${config.roadmapScanner.slicerMaxRuntime}s (${Math.floor(config.roadmapScanner.slicerMaxRuntime / 60)}min)`,
+        ]);
+        configTable.push(['Slicer Schedule', config.roadmapScanner.slicerSchedule]);
+        configTable.push(['Scanner Enabled', config.roadmapScanner.enabled ? 'Yes' : 'No']);
         console.log(configTable.toString());
 
         // Get roadmap status
-        header("Roadmap Status");
+        header('Roadmap Status');
         const roadmapStatus = getRoadmapStatus(projectDir, config);
 
         if (!config.roadmapScanner.enabled) {
-          dim("  Roadmap scanner is disabled");
-        } else if (roadmapStatus.status === "no-roadmap") {
+          dim('  Roadmap scanner is disabled');
+        } else if (roadmapStatus.status === 'no-roadmap') {
           dim(`  ROADMAP.md not found at ${config.roadmapScanner.roadmapPath}`);
         } else {
-          const statusTable = createTable({ head: ["Metric", "Count"] });
-          statusTable.push(["Total Items", roadmapStatus.totalItems]);
-          statusTable.push(["Processed", roadmapStatus.processedItems]);
-          statusTable.push(["Pending", roadmapStatus.pendingItems]);
-          statusTable.push(["Status", roadmapStatus.status]);
+          const statusTable = createTable({ head: ['Metric', 'Count'] });
+          statusTable.push(['Total Items', roadmapStatus.totalItems]);
+          statusTable.push(['Processed', roadmapStatus.processedItems]);
+          statusTable.push(['Pending', roadmapStatus.pendingItems]);
+          statusTable.push(['Status', roadmapStatus.status]);
           console.log(statusTable.toString());
 
           // Show pending items
           if (roadmapStatus.pendingItems > 0) {
-            header("Pending Items");
-            const pendingItems = roadmapStatus.items.filter((item) => !item.processed && !item.checked);
+            header('Pending Items');
+            const pendingItems = roadmapStatus.items.filter(
+              (item) => !item.processed && !item.checked,
+            );
             for (const item of pendingItems.slice(0, 10)) {
               info(`  - ${item.title}`);
               if (item.section) {
@@ -159,20 +170,20 @@ export function sliceCommand(program: Command): void {
         }
 
         // Provider invocation command
-        header("Provider Invocation");
+        header('Provider Invocation');
         const providerCmd = PROVIDER_COMMANDS[config.provider];
-        const autoFlag = config.provider === "claude" ? "--dangerously-skip-permissions" : "--yolo";
+        const autoFlag = config.provider === 'claude' ? '--dangerously-skip-permissions' : '--yolo';
         dim(`  ${providerCmd} ${autoFlag} -p "/night-watch-slicer"`);
 
         // Environment variables
-        header("Environment Variables");
+        header('Environment Variables');
         for (const [key, value] of Object.entries(envVars)) {
           dim(`  ${key}=${value}`);
         }
 
         // Full command that would be executed
-        header("Action");
-        dim("  Would invoke sliceNextItem() to process one roadmap item");
+        header('Action');
+        dim('  Would invoke sliceNextItem() to process one roadmap item');
         console.log();
 
         process.exit(0);
@@ -180,12 +191,14 @@ export function sliceCommand(program: Command): void {
 
       // Check if roadmap scanner is enabled
       if (!config.roadmapScanner.enabled) {
-        uiError("Roadmap scanner is disabled. Enable it in night-watch.config.json to use the slicer.");
+        uiError(
+          'Roadmap scanner is disabled. Enable it in night-watch.config.json to use the slicer.',
+        );
         process.exit(1);
       }
 
       // Execute the slicer with spinner
-      const spinner = createSpinner("Running roadmap slicer...");
+      const spinner = createSpinner('Running roadmap slicer...');
       spinner.start();
 
       try {
@@ -194,31 +207,35 @@ export function sliceCommand(program: Command): void {
         if (result.sliced) {
           spinner.succeed(`Slicer completed successfully: Created ${result.file}`);
         } else if (result.error) {
-          if (result.error === "No pending items to process") {
-            spinner.succeed("No pending items to process");
+          if (result.error === 'No pending items to process') {
+            spinner.succeed('No pending items to process');
           } else {
             spinner.fail(`Slicer failed: ${result.error}`);
           }
         }
 
         // Send notifications (fire-and-forget, failures do not affect exit code)
-        const exitCode = result.sliced ? 0 : (result.error === "No pending items to process" ? 0 : 1);
+        const exitCode = result.sliced ? 0 : result.error === 'No pending items to process' ? 0 : 1;
 
         if (!options.dryRun && result.sliced) {
-          const event: NotificationEvent = "run_succeeded";
+          const event: NotificationEvent = 'run_succeeded';
 
-          await sendNotifications(config, {
+          const _sliceCtx = {
             event,
             projectName: path.basename(projectDir),
             exitCode,
             provider: config.provider,
             prTitle: result.item?.title,
-          });
+          };
+          await Promise.allSettled([
+            sendNotifications(config, _sliceCtx),
+            sendSlackBotNotification(config, _sliceCtx),
+          ]);
         }
 
         process.exit(exitCode);
       } catch (err) {
-        spinner.fail("Failed to execute slice command");
+        spinner.fail('Failed to execute slice command');
         uiError(`${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
       }

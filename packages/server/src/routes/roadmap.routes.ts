@@ -6,11 +6,14 @@ import * as path from 'path';
 
 import { Request, Response, Router } from 'express';
 
-import { loadConfig } from '@night-watch/core/config.js';
-import { INightWatchConfig } from '@night-watch/core/types.js';
-import { getRoadmapStatus, scanRoadmap } from '@night-watch/core/utils/roadmap-scanner.js';
-import { loadRoadmapState } from '@night-watch/core/utils/roadmap-state.js';
-import { saveConfig } from '@night-watch/core/utils/config-writer.js';
+import {
+  INightWatchConfig,
+  getRoadmapStatus,
+  loadConfig,
+  loadRoadmapState,
+  saveConfig,
+  scanRoadmap,
+} from '@night-watch/core';
 
 export interface IRoadmapRoutesDeps {
   projectDir: string;
@@ -34,33 +37,26 @@ export function createRoadmapRoutes(deps: IRoadmapRoutesDeps): Router {
         autoScanInterval: config.roadmapScanner.autoScanInterval,
       });
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
-  router.post(
-    '/scan',
-    async (_req: Request, res: Response): Promise<void> => {
-      try {
-        const config = getConfig();
-        if (!config.roadmapScanner.enabled) {
-          res.status(409).json({ error: 'Roadmap scanner is disabled' });
-          return;
-        }
-
-        const result = await scanRoadmap(projectDir, config);
-        res.json(result);
-      } catch (error) {
-        res
-          .status(500)
-          .json({
-            error: error instanceof Error ? error.message : String(error),
-          });
+  router.post('/scan', async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const config = getConfig();
+      if (!config.roadmapScanner.enabled) {
+        res.status(409).json({ error: 'Roadmap scanner is disabled' });
+        return;
       }
-    },
-  );
+
+      const result = await scanRoadmap(projectDir, config);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
 
   router.put('/toggle', (req: Request, res: Response): void => {
     try {
@@ -87,9 +83,7 @@ export function createRoadmapRoutes(deps: IRoadmapRoutesDeps): Router {
       reloadConfig();
       res.json(getConfig());
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -115,9 +109,7 @@ export function createProjectRoadmapRoutes(): Router {
         autoScanInterval: config.roadmapScanner.autoScanInterval,
       });
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -133,9 +125,7 @@ export function createProjectRoadmapRoutes(): Router {
       const result = await scanRoadmap(projectDir, config);
       res.json(result);
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -165,9 +155,7 @@ export function createProjectRoadmapRoutes(): Router {
 
       res.json(loadConfig(projectDir));
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 

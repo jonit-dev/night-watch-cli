@@ -4,8 +4,7 @@
 
 import { Response } from 'express';
 
-import { INightWatchConfig } from '@night-watch/core/types.js';
-import { fetchStatusSnapshot } from '@night-watch/core/utils/status-data.js';
+import { INightWatchConfig, fetchStatusSnapshot } from '@night-watch/core';
 
 /**
  * SSE client registry type
@@ -15,11 +14,7 @@ export type SseClientSet = Set<Response>;
 /**
  * Broadcast an SSE event to all connected clients.
  */
-export function broadcastSSE(
-  clients: SseClientSet,
-  event: string,
-  data: unknown,
-): void {
+export function broadcastSSE(clients: SseClientSet, event: string, data: unknown): void {
   const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const client of clients) {
     try {

@@ -2,9 +2,7 @@
  * Shared helpers for server route modules.
  */
 
-import { IAgentPersona } from '@night-watch/core/shared/types.js';
-import { createBoardProvider } from '@night-watch/core/board/factory.js';
-import { INightWatchConfig } from '@night-watch/core/types.js';
+import { IAgentPersona, INightWatchConfig, createBoardProvider } from '@night-watch/core';
 
 // ==================== Validation ====================
 
@@ -27,9 +25,7 @@ export function maskPersonaSecrets(persona: IAgentPersona): IAgentPersona {
     ...persona,
     modelConfig: {
       ...modelConfig,
-      envVars: Object.fromEntries(
-        Object.keys(envVars).map((key) => [key, '***']),
-      ),
+      envVars: Object.fromEntries(Object.keys(envVars).map((key) => [key, '***'])),
     },
   };
 }
@@ -64,10 +60,7 @@ export function invalidateBoardCache(projectDir: string): void {
 
 // ==================== Board Provider ====================
 
-export function getBoardProvider(
-  config: INightWatchConfig,
-  projectDir: string,
-) {
+export function getBoardProvider(config: INightWatchConfig, projectDir: string) {
   if (!config.boardProvider?.enabled || !config.boardProvider?.projectNumber) {
     return null;
   }

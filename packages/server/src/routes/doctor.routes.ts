@@ -8,13 +8,13 @@ import { execSync } from 'child_process';
 
 import { Request, Response, Router } from 'express';
 
-import { CONFIG_FILE_NAME } from '@night-watch/core/constants.js';
-import { INightWatchConfig } from '@night-watch/core/types.js';
 import {
+  CONFIG_FILE_NAME,
+  INightWatchConfig,
   generateMarker,
   getEntries,
   getProjectEntries,
-} from '@night-watch/core/utils/crontab.js';
+} from '@night-watch/core';
 
 interface IHealthCheck {
   name: string;
@@ -22,10 +22,7 @@ interface IHealthCheck {
   detail?: string;
 }
 
-function runDoctorChecks(
-  projectDir: string,
-  config: INightWatchConfig,
-): IHealthCheck[] {
+function runDoctorChecks(projectDir: string, config: INightWatchConfig): IHealthCheck[] {
   const checks: IHealthCheck[] = [];
 
   try {
@@ -56,10 +53,7 @@ function runDoctorChecks(
   try {
     const projectName = path.basename(projectDir);
     const marker = generateMarker(projectName);
-    const crontabEntries = [
-      ...getEntries(marker),
-      ...getProjectEntries(projectDir),
-    ];
+    const crontabEntries = [...getEntries(marker), ...getProjectEntries(projectDir)];
     if (crontabEntries.length > 0) {
       checks.push({
         name: 'crontab',
@@ -127,9 +121,7 @@ export function createDoctorRoutes(deps: IDoctorRoutesDeps): Router {
       const checks = runDoctorChecks(projectDir, getConfig());
       res.json(checks);
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
@@ -147,9 +139,7 @@ export function createProjectDoctorRoutes(): Router {
       const checks = runDoctorChecks(req.projectDir!, req.projectConfig!);
       res.json(checks);
     } catch (error) {
-      res
-        .status(500)
-        .json({ error: error instanceof Error ? error.message : String(error) });
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 

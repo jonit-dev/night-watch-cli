@@ -3,12 +3,12 @@
  * View and manage crontab entries for executor and reviewer
  */
 
-import blessed from "blessed";
-import cronstrue from "cronstrue";
-import { performInstall } from "../install.js";
-import { performUninstall } from "../uninstall.js";
-import { saveConfig } from "@night-watch/core/utils/config-writer.js";
-import { ITab, ITabContext } from "./types.js";
+import blessed from 'blessed';
+import cronstrue from 'cronstrue';
+import { performInstall } from '../install.js';
+import { performUninstall } from '../uninstall.js';
+import { saveConfig } from '@night-watch/core';
+import { ITab, ITabContext } from './types.js';
 
 /**
  * Convert a cron schedule to a human-readable description using cronstrue.
@@ -27,15 +27,15 @@ export function cronToHuman(cron: string): string {
  * Common schedule presets for the selector UI
  */
 export const SCHEDULE_PRESETS = [
-  { label: "Every 15 minutes", cron: "*/15 * * * *" },
-  { label: "Every 30 minutes", cron: "*/30 * * * *" },
-  { label: "Hourly", cron: "0 * * * *" },
-  { label: "Every 2 hours", cron: "0 */2 * * *" },
-  { label: "Every 3 hours", cron: "0 */3 * * *" },
-  { label: "Every 6 hours", cron: "0 */6 * * *" },
-  { label: "Hourly 9am-9pm", cron: "0 9-21 * * *" },
-  { label: "Twice daily (9,21)", cron: "0 9,21 * * *" },
-  { label: "Daily at midnight", cron: "0 0 * * *" },
+  { label: 'Every 15 minutes', cron: '*/15 * * * *' },
+  { label: 'Every 30 minutes', cron: '*/30 * * * *' },
+  { label: 'Hourly', cron: '0 * * * *' },
+  { label: 'Every 2 hours', cron: '0 */2 * * *' },
+  { label: 'Every 3 hours', cron: '0 */3 * * *' },
+  { label: 'Every 6 hours', cron: '0 */6 * * *' },
+  { label: 'Hourly 9am-9pm', cron: '0 9-21 * * *' },
+  { label: 'Twice daily (9,21)', cron: '0 9,21 * * *' },
+  { label: 'Daily at midnight', cron: '0 0 * * *' },
 ];
 
 /**
@@ -45,36 +45,36 @@ export function createSchedulesTab(): ITab {
   const container = blessed.box({
     top: 0,
     left: 0,
-    width: "100%",
-    height: "100%",
+    width: '100%',
+    height: '100%',
     hidden: true,
   });
 
   const crontabBox = blessed.box({
     top: 0,
     left: 0,
-    width: "100%",
-    height: "45%",
-    label: "[ Current Crontab Entries ]",
-    border: { type: "line" },
+    width: '100%',
+    height: '45%',
+    label: '[ Current Crontab Entries ]',
+    border: { type: 'line' },
     scrollable: true,
     alwaysScroll: true,
-    scrollbar: { style: { bg: "blue" } },
-    style: { border: { fg: "cyan" } },
+    scrollbar: { style: { bg: 'blue' } },
+    style: { border: { fg: 'cyan' } },
     tags: true,
-    content: "Loading...",
+    content: 'Loading...',
   });
 
   const scheduleBox = blessed.box({
-    top: "45%",
+    top: '45%',
     left: 0,
-    width: "100%",
-    height: "55%",
-    label: "[ Schedule Settings ]",
-    border: { type: "line" },
-    style: { border: { fg: "white" } },
+    width: '100%',
+    height: '55%',
+    label: '[ Schedule Settings ]',
+    border: { type: 'line' },
+    style: { border: { fg: 'white' } },
     tags: true,
-    content: "Loading...",
+    content: 'Loading...',
   });
 
   container.append(crontabBox);
@@ -84,18 +84,18 @@ export function createSchedulesTab(): ITab {
     const { crontab } = ctx.snapshot;
     if (!crontab.installed || crontab.entries.length === 0) {
       crontabBox.setContent(
-        "{yellow-fg}No crontab entries installed{/yellow-fg}\n\n" +
-        "Press {bold}i{/bold} to install cron schedules."
+        '{yellow-fg}No crontab entries installed{/yellow-fg}\n\n' +
+          'Press {bold}i{/bold} to install cron schedules.',
       );
     } else {
       const lines = crontab.entries.map((entry, idx) => {
         // Extract the cron expression (first 5 fields)
         const parts = entry.trim().split(/\s+/);
-        const cronExpr = parts.slice(0, 5).join(" ");
+        const cronExpr = parts.slice(0, 5).join(' ');
         const human = cronToHuman(cronExpr);
         return `{bold}Entry ${idx + 1}:{/bold} ${human}\n{#888888-fg}${entry}{/#888888-fg}`;
       });
-      crontabBox.setContent(lines.join("\n\n"));
+      crontabBox.setContent(lines.join('\n\n'));
     }
   }
 
@@ -107,22 +107,26 @@ export function createSchedulesTab(): ITab {
     const lines = [
       `{bold}Executor Schedule:{/bold}  ${config.cronSchedule}`,
       `  ${executorHuman}`,
-      "",
+      '',
       `{bold}Reviewer Schedule:{/bold}  ${config.reviewerSchedule}`,
       `  ${reviewerHuman}`,
-      "",
-      `{bold}Reviewer Enabled:{/bold}  ${config.reviewerEnabled ? "{green-fg}Yes{/green-fg}" : "{red-fg}No{/red-fg}"}`,
-      "",
-      "{#888888-fg}Keys: e:Edit Executor  v:Edit Reviewer  i:Install  x:Uninstall  R:Reinstall{/#888888-fg}",
+      '',
+      `{bold}Reviewer Enabled:{/bold}  ${config.reviewerEnabled ? '{green-fg}Yes{/green-fg}' : '{red-fg}No{/red-fg}'}`,
+      '',
+      '{#888888-fg}Keys: e:Edit Executor  v:Edit Reviewer  i:Install  x:Uninstall  R:Reinstall{/#888888-fg}',
     ];
 
-    scheduleBox.setContent(lines.join("\n"));
+    scheduleBox.setContent(lines.join('\n'));
   }
 
-  function applySchedule(ctx: ITabContext, field: "cronSchedule" | "reviewerSchedule", cronExpr: string) {
+  function applySchedule(
+    ctx: ITabContext,
+    field: 'cronSchedule' | 'reviewerSchedule',
+    cronExpr: string,
+  ) {
     const result = saveConfig(ctx.projectDir, { [field]: cronExpr });
     if (!result.success) {
-      ctx.showMessage(`Save failed: ${result.error}`, "error");
+      ctx.showMessage(`Save failed: ${result.error}`, 'error');
       return;
     }
     performUninstall(ctx.projectDir, { keepLogs: true });
@@ -130,9 +134,9 @@ export function createSchedulesTab(): ITab {
     const installResult = performInstall(ctx.projectDir, newConfig);
     const human = cronToHuman(cronExpr);
     if (installResult.success) {
-      ctx.showMessage(`Schedule saved: ${human}`, "success");
+      ctx.showMessage(`Schedule saved: ${human}`, 'success');
     } else {
-      ctx.showMessage(`Saved but cron install failed: ${installResult.error}`, "error");
+      ctx.showMessage(`Saved but cron install failed: ${installResult.error}`, 'error');
     }
     ctx.config = newConfig;
     const snap = ctx.refreshSnapshot();
@@ -141,18 +145,22 @@ export function createSchedulesTab(): ITab {
     renderScheduleSettings(ctx);
   }
 
-  function showCustomCronInput(ctx: ITabContext, field: "cronSchedule" | "reviewerSchedule", label: string) {
+  function showCustomCronInput(
+    ctx: ITabContext,
+    field: 'cronSchedule' | 'reviewerSchedule',
+    label: string,
+  ) {
     const currentValue = ctx.config[field];
 
     const inputBox = blessed.textbox({
-      top: "center",
-      left: "center",
-      width: "60%",
+      top: 'center',
+      left: 'center',
+      width: '60%',
       height: 3,
-      border: { type: "line" },
+      border: { type: 'line' },
       label: `[ Custom ${label} ]`,
       tags: true,
-      style: { border: { fg: "cyan" }, fg: "white" },
+      style: { border: { fg: 'cyan' }, fg: 'white' },
       inputOnFocus: true,
     } as blessed.Widgets.TextboxOptions);
 
@@ -161,10 +169,10 @@ export function createSchedulesTab(): ITab {
     inputBox.focus();
     ctx.screen.render();
 
-    inputBox.on("submit", (value: string) => {
+    inputBox.on('submit', (value: string) => {
       const trimmed = value.trim();
       if (trimmed.split(/\s+/).length !== 5) {
-        ctx.showMessage("Invalid cron expression (need 5 fields)", "error");
+        ctx.showMessage('Invalid cron expression (need 5 fields)', 'error');
       } else {
         applySchedule(ctx, field, trimmed);
       }
@@ -173,29 +181,33 @@ export function createSchedulesTab(): ITab {
       ctx.screen.render();
     });
 
-    inputBox.on("cancel", () => {
+    inputBox.on('cancel', () => {
       inputBox.destroy();
       ctx.setEditing(false);
       ctx.screen.render();
     });
   }
 
-  function editSchedule(ctx: ITabContext, field: "cronSchedule" | "reviewerSchedule", label: string) {
+  function editSchedule(
+    ctx: ITabContext,
+    field: 'cronSchedule' | 'reviewerSchedule',
+    label: string,
+  ) {
     const presetItems = SCHEDULE_PRESETS.map((p) => ` ${p.label}  (${p.cron})`);
-    presetItems.push(" Custom...");
+    presetItems.push(' Custom...');
 
     const selectorList = blessed.list({
-      top: "center",
-      left: "center",
+      top: 'center',
+      left: 'center',
       width: 50,
       height: presetItems.length + 2,
-      border: { type: "line" },
+      border: { type: 'line' },
       label: `[ ${label} ]`,
       tags: true,
       style: {
-        border: { fg: "cyan" },
-        selected: { bg: "blue", fg: "white" },
-        item: { fg: "white" },
+        border: { fg: 'cyan' },
+        selected: { bg: 'blue', fg: 'white' },
+        item: { fg: 'white' },
       },
       keys: true,
       vi: false,
@@ -216,7 +228,7 @@ export function createSchedulesTab(): ITab {
     selectorList.focus();
     ctx.screen.render();
 
-    selectorList.on("select", (_item: unknown, index: number) => {
+    selectorList.on('select', (_item: unknown, index: number) => {
       selectorList.destroy();
       if (index === SCHEDULE_PRESETS.length) {
         // "Custom..." selected
@@ -229,7 +241,7 @@ export function createSchedulesTab(): ITab {
       }
     });
 
-    selectorList.key(["escape"], () => {
+    selectorList.key(['escape'], () => {
       selectorList.destroy();
       ctx.setEditing(false);
       ctx.screen.render();
@@ -241,45 +253,54 @@ export function createSchedulesTab(): ITab {
 
   function bindKeys(ctx: ITabContext) {
     const handlers: Array<[string[], (...args: unknown[]) => void]> = [
-      [["e"], () => editSchedule(ctx, "cronSchedule", "Executor Schedule")],
-      [["v"], () => editSchedule(ctx, "reviewerSchedule", "Reviewer Schedule")],
-      [["i"], () => {
-        const result = performInstall(ctx.projectDir, ctx.config);
-        if (result.success) {
-          ctx.showMessage(`Cron installed (${result.entries.length} entries)`, "success");
-        } else {
-          ctx.showMessage(`Install failed: ${result.error}`, "error");
-        }
-        const snap = ctx.refreshSnapshot();
-        ctx.snapshot = snap;
-        renderCrontab(ctx);
-        ctx.screen.render();
-      }],
-      [["x"], () => {
-        const result = performUninstall(ctx.projectDir, { keepLogs: true });
-        if (result.success) {
-          ctx.showMessage(`Removed ${result.removedCount} cron entries`, "success");
-        } else {
-          ctx.showMessage(`Uninstall failed: ${result.error}`, "error");
-        }
-        const snap = ctx.refreshSnapshot();
-        ctx.snapshot = snap;
-        renderCrontab(ctx);
-        ctx.screen.render();
-      }],
-      [["S-r"], () => {
-        performUninstall(ctx.projectDir, { keepLogs: true });
-        const result = performInstall(ctx.projectDir, ctx.config);
-        if (result.success) {
-          ctx.showMessage("Cron reinstalled", "success");
-        } else {
-          ctx.showMessage(`Reinstall failed: ${result.error}`, "error");
-        }
-        const snap = ctx.refreshSnapshot();
-        ctx.snapshot = snap;
-        renderCrontab(ctx);
-        ctx.screen.render();
-      }],
+      [['e'], () => editSchedule(ctx, 'cronSchedule', 'Executor Schedule')],
+      [['v'], () => editSchedule(ctx, 'reviewerSchedule', 'Reviewer Schedule')],
+      [
+        ['i'],
+        () => {
+          const result = performInstall(ctx.projectDir, ctx.config);
+          if (result.success) {
+            ctx.showMessage(`Cron installed (${result.entries.length} entries)`, 'success');
+          } else {
+            ctx.showMessage(`Install failed: ${result.error}`, 'error');
+          }
+          const snap = ctx.refreshSnapshot();
+          ctx.snapshot = snap;
+          renderCrontab(ctx);
+          ctx.screen.render();
+        },
+      ],
+      [
+        ['x'],
+        () => {
+          const result = performUninstall(ctx.projectDir, { keepLogs: true });
+          if (result.success) {
+            ctx.showMessage(`Removed ${result.removedCount} cron entries`, 'success');
+          } else {
+            ctx.showMessage(`Uninstall failed: ${result.error}`, 'error');
+          }
+          const snap = ctx.refreshSnapshot();
+          ctx.snapshot = snap;
+          renderCrontab(ctx);
+          ctx.screen.render();
+        },
+      ],
+      [
+        ['S-r'],
+        () => {
+          performUninstall(ctx.projectDir, { keepLogs: true });
+          const result = performInstall(ctx.projectDir, ctx.config);
+          if (result.success) {
+            ctx.showMessage('Cron reinstalled', 'success');
+          } else {
+            ctx.showMessage(`Reinstall failed: ${result.error}`, 'error');
+          }
+          const snap = ctx.refreshSnapshot();
+          ctx.snapshot = snap;
+          renderCrontab(ctx);
+          ctx.screen.render();
+        },
+      ],
     ];
 
     for (const [keys, handler] of handlers) {
@@ -298,10 +319,10 @@ export function createSchedulesTab(): ITab {
   }
 
   return {
-    name: "Schedules",
+    name: 'Schedules',
     container,
     activate(ctx: ITabContext) {
-      ctx.setFooter(" e:Executor  v:Reviewer  i:Install  x:Uninstall  R:Reinstall  q:Quit");
+      ctx.setFooter(' e:Executor  v:Reviewer  i:Install  x:Uninstall  R:Reinstall  q:Quit');
       renderCrontab(ctx);
       renderScheduleSettings(ctx);
       activeCtx = ctx;

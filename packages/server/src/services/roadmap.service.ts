@@ -7,8 +7,9 @@
 
 import { injectable } from 'tsyringe';
 
-import { INightWatchConfig } from '@night-watch/core/types.js';
 import {
+  INightWatchConfig,
+  IRoadmapItem,
   IRoadmapStatus,
   IScanResult,
   ISliceResult,
@@ -17,8 +18,7 @@ import {
   scanRoadmap,
   sliceNextItem,
   sliceRoadmapItem,
-} from '@night-watch/core/utils/roadmap-scanner.js';
-import { IRoadmapItem } from '@night-watch/core/utils/roadmap-parser.js';
+} from '@night-watch/core';
 
 export type { IRoadmapStatus, IScanResult, ISliceResult };
 
@@ -53,7 +53,7 @@ export class RoadmapService {
     projectDir: string,
     prdDir: string,
     item: IRoadmapItem,
-    config: INightWatchConfig
+    config: INightWatchConfig,
   ): Promise<ISliceResult> {
     return sliceRoadmapItem(projectDir, prdDir, item, config);
   }

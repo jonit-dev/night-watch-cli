@@ -3,8 +3,7 @@
  * Handles Anthropic and OpenAI provider configs with per-persona overrides.
  */
 
-import type { IAgentPersona } from '@night-watch/core/shared/types.js';
-import type { INightWatchConfig } from '@night-watch/core/types.js';
+import type { IAgentPersona, INightWatchConfig } from '@night-watch/core';
 
 export interface IResolvedAIConfig {
   provider: 'anthropic' | 'openai';
@@ -32,7 +31,10 @@ export function resolveGlobalAIConfig(config: INightWatchConfig): IResolvedAICon
     return {
       provider: 'anthropic',
       model: config.claudeModel === 'opus' ? 'claude-opus-4-6' : 'claude-sonnet-4-6',
-      baseUrl: globalEnv.ANTHROPIC_BASE_URL ?? process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com',
+      baseUrl:
+        globalEnv.ANTHROPIC_BASE_URL ??
+        process.env.ANTHROPIC_BASE_URL ??
+        'https://api.anthropic.com',
       envVars: globalEnv,
       maxTokens: 512,
       temperature: 0.8,
@@ -52,7 +54,10 @@ export function resolveGlobalAIConfig(config: INightWatchConfig): IResolvedAICon
 /**
  * Resolve AI configuration for a specific persona, with per-persona overrides.
  */
-export function resolvePersonaAIConfig(persona: IAgentPersona, config: INightWatchConfig): IResolvedAIConfig {
+export function resolvePersonaAIConfig(
+  persona: IAgentPersona,
+  config: INightWatchConfig,
+): IResolvedAIConfig {
   const modelConfig = persona.modelConfig;
   if (!modelConfig) {
     return resolveGlobalAIConfig(config);
@@ -66,8 +71,14 @@ export function resolvePersonaAIConfig(persona: IAgentPersona, config: INightWat
     provider: isAnthropic ? 'anthropic' : 'openai',
     model: modelConfig.model,
     baseUrl: isAnthropic
-      ? modelConfig.baseUrl ?? globalEnv.ANTHROPIC_BASE_URL ?? process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com'
-      : modelConfig.baseUrl ?? globalEnv.OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com',
+      ? (modelConfig.baseUrl ??
+        globalEnv.ANTHROPIC_BASE_URL ??
+        process.env.ANTHROPIC_BASE_URL ??
+        'https://api.anthropic.com')
+      : (modelConfig.baseUrl ??
+        globalEnv.OPENAI_BASE_URL ??
+        process.env.OPENAI_BASE_URL ??
+        'https://api.openai.com'),
     envVars,
     maxTokens: modelConfig.maxTokens ?? 512,
     temperature: modelConfig.temperature ?? 0.8,

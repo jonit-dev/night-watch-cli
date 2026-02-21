@@ -4,10 +4,8 @@
  * as child processes from Slack interactions.
  */
 
-import { IAgentPersona } from '@night-watch/core/shared/types.js';
-import { INightWatchConfig } from '@night-watch/core/types.js';
-import type { IRegistryEntry } from '@night-watch/core/utils/registry.js';
-import { parseScriptResult } from '@night-watch/core/utils/script-result.js';
+import { IAgentPersona, INightWatchConfig, parseScriptResult } from '@night-watch/core';
+import type { IRegistryEntry } from '@night-watch/core';
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';

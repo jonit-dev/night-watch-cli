@@ -2,22 +2,16 @@
  * Retry command — Move a completed PRD back to pending for re-execution.
  */
 
-import { Command } from "commander";
-import * as fs from "fs";
-import * as path from "path";
-import { loadConfig } from "@night-watch/core/config.js";
-import {
-  dim,
-  info,
-  success,
-  error as uiError,
-} from "@night-watch/core/utils/ui.js";
+import { Command } from 'commander';
+import * as fs from 'fs';
+import * as path from 'path';
+import { dim, info, loadConfig, success, error as uiError } from '@night-watch/core';
 
 /**
  * Normalize the PRD name to ensure it has .md extension
  */
 function normalizePrdName(name: string): string {
-  if (!name.endsWith(".md")) {
+  if (!name.endsWith('.md')) {
     return `${name}.md`;
   }
   return name;
@@ -30,7 +24,7 @@ function getDonePrds(doneDir: string): string[] {
   if (!fs.existsSync(doneDir)) {
     return [];
   }
-  return fs.readdirSync(doneDir).filter((f) => f.endsWith(".md"));
+  return fs.readdirSync(doneDir).filter((f) => f.endsWith('.md'));
 }
 
 /**
@@ -38,13 +32,13 @@ function getDonePrds(doneDir: string): string[] {
  */
 export function retryCommand(program: Command): void {
   program
-    .command("retry <prdName>")
-    .description("Move a completed PRD from done/ back to pending")
+    .command('retry <prdName>')
+    .description('Move a completed PRD from done/ back to pending')
     .action((prdName: string) => {
       const projectDir = process.cwd();
       const config = loadConfig(projectDir);
       const prdDir = path.join(projectDir, config.prdDir);
-      const doneDir = path.join(prdDir, "done");
+      const doneDir = path.join(prdDir, 'done');
 
       // Normalize the PRD name
       const normalizedPrdName = normalizePrdName(prdName);
@@ -78,7 +72,7 @@ export function retryCommand(program: Command): void {
           dim(`  - ${prd}`);
         }
       } else {
-        info("No PRDs found in done/ directory.");
+        info('No PRDs found in done/ directory.');
       }
 
       process.exit(1);

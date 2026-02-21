@@ -2,10 +2,16 @@
  * Board tool definitions for AI provider calls.
  */
 
-import type { BoardColumnName } from '@night-watch/core/board/types.js';
-import type { IBoardProviderConfig } from '@night-watch/core/board/types.js';
-import { createBoardProvider } from '@night-watch/core/board/factory.js';
-import { CATEGORY_LABELS, HORIZON_LABELS, PRIORITY_LABELS, isValidCategory, isValidHorizon, isValidPriority } from '@night-watch/core/board/labels.js';
+import {
+  CATEGORY_LABELS,
+  HORIZON_LABELS,
+  PRIORITY_LABELS,
+  createBoardProvider,
+  isValidCategory,
+  isValidHorizon,
+  isValidPriority,
+} from '@night-watch/core';
+import type { BoardColumnName, IBoardProviderConfig } from '@night-watch/core';
 import { execFileSync } from 'child_process';
 
 export interface IAnthropicTool {
@@ -28,16 +34,36 @@ export function buildBoardTools(): IAnthropicTool[] {
   return [
     {
       name: 'open_github_issue',
-      description: 'Create a new GitHub issue on the project board. Always infer and set priority, category, and horizon based on the issue content and context.',
+      description:
+        'Create a new GitHub issue on the project board. Always infer and set priority, category, and horizon based on the issue content and context.',
       input_schema: {
         type: 'object',
         properties: {
           title: { type: 'string', description: 'Short, descriptive issue title.' },
           body: { type: 'string', description: 'Detailed issue description in Markdown.' },
-          column: { type: 'string', enum: columnEnum, description: "Board column to place the issue in. Defaults to 'Ready'." },
-          priority: { type: 'string', enum: [...PRIORITY_LABELS], description: 'Priority label: P0 (Critical), P1 (High), P2 (Normal). Infer from urgency and impact.' },
-          category: { type: 'string', enum: [...CATEGORY_LABELS], description: 'Category label aligned with roadmap theme (e.g. reliability, quality, product, ux, provider, team, platform, intelligence, ecosystem).' },
-          horizon: { type: 'string', enum: [...HORIZON_LABELS], description: 'Delivery horizon: short-term (0-6w), medium-term (6w-4m), long-term (4-12m).' },
+          column: {
+            type: 'string',
+            enum: columnEnum,
+            description: "Board column to place the issue in. Defaults to 'Ready'.",
+          },
+          priority: {
+            type: 'string',
+            enum: [...PRIORITY_LABELS],
+            description:
+              'Priority label: P0 (Critical), P1 (High), P2 (Normal). Infer from urgency and impact.',
+          },
+          category: {
+            type: 'string',
+            enum: [...CATEGORY_LABELS],
+            description:
+              'Category label aligned with roadmap theme (e.g. reliability, quality, product, ux, provider, team, platform, intelligence, ecosystem).',
+          },
+          horizon: {
+            type: 'string',
+            enum: [...HORIZON_LABELS],
+            description:
+              'Delivery horizon: short-term (0-6w), medium-term (6w-4m), long-term (4-12m).',
+          },
         },
         required: ['title', 'body', 'priority', 'category', 'horizon'],
       },

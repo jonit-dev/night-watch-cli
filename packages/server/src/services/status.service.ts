@@ -7,9 +7,9 @@
 
 import { injectable } from 'tsyringe';
 
-import { INightWatchConfig } from '@night-watch/core/types.js';
 import {
   ILogInfo,
+  INightWatchConfig,
   IPrInfo,
   IPrdInfo,
   IProcessInfo,
@@ -31,15 +31,9 @@ import {
   parsePrdDependencies,
   projectRuntimeKey,
   reviewerLockPath,
-} from '@night-watch/core/utils/status-data.js';
+} from '@night-watch/core';
 
-export type {
-  IStatusSnapshot,
-  IPrdInfo,
-  IPrInfo,
-  ILogInfo,
-  IProcessInfo,
-};
+export type { IStatusSnapshot, IPrdInfo, IPrInfo, ILogInfo, IProcessInfo };
 
 @injectable()
 export class StatusService {
@@ -123,21 +117,31 @@ export class StatusService {
   /**
    * Return metadata about a log file.
    */
-  getLogInfo(logPath: string, lastLines?: number): { path: string; lastLines: string[]; exists: boolean; size: number } {
+  getLogInfo(
+    logPath: string,
+    lastLines?: number,
+  ): { path: string; lastLines: string[]; exists: boolean; size: number } {
     return getLogInfo(logPath, lastLines);
   }
 
   /**
    * Get crontab information for a project.
    */
-  getCrontabInfo(projectName: string, projectDir: string): { installed: boolean; entries: string[] } {
+  getCrontabInfo(
+    projectName: string,
+    projectDir: string,
+  ): { installed: boolean; entries: string[] } {
     return getCrontabInfo(projectName, projectDir);
   }
 
   /**
    * Count PRDs by status in the PRD directory.
    */
-  countPRDs(projectDir: string, prdDir: string, maxRuntime: number): { pending: number; claimed: number; done: number } {
+  countPRDs(
+    projectDir: string,
+    prdDir: string,
+    maxRuntime: number,
+  ): { pending: number; claimed: number; done: number } {
     return countPRDs(projectDir, prdDir, maxRuntime);
   }
 

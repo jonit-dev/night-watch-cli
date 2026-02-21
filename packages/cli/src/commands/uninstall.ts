@@ -3,22 +3,20 @@
  * Removes crontab entries for the current project
  */
 
-import { Command } from "commander";
-import * as path from "path";
-import * as fs from "fs";
+import { Command } from 'commander';
+import * as path from 'path';
+import * as fs from 'fs';
 import {
+  dim,
   generateMarker,
   getEntries,
   getProjectEntries,
+  getProjectName,
   removeEntriesForProject,
-} from "@night-watch/core/utils/crontab.js";
-import {
-  dim,
   success,
   error as uiError,
   warn,
-} from "@night-watch/core/utils/ui.js";
-import { getProjectName } from "@night-watch/core/utils/status-data.js";
+} from '@night-watch/core';
 
 export interface IUninstallOptions {
   keepLogs?: boolean;
@@ -36,14 +34,14 @@ export interface IUninstallResult {
  */
 export function performUninstall(
   projectDir: string,
-  options?: { keepLogs?: boolean }
+  options?: { keepLogs?: boolean },
 ): IUninstallResult {
   try {
     const projectName = getProjectName(projectDir);
     const marker = generateMarker(projectName);
 
     const existingEntries = Array.from(
-      new Set([...getEntries(marker), ...getProjectEntries(projectDir)])
+      new Set([...getEntries(marker), ...getProjectEntries(projectDir)]),
     );
     if (existingEntries.length === 0) {
       return { success: true, removedCount: 0 };
@@ -52,9 +50,9 @@ export function performUninstall(
     const removedCount = removeEntriesForProject(projectDir, marker);
 
     if (!options?.keepLogs) {
-      const logDir = path.join(projectDir, "logs");
+      const logDir = path.join(projectDir, 'logs');
       if (fs.existsSync(logDir)) {
-        const logFiles = ["executor.log", "reviewer.log", "slicer.log", "audit.log"];
+        const logFiles = ['executor.log', 'reviewer.log', 'slicer.log', 'audit.log'];
         logFiles.forEach((logFile) => {
           const logPath = path.join(logDir, logFile);
           if (fs.existsSync(logPath)) {
@@ -88,9 +86,9 @@ export function performUninstall(
  */
 export function uninstallCommand(program: Command): void {
   program
-    .command("uninstall")
-    .description("Remove crontab entries")
-    .option("--keep-logs", "Preserve log files")
+    .command('uninstall')
+    .description('Remove crontab entries')
+    .option('--keep-logs', 'Preserve log files')
     .action(async (options: IUninstallOptions) => {
       try {
         // Get project directory
@@ -102,11 +100,11 @@ export function uninstallCommand(program: Command): void {
 
         // Check if there are entries to remove
         const existingEntries = Array.from(
-          new Set([...getEntries(marker), ...getProjectEntries(projectDir)])
+          new Set([...getEntries(marker), ...getProjectEntries(projectDir)]),
         );
         if (existingEntries.length === 0) {
           warn(`No Night Watch crontab entries found for ${projectName}.`);
-          dim("Nothing to uninstall.");
+          dim('Nothing to uninstall.');
           return;
         }
 
@@ -119,9 +117,9 @@ export function uninstallCommand(program: Command): void {
 
         // Handle log files
         if (!options.keepLogs) {
-          const logDir = path.join(projectDir, "logs");
+          const logDir = path.join(projectDir, 'logs');
           if (fs.existsSync(logDir)) {
-            const logFiles = ["executor.log", "reviewer.log", "slicer.log", "audit.log"];
+            const logFiles = ['executor.log', 'reviewer.log', 'slicer.log', 'audit.log'];
             let logsRemoved = 0;
 
             logFiles.forEach((logFile) => {
@@ -149,13 +147,13 @@ export function uninstallCommand(program: Command): void {
           }
         } else {
           console.log();
-          dim("Log files preserved.");
+          dim('Log files preserved.');
         }
 
         success(`Successfully removed ${removedCount} crontab entry/entries.`);
       } catch (err) {
         uiError(
-          `Error uninstalling Night Watch: ${err instanceof Error ? err.message : String(err)}`
+          `Error uninstalling Night Watch: ${err instanceof Error ? err.message : String(err)}`,
         );
         process.exit(1);
       }

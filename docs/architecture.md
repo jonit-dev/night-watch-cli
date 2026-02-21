@@ -2,39 +2,28 @@
 
 ## Overview
 
+Night Watch CLI is a monorepo-based autonomous PRD executor with a Slack integration layer. It uses AI provider CLIs (Claude/Codex) to implement PRD tickets, open pull requests, and fix CI failures. A web UI and REST API provide visibility and control.
+
 ```
-+-------------------------------------------------------------+
-|                     Night Watch CLI                          |
-|  (Node.js wrapper for discoverability, config, distribution) |
-+-------------------------------------------------------------+
-                              |
-                              v
-+-------------------------------------------------------------+
-|                     Bash Scripts                             |
-|  (Battle-tested core logic for PRD execution and review)     |
-|                                                              |
-|  +---------------------+  +--------------------------------+ |
-|  | night-watch-cron.sh |  | night-watch-pr-reviewer-cron.sh | |
-|  |   (PRD Executor)    |  |        (PR Reviewer)            | |
-|  +---------------------+  +--------------------------------+ |
-|              |                          |                     |
-|              +-----------+--------------+                     |
-|                          v                                    |
-|            +-----------------------------+                    |
-|            | night-watch-helpers.sh      |                    |
-|            |   (Shared utilities)        |                    |
-|            +-----------------------------+                    |
-+-------------------------------------------------------------+
-                              |
-                              v
-+-------------------------------------------------------------+
-|                    External Tools                            |
-|                                                              |
-|  +----------------+  +------------+  +------------------+    |
-|  |  Provider CLI  |  | GitHub CLI |  |  Git Worktrees   |    |
-|  | (Claude/Codex) |  |  (PR mgmt) |  |  (Isolation)     |    |
-|  +----------------+  +------------+  +------------------+    |
-+-------------------------------------------------------------+
+packages/
+├── core/     — Domain logic, storage, config, DI container
+├── cli/      — Commander.js entry point; published to npm
+├── server/   — Express REST API + SSE; serves the web UI
+├── slack/    — Slack bot (Socket Mode), deliberation engine
+└── web/      — React + Vite dashboard (built to web/dist/)
+```
+
+---
+
+## Package Dependency Graph
+
+```
+cli ──────────────┐
+                  ▼
+server ───────► core ◄─── slack
+                            ▲
+                            │
+              (slack depends on core; core has no dependency on slack)
 ```
 
 ---
@@ -46,10 +35,11 @@
 3. **Check for open PRs** — Skip PRDs that already have an open PR
 4. **Acquire lock** — Prevent concurrent executions
 5. **Create worktree** — Isolate changes in a git worktree
-6. **Launch Provider CLI** — Execute PRD using provider CLI with slash command
+6. **Launch AI Provider CLI** — Execute PRD using provider CLI with slash command
 7. **Verify PR created** — Check that a PR was opened
 8. **Mark done** — Move PRD to `done/` directory
-9. **Cleanup** — Remove lock files and worktrees
+9. **Send notifications** — Post to webhooks and/or Slack Bot API
+10. **Cleanup** — Remove lock files and worktrees
 
 ---
 
@@ -59,41 +49,67 @@
 2. **Check CI status** — Identify failed checks
 3. **Check review scores** — Find PRs with score < 80/100
 4. **Acquire lock** — Prevent concurrent executions
-5. **Launch Provider CLI** — Execute PR fix using provider CLI with slash command
+5. **Launch AI Provider CLI** — Execute PR fix
 6. **Cleanup** — Remove lock files
 
 ---
 
-## Project Structure
+## Monorepo Structure
 
 ```
 night-watch-cli/
-+-- bin/
-|   +-- night-watch.mjs      # ESM entry point
-+-- src/
-|   +-- cli.ts               # CLI entry
-|   +-- config.ts            # Config loader
-|   +-- types.ts             # TypeScript types
-|   +-- constants.ts         # Default values
-|   +-- commands/            # Command implementations
-|   |   +-- init.ts
-|   |   +-- run.ts
-|   |   +-- review.ts
-|   |   +-- install.ts
-|   |   +-- uninstall.ts
-|   |   +-- status.ts
-|   |   +-- logs.ts
-|   +-- utils/
-|       +-- shell.ts         # Shell execution
-|       +-- crontab.ts       # Crontab management
-+-- scripts/                 # Bundled bash scripts
-|   +-- night-watch-cron.sh
-|   +-- night-watch-pr-reviewer-cron.sh
-|   +-- night-watch-helpers.sh
-+-- templates/               # Template files
-|   +-- night-watch.md
-|   +-- night-watch-pr-reviewer.md
-|   +-- night-watch.config.json
-+-- docs/                    # Documentation
-+-- dist/                    # Compiled output
+├── packages/
+│   ├── core/
+│   │   └── src/
+│   │       ├── agents/           # Soul compiler (persona → system prompt)
+│   │       ├── board/            # Roadmap/ticket management
+│   │       ├── config.ts         # Hierarchical config loader
+│   │       ├── constants.ts      # DEFAULT_*, VALID_* constants
+│   │       ├── di/
+│   │       │   └── container.ts  # tsyringe composition root
+│   │       ├── storage/
+│   │       │   ├── repositories/ # Repository interfaces + SQLite implementations
+│   │       │   └── sqlite/       # DB client + migrations
+│   │       ├── templates/        # PRD/slicer prompt templates
+│   │       ├── types.ts          # Shared TypeScript types
+│   │       └── utils/            # notify, shell, registry, roadmap, etc.
+│   ├── cli/
+│   │   └── src/
+│   │       ├── cli.ts            # Commander.js program setup
+│   │       └── commands/         # init, run, review, qa, serve, board, state…
+│   ├── server/
+│   │   └── src/
+│   │       ├── index.ts          # startServer / startGlobalServer / createApp
+│   │       ├── middleware/       # error-handler, graceful-shutdown, SSE, resolver
+│   │       ├── routes/           # REST API routes (agents, prds, board, slack…)
+│   │       └── services/         # notification.service, etc.
+│   ├── slack/
+│   │   └── src/
+│   │       ├── client.ts         # SlackClient (WebClient wrapper)
+│   │       ├── deliberation.ts   # DeliberationEngine (multi-agent discussions)
+│   │       ├── factory.ts        # createSlackStack()
+│   │       ├── interaction-listener/ # Socket Mode event routing (modular)
+│   │       ├── notify.ts         # sendSlackBotNotification()
+│   │       └── proactive-loop.ts # Proactive message scheduler
+│   └── web/                      # React + Vite SPA (output → web/dist/)
+├── web/                           # Vite build root (dist/ used by server)
+├── docs/                          # Documentation + PRDs
+├── package.json                   # Workspace root (Yarn workspaces)
+└── turbo.json                     # Turbo build pipeline
 ```
+
+---
+
+## Key Design Decisions
+
+| Decision            | Choice                        | Rationale                                         |
+| ------------------- | ----------------------------- | ------------------------------------------------- |
+| CLI framework       | Commander.js                  | Lightweight, well-established                     |
+| Monorepo tooling    | Yarn workspaces + Turbo       | Incremental builds, workspace protocol            |
+| DI container        | tsyringe                      | Decorator-based, TypeScript-native                |
+| Persistence         | SQLite via repository pattern | Structured state, enforced architectural boundary |
+| Scheduling          | System crontab                | No daemon, works on any Unix                      |
+| Isolation           | Git worktrees                 | Parallel execution without polluting main tree    |
+| Concurrency control | PID lock files                | Simple, reliable, auto-cleanup                    |
+| Slack integration   | Socket Mode (WebSocket)       | No inbound HTTP required, works behind NAT        |
+| AI personas         | Soul/Style/Skill compiler     | Composable prompt layers per agent                |

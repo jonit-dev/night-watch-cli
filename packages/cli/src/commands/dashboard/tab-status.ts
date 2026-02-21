@@ -3,20 +3,19 @@
  * Shows the original 4-pane layout: PRD Queue, Processes, Pull Requests, Logs
  */
 
-import blessed from "blessed";
-import { IStatusSnapshot, getLastLogLines } from "@night-watch/core/utils/status-data.js";
-import { saveConfig } from "@night-watch/core/utils/config-writer.js";
-import { ITab, ITabContext } from "./types.js";
-import * as fs from "fs";
+import blessed from 'blessed';
+import { IStatusSnapshot, getLastLogLines, saveConfig } from '@night-watch/core';
+import { ITab, ITabContext } from './types.js';
+import * as fs from 'fs';
 
 /**
  * Sort PRDs by priority order. PRDs in the priority list come first (in that order),
  * remaining PRDs follow alphabetically.
  */
 export function sortPrdsByPriority(
-  prds: IStatusSnapshot["prds"],
-  priority: string[]
-): IStatusSnapshot["prds"] {
+  prds: IStatusSnapshot['prds'],
+  priority: string[],
+): IStatusSnapshot['prds'] {
   if (priority.length === 0) return prds;
 
   const priorityMap = new Map<string, number>();
@@ -35,9 +34,9 @@ export function sortPrdsByPriority(
 /**
  * Render the PRD Queue pane content from snapshot data.
  */
-export function renderPrdPane(prds: IStatusSnapshot["prds"], priority?: string[]): string {
+export function renderPrdPane(prds: IStatusSnapshot['prds'], priority?: string[]): string {
   if (prds.length === 0) {
-    return "No PRD files found";
+    return 'No PRD files found';
   }
 
   const sorted = priority ? sortPrdsByPriority(prds, priority) : prds;
@@ -46,98 +45,91 @@ export function renderPrdPane(prds: IStatusSnapshot["prds"], priority?: string[]
   for (const prd of sorted) {
     let indicator: string;
     switch (prd.status) {
-      case "ready":
-        indicator = "{green-fg}\u25cf{/green-fg}";
+      case 'ready':
+        indicator = '{green-fg}\u25cf{/green-fg}';
         break;
-      case "blocked":
-        indicator = "{yellow-fg}\u25cf{/yellow-fg}";
+      case 'blocked':
+        indicator = '{yellow-fg}\u25cf{/yellow-fg}';
         break;
-      case "in-progress":
-        indicator = "{cyan-fg}\u25cf{/cyan-fg}";
+      case 'in-progress':
+        indicator = '{cyan-fg}\u25cf{/cyan-fg}';
         break;
-      case "pending-review":
-        indicator = "{yellow-fg}\u25cf{/yellow-fg}";
+      case 'pending-review':
+        indicator = '{yellow-fg}\u25cf{/yellow-fg}';
         break;
-      case "done":
-        indicator = "{#888888-fg}\u25cf{/#888888-fg}";
+      case 'done':
+        indicator = '{#888888-fg}\u25cf{/#888888-fg}';
         break;
       default:
-        indicator = "{white-fg}\u25cf{/white-fg}";
+        indicator = '{white-fg}\u25cf{/white-fg}';
     }
 
     let line = `${indicator} ${prd.name}`;
     if (prd.dependencies.length > 0) {
-      line += ` (deps: ${prd.dependencies.join(", ")})`;
+      line += ` (deps: ${prd.dependencies.join(', ')})`;
     }
     lines.push(line);
   }
 
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 /**
  * Render the Process Status pane content from snapshot data.
  */
-export function renderProcessPane(
-  processes: IStatusSnapshot["processes"]
-): string {
+export function renderProcessPane(processes: IStatusSnapshot['processes']): string {
   const lines: string[] = [];
   for (const proc of processes) {
     if (proc.running) {
-      lines.push(
-        `{green-fg}\u25cf{/green-fg} ${proc.name}: Running (PID: ${proc.pid})`
-      );
+      lines.push(`{green-fg}\u25cf{/green-fg} ${proc.name}: Running (PID: ${proc.pid})`);
     } else {
       lines.push(`{white-fg}\u25cb{/white-fg} ${proc.name}: Not running`);
     }
   }
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 /**
  * Render the PR Status pane content from snapshot data.
  */
-export function renderPrPane(prs: IStatusSnapshot["prs"]): string {
+export function renderPrPane(prs: IStatusSnapshot['prs']): string {
   if (prs.length === 0) {
-    return "No matching pull requests";
+    return 'No matching pull requests';
   }
 
   const lines: string[] = [];
   for (const pr of prs) {
     let ciIndicator: string;
     switch (pr.ciStatus) {
-      case "pass":
-        ciIndicator = "{green-fg}\u25cf{/green-fg}";
+      case 'pass':
+        ciIndicator = '{green-fg}\u25cf{/green-fg}';
         break;
-      case "fail":
-        ciIndicator = "{red-fg}\u25cf{/red-fg}";
+      case 'fail':
+        ciIndicator = '{red-fg}\u25cf{/red-fg}';
         break;
-      case "pending":
-        ciIndicator = "{yellow-fg}\u25cf{/yellow-fg}";
+      case 'pending':
+        ciIndicator = '{yellow-fg}\u25cf{/yellow-fg}';
         break;
       default:
-        ciIndicator = "{white-fg}\u25cf{/white-fg}";
+        ciIndicator = '{white-fg}\u25cf{/white-fg}';
         break;
     }
 
-    const reviewLabel = pr.reviewScore !== null ? ` [Review: ${pr.reviewScore}%]` : "";
+    const reviewLabel = pr.reviewScore !== null ? ` [Review: ${pr.reviewScore}%]` : '';
     lines.push(`${ciIndicator} #${pr.number} ${pr.title}${reviewLabel}`);
     lines.push(`    ${pr.branch}`);
   }
-  return lines.join("\n");
+  return lines.join('\n');
 }
 
 /**
  * Render the Log Tail pane content from snapshot data.
  */
-export function renderLogPane(
-  projectDir: string,
-  logs: IStatusSnapshot["logs"]
-): string {
+export function renderLogPane(projectDir: string, logs: IStatusSnapshot['logs']): string {
   const existingLogs = logs.filter((l) => l.exists);
 
   if (existingLogs.length === 0) {
-    return "No log files found";
+    return 'No log files found';
   }
 
   let newestLog = existingLogs[0];
@@ -160,7 +152,7 @@ export function renderLogPane(
     return `${newestLog.name}.log: (empty)`;
   }
 
-  return `--- ${newestLog.name}.log ---\n${lines.join("\n")}`;
+  return `--- ${newestLog.name}.log ---\n${lines.join('\n')}`;
 }
 
 /**
@@ -170,69 +162,69 @@ export function createStatusTab(): ITab {
   const container = blessed.box({
     top: 0,
     left: 0,
-    width: "100%",
-    height: "100%",
+    width: '100%',
+    height: '100%',
     hidden: true,
   });
 
   const prdPane = blessed.box({
     top: 0,
     left: 0,
-    width: "50%",
-    height: "50%",
-    label: "[ PRD Queue ]",
-    border: { type: "line" },
+    width: '50%',
+    height: '50%',
+    label: '[ PRD Queue ]',
+    border: { type: 'line' },
     scrollable: true,
     alwaysScroll: true,
-    scrollbar: { style: { bg: "blue" } },
-    style: { border: { fg: "white" } },
+    scrollbar: { style: { bg: 'blue' } },
+    style: { border: { fg: 'white' } },
     tags: true,
-    content: "Loading...",
+    content: 'Loading...',
   });
 
   const processPane = blessed.box({
     top: 0,
-    left: "50%",
-    width: "50%",
-    height: "50%",
-    label: "[ Processes ]",
-    border: { type: "line" },
+    left: '50%',
+    width: '50%',
+    height: '50%',
+    label: '[ Processes ]',
+    border: { type: 'line' },
     scrollable: true,
     alwaysScroll: true,
-    scrollbar: { style: { bg: "blue" } },
-    style: { border: { fg: "white" } },
+    scrollbar: { style: { bg: 'blue' } },
+    style: { border: { fg: 'white' } },
     tags: true,
-    content: "Loading...",
+    content: 'Loading...',
   });
 
   const prPane = blessed.box({
-    top: "50%",
+    top: '50%',
     left: 0,
-    width: "50%",
-    height: "50%",
-    label: "[ Pull Requests ]",
-    border: { type: "line" },
+    width: '50%',
+    height: '50%',
+    label: '[ Pull Requests ]',
+    border: { type: 'line' },
     scrollable: true,
     alwaysScroll: true,
-    scrollbar: { style: { bg: "blue" } },
-    style: { border: { fg: "white" } },
+    scrollbar: { style: { bg: 'blue' } },
+    style: { border: { fg: 'white' } },
     tags: true,
-    content: "Loading...",
+    content: 'Loading...',
   });
 
   const logPane = blessed.box({
-    top: "50%",
-    left: "50%",
-    width: "50%",
-    height: "50%",
-    label: "[ Logs ]",
-    border: { type: "line" },
+    top: '50%',
+    left: '50%',
+    width: '50%',
+    height: '50%',
+    label: '[ Logs ]',
+    border: { type: 'line' },
     scrollable: true,
     alwaysScroll: true,
-    scrollbar: { style: { bg: "blue" } },
-    style: { border: { fg: "white" } },
+    scrollbar: { style: { bg: 'blue' } },
+    style: { border: { fg: 'white' } },
     tags: true,
-    content: "Loading...",
+    content: 'Loading...',
   });
 
   container.append(prdPane);
@@ -254,10 +246,10 @@ export function createStatusTab(): ITab {
   function updatePaneFocus(screen: blessed.Widgets.Screen) {
     panes.forEach((pane, index) => {
       if (index === focusedPaneIndex) {
-        pane.style.border = { fg: reorderMode && index === 0 ? "yellow" : "cyan" };
+        pane.style.border = { fg: reorderMode && index === 0 ? 'yellow' : 'cyan' };
         pane.focus();
       } else {
-        pane.style.border = { fg: "white" };
+        pane.style.border = { fg: 'white' };
       }
     });
     screen.render();
@@ -274,19 +266,19 @@ export function createStatusTab(): ITab {
 
   function renderReorderList(screen: blessed.Widgets.Screen) {
     const lines = reorderList.map((name, idx) => {
-      const marker = idx === reorderIndex ? "{bold}{cyan-fg}> " : "  ";
-      const end = idx === reorderIndex ? "{/cyan-fg}{/bold}" : "";
+      const marker = idx === reorderIndex ? '{bold}{cyan-fg}> ' : '  ';
+      const end = idx === reorderIndex ? '{/cyan-fg}{/bold}' : '';
       return `${marker}${idx + 1}. ${name}${end}`;
     });
-    prdPane.setContent(lines.join("\n"));
+    prdPane.setContent(lines.join('\n'));
     screen.render();
   }
 
   function enterReorderMode(ctx: ITabContext) {
     // Only reorder non-done PRDs
-    const nonDone = ctx.snapshot.prds.filter((p) => p.status !== "done");
+    const nonDone = ctx.snapshot.prds.filter((p) => p.status !== 'done');
     if (nonDone.length === 0) {
-      ctx.showMessage("No PRDs to reorder", "info");
+      ctx.showMessage('No PRDs to reorder', 'info');
       return;
     }
 
@@ -298,67 +290,71 @@ export function createStatusTab(): ITab {
 
     // Switch focus to PRD pane
     focusedPaneIndex = 0;
-    prdPane.setLabel("[ PRD Queue - Reordering ]");
-    prdPane.style.border = { fg: "yellow" };
+    prdPane.setLabel('[ PRD Queue - Reordering ]');
+    prdPane.style.border = { fg: 'yellow' };
 
     ctx.setEditing(true);
-    ctx.setFooter(" \u2191\u2193:Navigate  K:Move Up  J:Move Down  Enter:Save  Esc:Cancel");
+    ctx.setFooter(' \u2191\u2193:Navigate  K:Move Up  J:Move Down  Enter:Save  Esc:Cancel');
 
     renderReorderList(ctx.screen);
 
     const handlers: Array<{ key: string[]; handler: () => void }> = [
       {
-        key: ["up"],
+        key: ['up'],
         handler: () => {
           if (reorderIndex > 0) reorderIndex--;
           renderReorderList(ctx.screen);
         },
       },
       {
-        key: ["down"],
+        key: ['down'],
         handler: () => {
           if (reorderIndex < reorderList.length - 1) reorderIndex++;
           renderReorderList(ctx.screen);
         },
       },
       {
-        key: ["S-k"],
+        key: ['S-k'],
         handler: () => {
           if (reorderIndex > 0) {
-            [reorderList[reorderIndex - 1], reorderList[reorderIndex]] =
-              [reorderList[reorderIndex], reorderList[reorderIndex - 1]];
+            [reorderList[reorderIndex - 1], reorderList[reorderIndex]] = [
+              reorderList[reorderIndex],
+              reorderList[reorderIndex - 1],
+            ];
             reorderIndex--;
             renderReorderList(ctx.screen);
           }
         },
       },
       {
-        key: ["S-j"],
+        key: ['S-j'],
         handler: () => {
           if (reorderIndex < reorderList.length - 1) {
-            [reorderList[reorderIndex], reorderList[reorderIndex + 1]] =
-              [reorderList[reorderIndex + 1], reorderList[reorderIndex]];
+            [reorderList[reorderIndex], reorderList[reorderIndex + 1]] = [
+              reorderList[reorderIndex + 1],
+              reorderList[reorderIndex],
+            ];
             reorderIndex++;
             renderReorderList(ctx.screen);
           }
         },
       },
       {
-        key: ["enter"],
+        key: ['enter'],
         handler: () => {
           // Save priority to config
           const result = saveConfig(ctx.projectDir, { prdPriority: reorderList });
           if (result.success) {
             ctx.config = ctx.reloadConfig();
-            ctx.showMessage("PRD priority saved", "success");
+            ctx.showMessage('PRD priority saved', 'success');
           } else {
-            ctx.showMessage(`Save failed: ${result.error}`, "error");
+            ctx.showMessage(`Save failed: ${result.error}`, 'error');
           }
           exitReorderMode(ctx);
         },
       },
       {
-        key: ["escape"],
+        key: ['escape'],
         handler: () => {
           exitReorderMode(ctx);
         },
@@ -383,44 +379,44 @@ export function createStatusTab(): ITab {
     }
     reorderKeyHandlers = [];
 
-    prdPane.setLabel("[ PRD Queue ]");
-    ctx.setFooter(" Tab:Focus  \u2191\u2193:Scroll  p:Priority  r:Refresh  q:Quit");
+    prdPane.setLabel('[ PRD Queue ]');
+    ctx.setFooter(' Tab:Focus  \u2191\u2193:Scroll  p:Priority  r:Refresh  q:Quit');
     renderPanes(ctx);
     updatePaneFocus(ctx.screen);
   }
 
   return {
-    name: "Status",
+    name: 'Status',
     container,
     activate(ctx: ITabContext) {
-      ctx.setFooter(" Tab:Focus  \u2191\u2193:Scroll  p:Priority  r:Refresh  q:Quit");
+      ctx.setFooter(' Tab:Focus  \u2191\u2193:Scroll  p:Priority  r:Refresh  q:Quit');
       renderPanes(ctx);
       updatePaneFocus(ctx.screen);
 
       keyHandlers = [
         {
-          key: ["tab"],
+          key: ['tab'],
           handler: () => {
             focusedPaneIndex = (focusedPaneIndex + 1) % panes.length;
             updatePaneFocus(ctx.screen);
           },
         },
         {
-          key: ["up"],
+          key: ['up'],
           handler: () => {
             panes[focusedPaneIndex].scroll(-1);
             ctx.screen.render();
           },
         },
         {
-          key: ["down"],
+          key: ['down'],
           handler: () => {
             panes[focusedPaneIndex].scroll(1);
             ctx.screen.render();
           },
         },
         {
-          key: ["p"],
+          key: ['p'],
           handler: () => {
             if (!reorderMode && focusedPaneIndex === 0) {
               enterReorderMode(ctx);

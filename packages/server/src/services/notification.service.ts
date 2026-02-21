@@ -9,11 +9,10 @@
 
 import { injectable } from 'tsyringe';
 
-import { INightWatchConfig } from '@night-watch/core/types.js';
 import {
+  INightWatchConfig,
   INotificationContext,
   buildDescription,
-  buildNotificationText,
   formatDiscordPayload,
   formatSlackPayload,
   formatTelegramPayload,
@@ -22,7 +21,8 @@ import {
   getEventTitle,
   sendNotifications,
   sendWebhook,
-} from '@night-watch/core/utils/notify.js';
+} from '@night-watch/core';
+import { buildNotificationText, sendSlackBotNotification } from '@night-watch/slack/notify.js';
 
 export type { INotificationContext };
 
@@ -33,7 +33,10 @@ export class NotificationService {
    * Delegates to the battle-tested sendNotifications() function in utils/notify.ts.
    */
   async send(config: INightWatchConfig, ctx: INotificationContext): Promise<void> {
-    return sendNotifications(config, ctx);
+    await Promise.allSettled([
+      sendNotifications(config, ctx),
+      sendSlackBotNotification(config, ctx),
+    ]);
   }
 
   /**
@@ -98,7 +101,7 @@ export class NotificationService {
    */
   async sendWebhook(
     webhook: INightWatchConfig['notifications']['webhooks'][number],
-    ctx: INotificationContext
+    ctx: INotificationContext,
   ): Promise<void> {
     return sendWebhook(webhook, ctx);
   }

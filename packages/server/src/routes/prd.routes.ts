@@ -5,7 +5,7 @@
 
 import { Request, Response, Router } from 'express';
 
-import { INightWatchConfig } from '@night-watch/core/types.js';
+import { INightWatchConfig } from '@night-watch/core';
 
 export interface IPrdRoutesDeps {
   projectDir: string;

@@ -3,11 +3,17 @@
  * Lists matching PRs with their CI status and review scores
  */
 
-import { Command } from "commander";
-import chalk from "chalk";
-import { loadConfig } from "@night-watch/core/config.js";
-import { IPrInfo, collectPrInfo } from "@night-watch/core/utils/status-data.js";
-import { createTable, dim, header, info } from "@night-watch/core/utils/ui.js";
+import { Command } from 'commander';
+import chalk from 'chalk';
+import {
+  IPrInfo,
+  collectPrInfo,
+  createTable,
+  dim,
+  header,
+  info,
+  loadConfig,
+} from '@night-watch/core';
 
 export interface IPrsOptions {
   json?: boolean;
@@ -17,16 +23,16 @@ export interface IPrsOptions {
 /**
  * Format CI status with color coding
  */
-function formatCiStatus(status: IPrInfo["ciStatus"]): string {
+function formatCiStatus(status: IPrInfo['ciStatus']): string {
   switch (status) {
-    case "pass":
-      return chalk.green("pass");
-    case "fail":
-      return chalk.red("fail");
-    case "pending":
-      return chalk.yellow("pending");
+    case 'pass':
+      return chalk.green('pass');
+    case 'fail':
+      return chalk.red('fail');
+    case 'pending':
+      return chalk.yellow('pending');
     default:
-      return chalk.dim("unknown");
+      return chalk.dim('unknown');
   }
 }
 
@@ -35,7 +41,7 @@ function formatCiStatus(status: IPrInfo["ciStatus"]): string {
  */
 function formatReviewScore(score: number | null): string {
   if (score === null) {
-    return chalk.dim("-");
+    return chalk.dim('-');
   }
   if (score >= 80) {
     return chalk.green(String(score));
@@ -59,15 +65,15 @@ interface IPrsJsonOutput {
  */
 export function prsCommand(program: Command): void {
   program
-    .command("prs")
-    .description("List matching PRs with CI status and review scores")
-    .option("--json", "Output PRs as JSON")
-    .option("--debug", "Enable debug logging for CI status and review score derivation")
+    .command('prs')
+    .description('List matching PRs with CI status and review scores')
+    .option('--json', 'Output PRs as JSON')
+    .option('--debug', 'Enable debug logging for CI status and review score derivation')
     .action(async (options: IPrsOptions) => {
       try {
         // Enable debug mode via environment variable
         if (options.debug) {
-          process.env.DEBUG_PR_DATA = "1";
+          process.env.DEBUG_PR_DATA = '1';
         }
 
         const projectDir = process.cwd();
@@ -86,13 +92,13 @@ export function prsCommand(program: Command): void {
 
         // Print header
         console.log();
-        console.log(chalk.bold.cyan("Night Watch PRs"));
-        console.log(chalk.dim("-".repeat(40)));
+        console.log(chalk.bold.cyan('Night Watch PRs'));
+        console.log(chalk.dim('-'.repeat(40)));
         console.log();
 
         if (prs.length === 0) {
-          info("No open PRs matching configured branch patterns found.");
-          dim(`Branch patterns: ${config.branchPatterns.join(", ")}`);
+          info('No open PRs matching configured branch patterns found.');
+          dim(`Branch patterns: ${config.branchPatterns.join(', ')}`);
           console.log();
           return;
         }
@@ -101,15 +107,15 @@ export function prsCommand(program: Command): void {
 
         // Create and populate table
         const table = createTable({
-          head: ["#", "Title", "Branch", "CI", "Score", "URL"],
+          head: ['#', 'Title', 'Branch', 'CI', 'Score', 'URL'],
           colWidths: [6, 30, 25, 10, 8, 50],
         });
 
         for (const pr of prs) {
           // Truncate title if too long
-          const title = pr.title.length > 27 ? pr.title.substring(0, 24) + "..." : pr.title;
+          const title = pr.title.length > 27 ? pr.title.substring(0, 24) + '...' : pr.title;
           // Truncate branch if too long
-          const branch = pr.branch.length > 22 ? pr.branch.substring(0, 19) + "..." : pr.branch;
+          const branch = pr.branch.length > 22 ? pr.branch.substring(0, 19) + '...' : pr.branch;
 
           table.push([
             String(pr.number),
@@ -125,7 +131,7 @@ export function prsCommand(program: Command): void {
         console.log();
       } catch (error) {
         console.error(
-          `Error listing PRs: ${error instanceof Error ? error.message : String(error)}`
+          `Error listing PRs: ${error instanceof Error ? error.message : String(error)}`,
         );
         process.exit(1);
       }
