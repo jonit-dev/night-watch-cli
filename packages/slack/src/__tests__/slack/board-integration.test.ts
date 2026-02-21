@@ -606,7 +606,7 @@ describe('BoardIntegration', () => {
           number: 42,
           title: 'fix: unhandled error in auth flow',
           url: 'https://github.com/org/repo/issues/42',
-          column: 'Ready',
+          column: 'Draft',
         }),
       };
 
@@ -616,6 +616,7 @@ describe('BoardIntegration', () => {
       vi.mocked(findDev).mockReturnValue(dev);
       vi.mocked(callAIForContribution)
         .mockResolvedValueOnce('FILE: found unhandled error in auth flow')
+        .mockResolvedValueOnce('fix: unhandled error in auth flow') // title generation
         .mockResolvedValueOnce('## Issue body');
       vi.mocked(loadConfig).mockReturnValue({
         boardProvider: boardConfig,
@@ -629,21 +630,21 @@ describe('BoardIntegration', () => {
       expect(mockProvider.createIssue).toHaveBeenCalledWith({
         title: expect.stringContaining('unhandled error in auth flow'),
         body: '## Issue body',
-        column: 'Ready',
+        column: 'Draft',
       });
       expect(slackClient.postAsAgent).toHaveBeenCalledOnce();
       const call = vi.mocked(slackClient.postAsAgent).mock.calls[0];
       expect(call[1]).toContain('https://github.com/org/repo/issues/42');
     });
 
-    it('generates proper issue title from audit triage output', async () => {
+    it('generates proper issue title from audit triage output using LLM', async () => {
       const dev = buildPersona();
       const boardConfig = { enabled: true, projectNumber: 5 } as unknown as IBoardProviderConfig;
       const mockProvider = {
         createIssue: vi.fn().mockResolvedValue({
           number: 42,
           url: 'https://github.com/org/repo/issues/42',
-          column: 'Ready',
+          column: 'Draft',
         }),
       };
 
@@ -653,6 +654,7 @@ describe('BoardIntegration', () => {
       vi.mocked(findDev).mockReturnValue(dev);
       vi.mocked(callAIForContribution)
         .mockResolvedValueOnce('FILE: Found hardcoded credentials in config file.')
+        .mockResolvedValueOnce('remove hardcoded credentials from config file') // LLM title
         .mockResolvedValueOnce('## Issue body');
       vi.mocked(loadConfig).mockReturnValue({
         boardProvider: boardConfig,
@@ -664,20 +666,20 @@ describe('BoardIntegration', () => {
       await board.handleAuditReport('Issues found.', 'proj', '/proj', 'C01');
 
       expect(mockProvider.createIssue).toHaveBeenCalledWith({
-        title: 'fix: hardcoded credentials in config file',
+        title: 'fix: remove hardcoded credentials from config file',
         body: '## Issue body',
-        column: 'Ready',
+        column: 'Draft',
       });
     });
 
-    it('removes filler words from issue title', async () => {
+    it('LLM title generation prompt contains the triage one-liner', async () => {
       const dev = buildPersona();
       const boardConfig = { enabled: true, projectNumber: 5 } as unknown as IBoardProviderConfig;
       const mockProvider = {
         createIssue: vi.fn().mockResolvedValue({
           number: 42,
           url: 'https://github.com/org/repo/issues/42',
-          column: 'Ready',
+          column: 'Draft',
         }),
       };
 
@@ -687,6 +689,7 @@ describe('BoardIntegration', () => {
       vi.mocked(findDev).mockReturnValue(dev);
       vi.mocked(callAIForContribution)
         .mockResolvedValueOnce('FILE: Flagging potential memory leak in cache.')
+        .mockResolvedValueOnce('fix memory leak in cache layer') // LLM title
         .mockResolvedValueOnce('## Issue body');
       vi.mocked(loadConfig).mockReturnValue({
         boardProvider: boardConfig,
@@ -697,10 +700,14 @@ describe('BoardIntegration', () => {
 
       await board.handleAuditReport('Issues found.', 'proj', '/proj', 'C01');
 
+      // Second callAIForContribution call is the title prompt
+      const titlePromptCall = vi.mocked(callAIForContribution).mock.calls[1];
+      expect(titlePromptCall[2]).toContain('Flagging potential memory leak in cache.');
+      expect(titlePromptCall[2]).toContain('imperative-mood');
       expect(mockProvider.createIssue).toHaveBeenCalledWith({
-        title: 'fix: potential memory leak in cache',
+        title: 'fix: fix memory leak in cache layer',
         body: '## Issue body',
-        column: 'Ready',
+        column: 'Draft',
       });
     });
 
@@ -711,7 +718,7 @@ describe('BoardIntegration', () => {
         createIssue: vi.fn().mockResolvedValue({
           number: 42,
           url: 'https://github.com/org/repo/issues/42',
-          column: 'Ready',
+          column: 'Draft',
         }),
       };
 
@@ -722,6 +729,7 @@ describe('BoardIntegration', () => {
       const longSentence = 'a'.repeat(100);
       vi.mocked(callAIForContribution)
         .mockResolvedValueOnce(`FILE: ${longSentence}`)
+        .mockResolvedValueOnce(longSentence) // LLM returns a long title
         .mockResolvedValueOnce('## Issue body');
       vi.mocked(loadConfig).mockReturnValue({
         boardProvider: boardConfig,
@@ -733,7 +741,7 @@ describe('BoardIntegration', () => {
       await board.handleAuditReport('Issues found.', 'proj', '/proj', 'C01');
 
       const titleArg = mockProvider.createIssue.mock.calls[0][0].title;
-      // Title is "fix: " + up to 80 chars of the one-liner = max 85 chars
+      // Title is "fix: " + up to 80 chars of the LLM-generated title = max 85 chars
       expect(titleArg.length).toBeLessThanOrEqual(85);
       expect(titleArg).toMatch(/^fix: /);
       // The content part after "fix: " should be max 80 chars
@@ -747,7 +755,7 @@ describe('BoardIntegration', () => {
         createIssue: vi.fn().mockResolvedValue({
           number: 42,
           url: 'https://github.com/org/repo/issues/42',
-          column: 'Ready',
+          column: 'Draft',
         }),
       };
 
@@ -757,6 +765,7 @@ describe('BoardIntegration', () => {
       vi.mocked(findDev).mockReturnValue(dev);
       vi.mocked(callAIForContribution)
         .mockResolvedValueOnce('FILE: issue found')
+        .mockResolvedValueOnce('fix issue in auth handler') // LLM title
         .mockRejectedValueOnce(new Error('Body generation failed'));
       vi.mocked(loadConfig).mockReturnValue({
         boardProvider: boardConfig,
@@ -775,7 +784,7 @@ describe('BoardIntegration', () => {
       expect(mockProvider.createIssue).toHaveBeenCalledWith({
         title: expect.any(String),
         body: 'Detailed audit report with findings here.',
-        column: 'Ready',
+        column: 'Draft',
       });
     });
 
@@ -792,6 +801,7 @@ describe('BoardIntegration', () => {
       vi.mocked(findDev).mockReturnValue(dev);
       vi.mocked(callAIForContribution)
         .mockResolvedValueOnce('FILE: issue found')
+        .mockResolvedValueOnce('fix issue in handler') // LLM title
         .mockResolvedValueOnce('## Issue body');
       vi.mocked(loadConfig).mockReturnValue({
         boardProvider: boardConfig,
@@ -823,6 +833,7 @@ describe('BoardIntegration', () => {
       vi.mocked(findDev).mockReturnValue(dev);
       vi.mocked(callAIForContribution)
         .mockResolvedValueOnce('FILE: Found security vulnerability')
+        .mockResolvedValueOnce('fix security vulnerability in auth') // LLM title
         .mockResolvedValueOnce('## Issue body');
       vi.mocked(loadConfig).mockReturnValue({
         boardProvider: boardConfig,
@@ -915,7 +926,7 @@ describe('BoardIntegration', () => {
           number: 42,
           title: 'fix: unused export',
           url: 'https://github.com/org/repo/issues/42',
-          column: 'In Progress',
+          column: 'Draft',
         }),
         moveIssue: vi.fn().mockResolvedValue(undefined),
       };
@@ -942,15 +953,15 @@ describe('BoardIntegration', () => {
       });
 
       expect(mockProvider.createIssue).toHaveBeenCalledWith(
-        expect.objectContaining({ column: 'In Progress' }),
+        expect.objectContaining({ column: 'Draft' }),
       );
       const calls = vi.mocked(slackClient.postAsAgent).mock.calls;
       const lastCall = calls[calls.length - 1];
       expect(lastCall[1]).toContain('Opened #42');
-      expect(lastCall[1]).toContain('In Progress');
+      expect(lastCall[1]).toContain('Draft');
     });
 
-    it('moves issue to In Progress when createIssue returns different column', async () => {
+    it('moves issue to Draft when createIssue returns different column', async () => {
       const dev = buildPersona();
       const boardConfig = { enabled: true, projectNumber: 5 } as unknown as IBoardProviderConfig;
       const mockProvider = {
@@ -984,7 +995,7 @@ describe('BoardIntegration', () => {
         context: 'Signal: something\nLocation: src/file.ts',
       });
 
-      expect(mockProvider.moveIssue).toHaveBeenCalledWith(42, 'In Progress');
+      expect(mockProvider.moveIssue).toHaveBeenCalledWith(42, 'Draft');
     });
 
     it('handles board createIssue failure gracefully by posting truncated body', async () => {
@@ -1001,7 +1012,7 @@ describe('BoardIntegration', () => {
       } as unknown as ReturnType<typeof getRepositories>);
       vi.mocked(findDev).mockReturnValue(dev);
       vi.mocked(callAIForContribution).mockResolvedValue(
-        '## Context\n...\n\n## Full issue body that should be truncated\n' + 'x'.repeat(700),
+        '## Context\n...\n\n## Full issue body that should be truncated\n' + 'x'.repeat(1300),
       );
       vi.mocked(loadConfig).mockReturnValue({
         boardProvider: boardConfig,
@@ -1021,12 +1032,12 @@ describe('BoardIntegration', () => {
       const errorCall = calls.find((c) => c[1]?.includes('configured'));
       expect(errorCall).toBeDefined();
       expect(errorCall![1]).toContain("Here's the writeup:");
-      // The body part should be truncated - the original is 700+ chars but we should only see 600
+      // The body part should be truncated - the original is 1300+ chars but we should only see 1200
       const bodyPart = errorCall![1].split("Here's the writeup:\n\n")[1];
-      // Verify truncation: body part should be max 600 chars (actual implementation uses body.slice(0, 600))
-      expect(bodyPart.length).toBeLessThanOrEqual(600);
-      // And importantly, it shouldn't contain all 700 'x' characters from the original body
-      expect(bodyPart).not.toContain('x'.repeat(600)); // if it had all 700, it would have 600+ in a row
+      // Verify truncation: body part should be max 1200 chars (implementation uses body.slice(0, 1200))
+      expect(bodyPart.length).toBeLessThanOrEqual(1200);
+      // And importantly, it shouldn't contain all 1300 'x' characters from the original body
+      expect(bodyPart).not.toContain('x'.repeat(1200)); // if it had all 1300, it would have 1200+ in a row
     });
 
     it('posts writeup when no board is configured', async () => {
@@ -1055,6 +1066,38 @@ describe('BoardIntegration', () => {
       expect(bodyCall![1]).toContain('## Issue body here.');
     });
 
+    it('should use longer body preview (1200 chars) when no board configured', async () => {
+      const dev = buildPersona();
+      vi.mocked(getRepositories).mockReturnValue({
+        ...buildRepos(),
+        slackDiscussion: { getById: vi.fn().mockReturnValue(buildDiscussion()) },
+        agentPersona: { getActive: vi.fn().mockReturnValue([dev]) },
+      } as unknown as ReturnType<typeof getRepositories>);
+      vi.mocked(findDev).mockReturnValue(dev);
+      // AI generates a body longer than 1200 chars
+      const longBody = 'x'.repeat(1500);
+      vi.mocked(callAIForContribution).mockResolvedValue(longBody);
+      vi.mocked(loadConfig).mockReturnValue({
+        boardProvider: undefined,
+      } as unknown as INightWatchConfig);
+
+      await board.triggerIssueOpener('disc-1', {
+        type: 'code_watch',
+        projectPath: '/projects/my-project',
+        ref: 'ref-abc',
+        context: 'Signal: issue\nLocation: src/file.ts',
+      });
+
+      const calls = vi.mocked(slackClient.postAsAgent).mock.calls;
+      const bodyCall = calls.find((c) => c[1]?.includes('No board configured'));
+      expect(bodyCall).toBeDefined();
+      const bodyPart = bodyCall![1].split('here:\n\n')[1];
+      // Should contain up to 1200 chars, not more
+      expect(bodyPart.length).toBeLessThanOrEqual(1200);
+      // Should not contain 1500 x's (confirms truncation at 1200)
+      expect(bodyPart).not.toContain('x'.repeat(1201));
+    });
+
     it('uses buildIssueTitleFromTrigger for issue title', async () => {
       const dev = buildPersona();
       const boardConfig = { enabled: true, projectNumber: 5 } as unknown as IBoardProviderConfig;
@@ -1062,7 +1105,7 @@ describe('BoardIntegration', () => {
         createIssue: vi.fn().mockResolvedValue({
           number: 42,
           url: 'https://github.com/org/repo/issues/42',
-          column: 'In Progress',
+          column: 'Draft',
         }),
       };
 

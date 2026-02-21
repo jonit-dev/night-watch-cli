@@ -37,7 +37,7 @@ export function resolveGlobalAIConfig(config: INightWatchConfig): IResolvedAICon
         process.env.ANTHROPIC_BASE_URL ??
         'https://api.anthropic.com',
       envVars: globalEnv,
-      maxTokens: 512,
+      maxTokens: 1024,
       temperature: 0.8,
     };
   }
@@ -47,7 +47,7 @@ export function resolveGlobalAIConfig(config: INightWatchConfig): IResolvedAICon
     model: globalEnv.OPENAI_MODEL ?? process.env.OPENAI_MODEL ?? 'gpt-4o',
     baseUrl: globalEnv.OPENAI_BASE_URL ?? process.env.OPENAI_BASE_URL ?? 'https://api.openai.com',
     envVars: globalEnv,
-    maxTokens: 512,
+    maxTokens: 1024,
     temperature: 0.8,
   };
 }
@@ -81,7 +81,7 @@ export function resolvePersonaAIConfig(
         process.env.OPENAI_BASE_URL ??
         'https://api.openai.com'),
     envVars,
-    maxTokens: modelConfig.maxTokens ?? 512,
+    maxTokens: modelConfig.maxTokens ?? 1024,
     temperature: modelConfig.temperature ?? 0.8,
   };
 }

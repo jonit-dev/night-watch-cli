@@ -152,6 +152,23 @@ describe('buildReflectionPrompt', () => {
     expect(prompt).toContain('- ');
     expect(prompt).toContain('bullet');
   });
+
+  it('should include category format in reflection prompt', () => {
+    const persona = buildPersona();
+    const context = buildContext();
+    const prompt = buildReflectionPrompt(persona, context);
+
+    expect(prompt).toContain('[CATEGORY]');
+  });
+
+  it('should include good/bad examples in reflection prompt', () => {
+    const persona = buildPersona();
+    const context = buildContext();
+    const prompt = buildReflectionPrompt(persona, context);
+
+    expect(prompt).toContain('GOOD lessons');
+    expect(prompt).toContain('BAD lessons');
+  });
 });
 
 describe('buildCompactionPrompt', () => {
@@ -168,8 +185,8 @@ describe('buildCompactionPrompt', () => {
     const persona = buildPersona({ name: 'Bob' });
     const prompt = buildCompactionPrompt(persona, 'some memory');
 
-    // COMPACTION_TARGET_LINES = 50, so maxBullets = 25
-    expect(prompt).toContain('25');
+    // COMPACTION_TARGET_LINES = 60, so maxBullets = 30
+    expect(prompt).toContain('30');
   });
 
   it('should instruct to respond only with a bullet list and no preamble', () => {
@@ -179,5 +196,12 @@ describe('buildCompactionPrompt', () => {
     expect(prompt).toContain('bullet');
     expect(prompt).toContain('no preamble');
     expect(prompt).toContain('no headers');
+  });
+
+  it('should instruct compaction to preserve refs', () => {
+    const persona = buildPersona({ name: 'Priya' });
+    const prompt = buildCompactionPrompt(persona, 'memory content');
+
+    expect(prompt).toContain('ref: path#L42');
   });
 });

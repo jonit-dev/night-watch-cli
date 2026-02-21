@@ -645,8 +645,8 @@ export class DeliberationEngine {
     }
 
     const codebaseGuidance = useTools
-      ? `- You have a query_codebase tool. Before pointing at any file or making a code claim, call it and read the actual output. Then drop the specific line or snippet directly into your message — like a teammate who pulled it up in their editor, not a bot filing a report. Short inline backtick or a 2-3 line block is fine.\n`
-      : `- If you make a specific code claim, back it up with a snippet from context. If you don't have it, ask for it.\n`;
+      ? `- You have a query_codebase tool. Before making any code claim, call it first. Then cite what you found using GitHub permalink format: \`path/to/file.ts#L42-L45\` with an inline snippet. Like a teammate who pulled it up in their editor.\n`
+      : `- When referencing code, always include the file path: \`path/to/file.ts#L42-L45\`. No vague "in the auth module" — name the file.\n`;
 
     const prompt =
       `You are ${persona.name}, ${persona.role}.\n` +
@@ -782,7 +782,8 @@ export class DeliberationEngine {
       `- No markdown, headings, bullets. Just a message.\n` +
       `- No "Great question", "Just checking in", or "Hope everyone is doing well."\n` +
       `- Emojis: one max, only if natural. Default to none.\n` +
-      `- Do not make up specific PR numbers, issue numbers, or URLs. If you don't have a concrete reference from context, speak in general terms.\n` +
+      `- If you don't have an exact PR/issue number, describe the pattern or location instead. "The retry logic in the queue worker has no backoff" is better than "we should think about resilience."\n` +
+      `- When you reference code, use path format: \`path/to/file.ts#L42-L45\`.\n` +
       `- Your memory (in your system prompt) records what you've previously raised. Do NOT repeat a topic you already flagged — pick something fresh and different.\n` +
       `- If you genuinely have nothing useful to say, write exactly: SKIP\n\n` +
       `Write only your message. No name prefix.`;

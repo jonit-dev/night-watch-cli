@@ -20,7 +20,7 @@ export class ContextFetcher {
     const timeoutId = setTimeout(() => controller.abort(), 5_000);
 
     try {
-      for (const url of urls.slice(0, 2)) {
+      for (const url of urls.slice(0, 4)) {
         try {
           const res = await fetch(url, {
             signal: controller.signal,
@@ -61,7 +61,7 @@ export class ContextFetcher {
 
     const parts: string[] = [];
 
-    for (const url of urls.slice(0, 3)) {
+    for (const url of urls.slice(0, 5)) {
       const match = url.match(/github\.com\/([^/]+)\/([^/]+)\/(issues|pull)\/(\d+)/);
       if (!match) continue;
       const [, owner, repo, type, number] = match;

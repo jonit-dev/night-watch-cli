@@ -171,7 +171,7 @@ export function executeCodebaseQuery(
       maxBuffer: 256 * 1024,
       env: { ...process.env, ...(providerEnv ?? {}) },
     });
-    return output.trim().slice(0, 4000) || '(no output)';
+    return output.trim().slice(0, 6000) || '(no output)';
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return `Provider query failed: ${msg}`;

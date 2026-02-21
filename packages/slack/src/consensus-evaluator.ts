@@ -111,9 +111,9 @@ Make the call. Are we done, do we need one more pass, or does a human need to we
 - If you approve, do not restate prior arguments.
 
 Respond with EXACTLY one of these formats (include the prefix):
-- APPROVE: [one short closing message in your voice — e.g., "Clean. Let's ship it."]
-- CHANGES: [what specifically still needs work — be concrete, not vague]
-- HUMAN: [why this needs a human decision — be specific about what's ambiguous]
+- APPROVE: [one short closing message — e.g., "Clean. Let's ship it."]
+- CHANGES: [what specifically still needs work — e.g., "The error handler in \`src/api/handler.ts#L45\` swallows the stack trace. Need to propagate it."]
+- HUMAN: [why this needs a human decision — e.g., "The team is split on whether to cache at the API layer or DB layer. Need a product call."]
 
 Write the prefix and your message. Nothing else.`;
 
