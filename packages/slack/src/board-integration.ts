@@ -214,13 +214,13 @@ ${trigger.context}`;
     if (boardConfig) {
       try {
         const provider = createBoardProvider(boardConfig, trigger.projectPath);
-        const issue = await provider.createIssue({ title, body, column: 'In Progress' });
-        if (issue.column !== 'In Progress') {
-          await provider.moveIssue(issue.number, 'In Progress').catch(() => undefined);
+        const issue = await provider.createIssue({ title, body, column: 'Draft' });
+        if (issue.column !== 'Draft') {
+          await provider.moveIssue(issue.number, 'Draft').catch(() => undefined);
         }
         await this.slackClient.postAsAgent(
           discussion.channelId,
-          `Opened #${issue.number}: ${issue.title} — ${issue.url}\nTaking first pass now. It's in In Progress.`,
+          `Opened #${issue.number}: ${issue.title} — ${issue.url}\nFiled as Draft for review.`,
           devPersona,
           discussion.threadTs,
         );
@@ -353,7 +353,7 @@ ${trigger.context}`;
         const issue = await provider.createIssue({
           title: issueTitle,
           body: issueBody,
-          column: 'Ready',
+          column: 'Draft',
         });
         issueUrl = issue.url;
         log.info('audit: filed issue', {

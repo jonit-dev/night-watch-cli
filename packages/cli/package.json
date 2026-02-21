@@ -16,8 +16,7 @@
   "files": [
     "dist/",
     "bin/",
-    "scripts/",
-    "templates/"
+    "scripts/"
   ],
   "scripts": {
     "build": "tsc --build tsconfig.json && tsc-alias -p tsconfig.json && node build.mjs",
