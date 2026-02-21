@@ -1,6 +1,7 @@
 # Night Watch CLI Roadmap
 
 This roadmap is organized by delivery horizon and focused on three goals:
+
 - Make autonomous execution safer and more reliable.
 - Make the CLI + web experience easier for day-to-day use.
 - Build a scalable foundation for multi-project and team usage.
@@ -10,6 +11,7 @@ This roadmap is organized by delivery horizon and focused on three goals:
 ## Short Term (0-6 weeks)
 
 ### 1) Reliability and correctness hardening
+
 - [ ] Close remaining consistency gaps between CLI and bash runtime (paths, logs, lock conventions, status reporting).
 - [ ] Add stronger error handling around provider and GitHub CLI failures with clear recovery hints.
 - [ ] Improve notification delivery accuracy (treat non-2xx webhook responses as failures).
@@ -18,14 +20,16 @@ This roadmap is organized by delivery horizon and focused on three goals:
 - [ ] Add structured logging (JSON lines) alongside human-readable logs so downstream tools can parse run outcomes without regex.
 
 ### 2) Quality gates and developer workflow
-- [ ] Add minimal CI pipeline (`verify`, `test`) on pull requests.
+
+- [x] Add minimal CI pipeline (`verify`, `test`) on pull requests. _(ci.yml + tests.yml active; husky + lint-staged for pre-commit)_
 - [ ] Add coverage tooling (`@vitest/coverage-v8`) and publish baseline coverage in CI output.
 - [ ] Add shell script quality checks (`shellcheck`, optional `bats`) to reduce runtime script regressions.
-- [ ] Align docs with current product reality (commands, web UI pages, config defaults).
+- [x] Align docs with current product reality (commands, web UI pages, config defaults). _(architecture.md + architecture-overview.md rewritten in da5d482)_
 - [ ] Add integration test that exercises the full `run --dry-run` path end-to-end (currently only unit-tested in isolation).
 
 ### 3) Product completeness for core operators
-- [ ] Finalize roadmap scanner UX and edge-case handling (duplicates, malformed roadmap entries, clear completion state).
+
+- [x] Finalize roadmap scanner UX and edge-case handling (duplicates, malformed roadmap entries, clear completion state). _(Ticket categorization + roadmap-horizon alignment added in #34; roadmap-mapping.ts maps roadmap items to board columns)_
 - [ ] Improve `doctor` output with actionable fix guidance and clearer environment diagnostics.
 - [ ] Strengthen scheduling visibility (next run, paused state, install/uninstall outcomes) across CLI and web.
 - [ ] Add `night-watch history` command — show a table of recent runs with outcome, duration, PRD name, and branch. Right now there's no easy way to answer "what happened last night?" without reading raw logs.
@@ -36,7 +40,8 @@ This roadmap is organized by delivery horizon and focused on three goals:
 ## Medium Term (6 weeks-4 months)
 
 ### 4) Unified operations experience (CLI + Web)
-- [ ] Add full PRD lifecycle operations in CLI and web (inspect, prioritize, retry, cancel, archive).
+
+- [ ] Add full PRD lifecycle operations in CLI and web (inspect, prioritize, retry, cancel, archive). _(Web UI consolidated around GitHub Projects board in #36 — filesystem PRDs section removed; board is now the source of truth)_
 - [ ] Implement richer dependency visualization (blocked reasons, dependency graph, dependency health).
 - [ ] Add real-time activity/event stream for run/review lifecycle and auditability.
 - [ ] Improve logs experience with filters, correlation IDs, and run-level grouping.
@@ -44,15 +49,17 @@ This roadmap is organized by delivery horizon and focused on three goals:
 - [ ] Support **PRD editing** in the web UI — even a basic markdown editor with preview would eliminate the context-switch of opening an editor, finding the file, editing, saving, and coming back to the dashboard.
 
 ### 5) Provider and execution platform expansion
+
 - [ ] Expand provider abstraction to support additional AI runtimes and richer provider-specific configuration.
 - [ ] Introduce safer execution guards (budget/time caps, branch protections, optional approval checkpoints).
 - [ ] Add resumable run metadata to recover from interruptions without manual cleanup.
-- [ ] Improve PR review automation with better CI signal interpretation and confidence thresholds.
+- [x] Improve PR review automation with better CI signal interpretation and confidence thresholds. _(Auto-merge added in #26; CI status + review score derivation fixed in #20)_
 - [ ] **Add Gemini CLI as a third provider.** The provider abstraction already exists (`claude | codex`); Gemini CLI follows a similar invocation pattern. This is low-hanging fruit that doubles the audience.
 - [ ] **Decouple provider invocation from bash scripts.** The current `case` statement in `night-watch-cron.sh` is the single point where new providers get wired in. Moving provider invocation into a TypeScript strategy pattern would make adding providers a config-only change and make the bash layer thinner and more testable.
 - [ ] Add **cost tracking per run** — capture token usage or API cost from provider output and surface it in status/history. Autonomous agents burning money silently is the #1 trust-killer.
 
 ### 6) Team and multi-project ergonomics
+
 - [ ] Mature global mode for managing multiple repositories from one dashboard.
 - [ ] Add project profiles and reusable config presets.
 - [ ] Add collaboration features: ownership/claim visibility, handoff notes, and shared run history.
@@ -64,12 +71,14 @@ This roadmap is organized by delivery horizon and focused on three goals:
 ## Long Term (4-12 months)
 
 ### 7) Platformization and enterprise readiness
+
 - [ ] Add optional remote worker execution (self-hosted agents) for non-local automation.
 - [ ] Introduce policy engine support (allowed commands, branch rules, security controls).
 - [ ] Add auth and role-based permissions for web operations in shared environments.
 - [ ] Add immutable audit trails and compliance-oriented operational reporting.
 
 ### 8) Intelligence and autonomous planning
+
 - [ ] Evolve roadmap scanner into roadmap planning assistant (sizing, dependency suggestions, slice recommendations).
 - [ ] Add PRD quality scoring and pre-execution readiness checks.
 - [ ] Add historical learning loop: use prior run outcomes to improve prompts/templates and task slicing.
@@ -78,6 +87,7 @@ This roadmap is organized by delivery horizon and focused on three goals:
 - [ ] **Post-run self-review** — after a run produces a PR, automatically trigger the reviewer on it before notifying the operator. Close the loop: generate -> review -> fix -> notify. Currently these are two independent cron schedules with no causal link.
 
 ### 9) Ecosystem and adoption
+
 - [ ] Publish stable extension points for templates, providers, and notifier integrations.
 - [ ] Create migration and onboarding kits for teams adopting Night Watch at scale.
 - [ ] Build public examples/playbooks for common workflows (solo dev, startup team, platform team).
