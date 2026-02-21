@@ -44,7 +44,7 @@ export function buildBoardTools(): IAnthropicTool[] {
           column: {
             type: 'string',
             enum: columnEnum,
-            description: "Board column to place the issue in. Defaults to 'Ready'.",
+            description: "Board column to place the issue in. Defaults to 'Draft'.",
           },
           priority: {
             type: 'string',
@@ -201,7 +201,7 @@ export async function executeBoardTool(
       const issue = await provider.createIssue({
         title: String(input.title ?? ''),
         body: String(input.body ?? ''),
-        column: (input.column as BoardColumnName | undefined) ?? 'Ready',
+        column: (input.column as BoardColumnName | undefined) ?? 'Draft',
         labels: labels.length > 0 ? labels : undefined,
       });
       return JSON.stringify({ number: issue.number, url: issue.url, title: issue.title, labels });
