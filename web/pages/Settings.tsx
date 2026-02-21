@@ -43,7 +43,6 @@ type ConfigForm = {
 const DEFAULT_SLACK_CONFIG: ISlackBotConfig = {
   enabled: false,
   botToken: '',
-  channels: { eng: '', prs: '', incidents: '', releases: '' },
   autoCreateProjectChannels: false,
   discussionEnabled: false,
 };
@@ -809,68 +808,10 @@ const Settings: React.FC = () => {
           </div>
 
           <div className="space-y-4 pt-4 border-t border-slate-800">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-medium text-slate-300">Channel IDs</h4>
-              <button
-                type="button"
-                className="px-3 py-1.5 text-xs rounded-md bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors"
-                onClick={() => {
-                  // Coming soon: will list workspace channels
-                  alert('Coming soon: will list workspace channels');
-                }}
-              >
-                Detect Channels
-              </button>
-            </div>
+            <h4 className="text-sm font-medium text-slate-300">Channels</h4>
             <p className="text-xs text-slate-500">
-              Enter the Slack channel IDs (e.g. C01ABCDEF) where agent messages will be posted.
+              Channels are automatically created per project (e.g. <code>#proj-my-app</code>). All agent messages, deliberations, and notifications for a project are posted to that project&apos;s channel.
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="#eng Channel ID"
-                value={form.slack.channels.eng}
-                onChange={(e) =>
-                  updateField('slack', {
-                    ...form.slack,
-                    channels: { ...form.slack.channels, eng: e.target.value },
-                  })
-                }
-                placeholder="C01ABCDEF"
-              />
-              <Input
-                label="#prs Channel ID"
-                value={form.slack.channels.prs}
-                onChange={(e) =>
-                  updateField('slack', {
-                    ...form.slack,
-                    channels: { ...form.slack.channels, prs: e.target.value },
-                  })
-                }
-                placeholder="C01ABCDEF"
-              />
-              <Input
-                label="#incidents Channel ID"
-                value={form.slack.channels.incidents}
-                onChange={(e) =>
-                  updateField('slack', {
-                    ...form.slack,
-                    channels: { ...form.slack.channels, incidents: e.target.value },
-                  })
-                }
-                placeholder="C01ABCDEF"
-              />
-              <Input
-                label="#releases Channel ID"
-                value={form.slack.channels.releases}
-                onChange={(e) =>
-                  updateField('slack', {
-                    ...form.slack,
-                    channels: { ...form.slack.channels, releases: e.target.value },
-                  })
-                }
-                placeholder="C01ABCDEF"
-              />
-            </div>
           </div>
 
           <div className="space-y-4 pt-4 border-t border-slate-800">

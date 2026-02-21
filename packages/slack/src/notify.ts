@@ -10,7 +10,6 @@ import {
   IDiscussionTrigger,
   INightWatchConfig,
   INotificationContext,
-  ISlackBotConfig,
   NotificationEvent,
   getRepositories,
   warn,
@@ -125,23 +124,6 @@ function getPersonaNameForEvent(event: NotificationEvent): string {
   }
 }
 
-function getChannelForEvent(event: NotificationEvent, slackConfig: ISlackBotConfig): string {
-  switch (event) {
-    case 'run_started':
-    case 'run_succeeded':
-    case 'run_failed':
-    case 'run_timeout':
-    case 'rate_limit_fallback':
-      return slackConfig.channels.eng;
-    case 'review_completed':
-    case 'pr_auto_merged':
-      return slackConfig.channels.prs;
-    case 'qa_completed':
-      return slackConfig.channels.eng;
-    default:
-      return slackConfig.channels.eng;
-  }
-}
 
 function buildDiscussionTrigger(
   ctx: INotificationContext,
@@ -184,7 +166,9 @@ export async function sendSlackBotNotification(
         const persona = personas.find((p) => p.name === personaName) ?? personas[0];
 
         if (persona) {
-          const channel = getChannelForEvent(ctx.event, slackConfig);
+          const projects = repos.projectRegistry.getAll();
+          const project = projects.find((p) => p.name === ctx.projectName) ?? projects[0];
+          const channel = project?.slackChannelId;
           if (channel) {
             const text = buildNotificationText(ctx);
             await slackClient.postAsAgent(channel, text, persona);

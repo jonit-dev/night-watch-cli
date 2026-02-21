@@ -101,7 +101,6 @@ function buildConfig(): INightWatchConfig {
     slack: {
       botToken: 'xoxb-test',
       appToken: 'xapp-test',
-      channels: { eng: 'C01', prs: 'C02', incidents: 'C03' },
     },
     boardProvider: undefined,
     providerEnv: {},

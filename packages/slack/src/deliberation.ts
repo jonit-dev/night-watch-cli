@@ -38,7 +38,7 @@ import {
   countThreadReplies,
   discussionStartKey,
   formatThreadHistory,
-  getChannelForTrigger,
+  getChannelForProject,
   hasConcreteCodeContext,
   humanDelay,
   loadPrDiffExcerpt,
@@ -102,15 +102,8 @@ export class DeliberationEngine {
     if (projectPathForTools) return basename(projectPathForTools);
     const repos = getRepositories();
     const projects = repos.projectRegistry.getAll();
-    const slack = this.config.slack;
-    if (slack?.channels) {
-      const channelEntry = Object.entries(slack.channels).find(([, v]) => v === channel);
-      if (channelEntry) {
-        const match = projects.find((p) => p.slackChannelId === channel) ?? projects[0];
-        return match ? basename(match.path) : undefined;
-      }
-    }
-    return projects[0] ? basename(projects[0].path) : undefined;
+    const match = projects.find((p) => p.slackChannelId === channel) ?? projects[0];
+    return match ? basename(match.path) : undefined;
   }
 
   private humanizeForPost(
@@ -171,22 +164,14 @@ export class DeliberationEngine {
     const personas = repos.agentPersona.getActive();
     const participants = getParticipatingPersonas(trigger.type, personas);
 
-    // Resolve project channel for prd_kickoff
     const resolvedTrigger = { ...trigger };
-    if (trigger.type === 'prd_kickoff' && !trigger.channelId) {
-      const projects = repos.projectRegistry.getAll();
-      const project = projects.find((p) => p.path === trigger.projectPath);
-      if (project?.slackChannelId) {
-        resolvedTrigger.channelId = project.slackChannelId;
-      }
-    }
     if (resolvedTrigger.type === 'pr_review' && !hasConcreteCodeContext(resolvedTrigger.context)) {
       const diffExcerpt = loadPrDiffExcerpt(resolvedTrigger.projectPath, resolvedTrigger.ref);
       if (diffExcerpt) {
         resolvedTrigger.context = `${resolvedTrigger.context}\n\n${diffExcerpt}`.slice(0, 5000);
       }
     }
-    const channel = getChannelForTrigger(resolvedTrigger, this.config);
+    const channel = getChannelForProject(resolvedTrigger.projectPath, resolvedTrigger.channelId);
 
     if (!channel) {
       throw new Error(`No Slack channel configured for trigger type: ${trigger.type}`);

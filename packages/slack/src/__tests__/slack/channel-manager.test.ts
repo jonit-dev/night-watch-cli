@@ -36,12 +36,6 @@ function buildConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchCon
       botToken: 'xbot-test',
       appToken: 'xapp-test',
       autoCreateProjectChannels: true,
-      channels: {
-        eng: 'CENG',
-        prs: 'CPRS',
-        incidents: 'CINC',
-        releases: 'CREL',
-      },
     },
     ...overrides,
   } as any;
@@ -371,10 +365,13 @@ describe('ChannelManager', () => {
   });
 
   describe('postReleaseAnnouncement', () => {
-    it('posts release announcement to #releases', async () => {
+    it('posts release announcement to project channel', async () => {
       const slackClient = buildMockSlackClient();
       const dev = buildPersona('Dev');
       mockGetRepositories.mockReturnValue({
+        projectRegistry: {
+          getAll: vi.fn().mockReturnValue([buildProject('/path/test', 'CPROJ')]),
+        },
         agentPersona: {
           getActive: vi.fn().mockReturnValue([dev]),
         },
@@ -385,33 +382,29 @@ describe('ChannelManager', () => {
         'Fix login bug',
         'main',
         'https://github.com/test/pull/42',
+        '/path/test',
       );
 
       expect(slackClient.postAsAgent).toHaveBeenCalledWith(
-        'CREL',
+        'CPROJ',
         'Shipped: Fix login bug → main\nhttps://github.com/test/pull/42',
         dev,
       );
     });
 
-    it('returns early when releases channel not configured', async () => {
+    it('returns early when project has no channel', async () => {
       const slackClient = buildMockSlackClient();
       mockGetRepositories.mockReturnValue({
+        projectRegistry: {
+          getAll: vi.fn().mockReturnValue([]),
+        },
         agentPersona: {
           getActive: vi.fn().mockReturnValue([buildPersona('Dev')]),
         },
       } as any);
 
-      const manager = new ChannelManager(
-        slackClient,
-        buildConfig({
-          slack: {
-            enabled: true,
-            channels: { eng: 'CENG' }, // No releases channel
-          },
-        }),
-      );
-      await manager.postReleaseAnnouncement('Test', 'main');
+      const manager = new ChannelManager(slackClient, buildConfig());
+      await manager.postReleaseAnnouncement('Test', 'main', undefined, '/path/test');
 
       expect(slackClient.postAsAgent).not.toHaveBeenCalled();
     });
@@ -419,16 +412,19 @@ describe('ChannelManager', () => {
     it('handles announcement without PR URL', async () => {
       const slackClient = buildMockSlackClient();
       mockGetRepositories.mockReturnValue({
+        projectRegistry: {
+          getAll: vi.fn().mockReturnValue([buildProject('/path/test', 'CPROJ')]),
+        },
         agentPersona: {
           getActive: vi.fn().mockReturnValue([buildPersona('Dev')]),
         },
       } as any);
 
       const manager = new ChannelManager(slackClient, buildConfig());
-      await manager.postReleaseAnnouncement('Hotfix', 'main');
+      await manager.postReleaseAnnouncement('Hotfix', 'main', undefined, '/path/test');
 
       expect(slackClient.postAsAgent).toHaveBeenCalledWith(
-        'CREL',
+        'CPROJ',
         'Shipped: Hotfix → main',
         expect.any(Object),
       );
@@ -437,33 +433,39 @@ describe('ChannelManager', () => {
     it('does not post when Dev persona not found', async () => {
       const slackClient = buildMockSlackClient();
       mockGetRepositories.mockReturnValue({
+        projectRegistry: {
+          getAll: vi.fn().mockReturnValue([buildProject('/path/test', 'CPROJ')]),
+        },
         agentPersona: {
           getActive: vi.fn().mockReturnValue([]),
         },
       } as any);
 
       const manager = new ChannelManager(slackClient, buildConfig());
-      await manager.postReleaseAnnouncement('Test', 'main');
+      await manager.postReleaseAnnouncement('Test', 'main', undefined, '/path/test');
 
       expect(slackClient.postAsAgent).not.toHaveBeenCalled();
     });
   });
 
   describe('postEngAnnouncement', () => {
-    it('posts announcement to #eng with specified persona', async () => {
+    it('posts announcement to project channel with specified persona', async () => {
       const slackClient = buildMockSlackClient();
       const carlos = buildPersona('Carlos');
       mockGetRepositories.mockReturnValue({
+        projectRegistry: {
+          getAll: vi.fn().mockReturnValue([buildProject('/path/test', 'CPROJ')]),
+        },
         agentPersona: {
           getActive: vi.fn().mockReturnValue([carlos]),
         },
       } as any);
 
       const manager = new ChannelManager(slackClient, buildConfig());
-      await manager.postEngAnnouncement('Weekly summary: all good', 'Carlos');
+      await manager.postEngAnnouncement('Weekly summary: all good', 'Carlos', '/path/test');
 
       expect(slackClient.postAsAgent).toHaveBeenCalledWith(
-        'CENG',
+        'CPROJ',
         'Weekly summary: all good',
         carlos,
       );
@@ -473,50 +475,51 @@ describe('ChannelManager', () => {
       const slackClient = buildMockSlackClient();
       const carlos = buildPersona('Carlos');
       mockGetRepositories.mockReturnValue({
+        projectRegistry: {
+          getAll: vi.fn().mockReturnValue([buildProject('/path/test', 'CPROJ')]),
+        },
         agentPersona: {
           getActive: vi.fn().mockReturnValue([carlos]),
         },
       } as any);
 
       const manager = new ChannelManager(slackClient, buildConfig());
-      await manager.postEngAnnouncement('Team update');
+      await manager.postEngAnnouncement('Team update', 'Carlos', '/path/test');
 
-      expect(slackClient.postAsAgent).toHaveBeenCalledWith('CENG', 'Team update', carlos);
+      expect(slackClient.postAsAgent).toHaveBeenCalledWith('CPROJ', 'Team update', carlos);
     });
 
     it('falls back to first persona if requested not found', async () => {
       const slackClient = buildMockSlackClient();
       const dev = buildPersona('Dev');
       mockGetRepositories.mockReturnValue({
+        projectRegistry: {
+          getAll: vi.fn().mockReturnValue([buildProject('/path/test', 'CPROJ')]),
+        },
         agentPersona: {
           getActive: vi.fn().mockReturnValue([dev]),
         },
       } as any);
 
       const manager = new ChannelManager(slackClient, buildConfig());
-      await manager.postEngAnnouncement('Test', 'Carlos'); // Carlos not found
+      await manager.postEngAnnouncement('Test', 'Carlos', '/path/test'); // Carlos not found
 
-      expect(slackClient.postAsAgent).toHaveBeenCalledWith('CENG', 'Test', dev);
+      expect(slackClient.postAsAgent).toHaveBeenCalledWith('CPROJ', 'Test', dev);
     });
 
-    it('returns early when eng channel not configured', async () => {
+    it('returns early when project has no channel', async () => {
       const slackClient = buildMockSlackClient();
       mockGetRepositories.mockReturnValue({
+        projectRegistry: {
+          getAll: vi.fn().mockReturnValue([]),
+        },
         agentPersona: {
           getActive: vi.fn().mockReturnValue([buildPersona('Carlos')]),
         },
       } as any);
 
-      const manager = new ChannelManager(
-        slackClient,
-        buildConfig({
-          slack: {
-            enabled: true,
-            channels: { prs: 'CPRS' }, // No eng channel
-          },
-        }),
-      );
-      await manager.postEngAnnouncement('Test');
+      const manager = new ChannelManager(slackClient, buildConfig());
+      await manager.postEngAnnouncement('Test', 'Carlos', '/path/test');
 
       expect(slackClient.postAsAgent).not.toHaveBeenCalled();
     });

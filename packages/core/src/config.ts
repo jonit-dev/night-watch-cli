@@ -112,7 +112,7 @@ export function getDefaultConfig(): INightWatchConfig {
     audit: { ...DEFAULT_AUDIT },
 
     // Slack Bot API
-    slack: { ...DEFAULT_SLACK_BOT_CONFIG, channels: { ...DEFAULT_SLACK_BOT_CONFIG.channels } },
+    slack: { ...DEFAULT_SLACK_BOT_CONFIG },
   };
 }
 
@@ -279,16 +279,9 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   // Slack Bot Configuration
   const rawSlack = readObject(rawConfig.slack);
   if (rawSlack) {
-    const rawChannels = readObject(rawSlack.channels) ?? {};
     const slack: ISlackBotConfig = {
       enabled: readBoolean(rawSlack.enabled) ?? DEFAULT_SLACK_BOT_CONFIG.enabled,
       botToken: readString(rawSlack.botToken) ?? DEFAULT_SLACK_BOT_CONFIG.botToken,
-      channels: {
-        eng: readString(rawChannels.eng) ?? DEFAULT_SLACK_BOT_CONFIG.channels.eng,
-        prs: readString(rawChannels.prs) ?? DEFAULT_SLACK_BOT_CONFIG.channels.prs,
-        incidents: readString(rawChannels.incidents) ?? DEFAULT_SLACK_BOT_CONFIG.channels.incidents,
-        releases: readString(rawChannels.releases) ?? DEFAULT_SLACK_BOT_CONFIG.channels.releases,
-      },
       autoCreateProjectChannels:
         readBoolean(rawSlack.autoCreateProjectChannels) ??
         DEFAULT_SLACK_BOT_CONFIG.autoCreateProjectChannels,
@@ -431,11 +424,7 @@ function mergeConfigs(
     if (fileConfig.claudeModel !== undefined) merged.claudeModel = fileConfig.claudeModel;
     if (fileConfig.qa !== undefined) merged.qa = { ...merged.qa, ...fileConfig.qa };
     if (fileConfig.slack !== undefined)
-      merged.slack = {
-        ...merged.slack,
-        ...fileConfig.slack,
-        channels: { ...merged.slack?.channels, ...fileConfig.slack.channels },
-      };
+      merged.slack = { ...merged.slack, ...fileConfig.slack };
   }
 
   // Merge env config (takes precedence)
@@ -472,11 +461,7 @@ function mergeConfigs(
   if (envConfig.claudeModel !== undefined) merged.claudeModel = envConfig.claudeModel;
   if (envConfig.qa !== undefined) merged.qa = { ...merged.qa, ...envConfig.qa };
   if (envConfig.slack !== undefined)
-    merged.slack = {
-      ...merged.slack,
-      ...envConfig.slack,
-      channels: { ...merged.slack?.channels, ...envConfig.slack.channels },
-    };
+    merged.slack = { ...merged.slack, ...envConfig.slack };
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
 

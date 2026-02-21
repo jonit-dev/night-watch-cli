@@ -112,12 +112,22 @@ export class ChannelManager {
   }
 
   /**
-   * Post a release announcement to #releases when a PR is auto-merged.
+   * Post a release announcement to the project's channel when a PR is auto-merged.
    */
-  async postReleaseAnnouncement(prTitle: string, branch: string, prUrl?: string): Promise<void> {
-    if (!this.config.slack?.enabled || !this.config.slack?.channels?.releases) return;
+  async postReleaseAnnouncement(
+    prTitle: string,
+    branch: string,
+    prUrl?: string,
+    projectPath?: string,
+  ): Promise<void> {
+    if (!this.config.slack?.enabled) return;
 
     const repos = getRepositories();
+    const projects = repos.projectRegistry.getAll();
+    const project = projects.find((p) => p.path === projectPath) ?? projects[0];
+    const channel = project?.slackChannelId;
+    if (!channel) return;
+
     const personas = repos.agentPersona.getActive();
     const dev = personas.find((p) => p.name === 'Dev') ?? personas[0];
 
@@ -125,7 +135,7 @@ export class ChannelManager {
 
     try {
       const text = `Shipped: ${prTitle} → ${branch}${prUrl ? `\n${prUrl}` : ''}`;
-      await this.slackClient.postAsAgent(this.config.slack.channels.releases, text, dev);
+      await this.slackClient.postAsAgent(channel, text, dev);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.warn(`Failed to post release announcement: ${message}`);
@@ -133,23 +143,32 @@ export class ChannelManager {
   }
 
   /**
-   * Post a cross-channel #eng announcement.
+   * Post an announcement to the project's channel.
    * Used for weekly summaries or important team updates.
    */
-  async postEngAnnouncement(message: string, personaName = 'Carlos'): Promise<void> {
-    if (!this.config.slack?.enabled || !this.config.slack?.channels?.eng) return;
+  async postEngAnnouncement(
+    message: string,
+    personaName = 'Carlos',
+    projectPath?: string,
+  ): Promise<void> {
+    if (!this.config.slack?.enabled) return;
 
     const repos = getRepositories();
+    const projects = repos.projectRegistry.getAll();
+    const project = projects.find((p) => p.path === projectPath) ?? projects[0];
+    const channel = project?.slackChannelId;
+    if (!channel) return;
+
     const personas = repos.agentPersona.getActive();
     const persona = personas.find((p) => p.name === personaName) ?? personas[0];
 
     if (!persona) return;
 
     try {
-      await this.slackClient.postAsAgent(this.config.slack.channels.eng, message, persona);
+      await this.slackClient.postAsAgent(channel, message, persona);
     } catch (err) {
       const message2 = err instanceof Error ? err.message : String(err);
-      console.warn(`Failed to post #eng announcement: ${message2}`);
+      console.warn(`Failed to post announcement: ${message2}`);
     }
   }
 }
