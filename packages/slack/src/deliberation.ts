@@ -861,6 +861,12 @@ Write the prefix and your message. Nothing else.`;
     const useTools = Boolean(projectPathForTools && resolved.provider === 'anthropic');
 
     const replyProjectSlug = projectPathForTools ? basename(projectPathForTools) : undefined;
+    log.info('ad-hoc reply memory probe', {
+      agent: persona.name,
+      channel,
+      projectPath: projectPathForTools,
+      projectSlug: replyProjectSlug ?? '(none)',
+    });
 
     // Fetch persona memory to inject into system prompt (optional — ignore errors)
     let replyMemory: string | undefined;

@@ -30,5 +30,6 @@ export default defineConfig({
     pool: 'forks',
     minWorkers: 1,
     maxWorkers: 4,
+    setupFiles: ['reflect-metadata'],
   },
 });
