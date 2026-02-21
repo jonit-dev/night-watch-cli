@@ -47,6 +47,7 @@ emit_result() {
 # Validate provider
 if ! validate_provider "${PROVIDER_CMD}"; then
   echo "ERROR: Unknown provider: ${PROVIDER_CMD}" >&2
+  emit_result "failure" "reason=unknown_provider"
   exit 1
 fi
 
@@ -89,6 +90,7 @@ cleanup_worktrees "${PROJECT_DIR}" "${AUDIT_WORKTREE_BASENAME}"
 
 if ! prepare_detached_worktree "${PROJECT_DIR}" "${AUDIT_WORKTREE_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
   log "FAIL: Unable to create isolated audit worktree ${AUDIT_WORKTREE_DIR}"
+  emit_result "failure" "reason=worktree_setup_failed"
   exit 1
 fi
 
@@ -127,6 +129,7 @@ case "${PROVIDER_CMD}" in
     ;;
   *)
     log "ERROR: Unknown provider: ${PROVIDER_CMD}"
+    emit_result "failure" "reason=unknown_provider"
     exit 1
     ;;
 esac
@@ -159,7 +162,7 @@ elif [ "${EXIT_CODE}" -eq 124 ]; then
   emit_result "timeout"
 else
   log "FAIL: Audit exited with code ${EXIT_CODE}"
-  emit_result "failure"
+  emit_result "failure" "provider_exit=${EXIT_CODE}"
 fi
 
 exit "${EXIT_CODE}"

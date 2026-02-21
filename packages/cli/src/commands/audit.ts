@@ -135,7 +135,17 @@ export function auditCommand(program: Command): void {
           }
         } else {
           const statusSuffix = scriptResult?.status ? ` (${scriptResult.status})` : '';
-          spinner.fail(`Code audit exited with code ${exitCode}${statusSuffix}`);
+          const providerExit = scriptResult?.data?.provider_exit;
+          const exitDetail = providerExit && providerExit !== String(exitCode) ? `, provider exit ${providerExit}` : '';
+          spinner.fail(`Code audit exited with code ${exitCode}${statusSuffix}${exitDetail}`);
+          // Print last audit log lines so the parent process captures the actual failure reason
+          const logPath = path.join(projectDir, 'logs', 'audit.log');
+          if (fs.existsSync(logPath)) {
+            const logLines = fs.readFileSync(logPath, 'utf-8').split('\n').filter((l) => l.trim()).slice(-8);
+            if (logLines.length > 0) {
+              process.stderr.write(logLines.join('\n') + '\n');
+            }
+          }
           process.exit(exitCode || 1);
         }
       } catch (err) {
