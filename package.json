@@ -11,6 +11,7 @@
     "verify": "turbo run verify",
     "build:web": "cd web && yarn install && yarn build",
     "dev:web": "concurrently --names \"api,vite\" --prefix-colors \"cyan,magenta\" \"node packages/cli/bin/night-watch.mjs serve\" \"yarn --cwd web dev\"",
+    "dev": "concurrently --names \"api,vite\" --prefix-colors \"cyan,magenta\" \"tsx --watch packages/cli/src/cli.ts serve\" \"yarn --cwd web dev\"",
     "prepublishOnly": "yarn build && yarn test",
     "lint": "eslint packages/",
     "format": "prettier --write 'packages/**/*.{ts,tsx,js,mjs,json}'",
