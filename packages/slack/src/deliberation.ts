@@ -860,6 +860,25 @@ Write the prefix and your message. Nothing else.`;
     const resolved = resolvePersonaAIConfig(persona, this.config);
     const useTools = Boolean(projectPathForTools && resolved.provider === 'anthropic');
 
+    const replyProjectSlug = projectPathForTools ? basename(projectPathForTools) : undefined;
+
+    // Fetch persona memory to inject into system prompt (optional — ignore errors)
+    let replyMemory: string | undefined;
+    if (replyProjectSlug) {
+      try {
+        replyMemory = await this.memoryService.getMemory(persona.name, replyProjectSlug);
+        if (replyMemory) {
+          log.info('memory injected for ad-hoc reply', {
+            agent: persona.name,
+            project: replyProjectSlug,
+            chars: replyMemory.length,
+          });
+        }
+      } catch {
+        // Memory is optional — never block a reply due to a read failure
+      }
+    }
+
     const codebaseGuidance = useTools
       ? `- You have a query_codebase tool. Before pointing at any file or making a code claim, call it and read the actual output. Then drop the specific line or snippet directly into your message — like a teammate who pulled it up in their editor, not a bot filing a report. Short inline backtick or a 2-3 line block is fine.\n`
       : `- If you make a specific code claim, back it up with a snippet from context. If you don't have it, ask for it.\n`;
@@ -917,7 +936,7 @@ Write the prefix and your message. Nothing else.`;
         message = await callAIWithTools(persona, this.config, prompt, tools, registry);
       } else {
         // Allow up to 1024 tokens for ad-hoc replies so agents can write substantive responses
-        message = await callAIForContribution(persona, this.config, prompt, 1024);
+        message = await callAIForContribution(persona, this.config, prompt, 1024, replyMemory);
       }
     } catch (err) {
       log.error('ad-hoc reply failed', { agent: persona.name, error: String(err) });
@@ -930,6 +949,27 @@ Write the prefix and your message. Nothing else.`;
       const normalized = normalizeText(finalMessage);
       if (!normalized || historySet.has(normalized)) return '';
       await this.slackClient.postAsAgent(channel, finalMessage, persona, threadTs);
+
+      // Fire-and-forget reflection after ad-hoc reply
+      if (replyProjectSlug) {
+        const llmCaller = (_sysPrompt: string, userPrompt: string): Promise<string> =>
+          callAIForContribution(persona, this.config, userPrompt).catch(() => '');
+        const reflectionContext: IReflectionContext = {
+          triggerType: 'slack_message',
+          outcome: 'replied',
+          summary: `Ad-hoc Slack reply in channel ${channel}: "${incomingText.slice(0, 200)}"`,
+        };
+        log.info('triggering memory reflect for ad-hoc reply', {
+          agent: persona.name,
+          project: replyProjectSlug,
+        });
+        void this.memoryService
+          .reflect(persona, replyProjectSlug, reflectionContext, llmCaller)
+          .catch((err: unknown) =>
+            log.warn('ad-hoc memory reflect failed', { error: String(err) }),
+          );
+      }
+
       return finalMessage;
     }
     return '';

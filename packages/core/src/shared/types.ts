@@ -249,7 +249,8 @@ export type TriggerType =
   | 'build_failure'
   | 'prd_kickoff'
   | 'code_watch'
-  | 'issue_review';
+  | 'issue_review'
+  | 'slack_message';
 
 export interface ISlackDiscussion {
   id: string;
