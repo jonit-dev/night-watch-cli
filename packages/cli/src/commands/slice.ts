@@ -215,7 +215,8 @@ export function sliceCommand(program: Command): void {
         }
 
         // Send notifications (fire-and-forget, failures do not affect exit code)
-        const exitCode = result.sliced ? 0 : result.error === 'No pending items to process' ? 0 : 1;
+        const nothingPending = result.error === 'No pending items to process';
+        const exitCode = result.sliced || nothingPending ? 0 : 1;
 
         if (!options.dryRun && result.sliced) {
           const event: NotificationEvent = 'run_succeeded';

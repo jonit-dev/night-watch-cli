@@ -3,15 +3,15 @@
  * Provides safe read/write operations for user crontab
  */
 
-import { execSync } from "child_process";
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
+import { execSync } from 'child_process';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
 /**
  * Marker prefix used to identify Night Watch entries
  */
-export const CRONTAB_MARKER_PREFIX = "# night-watch-cli:";
+export const CRONTAB_MARKER_PREFIX = '# night-watch-cli:';
 
 /**
  * Check whether a crontab line belongs to the given project directory.
@@ -22,12 +22,9 @@ function isEntryForProject(line: string, projectDir: string): boolean {
     return false;
   }
 
-  const normalized = projectDir.replace(/\/+$/, "");
-  const candidates = [
-    `cd ${normalized}`,
-    `cd '${normalized}'`,
-    `cd "${normalized}"`,
-  ];
+  // eslint-disable-next-line sonarjs/slow-regex
+  const normalized = projectDir.replace(/\/+$/, '');
+  const candidates = [`cd ${normalized}`, `cd '${normalized}'`, `cd "${normalized}"`];
 
   return candidates.some((candidate) => line.includes(candidate));
 }
@@ -38,11 +35,14 @@ function isEntryForProject(line: string, projectDir: string): boolean {
  */
 export function readCrontab(): string[] {
   try {
-    const output = execSync("crontab -l 2>/dev/null", {
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
+    const output = execSync('crontab -l 2>/dev/null', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
-    return output.trim().split("\n").filter((line) => line.length > 0);
+    return output
+      .trim()
+      .split('\n')
+      .filter((line) => line.length > 0);
   } catch {
     // crontab -l returns error if no crontab exists
     // This is expected and should return empty array
@@ -56,21 +56,21 @@ export function readCrontab(): string[] {
  * @throws Error if crontab write fails
  */
 export function writeCrontab(lines: string[]): void {
-  if (process.env.NW_EXECUTION_CONTEXT === "agent") {
+  if (process.env.NW_EXECUTION_CONTEXT === 'agent') {
     throw new Error(
-      "Crontab writes are blocked during agent execution (NW_EXECUTION_CONTEXT=agent). " +
-      "This prevents the running agent from accidentally modifying its own scheduling."
+      'Crontab writes are blocked during agent execution (NW_EXECUTION_CONTEXT=agent). ' +
+        'This prevents the running agent from accidentally modifying its own scheduling.',
     );
   }
 
-  const content = lines.join("\n");
+  const content = lines.join('\n');
 
   // Create a backup first
   try {
     const currentCrontab = readCrontab();
     if (currentCrontab.length > 0) {
       execSync(`crontab -l > /tmp/night-watch-crontab-backup-$(date +%s).txt`, {
-        encoding: "utf-8",
+        encoding: 'utf-8',
       });
     }
   } catch {
@@ -80,14 +80,18 @@ export function writeCrontab(lines: string[]): void {
   // Write new crontab via temp file to avoid shell line length limits
   const tmpFile = path.join(os.tmpdir(), `night-watch-crontab-${Date.now()}.txt`);
   try {
-    fs.writeFileSync(tmpFile, content + "\n");
-    execSync(`crontab ${tmpFile}`, { encoding: "utf-8" });
+    fs.writeFileSync(tmpFile, content + '\n');
+    execSync(`crontab ${tmpFile}`, { encoding: 'utf-8' });
   } catch (error) {
     throw new Error(
-      `Failed to write crontab: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to write crontab: ${error instanceof Error ? error.message : String(error)}`,
     );
   } finally {
-    try { fs.unlinkSync(tmpFile); } catch { /* ignore cleanup errors */ }
+    try {
+      fs.unlinkSync(tmpFile);
+    } catch {
+      /* ignore cleanup errors */
+    }
   }
 }
 
@@ -114,9 +118,7 @@ export function addEntry(entry: string, marker: string): boolean {
   const lines = readCrontab();
 
   // Add the entry with marker comment on the same line
-  const entryWithMarker = entry.endsWith(marker)
-    ? entry
-    : `${entry}  ${marker}`;
+  const entryWithMarker = entry.endsWith(marker) ? entry : `${entry}  ${marker}`;
 
   lines.push(entryWithMarker);
   writeCrontab(lines);
@@ -179,7 +181,7 @@ export function getProjectEntries(projectDir: string): string[] {
 export function removeEntriesForProject(projectDir: string, marker?: string): number {
   const lines = readCrontab();
   const filtered = lines.filter(
-    (line) => !isEntryForProject(line, projectDir) && !(marker && line.includes(marker))
+    (line) => !isEntryForProject(line, projectDir) && !(marker && line.includes(marker)),
   );
   const removedCount = lines.length - filtered.length;
 

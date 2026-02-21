@@ -22,9 +22,6 @@ import {
 import { SseClientSet, broadcastSSE } from '../middleware/sse.middleware.js';
 import { validatePrdName } from '../helpers.js';
 
-// Track spawned processes module-level
-const spawnedProcesses = new Map<number, ReturnType<typeof spawn>>();
-
 /**
  * Recursively clean up orphaned claim files in the PRD directory.
  * A claim is orphaned if the executor is not running.
@@ -63,12 +60,12 @@ function spawnAction(
   onSpawned?: (pid: number) => void,
 ): void {
   try {
-    const lockPath =
-      command[0] === 'run'
-        ? executorLockPath(projectDir)
-        : command[0] === 'review'
-          ? reviewerLockPath(projectDir)
-          : null;
+    let lockPath: string | null = null;
+    if (command[0] === 'run') {
+      lockPath = executorLockPath(projectDir);
+    } else if (command[0] === 'review') {
+      lockPath = reviewerLockPath(projectDir);
+    }
 
     if (lockPath) {
       const lock = checkLockFile(lockPath);
@@ -99,8 +96,6 @@ function spawnAction(
     child.unref();
 
     if (child.pid !== undefined) {
-      spawnedProcesses.set(child.pid, child);
-
       if (command[0] === 'run') {
         const config = loadConfig(projectDir);
         sendNotifications(config, {

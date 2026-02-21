@@ -310,6 +310,7 @@ export class SqliteAgentPersonaRepository implements IAgentPersonaRepository {
     if (!existing) throw new Error(`Agent persona not found: ${id}`);
 
     const now = Date.now();
+    const isActive = input.isActive !== undefined ? input.isActive : existing.isActive;
     const soul: IAgentSoul = input.soul ? mergeSoul(existing.soul, input.soul) : existing.soul;
     const style: IAgentStyle = input.style
       ? mergeStyle(existing.style, input.style)
@@ -363,7 +364,7 @@ export class SqliteAgentPersonaRepository implements IAgentPersonaRepository {
         input.systemPromptOverride !== undefined
           ? (input.systemPromptOverride ?? null)
           : existing.systemPromptOverride,
-        (input.isActive !== undefined ? input.isActive : existing.isActive) ? 1 : 0,
+        isActive ? 1 : 0,
         now,
         id,
       );
