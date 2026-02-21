@@ -87,3 +87,10 @@ const scriptsSrc = resolve(__dirname, '../../scripts');
 const scriptsDest = resolve(__dirname, 'dist/scripts');
 cpSync(scriptsSrc, scriptsDest, { recursive: true, dereference: true });
 console.log('Scripts copied: dist/scripts/');
+
+// Copy templates into dist/templates/ so bundled scripts can find them.
+// Scripts reference ../templates/ relative to their location in dist/scripts/.
+const templatesSrc = resolve(__dirname, '../../templates');
+const templatesDest = resolve(__dirname, 'dist/templates');
+cpSync(templatesSrc, templatesDest, { recursive: true, dereference: true });
+console.log('Templates copied: dist/templates/');
