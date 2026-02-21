@@ -54,6 +54,7 @@ import {
   resolvePersonaAIConfig,
 } from './ai/index.js';
 import type { ToolRegistry } from './ai/index.js';
+import { BoundedCache } from './bounded-cache.js';
 
 // Re-export humanizeSlackReply for backwards compatibility with existing tests
 
@@ -64,6 +65,9 @@ const MAX_AGENT_THREAD_REPLIES = 4;
 const DISCUSSION_RESUME_DELAY_MS = 60_000;
 const DISCUSSION_REPLAY_GUARD_MS = 30 * 60_000;
 
+/** Default max size for emojiCadenceCounter to prevent unbounded memory growth */
+const DEFAULT_EMOJI_CADENCE_CACHE_SIZE = 1000;
+
 const inFlightDiscussionStarts = new Map<string, Promise<ISlackDiscussion>>();
 
 export class DeliberationEngine {
@@ -73,7 +77,10 @@ export class DeliberationEngine {
   private readonly board: BoardIntegration;
   private readonly consensus: ConsensusEvaluator;
   private readonly humanResumeTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private readonly emojiCadenceCounter = new Map<string, number>();
+  private readonly emojiCadenceCounter = new BoundedCache<string, number>({
+    maxSize: DEFAULT_EMOJI_CADENCE_CACHE_SIZE,
+    debugLabel: 'emojiCadenceCounter',
+  });
 
   constructor(slackClient: SlackClient, config: INightWatchConfig) {
     this.slackClient = slackClient;
