@@ -7,11 +7,14 @@
 import {
   IAgentPersona,
   INightWatchConfig,
+  createLogger,
   generatePersonaAvatar,
   getDb,
   getRepositories,
   getRoadmapStatus,
 } from '@night-watch/core';
+
+const log = createLogger('slack');
 import type { IRegistryEntry } from '@night-watch/core';
 import { SocketModeClient } from '@slack/socket-mode';
 import { execFileSync } from 'child_process';
@@ -111,7 +114,7 @@ export class SlackInteractionListener {
       this.botUserId = await this.slackClient.getBotUserId();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`Slack interaction listener: failed to resolve bot user id (${msg})`);
+      log.warn('failed to resolve bot user id', { error: msg });
       this.botUserId = null;
     }
 
@@ -132,12 +135,12 @@ export class SlackInteractionListener {
 
     socket.on('error', (err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`Slack interaction listener error: ${msg}`);
+      log.warn('socket error', { error: msg });
     });
 
     await socket.start();
     this.socketClient = socket;
-    console.log('Slack interaction listener started (Socket Mode)');
+    log.info('interaction listener started (Socket Mode)');
     this.proactiveLoop.start();
     void this.postPersonaIntros();
   }
@@ -159,10 +162,10 @@ export class SlackInteractionListener {
           throw new Error(`timed out after ${SOCKET_DISCONNECT_TIMEOUT_MS}ms`);
         }),
       ]);
-      console.log('Slack interaction listener stopped');
+      log.info('interaction listener stopped');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`Slack interaction listener shutdown failed: ${msg}`);
+      log.warn('shutdown failed', { error: msg });
     } finally {
       socket.removeAllListeners();
     }
@@ -186,7 +189,7 @@ export class SlackInteractionListener {
     for (const channelId of channelIds) {
       try {
         await this.slackClient.joinChannel(channelId);
-        console.log(`[slack] Joined channel ${channelId}`);
+        log.info('joined channel', { channel: channelId });
       } catch {
         // Ignore — channel may already be joined or private
       }
@@ -205,18 +208,18 @@ export class SlackInteractionListener {
     const personas = repos.agentPersona.getActive();
     const newPersonas = personas.filter((p) => !introduced.has(p.id));
     if (newPersonas.length === 0) {
-      console.log('[slack] All personas already introduced — skipping intros');
+      log.info('all personas already introduced — skipping intros');
       return;
     }
 
-    console.log(`[slack] Introducing ${newPersonas.length} persona(s) to #eng`);
+    log.info('introducing personas to #eng', { count: newPersonas.length });
 
     for (const persona of newPersonas) {
       // Generate avatar if missing and Replicate token is configured
       let currentPersona = persona;
       if (!currentPersona.avatarUrl && slack.replicateApiToken) {
         try {
-          console.log(`[slack] Generating avatar for ${persona.name}…`);
+          log.info('generating avatar', { agent: persona.name });
           const avatarUrl = await generatePersonaAvatar(
             persona.name,
             persona.role,
@@ -226,11 +229,11 @@ export class SlackInteractionListener {
             currentPersona = repos.agentPersona.update(persona.id, {
               avatarUrl,
             });
-            console.log(`[slack] Avatar set for ${persona.name}: ${avatarUrl}`);
+            log.info('avatar set', { agent: persona.name, url: avatarUrl });
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          console.warn(`[slack] Avatar generation failed for ${persona.name}: ${msg}`);
+          log.warn('avatar generation failed', { agent: persona.name, error: msg });
         }
       }
 
@@ -250,10 +253,10 @@ export class SlackInteractionListener {
           `INSERT INTO schema_meta (key, value) VALUES ('slack_persona_intros_v4', ?)
            ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
         ).run(JSON.stringify(Array.from(introduced)));
-        console.log(`[slack] Intro posted for ${persona.name}`);
+        log.info('persona intro posted', { agent: persona.name });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[slack] Persona intro failed for ${persona.name}: ${msg}`);
+        log.warn('persona intro failed', { agent: persona.name, error: msg });
       }
     }
   }
@@ -290,22 +293,28 @@ export class SlackInteractionListener {
           event.text ?? '',
           repos.projectRegistry.getAll(),
         ).catch((e: unknown) =>
-          console.warn('[slack][issue-review] bot message review failed:', String(e)),
+          log.warn('bot message issue-review failed', { error: String(e) }),
         );
       }
     }
 
     const ignored = this.parser.shouldIgnoreInboundSlackEvent(event, this.botUserId);
     if (ignored) {
-      console.log(
-        `[slack] ignored self/system event type=${event.type ?? '?'} subtype=${event.subtype ?? '-'} channel=${event.channel ?? '-'} user=${event.user ?? '-'} bot_id=${event.bot_id ?? '-'}`,
-      );
+      log.debug('ignored self/system event', {
+        type: event.type,
+        subtype: event.subtype,
+        channel: event.channel,
+        bot_id: event.bot_id,
+      });
       return;
     }
 
-    console.log(
-      `[slack] inbound human event type=${event.type ?? '?'} channel=${event.channel ?? '-'} user=${event.user ?? '-'} text=${(event.text ?? '').slice(0, 80)}`,
-    );
+    log.info('inbound human event', {
+      type: event.type,
+      channel: event.channel,
+      user: event.user,
+      text: (event.text ?? '').slice(0, 80),
+    });
 
     // Direct bot mentions arrive as app_mention; ignore the mirrored message event
     // to avoid duplicate or out-of-order handling on the same Slack message ts.
@@ -314,7 +323,7 @@ export class SlackInteractionListener {
       this.botUserId &&
       (event.text ?? '').includes(`<@${this.botUserId}>`)
     ) {
-      console.log('[slack] ignoring mirrored message event for direct bot mention');
+      log.debug('ignoring mirrored message event for direct bot mention');
       return;
     }
 
@@ -322,7 +331,7 @@ export class SlackInteractionListener {
       await this.handleInboundMessage(event);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`Slack interaction message handling failed: ${msg}`);
+      log.warn('message handling failed', { error: msg });
     }
   }
 
@@ -392,7 +401,7 @@ export class SlackInteractionListener {
 
     if (mentioned.length === 0) return;
 
-    console.log(`[slack] agent mention follow-up: ${mentioned.map((p) => p.name).join(', ')}`);
+    log.info('agent mention follow-up', { agents: mentioned.map((p) => p.name).join(', '), channel });
 
     for (const persona of mentioned) {
       // Small human-like delay before the tagged persona responds
@@ -733,9 +742,11 @@ export class SlackInteractionListener {
       return true;
     }
 
-    console.log(
-      `[slack][provider] routing provider=${request.provider} to persona=${persona.name} project=${targetProject.name}`,
-    );
+    log.info('routing direct provider request', {
+      provider: request.provider,
+      agent: persona.name,
+      project: targetProject.name,
+    });
 
     const providerLabel = request.provider === 'claude' ? 'Claude' : 'Codex';
     const compactPrompt = request.prompt.replace(/\s+/g, ' ').trim();
@@ -815,9 +826,13 @@ export class SlackInteractionListener {
       return true;
     }
 
-    console.log(
-      `[slack][job] routing job=${request.job} to persona=${persona.name} project=${targetProject.name}${request.prNumber ? ` pr=${request.prNumber}` : ''}${request.fixConflicts ? ' fix_conflicts=true' : ''}`,
-    );
+    log.info('routing job request', {
+      job: request.job,
+      agent: persona.name,
+      project: targetProject.name,
+      pr: request.prNumber,
+      fixConflicts: request.fixConflicts || undefined,
+    });
 
     const planLine =
       request.job === 'review'
@@ -829,9 +844,12 @@ export class SlackInteractionListener {
     await this.applyHumanResponseTiming(channel, messageTs, persona);
 
     await this.slackClient.postAsAgent(channel, `${planLine}`, persona, threadTs);
-    console.log(
-      `[slack][job] ${persona.name} accepted job=${request.job} project=${targetProject.name}${request.prNumber ? ` pr=${request.prNumber}` : ''}`,
-    );
+    log.info('agent accepted job', {
+      agent: persona.name,
+      job: request.job,
+      project: targetProject.name,
+      pr: request.prNumber,
+    });
     this.markChannelActivity(channel);
     this.markPersonaReply(channel, threadTs, persona.id);
     this.rememberAdHocThreadPersona(channel, threadTs, persona.id);
@@ -889,9 +907,11 @@ export class SlackInteractionListener {
       return true;
     }
 
-    console.log(
-      `[slack][issue-pickup] routing issue=#${request.issueNumber} to persona=${persona.name} project=${targetProject.name}`,
-    );
+    log.info('routing issue pickup', {
+      issue: request.issueNumber,
+      agent: persona.name,
+      project: targetProject.name,
+    });
 
     await this.applyHumanResponseTiming(channel, messageTs, persona);
     await this.slackClient.postAsAgent(
@@ -919,13 +939,13 @@ export class SlackInteractionListener {
           timeout: 15_000,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
-        console.log(`[slack][issue-pickup] moved #${request.issueNumber} to In Progress`);
+        log.info('issue moved to In Progress', { issue: request.issueNumber });
       } catch {
-        console.warn(`[slack][issue-pickup] failed to move #${request.issueNumber} to In Progress`);
+        log.warn('failed to move issue to In Progress', { issue: request.issueNumber });
       }
     }
 
-    console.log(`[slack][issue-pickup] spawning run for #${request.issueNumber}`);
+    log.info('spawning run for issue', { issue: request.issueNumber });
     await this.jobSpawner.spawnNightWatchJob(
       'run',
       targetProject,
@@ -956,7 +976,7 @@ export class SlackInteractionListener {
 
     const lastReviewed = this.reviewedIssues.get(reviewable.issueUrl);
     if (lastReviewed && Date.now() - lastReviewed < this.ISSUE_REVIEW_COOLDOWN_MS) {
-      console.log(`[slack][issue-review] cooldown active for ${reviewable.issueUrl} — skipping`);
+      log.debug('issue-review cooldown active, skipping', { url: reviewable.issueUrl });
       return false;
     }
 
@@ -977,22 +997,22 @@ export class SlackInteractionListener {
     };
 
     this.reviewedIssues.set(reviewable.issueUrl, Date.now());
-    console.log(
-      `[slack][issue-review] starting review for ${reviewable.issueRef} in ${channel}:${ts}`,
-    );
+    log.info('starting issue review', { ref: reviewable.issueRef, channel, ts });
     void this.engine
       .startDiscussion(trigger)
       .catch((e: unknown) =>
-        console.warn('[slack][issue-review] startDiscussion failed:', String(e)),
+        log.warn('issue-review startDiscussion failed', { error: String(e) }),
       );
     return true;
   }
 
   private async handleInboundMessage(event: IInboundSlackEvent): Promise<void> {
     if (this.parser.shouldIgnoreInboundSlackEvent(event, this.botUserId)) {
-      console.log(
-        `[slack] ignoring event — failed shouldIgnore check (user=${event.user}, bot_id=${event.bot_id ?? '-'}, subtype=${event.subtype ?? '-'})`,
-      );
+      log.debug('ignoring event — shouldIgnore check', {
+        user: event.user,
+        bot_id: event.bot_id,
+        subtype: event.subtype,
+      });
       return;
     }
 
@@ -1005,7 +1025,7 @@ export class SlackInteractionListener {
 
     // Deduplicate retried/replayed events to prevent response loops.
     if (!this.rememberMessageKey(messageKey)) {
-      console.log(`[slack] duplicate event ${messageKey} — skipping`);
+      log.debug('duplicate event, skipping', { key: messageKey });
       return;
     }
 
@@ -1017,9 +1037,12 @@ export class SlackInteractionListener {
     // Fetch GitHub issue/PR content from URLs in the message so agents can inspect them.
     const githubUrls = this.parser.extractGitHubIssueUrls(text);
     const genericUrls = this.parser.extractGenericUrls(text);
-    console.log(
-      `[slack] processing message channel=${channel} thread=${threadTs} github_urls=${githubUrls.length} generic_urls=${genericUrls.length}`,
-    );
+    log.info('processing message', {
+      channel,
+      thread: threadTs,
+      github_urls: githubUrls.length,
+      generic_urls: genericUrls.length,
+    });
     const githubContext =
       githubUrls.length > 0 ? await this.contextFetcher.fetchGitHubIssueContext(githubUrls) : '';
     const urlContext =
@@ -1055,15 +1078,16 @@ export class SlackInteractionListener {
     if (mentionedPersonas.length === 0) {
       mentionedPersonas = resolvePersonasByPlainName(text, personas);
       if (mentionedPersonas.length > 0) {
-        console.log(`[slack] plain-name match: ${mentionedPersonas.map((p) => p.name).join(', ')}`);
+        log.info('plain-name match', { agents: mentionedPersonas.map((p) => p.name).join(', ') });
       }
     }
 
     // Persona mentioned → respond regardless of whether a formal discussion exists.
     if (mentionedPersonas.length > 0) {
-      console.log(
-        `[slack] routing to persona(s): ${mentionedPersonas.map((p) => p.name).join(', ')} in ${channel}`,
-      );
+      log.info('routing to mentioned persona(s)', {
+        agents: mentionedPersonas.map((p) => p.name).join(', '),
+        channel,
+      });
       const discussion = repos.slackDiscussion
         .getActive('')
         .find((d) => d.channelId === channel && d.threadTs === threadTs);
@@ -1072,14 +1096,14 @@ export class SlackInteractionListener {
       let lastPersonaId = '';
       for (const persona of mentionedPersonas) {
         if (this.isPersonaOnCooldown(channel, threadTs, persona.id)) {
-          console.log(`[slack] ${persona.name} is on cooldown — skipping`);
+          log.debug('persona on cooldown, skipping', { agent: persona.name });
           continue;
         }
         await this.applyHumanResponseTiming(channel, ts, persona);
         if (discussion) {
           await this.engine.contributeAsAgent(discussion.id, persona);
         } else {
-          console.log(`[slack] replying as ${persona.name} in ${channel}`);
+          log.info('replying as agent', { agent: persona.name, channel });
           lastPosted = await this.engine.replyAsAgent(
             channel,
             threadTs,
@@ -1110,9 +1134,7 @@ export class SlackInteractionListener {
       return;
     }
 
-    console.log(
-      `[slack] no persona match — checking for active discussion in ${channel}:${threadTs}`,
-    );
+    log.debug('no persona match — checking for active discussion', { channel, thread: threadTs });
 
     // No persona mention — only handle within an existing Night Watch discussion thread.
     const discussion = repos.slackDiscussion
@@ -1129,14 +1151,16 @@ export class SlackInteractionListener {
     if (rememberedPersona) {
       const followUpPersona = selectFollowUpPersona(rememberedPersona, personas, text);
       if (followUpPersona.id !== rememberedPersona.id) {
-        console.log(
-          `[slack] handing off ad-hoc thread from ${rememberedPersona.name} to ${followUpPersona.name} based on topic`,
-        );
+        log.info('handing off ad-hoc thread', {
+          from: rememberedPersona.name,
+          to: followUpPersona.name,
+          channel,
+        });
       } else {
-        console.log(`[slack] continuing ad-hoc thread with ${rememberedPersona.name}`);
+        log.info('continuing ad-hoc thread', { agent: rememberedPersona.name, channel });
       }
       await this.applyHumanResponseTiming(channel, ts, followUpPersona);
-      console.log(`[slack] replying as ${followUpPersona.name} in ${channel}`);
+      log.info('replying as agent', { agent: followUpPersona.name, channel });
       const postedText = await this.engine.replyAsAgent(
         channel,
         threadTs,
@@ -1174,11 +1198,13 @@ export class SlackInteractionListener {
       );
       if (recoveredPersona) {
         const followUpPersona = selectFollowUpPersona(recoveredPersona, personas, text);
-        console.log(
-          `[slack] recovered ad-hoc thread persona ${recoveredPersona.name} from history, replying as ${followUpPersona.name}`,
-        );
+        log.info('recovered ad-hoc thread persona from history', {
+          recovered: recoveredPersona.name,
+          replyingAs: followUpPersona.name,
+          channel,
+        });
         await this.applyHumanResponseTiming(channel, ts, followUpPersona);
-        console.log(`[slack] replying as ${followUpPersona.name} in ${channel}`);
+        log.info('replying as agent', { agent: followUpPersona.name, channel });
         const postedText = await this.engine.replyAsAgent(
           channel,
           threadTs,
@@ -1210,7 +1236,7 @@ export class SlackInteractionListener {
 
     // Ambient team messages ("hey guys", "happy friday", "are you all alive?") get multiple replies.
     if (this.parser.isAmbientTeamMessage(text)) {
-      console.log(`[slack] ambient team message detected — engaging multiple personas`);
+      log.info('ambient team message — engaging multiple personas', { channel });
       await this.engageMultiplePersonas(channel, threadTs, ts, text, personas, fullContext);
       return;
     }
@@ -1219,7 +1245,7 @@ export class SlackInteractionListener {
     if (event.type === 'app_mention') {
       const randomPersona = this.pickRandomPersona(personas, channel, threadTs);
       if (randomPersona) {
-        console.log(`[slack] app_mention auto-engaging via ${randomPersona.name}`);
+        log.info('app_mention auto-engaging', { agent: randomPersona.name, channel });
         await this.applyHumanResponseTiming(channel, ts, randomPersona);
         const postedText = await this.engine.replyAsAgent(
           channel,
@@ -1264,7 +1290,7 @@ export class SlackInteractionListener {
     // Guaranteed fallback reply — someone always responds.
     const randomPersona = this.pickRandomPersona(personas, channel, threadTs);
     if (randomPersona) {
-      console.log(`[slack] fallback engage via ${randomPersona.name}`);
+      log.info('fallback engage', { agent: randomPersona.name, channel });
       await this.applyHumanResponseTiming(channel, ts, randomPersona);
       const postedText = await this.engine.replyAsAgent(
         channel,
@@ -1295,6 +1321,6 @@ export class SlackInteractionListener {
       return;
     }
 
-    console.log(`[slack] no active discussion found — ignoring message`);
+    log.debug('no active discussion found — ignoring message', { channel, thread: threadTs });
   }
 }

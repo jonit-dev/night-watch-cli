@@ -3,7 +3,9 @@
  * Periodically sends idle-channel messages and code-watch audits.
  */
 
-import { IAgentPersona, INightWatchConfig, getRepositories } from '@night-watch/core';
+import { IAgentPersona, INightWatchConfig, createLogger, getRepositories } from '@night-watch/core';
+
+const log = createLogger('proactive');
 import type { IRegistryEntry } from '@night-watch/core';
 import * as fs from 'fs';
 import { basename } from 'node:path';
@@ -129,10 +131,10 @@ export class ProactiveLoop {
         );
         this.lastProactiveAt.set(channel, now);
         this.callbacks.markChannelActivity(channel);
-        console.log(`[slack] proactive message posted by ${persona.name} in ${channel}`);
+        log.info('proactive message posted', { agent: persona.name, channel });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`Slack proactive message failed: ${msg}`);
+        log.warn('proactive message failed', { error: msg, channel });
       }
     }
   }
