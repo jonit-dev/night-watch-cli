@@ -53,6 +53,16 @@ export function buildOpeningMessage(trigger: IDiscussionTrigger): string {
 
       return trigger.context.slice(0, 600);
     }
+    case 'issue_review': {
+      const openers = [
+        `Taking a look at ${trigger.ref} — what do we think?`,
+        `Reviewing ${trigger.ref}. Sharing notes in a sec.`,
+        `Got eyes on ${trigger.ref}. Let's figure out if this is real.`,
+        `${trigger.ref} came up — quick review?`,
+      ];
+      const hash = trigger.ref.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+      return openers[hash % openers.length];
+    }
     default:
       return trigger.context.slice(0, 500);
   }
@@ -123,6 +133,16 @@ ${isFirstRound ? '- First round: give your initial take from your angle. Be spec
 - Never say "as an AI" or break character.
 - Only reference PR numbers, issue numbers, or URLs that appear in the Context or Thread above. Never invent or guess links.
 ${isFinalRound ? '- Final round: be decisive. State your position clearly.' : ''}
+${
+  trigger.type === 'issue_review'
+    ? `
+Issue Review Guidance:
+- Is this issue actually valid? Does the codebase have this problem, or is it already fixed?
+- Is it worth tracking? Consider: Ready (prioritize now), Draft (valid but not urgent), or Close (invalid/duplicate/won't fix).
+- Use query_codebase to verify code claims before making them.
+- End your message with a clear lean toward READY, CLOSE, or DRAFT.`
+    : ''
+}
 
 Write ONLY your message. No name prefix, no labels.`;
 }

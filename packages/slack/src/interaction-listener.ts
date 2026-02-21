@@ -22,7 +22,12 @@ import { JobSpawner } from './job-spawner.js';
 import type { IJobSpawnerCallbacks } from './job-spawner.js';
 import { ProactiveLoop } from './proactive-loop.js';
 import { MessageParser } from './message-parser.js';
-import type { IAdHocThreadState, IEventsApiPayload, IInboundSlackEvent } from './message-parser.js';
+import type {
+  IAdHocThreadState,
+  IEventsApiPayload,
+  IInboundSlackEvent,
+  ISlackIssueReviewable,
+} from './message-parser.js';
 import {
   resolveMentionedPersonas,
   resolvePersonasByPlainName,
@@ -66,6 +71,8 @@ export class SlackInteractionListener {
   private readonly lastPersonaReplyAt = new Map<string, number>();
   private readonly adHocThreadState = new Map<string, IAdHocThreadState>();
   private readonly lastChannelActivityAt = new Map<string, number>();
+  private readonly reviewedIssues = new Map<string, number>(); // issueUrl → lastReviewedAt timestamp
+  private readonly ISSUE_REVIEW_COOLDOWN_MS = 30 * 60_000;
 
   constructor(slackClient: SlackClient, engine: DeliberationEngine, config: INightWatchConfig) {
     this.slackClient = slackClient;
@@ -264,6 +271,29 @@ export class SlackInteractionListener {
     if (!event) return;
 
     if (event.type !== 'message' && event.type !== 'app_mention') return;
+
+    // Bot-posted root messages with issue URLs trigger an async review before the ignore filter.
+    if (
+      event.bot_id &&
+      event.type === 'message' &&
+      !event.subtype &&
+      !event.thread_ts &&
+      event.channel &&
+      event.ts
+    ) {
+      const issueUrls = this.parser.extractGitHubIssueUrls(event.text ?? '');
+      if (issueUrls.length > 0) {
+        const repos = getRepositories();
+        void this.triggerIssueReviewIfFound(
+          event.channel,
+          event.ts,
+          event.text ?? '',
+          repos.projectRegistry.getAll(),
+        ).catch((e: unknown) =>
+          console.warn('[slack][issue-review] bot message review failed:', String(e)),
+        );
+      }
+    }
 
     const ignored = this.parser.shouldIgnoreInboundSlackEvent(event, this.botUserId);
     if (ignored) {
@@ -910,6 +940,54 @@ export class SlackInteractionListener {
     return true;
   }
 
+  /**
+   * Trigger an issue review discussion if the text contains a GitHub issue URL.
+   * Anti-loop: tracked per-URL with a 30-minute cooldown. Only root messages trigger reviews.
+   * Returns true if a review was started (caller should return early).
+   */
+  private async triggerIssueReviewIfFound(
+    channel: string,
+    ts: string,
+    text: string,
+    projects: IRegistryEntry[],
+  ): Promise<boolean> {
+    const reviewable: ISlackIssueReviewable | null = this.parser.parseSlackIssueReviewable(text);
+    if (!reviewable) return false;
+
+    const lastReviewed = this.reviewedIssues.get(reviewable.issueUrl);
+    if (lastReviewed && Date.now() - lastReviewed < this.ISSUE_REVIEW_COOLDOWN_MS) {
+      console.log(`[slack][issue-review] cooldown active for ${reviewable.issueUrl} — skipping`);
+      return false;
+    }
+
+    const targetProject = this.resolveTargetProject(channel, projects);
+    if (!targetProject) return false;
+
+    const issueContext = await this.contextFetcher
+      .fetchGitHubIssueContext([reviewable.issueUrl])
+      .catch(() => '');
+
+    const trigger = {
+      type: 'issue_review' as const,
+      ref: reviewable.issueRef,
+      context: issueContext || `GitHub Issue: ${reviewable.issueUrl}`,
+      channelId: channel,
+      threadTs: ts,
+      projectPath: targetProject.path,
+    };
+
+    this.reviewedIssues.set(reviewable.issueUrl, Date.now());
+    console.log(
+      `[slack][issue-review] starting review for ${reviewable.issueRef} in ${channel}:${ts}`,
+    );
+    void this.engine
+      .startDiscussion(trigger)
+      .catch((e: unknown) =>
+        console.warn('[slack][issue-review] startDiscussion failed:', String(e)),
+      );
+    return true;
+  }
+
   private async handleInboundMessage(event: IInboundSlackEvent): Promise<void> {
     if (this.parser.shouldIgnoreInboundSlackEvent(event, this.botUserId)) {
       console.log(
@@ -960,6 +1038,13 @@ export class SlackInteractionListener {
 
     if (await this.triggerIssuePickupIfRequested(event, channel, threadTs, ts, personas)) {
       return;
+    }
+
+    // Root messages with a GitHub issue URL trigger an automatic team review.
+    if (!event.thread_ts) {
+      if (await this.triggerIssueReviewIfFound(channel, ts, text, projects)) {
+        return;
+      }
     }
 
     // @mention matching: "@maya ..."

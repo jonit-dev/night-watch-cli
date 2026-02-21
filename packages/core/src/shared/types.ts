@@ -7,20 +7,20 @@
 // ==================== Provider ====================
 
 /** Supported AI providers */
-export type Provider = "claude" | "codex";
+export type Provider = 'claude' | 'codex';
 
 // ==================== Notification / Webhook ====================
 
-export type WebhookType = "slack" | "discord" | "telegram";
+export type WebhookType = 'slack' | 'discord' | 'telegram';
 export type NotificationEvent =
-  | "run_started"
-  | "run_succeeded"
-  | "run_failed"
-  | "run_timeout"
-  | "review_completed"
-  | "pr_auto_merged"
-  | "rate_limit_fallback"
-  | "qa_completed";
+  | 'run_started'
+  | 'run_succeeded'
+  | 'run_failed'
+  | 'run_timeout'
+  | 'review_completed'
+  | 'pr_auto_merged'
+  | 'rate_limit_fallback'
+  | 'qa_completed';
 
 export interface IWebhookConfig {
   type: WebhookType;
@@ -77,7 +77,7 @@ export interface INightWatchConfig {
 
 export interface IPrdInfo {
   name: string;
-  status: "ready" | "blocked" | "in-progress" | "pending-review" | "done";
+  status: 'ready' | 'blocked' | 'in-progress' | 'pending-review' | 'done';
   dependencies: string[];
   unmetDependencies: string[];
 }
@@ -97,7 +97,7 @@ export interface IPrInfo {
   title: string;
   branch: string;
   url: string;
-  ciStatus: "pass" | "fail" | "pending" | "unknown";
+  ciStatus: 'pass' | 'fail' | 'pending' | 'unknown';
   reviewScore: number | null;
 }
 
@@ -144,7 +144,7 @@ export interface IRoadmapStatus {
   totalItems: number;
   processedItems: number;
   pendingItems: number;
-  status: "idle" | "scanning" | "complete" | "disabled" | "no-roadmap";
+  status: 'idle' | 'scanning' | 'complete' | 'disabled' | 'no-roadmap';
   items: IRoadmapItem[];
   lastScan?: string;
   autoScanInterval?: number;
@@ -154,18 +154,18 @@ export interface IRoadmapStatus {
 
 export interface ISlackBotConfig {
   enabled: boolean;
-  botToken: string;           // xoxb-...
-  appToken?: string;          // xapp-... for Socket Mode (optional)
+  botToken: string; // xoxb-...
+  appToken?: string; // xapp-... for Socket Mode (optional)
   channels: {
-    eng: string;              // Channel ID for #eng
-    prs: string;              // Channel ID for #prs
-    incidents: string;        // Channel ID for #incidents
-    releases: string;         // Channel ID for #releases
+    eng: string; // Channel ID for #eng
+    prs: string; // Channel ID for #prs
+    incidents: string; // Channel ID for #incidents
+    releases: string; // Channel ID for #releases
   };
   autoCreateProjectChannels: boolean;
   discussionEnabled: boolean;
-  replicateApiToken?: string;  // For AI-generated persona avatars (Flux)
-  serverBaseUrl?: string;      // Public base URL of the Night Watch server (e.g. https://my-ngrok.io) used to serve local avatar images to Slack
+  replicateApiToken?: string; // For AI-generated persona avatars (Flux)
+  serverBaseUrl?: string; // Public base URL of the Night Watch server (e.g. https://my-ngrok.io) used to serve local avatar images to Slack
 }
 
 // ==================== Agent Personas ====================
@@ -174,7 +174,7 @@ export interface IAgentModelConfig {
   provider: 'anthropic' | 'openai' | 'custom';
   model: string;
   baseUrl?: string;
-  envVars?: Record<string, string>;  // Stored encrypted; never returned by API in plaintext
+  envVars?: Record<string, string>; // Stored encrypted; never returned by API in plaintext
   maxTokens?: number;
   temperature?: number;
 }
@@ -244,18 +244,23 @@ export type UpdateAgentPersonaInput = Partial<CreateAgentPersonaInput & { isActi
 
 export type DiscussionStatus = 'active' | 'consensus' | 'blocked' | 'closed';
 export type ConsensusResult = 'approved' | 'changes_requested' | 'human_needed';
-export type TriggerType = 'pr_review' | 'build_failure' | 'prd_kickoff' | 'code_watch';
+export type TriggerType =
+  | 'pr_review'
+  | 'build_failure'
+  | 'prd_kickoff'
+  | 'code_watch'
+  | 'issue_review';
 
 export interface ISlackDiscussion {
   id: string;
   projectPath: string;
   triggerType: TriggerType;
-  triggerRef: string;       // PR number, PRD name, etc.
+  triggerRef: string; // PR number, PRD name, etc.
   channelId: string;
   threadTs: string;
   status: DiscussionStatus;
   round: number;
-  participants: string[];   // Agent IDs that have contributed
+  participants: string[]; // Agent IDs that have contributed
   consensusResult: ConsensusResult | null;
   createdAt: number;
   updatedAt: number;
@@ -264,9 +269,10 @@ export interface ISlackDiscussion {
 export interface IDiscussionTrigger {
   type: TriggerType;
   projectPath: string;
-  ref: string;             // PR number as string, PRD name, etc.
-  context: string;         // PR diff, failure message, PRD summary, etc.
+  ref: string; // PR number as string, PRD name, etc.
+  context: string; // PR diff, failure message, PRD summary, etc.
   prUrl?: string;
-  channelId?: string;      // Explicit Slack channel override (e.g., project-specific channel)
+  channelId?: string; // Explicit Slack channel override (e.g., project-specific channel)
   openingMessage?: string; // Override the generated opening message (e.g., AI-authored observation)
+  threadTs?: string; // If set, skip opener post and anchor discussion in this existing thread
 }
