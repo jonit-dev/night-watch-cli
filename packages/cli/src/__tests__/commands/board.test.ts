@@ -16,6 +16,7 @@ import * as path from "path";
 
 const mockProvider = {
   setupBoard: vi.fn(),
+  ensureLabels: vi.fn().mockResolvedValue({ created: 0, skipped: 15, failed: 0 }),
   getBoard: vi.fn(),
   getColumns: vi.fn(),
   createIssue: vi.fn(),

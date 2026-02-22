@@ -91,6 +91,7 @@ async function ensureBoardConfigured(
     info(`No board configured. Creating "${title}"…`);
   }
   const boardInfo = await provider.setupBoard(title);
+  await provider.ensureLabels();
 
   const result = saveConfig(cwd, {
     boardProvider: {
@@ -232,6 +233,16 @@ export function boardCommand(program: Command): void {
         const boardTitle = options.title?.trim() || defaultBoardTitle(cwd);
         info(`Creating board "${boardTitle}"…`);
         const boardInfo = await provider.setupBoard(boardTitle);
+
+        // Ensure all Night Watch labels exist in the repo
+        info('Ensuring labels…');
+        const labelResult = await provider.ensureLabels();
+        if (labelResult.created > 0) {
+          success(`Created ${labelResult.created} label(s)`);
+        }
+        if (labelResult.skipped > 0) {
+          dim(`${labelResult.skipped} label(s) already existed`);
+        }
 
         // Persist the project number
         const result = saveConfig(cwd, {

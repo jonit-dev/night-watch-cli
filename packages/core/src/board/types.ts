@@ -38,6 +38,9 @@ export interface IBoardProvider {
   /** Create a new project board with lifecycle columns. Returns board info. */
   setupBoard(title: string): Promise<IBoardInfo>;
 
+  /** Ensure all Night Watch labels (priority, category, horizon) exist in the repo. */
+  ensureLabels(): Promise<{ created: number; skipped: number; failed: number }>;
+
   /** Get the configured board. Returns null if not set up. */
   getBoard(): Promise<IBoardInfo | null>;
 

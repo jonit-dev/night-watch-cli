@@ -12,13 +12,31 @@ import {
   isValidPriority,
 } from '@night-watch/core';
 import type { BoardColumnName, IBoardProviderConfig } from '@night-watch/core';
-import { execFile } from 'child_process';
+import { execFile, execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
-import { extractErrorMessage } from '../utils.js';
+import { buildSubprocessEnv, extractErrorMessage } from '../utils.js';
+
+/**
+ * Return the names of all labels that currently exist in the repo.
+ * Falls back to an empty array on any error (e.g. gh not authenticated, no repo).
+ */
+export function fetchRepoLabels(projectPath: string): string[] {
+  try {
+    const out = execFileSync('gh', ['label', 'list', '--json', 'name', '--limit', '200'], {
+      cwd: projectPath,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout: 10_000,
+    });
+    return (JSON.parse(out) as Array<{ name: string }>).map((l) => l.name);
+  } catch {
+    return [];
+  }
+}
 
 export interface IAnthropicTool {
   name: string;
@@ -34,9 +52,20 @@ export type ToolRegistry = Map<string, ToolHandler>;
 
 /**
  * Returns Anthropic tool definitions for board operations.
+ * Pass `repoLabels` (from `fetchRepoLabels`) to constrain label enums to what actually
+ * exists in the repo — prevents the agent from picking labels that don't exist yet.
  */
-export function buildBoardTools(): IAnthropicTool[] {
+export function buildBoardTools(repoLabels?: string[]): IAnthropicTool[] {
   const columnEnum = ['Draft', 'Ready', 'In Progress', 'Review', 'Done'];
+
+  // Filter a label group to the subset that exists in the repo.
+  // Falls back to the full group if repo labels are unknown or none match.
+  const intersect = (group: readonly string[]): string[] => {
+    if (!repoLabels?.length) return [...group];
+    const hit = group.filter((l) => repoLabels.includes(l));
+    return hit.length > 0 ? hit : [...group];
+  };
+
   return [
     {
       name: 'open_github_issue',
@@ -54,19 +83,19 @@ export function buildBoardTools(): IAnthropicTool[] {
           },
           priority: {
             type: 'string',
-            enum: [...PRIORITY_LABELS],
+            enum: intersect(PRIORITY_LABELS),
             description:
               'Priority label: P0 (Critical), P1 (High), P2 (Normal). Infer from urgency and impact.',
           },
           category: {
             type: 'string',
-            enum: [...CATEGORY_LABELS],
+            enum: intersect(CATEGORY_LABELS),
             description:
               'Category label aligned with roadmap theme (e.g. reliability, quality, product, ux, provider, team, platform, intelligence, ecosystem).',
           },
           horizon: {
             type: 'string',
-            enum: [...HORIZON_LABELS],
+            enum: intersect(HORIZON_LABELS),
             description:
               'Delivery horizon: short-term (0-6w), medium-term (6w-4m), long-term (4-12m).',
           },
@@ -268,12 +297,14 @@ export async function executeCodebaseQuery(
       encoding: 'utf-8',
       timeout: 60_000,
       maxBuffer: 256 * 1024,
-      env: { ...process.env, ...(providerEnv ?? {}) },
+      env: buildSubprocessEnv(providerEnv ?? {}),
     });
     return (stdout as string).trim().slice(0, 6000) || '(no output)';
   } catch (err) {
     const msg = extractErrorMessage(err);
-    return `Provider query failed: ${msg}`;
+    const stderr = (err as Record<string, unknown>).stderr;
+    const detail = typeof stderr === 'string' && stderr.trim() ? ` | stderr: ${stderr.trim().slice(0, 300)}` : '';
+    return `Provider query failed: ${msg}${detail}`;
   }
 }
 

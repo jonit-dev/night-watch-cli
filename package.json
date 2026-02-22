@@ -8,7 +8,7 @@
   "scripts": {
     "build": "turbo run build",
     "test": "turbo run test",
-    "verify": "turbo run verify",
+    "verify": "turbo run verify && yarn lint",
     "build:web": "cd web && yarn install && yarn build",
     "dev:web": "concurrently --names \"api,vite\" --prefix-colors \"cyan,magenta\" \"node packages/cli/bin/night-watch.mjs serve\" \"yarn --cwd web dev\"",
     "dev": "concurrently --names \"api,vite\" --prefix-colors \"cyan,magenta\" \"tsx --watch packages/cli/src/cli.ts serve\" \"yarn --cwd web dev\"",

@@ -16,6 +16,7 @@ let mockProjectDir: string;
 
 vi.mock("child_process", () => ({
   execSync: vi.fn(),
+  execFile: vi.fn(),
   spawn: vi.fn(),
 }));
 
