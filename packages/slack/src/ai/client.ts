@@ -2,10 +2,35 @@
  * AI client for making calls to Anthropic and OpenAI APIs.
  */
 
-import { compileSoul } from '@night-watch/core';
+import { compileSoul, createLogger } from '@night-watch/core';
 import type { IAgentPersona, INightWatchConfig } from '@night-watch/core';
 import { joinBaseUrl, resolvePersonaAIConfig } from './provider.js';
 import type { IAnthropicTool, ToolRegistry } from './tools.js';
+
+const log = createLogger('ai');
+
+const RETRY_DELAYS_MS = [1_000, 3_000];
+
+/**
+ * Fetch with automatic retry on network errors (TypeError: fetch failed).
+ * API-level errors (non-2xx) are NOT retried — those are surfaced immediately.
+ */
+async function fetchWithRetry(url: string, options: RequestInit): Promise<Response> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      return await fetch(url, options);
+    } catch (err) {
+      lastErr = err;
+      const delay = RETRY_DELAYS_MS[attempt];
+      if (delay !== undefined) {
+        log.warn('fetch failed, retrying', { url, attempt: attempt + 1, delayMs: delay, error: String(err) });
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastErr;
+}
 
 /**
  * Call the AI provider to generate an agent contribution.
@@ -31,7 +56,7 @@ export async function callAIForContribution(
       process.env.ANTHROPIC_AUTH_TOKEN ??
       '';
 
-    const response = await fetch(joinBaseUrl(resolved.baseUrl, '/v1/messages'), {
+    const response = await fetchWithRetry(joinBaseUrl(resolved.baseUrl, '/v1/messages'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -56,7 +81,7 @@ export async function callAIForContribution(
   } else if (resolved.provider === 'openai') {
     const apiKey = resolved.envVars['OPENAI_API_KEY'] ?? process.env.OPENAI_API_KEY ?? '';
 
-    const response = await fetch(joinBaseUrl(resolved.baseUrl, '/v1/chat/completions'), {
+    const response = await fetchWithRetry(joinBaseUrl(resolved.baseUrl, '/v1/chat/completions'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -96,8 +121,9 @@ export async function callAIWithTools(
   prompt: string,
   tools: IAnthropicTool[],
   registry: ToolRegistry,
+  memory?: string,
 ): Promise<string> {
-  const soulPrompt = compileSoul(persona);
+  const soulPrompt = compileSoul(persona, memory);
   const resolved = resolvePersonaAIConfig(persona, config);
 
   const apiKey =
@@ -115,7 +141,7 @@ export async function callAIWithTools(
 
   const MAX_TOOL_ITERATIONS = 5;
   for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-    const response = await fetch(joinBaseUrl(resolved.baseUrl, '/v1/messages'), {
+    const response = await fetchWithRetry(joinBaseUrl(resolved.baseUrl, '/v1/messages'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -124,7 +150,7 @@ export async function callAIWithTools(
       },
       body: JSON.stringify({
         model: resolved.model,
-        max_tokens: 1024,
+        max_tokens: resolved.maxTokens,
         system: soulPrompt,
         tools,
         messages,
@@ -152,25 +178,35 @@ export async function callAIWithTools(
       return textBlock?.text?.trim() ?? '';
     }
 
-    // Execute all tool_use blocks
+    // Execute all tool_use blocks in parallel
     const toolUseBlocks = data.content.filter((b) => b.type === 'tool_use') as Array<{
       type: 'tool_use';
       id: string;
       name: string;
       input: Record<string, unknown>;
     }>;
-    const toolResults: Array<{ type: 'tool_result'; tool_use_id: string; content: string }> = [];
 
-    for (const block of toolUseBlocks) {
-      let result: string;
-      try {
-        const handler = registry.get(block.name);
-        result = handler ? await handler(block.input) : `Unknown tool: ${block.name}`;
-      } catch (err) {
-        result = `Error: ${String(err)}`;
-      }
-      toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: result });
-    }
+    const toolResults = await Promise.all(
+      toolUseBlocks.map(async (block) => {
+        log.info(`tool call: ${block.name}`, {
+          agent: persona.name,
+          input: JSON.stringify(block.input).slice(0, 200),
+        });
+        let result: string;
+        try {
+          const handler = registry.get(block.name);
+          result = handler ? await handler(block.input) : `Unknown tool: ${block.name}`;
+        } catch (err) {
+          result = `Error: ${String(err)}`;
+        }
+        log.info(`tool result: ${block.name}`, {
+          agent: persona.name,
+          resultChars: result.length,
+          preview: result.slice(0, 150),
+        });
+        return { type: 'tool_result' as const, tool_use_id: block.id, content: result };
+      }),
+    );
 
     // Append assistant turn and tool results to message history
     messages.push({ role: 'assistant', content: data.content });

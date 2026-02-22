@@ -57,7 +57,6 @@ export class ConsensusEvaluator {
     discussionId: string,
     trigger: IDiscussionTrigger,
     callbacks: IConsensusCallbacks,
-    roadmapContext?: string,
   ): Promise<void> {
     const repos = getRepositories();
 
@@ -68,7 +67,7 @@ export class ConsensusEvaluator {
 
       // issue_review uses READY/CLOSE/DRAFT evaluation logic — handle separately
       if (trigger.type === 'issue_review') {
-        await this.evaluateIssueReviewConsensus(discussionId, trigger, roadmapContext);
+        await this.evaluateIssueReviewConsensus(discussionId, trigger);
         return;
       }
 
@@ -100,7 +99,7 @@ Thread:
 ${historyText || '(No thread history available)'}
 
 Round: ${discussion.round}/${MAX_ROUNDS}
-${roadmapContext ? `\nRoadmap priorities:\n${roadmapContext}\n\nConsider whether the discussion outcomes align with roadmap priorities.\n` : ''}
+
 Make the call. Are we done, do we need one more pass, or does a human need to weigh in?
 - Keep it brief and decisive. No recap of the whole thread.
 - If you approve, do not restate prior arguments.
@@ -238,7 +237,6 @@ Write the prefix and your message. Nothing else.`;
   async evaluateIssueReviewConsensus(
     discussionId: string,
     trigger: IDiscussionTrigger,
-    roadmapContext?: string,
   ): Promise<void> {
     const repos = getRepositories();
     const discussion = repos.slackDiscussion.getById(discussionId);
@@ -263,7 +261,7 @@ Write the prefix and your message. Nothing else.`;
 
 Thread:
 ${historyText || '(No thread history available)'}
-${roadmapContext ? `\nRoadmap priorities:\n${roadmapContext}\n` : ''}
+
 Based on the discussion above, make the triage call for this issue.
 
 Respond with EXACTLY one of these formats (include the prefix):

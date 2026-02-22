@@ -12,7 +12,7 @@ import { findCarlos } from './personas.js';
 export const MAX_ROUNDS = 2;
 
 /** Maximum number of agent replies allowed in a single thread. */
-export const MAX_AGENT_THREAD_REPLIES = 4;
+export const MAX_AGENT_THREAD_REPLIES = 6;
 
 /**
  * Generate the opening message text for a discussion
@@ -103,12 +103,10 @@ export function buildContributionPrompt(
   trigger: IDiscussionTrigger,
   threadHistory: string,
   round: number,
-  roadmapContext?: string,
+  hasTools?: boolean,
 ): string {
   const isFirstRound = round === 1;
   const isFinalRound = round >= MAX_ROUNDS;
-
-  const roadmapSection = roadmapContext ? `\n## Roadmap Priorities\n${roadmapContext}\n` : '';
 
   return `You are ${persona.name}, ${persona.role}.
 You're in a Slack thread with your teammates — Dev (implementer), Carlos (tech lead), Maya (security), and Priya (QA). This is a real conversation, not a report.
@@ -118,7 +116,7 @@ Round: ${round}/${MAX_ROUNDS}${isFinalRound ? ' (final round — wrap up)' : ''}
 
 ## Context
 ${trigger.context.slice(0, 2000)}
-${roadmapSection}
+
 ## Thread So Far
 ${threadHistory || '(Thread just started)'}
 
@@ -134,11 +132,11 @@ If at least one is yes, speak — but stick to what you actually know.
 Silence is the right call when: the trigger is outside your expertise, teammates already covered it, or you'd just be echoing someone else. Do not post to fill space.
 
 ## Step 2 — If you do have something worth saying
-Write a short Slack message — 1 to 2 sentences max, under ~180 chars when possible.
+Write a Slack message in your natural voice. Keep it as short or long as the topic deserves — a quick take can be one sentence, a code review or analysis might need several. Don't pad, but don't cut yourself short either.
 ${isFirstRound ? '- First round: give your initial take from your angle. Be specific.' : '- Follow-up round: respond to what others said. Agree, push back, or add something new.'}
 - React to one specific point already in the thread (use teammate names when available).
 - When referencing code, use GitHub permalink format: \`path/to/file.ts#L42-L45\` followed by a short inline snippet. Example: "\`src/auth/middleware.ts#L23-L25\` — the token check skips expiry validation."
-- Every code claim MUST include a file path reference. No vague "the auth module" — name the exact file and line range.
+${hasTools ? '- You have tools: read_roadmap (read ROADMAP.md on-demand), query_codebase (AI-powered search — use this to read any file or search the codebase). Before making any code or roadmap claim, call the relevant tool. Cite what you found with file paths and line numbers.\n- You have board tools available. If the discussion concludes that an issue should be opened, use them.' : '- Every code claim MUST include a file path reference. No vague "the auth module" — name the exact file and line range.'}
 - Talk like a teammate, not an assistant. No pleasantries, no filler.
 - Stay in your lane — only comment on your domain unless something crosses into it.
 - Ground your feedback in the project roadmap when relevant. If what you're raising isn't on the roadmap, say so explicitly ("Not on the roadmap, but...").

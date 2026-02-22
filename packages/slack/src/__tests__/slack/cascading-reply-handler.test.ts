@@ -226,7 +226,6 @@ describe('CascadingReplyHandler', () => {
         'Carlos, please review this',
         persona,
         'ctx',
-        undefined,
       );
       expect(mocks.state.markPersonaReply).toHaveBeenCalledWith('C1', 'ts1', 'carlos-id');
       expect(mocks.state.rememberAdHocThreadPersona).toHaveBeenCalledWith('C1', 'ts1', 'carlos-id');
@@ -278,7 +277,6 @@ describe('CascadingReplyHandler', () => {
         'MAYA, check this out!',
         persona,
         'ctx',
-        undefined,
       );
     });
 
@@ -357,7 +355,6 @@ describe('CascadingReplyHandler', () => {
         'hello',
         persona,
         'ctx',
-        undefined,
       );
     });
 
@@ -656,111 +653,6 @@ describe('CascadingReplyHandler', () => {
       await handler.applyHumanResponseTiming('C1', 'msg-ts', persona);
 
       expect(sleepSpy).toHaveBeenCalledWith(1500);
-    });
-  });
-
-  // ── roadmapCallback wiring ───────────────────────────────────────────────
-
-  describe('roadmapCallback wiring', () => {
-    it('should pass roadmap context to replyAsAgent in followAgentMentions', async () => {
-      const roadmapCallback = vi.fn().mockReturnValue('Roadmap: Phase 1 — Auth');
-      const handlerWithRoadmap = new CascadingReplyHandler(
-        mocks.slackClient,
-        mocks.engine,
-        mocks.state,
-        roadmapCallback,
-      );
-
-      vi.mocked(mocks.state.isPersonaOnCooldown).mockReturnValue(false);
-      vi.mocked(mocks.state.randomInt).mockReturnValue(0);
-      vi.mocked(mocks.engine.replyAsAgent).mockResolvedValue('Got it!');
-
-      const persona = buildPersona('carlos-id', 'Carlos');
-      const personas = [persona];
-
-      await handlerWithRoadmap.followAgentMentions(
-        'Carlos, please review this',
-        'C1',
-        'ts1',
-        personas,
-        'ctx',
-        'other-id',
-      );
-
-      expect(roadmapCallback).toHaveBeenCalledWith('C1', persona);
-      expect(mocks.engine.replyAsAgent).toHaveBeenCalledWith(
-        'C1',
-        'ts1',
-        'Carlos, please review this',
-        persona,
-        'ctx',
-        'Roadmap: Phase 1 — Auth',
-      );
-    });
-
-    it('should pass roadmap context to replyAsAgent in maybePiggybackReply', async () => {
-      const roadmapCallback = vi.fn().mockReturnValue('Roadmap: Phase 2 — Payments');
-      const handlerWithRoadmap = new CascadingReplyHandler(
-        mocks.slackClient,
-        mocks.engine,
-        mocks.state,
-        roadmapCallback,
-      );
-
-      vi.spyOn(Math, 'random').mockReturnValue(0); // triggers piggyback (0 < 0.4)
-      vi.mocked(mocks.state.isPersonaOnCooldown).mockReturnValue(false);
-      vi.mocked(mocks.state.randomInt).mockReturnValue(0);
-      vi.mocked(mocks.engine.replyAsAgent).mockResolvedValue('');
-
-      const persona = buildPersona('dev-id', 'Dev');
-      const personas = [persona];
-
-      await handlerWithRoadmap.maybePiggybackReply(
-        'C1',
-        'ts1',
-        'hello',
-        personas,
-        'ctx',
-        'other-id',
-      );
-
-      expect(roadmapCallback).toHaveBeenCalledWith('C1', persona);
-      expect(mocks.engine.replyAsAgent).toHaveBeenCalledWith(
-        'C1',
-        'ts1',
-        'hello',
-        persona,
-        'ctx',
-        'Roadmap: Phase 2 — Payments',
-      );
-    });
-
-    it('should pass undefined roadmap context when no roadmapCallback is provided', async () => {
-      // Default handler from beforeEach has no roadmapCallback
-      vi.mocked(mocks.state.isPersonaOnCooldown).mockReturnValue(false);
-      vi.mocked(mocks.state.randomInt).mockReturnValue(0);
-      vi.mocked(mocks.engine.replyAsAgent).mockResolvedValue('Noted!');
-
-      const persona = buildPersona('carlos-id', 'Carlos');
-      const personas = [persona];
-
-      await handler.followAgentMentions(
-        'Carlos, please review this',
-        'C1',
-        'ts1',
-        personas,
-        'ctx',
-        'other-id',
-      );
-
-      expect(mocks.engine.replyAsAgent).toHaveBeenCalledWith(
-        'C1',
-        'ts1',
-        'Carlos, please review this',
-        persona,
-        'ctx',
-        undefined,
-      );
     });
   });
 

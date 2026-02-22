@@ -8,7 +8,9 @@ export type { IAnthropicTool, ToolHandler, ToolRegistry } from './tools.js';
 export {
   buildBoardTools,
   buildCodebaseQueryTool,
+  buildFilesystemTools,
   executeBoardTool,
   executeCodebaseQuery,
+  executeReadRoadmap,
 } from './tools.js';
 export { callAIForContribution, callAIWithTools } from './client.js';

@@ -1,9 +1,9 @@
 /**
  * Roadmap Context Compiler for Night Watch agents.
  *
- * Produces two formats from an IRoadmapStatus:
- * - Full digest: all horizons with items and descriptions (for lead roles)
- * - Smart summary: pending short-term items + first 3 medium-term (for others)
+ * Produces agent-visible context from an IRoadmapStatus by combining:
+ * - The raw ROADMAP.md content (so agents can reference exact sections/wording)
+ * - A progress overlay showing which items are done vs pending
  *
  * Role detection uses case-insensitive substring matching so any custom
  * persona role string is handled without enum changes.
@@ -13,8 +13,12 @@ import type { IAgentPersona } from '../shared/types.js';
 import type { IRoadmapContextOptions } from '../shared/types.js';
 import type { IRoadmapStatus } from './roadmap-scanner.js';
 
-const DEFAULT_MAX_FULL = 3000;
-const DEFAULT_MAX_SUMMARY = 800;
+/** Max chars for the raw file content portion. */
+const RAW_CONTENT_MAX = 6000;
+
+/** Max chars for the progress overlay. */
+const PROGRESS_MAX_FULL = 2000;
+const PROGRESS_MAX_SUMMARY = 600;
 
 /** Keywords that identify a "lead" persona who gets the full roadmap digest. */
 const LEAD_KEYWORDS = ['lead', 'architect', 'product', 'manager', 'pm', 'director'] as const;
@@ -39,14 +43,25 @@ export function compileRoadmapContext(
   status: IRoadmapStatus,
   options: IRoadmapContextOptions,
 ): string {
-  if (!status.found || !status.enabled || status.items.length === 0) return '';
+  if (!status.found || status.items.length === 0) return '';
 
-  const maxChars =
-    options.maxChars ?? (options.mode === 'full' ? DEFAULT_MAX_FULL : DEFAULT_MAX_SUMMARY);
+  const parts: string[] = [];
 
-  const output = options.mode === 'full' ? buildFullDigest(status) : buildSmartSummary(status);
+  // Include raw file content so agents can reference exact sections and wording
+  if (status.rawContent) {
+    const truncated = status.rawContent.slice(0, options.maxChars ?? RAW_CONTENT_MAX);
+    parts.push(`### ROADMAP.md (file content)\n${truncated}`);
+  }
 
-  return output.slice(0, maxChars).trim();
+  // Append progress overlay
+  const progressMax = options.mode === 'full' ? PROGRESS_MAX_FULL : PROGRESS_MAX_SUMMARY;
+  const progress =
+    options.mode === 'full' ? buildFullProgress(status) : buildSmartProgress(status);
+  if (progress) {
+    parts.push(`### Progress Status\n${progress.slice(0, progressMax).trim()}`);
+  }
+
+  return parts.join('\n\n');
 }
 
 /**
@@ -77,9 +92,9 @@ function groupBySection<T extends { section: string }>(items: T[]): Map<string, 
 }
 
 /**
- * Full digest: all sections with pending items + descriptions + done counts.
+ * Full progress: all sections with pending items + done counts.
  */
-function buildFullDigest(status: IRoadmapStatus): string {
+function buildFullProgress(status: IRoadmapStatus): string {
   const bySection = groupBySection(status.items);
   let result = '';
 
@@ -87,21 +102,10 @@ function buildFullDigest(status: IRoadmapStatus): string {
     const done = items.filter((i) => i.checked || i.processed);
     const pending = items.filter((i) => !i.checked && !i.processed);
 
-    result += `### ${section} (${done.length}/${items.length} done)\n`;
-
-    for (const item of pending) {
-      result += `- [ ] ${item.title}\n`;
-      if (item.description) {
-        // Truncate long descriptions to keep per-item overhead reasonable
-        const desc = item.description.slice(0, 200).replace(/\n/g, ' ');
-        result += `  ${desc}\n`;
-      }
+    result += `**${section}**: ${done.length}/${items.length} done`;
+    if (pending.length > 0) {
+      result += ` — pending: ${pending.map((i) => i.title).join(', ')}`;
     }
-
-    if (done.length > 0) {
-      result += `- ${done.length} item${done.length > 1 ? 's' : ''} completed\n`;
-    }
-
     result += '\n';
   }
 
@@ -109,27 +113,22 @@ function buildFullDigest(status: IRoadmapStatus): string {
 }
 
 /**
- * Smart summary: pending items from the first section (Short Term) plus
- * the first 3 pending items from subsequent sections (Medium Term etc.).
- * Titles only — no descriptions.
+ * Smart progress: summary counts + next pending items.
  */
-function buildSmartSummary(status: IRoadmapStatus): string {
+function buildSmartProgress(status: IRoadmapStatus): string {
   const pending = status.items.filter((i) => !i.processed && !i.checked);
+  const done = status.items.filter((i) => i.processed || i.checked);
   if (pending.length === 0) return '';
 
+  let result = `${done.length}/${status.items.length} items done. Pending:\n`;
   const bySection = groupBySection(pending);
-  const sections = [...bySection.entries()];
 
-  let result = '';
-  sections.forEach(([section, items], idx) => {
-    const maxItems = idx === 0 ? items.length : 3; // All from first section, 3 from others
-    const slice = items.slice(0, maxItems);
-    result += `### ${section}\n`;
-    for (const item of slice) {
-      result += `- [ ] ${item.title}\n`;
-    }
+  for (const [section, items] of bySection) {
+    const slice = items.slice(0, 5);
+    result += `- ${section}: ${slice.map((i) => i.title).join(', ')}`;
+    if (items.length > slice.length) result += `, +${items.length - slice.length} more`;
     result += '\n';
-  });
+  }
 
   return result;
 }

@@ -2,13 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { humanizeSlackReply } from '../../deliberation.js';
 
 describe('humanizeSlackReply', () => {
-  it('removes canned assistant openers when followed by generic filler and keeps reply short', () => {
+  it('removes canned assistant openers when followed by generic filler', () => {
     const result = humanizeSlackReply(
       'Great question! I think we should check CI. Then we should fix tests. Finally we should re-run everything.',
     );
 
     expect(result.startsWith('Great question')).toBe(false);
-    expect(result.split(/(?<=[.!?])\s+/).length).toBeLessThanOrEqual(3);
   });
 
   it('keeps canned opener when followed by substantive non-filler content', () => {

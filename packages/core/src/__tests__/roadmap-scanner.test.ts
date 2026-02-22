@@ -156,7 +156,7 @@ describe("roadmap-scanner", () => {
       expect(status.totalItems).toBe(0);
     });
 
-    it("should return disabled status when scanner disabled", () => {
+    it("should still read file when scanner disabled", () => {
       // Create ROADMAP.md
       fs.writeFileSync(roadmapPath, `## Features\n- [ ] Item 1\n`);
 
@@ -168,6 +168,10 @@ describe("roadmap-scanner", () => {
 
       expect(status.enabled).toBe(false);
       expect(status.status).toBe("disabled");
+      // File should still be found and parsed even when scanner is disabled
+      expect(status.found).toBe(true);
+      expect(status.items).toHaveLength(1);
+      expect(status.rawContent).toContain("Item 1");
     });
 
     it("should return complete when all items processed", () => {
