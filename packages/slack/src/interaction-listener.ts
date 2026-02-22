@@ -58,11 +58,7 @@ export class SlackInteractionListener {
       markChannelActivity: (ch) => this.state.markChannelActivity(ch),
       markPersonaReply: (ch, ts, pid) => this.state.markPersonaReply(ch, ts, pid),
     };
-    this.replyHandler = new CascadingReplyHandler(
-      this.slackClient,
-      this.engine,
-      this.state,
-    );
+    this.replyHandler = new CascadingReplyHandler(this.slackClient, this.engine, this.state);
     this.triggerRouter = new TriggerRouter(
       this.parser,
       this.slackClient,
@@ -628,7 +624,15 @@ export class SlackInteractionListener {
         channel,
         source: aiPersona ? 'ai-matched' : 'random',
       });
-      await this.replyAndFollowUp(channel, threadTs, ts, text, fallbackPersona, personas, fullContext);
+      await this.replyAndFollowUp(
+        channel,
+        threadTs,
+        ts,
+        text,
+        fallbackPersona,
+        personas,
+        fullContext,
+      );
       return;
     }
 
@@ -646,7 +650,6 @@ export class SlackInteractionListener {
   ): Promise<void> {
     await this.replyHandler.applyHumanResponseTiming(channel, ts, persona);
     log.info('replying as agent', { agent: persona.name, channel });
-    const projects = getRepositories().projectRegistry.getAll();
     const postedText = await this.engine.replyAsAgent(
       channel,
       threadTs,
