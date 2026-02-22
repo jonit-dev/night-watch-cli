@@ -27,7 +27,7 @@ import {
   resolvePersonasByPlainName,
   selectFollowUpPersona,
 } from './personas.js';
-import { sleep } from './utils.js';
+import { extractErrorMessage, sleep } from './utils.js';
 import { ThreadStateManager } from './thread-state-manager.js';
 import { TriggerRouter } from './trigger-router.js';
 
@@ -209,7 +209,7 @@ export class SlackInteractionListener {
             log.info('avatar set', { agent: persona.name, url: avatarUrl });
           }
         } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
+          const msg = extractErrorMessage(err);
           log.warn('avatar generation failed', { agent: persona.name, error: msg });
         }
       }
@@ -232,7 +232,7 @@ export class SlackInteractionListener {
         ).run(JSON.stringify(Array.from(introduced)));
         log.info('persona intro posted', { agent: persona.name });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = extractErrorMessage(err);
         log.warn('persona intro failed', { agent: persona.name, error: msg });
       }
     }
@@ -306,7 +306,7 @@ export class SlackInteractionListener {
     try {
       await this.handleInboundMessage(event);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = extractErrorMessage(err);
       log.warn('message handling failed', { error: msg });
     }
   }
@@ -370,15 +370,6 @@ export class SlackInteractionListener {
   }
 
   private async handleInboundMessage(event: IInboundSlackEvent): Promise<void> {
-    if (this.parser.shouldIgnoreInboundSlackEvent(event, this.botUserId)) {
-      log.debug('ignoring event — shouldIgnore check', {
-        user: event.user,
-        bot_id: event.bot_id,
-        subtype: event.subtype,
-      });
-      return;
-    }
-
     const channel = event.channel as string;
     const ts = event.ts as string;
     const threadTs = event.thread_ts ?? ts;

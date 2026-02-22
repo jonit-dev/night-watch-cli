@@ -17,6 +17,7 @@ import {
 
 import { SlackClient } from './client.js';
 import { DeliberationEngine } from './deliberation.js';
+import { extractErrorMessage } from './utils.js';
 
 function buildQaNotificationText(ctx: INotificationContext): string {
   const prLabel = ctx.prNumber !== undefined ? `PR #${ctx.prNumber}` : 'the latest PR';
@@ -124,7 +125,6 @@ function getPersonaNameForEvent(event: NotificationEvent): string {
   }
 }
 
-
 function buildDiscussionTrigger(
   ctx: INotificationContext,
   projectPath: string,
@@ -175,7 +175,7 @@ export async function sendSlackBotNotification(
           }
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
+        const message = extractErrorMessage(err);
         warn(`Slack Bot notification failed: ${message}`);
       }
     })(),
@@ -190,7 +190,7 @@ export async function sendSlackBotNotification(
             const engine = new DeliberationEngine(slackClient, config);
             await engine.startDiscussion(trigger);
           } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
+            const message = extractErrorMessage(err);
             warn(`Slack deliberation failed: ${message}`);
           }
         })(),
