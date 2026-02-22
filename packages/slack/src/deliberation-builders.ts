@@ -100,9 +100,12 @@ export function buildContributionPrompt(
   trigger: IDiscussionTrigger,
   threadHistory: string,
   round: number,
+  roadmapContext?: string,
 ): string {
   const isFirstRound = round === 1;
   const isFinalRound = round >= MAX_ROUNDS;
+
+  const roadmapSection = roadmapContext ? `\n## Roadmap Priorities\n${roadmapContext}\n` : '';
 
   return `You are ${persona.name}, ${persona.role}.
 You're in a Slack thread with your teammates — Dev (implementer), Carlos (tech lead), Maya (security), and Priya (QA). This is a real conversation, not a report.
@@ -112,7 +115,7 @@ Round: ${round}/${MAX_ROUNDS}${isFinalRound ? ' (final round — wrap up)' : ''}
 
 ## Context
 ${trigger.context.slice(0, 2000)}
-
+${roadmapSection}
 ## Thread So Far
 ${threadHistory || '(Thread just started)'}
 
@@ -135,6 +138,8 @@ ${isFirstRound ? '- First round: give your initial take from your angle. Be spec
 - Every code claim MUST include a file path reference. No vague "the auth module" — name the exact file and line range.
 - Talk like a teammate, not an assistant. No pleasantries, no filler.
 - Stay in your lane — only comment on your domain unless something crosses into it.
+- Ground your feedback in the project roadmap when relevant. If what you're raising isn't on the roadmap, say so explicitly ("Not on the roadmap, but...").
+- Prioritize roadmap-aligned work over tangential improvements.
 - You can name-drop teammates when handing off ("Maya should look at the auth here").
 - No markdown formatting. No bullet lists. No headings. Just a message.
 - Emojis: use one only if it genuinely fits. Default to none.
@@ -192,10 +197,7 @@ export function humanDelay(): number {
  * Resolve which Slack channel to use for a trigger.
  * All trigger types now route to the project's own channel.
  */
-export function getChannelForProject(
-  projectPath: string,
-  channelIdOverride?: string,
-): string {
+export function getChannelForProject(projectPath: string, channelIdOverride?: string): string {
   if (channelIdOverride) return channelIdOverride;
   const repos = getRepositories();
   const projects = repos.projectRegistry.getAll();

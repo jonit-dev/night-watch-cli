@@ -32,6 +32,7 @@ export class CascadingReplyHandler {
     private readonly slackClient: SlackClient,
     private readonly engine: DeliberationEngine,
     private readonly state: ThreadStateManager,
+    private readonly roadmapCallback?: (channel: string, persona: IAgentPersona) => string,
   ) {}
 
   /**
@@ -72,7 +73,14 @@ export class CascadingReplyHandler {
       // Small human-like delay before the tagged persona responds
       await sleep(this.state.randomInt(RESPONSE_DELAY_MIN_MS * 2, RESPONSE_DELAY_MAX_MS * 3));
       // replyAsAgent fetches thread history internally so the persona sees the conversation
-      await this.engine.replyAsAgent(channel, threadTs, postedText, persona, projectContext);
+      await this.engine.replyAsAgent(
+        channel,
+        threadTs,
+        postedText,
+        persona,
+        projectContext,
+        this.roadmapCallback?.(channel, persona),
+      );
       this.state.markPersonaReply(channel, threadTs, persona.id);
       this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id);
     }
@@ -107,6 +115,7 @@ export class CascadingReplyHandler {
       text,
       persona,
       projectContext,
+      this.roadmapCallback?.(channel, persona),
     );
     this.state.markPersonaReply(channel, threadTs, persona.id);
     this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id);
@@ -159,6 +168,7 @@ export class CascadingReplyHandler {
         text,
         persona,
         projectContext,
+        this.roadmapCallback?.(channel, persona),
       );
       this.state.markPersonaReply(channel, threadTs, persona.id);
       this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id);

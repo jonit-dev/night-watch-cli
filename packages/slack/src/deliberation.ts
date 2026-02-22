@@ -11,8 +11,10 @@ import {
   IReflectionContext,
   ISlackDiscussion,
   MemoryService,
+  compileRoadmapForPersona,
   createLogger,
   getRepositories,
+  getRoadmapStatus,
 } from '@night-watch/core';
 
 const log = createLogger('deliberation');
@@ -104,6 +106,19 @@ export class DeliberationEngine {
     const projects = repos.projectRegistry.getAll();
     const match = projects.find((p) => p.slackChannelId === channel) ?? projects[0];
     return match ? basename(match.path) : undefined;
+  }
+
+  private buildRoadmapContextForLead(projectPath: string, personas: IAgentPersona[]): string {
+    const carlos = findCarlos(personas);
+    const leadPersonas = personas.filter((p) => p.role.toLowerCase().includes('lead'));
+    const persona = carlos ?? leadPersonas[0] ?? personas[0];
+    if (!persona) return '';
+    try {
+      const status = getRoadmapStatus(projectPath, this.config);
+      return compileRoadmapForPersona(persona, status);
+    } catch {
+      return '';
+    }
   }
 
   private humanizeForPost(
@@ -228,10 +243,15 @@ export class DeliberationEngine {
     await this.runContributionRound(discussion.id, reviewers, resolvedTrigger, openingText);
 
     // Check consensus after first round
+    const roadmapCtxForConsensus = this.buildRoadmapContextForLead(
+      resolvedTrigger.projectPath,
+      personas,
+    );
     await this.consensus.evaluateConsensus(
       discussion.id,
       resolvedTrigger,
       this.makeConsensusCallbacks(),
+      roadmapCtxForConsensus,
     );
 
     return repos.slackDiscussion.getById(discussion.id)!;
@@ -339,6 +359,10 @@ export class DeliberationEngine {
           threadTs,
         );
         await sleep(humanDelay());
+        const roadmapCtxForHuman = this.buildRoadmapContextForLead(
+          discussion.projectPath,
+          personas,
+        );
         await this.consensus.evaluateConsensus(
           discussion.id,
           {
@@ -348,6 +372,7 @@ export class DeliberationEngine {
             context: '',
           },
           this.makeConsensusCallbacks(),
+          roadmapCtxForHuman,
         );
       })().finally(() => {
         this.humanResumeTimers.delete(discussion.id);
@@ -365,6 +390,7 @@ export class DeliberationEngine {
     personas: IAgentPersona[],
     trigger: IDiscussionTrigger,
     currentContext: string,
+    roadmapCallback?: (persona: IAgentPersona) => string,
   ): Promise<void> {
     const repos = getRepositories();
     const discussion = repos.slackDiscussion.getById(discussionId);
@@ -403,6 +429,7 @@ export class DeliberationEngine {
         trigger,
         historyText,
         updatedDiscussion.round,
+        roadmapCallback?.(persona),
       );
 
       // Fetch persona memory to inject into the system prompt (optional — ignore errors)
@@ -569,6 +596,7 @@ export class DeliberationEngine {
     incomingText: string,
     persona: IAgentPersona,
     projectContext?: string,
+    roadmapContext?: string,
   ): Promise<string> {
     let history: ISlackMessage[] = [];
     try {
@@ -637,6 +665,7 @@ export class DeliberationEngine {
       `You are ${persona.name}, ${persona.role}.\n` +
       `Your teammates: Dev (implementer), Carlos (tech lead), Maya (security), Priya (QA).\n\n` +
       (projectContext ? `Project context:\n${projectContext}\n\n` : '') +
+      (roadmapContext ? `Roadmap priorities:\n${roadmapContext}\n\n` : '') +
       (historyText ? `Thread so far:\n${historyText}\n\n` : '') +
       `Latest message: "${incomingText}"\n\n` +
       `Respond in your own voice. This is Slack — keep it conversational, 1-3 sentences max.\n` +
@@ -650,7 +679,8 @@ export class DeliberationEngine {
       `- Emojis: one max, only if it fits. Default to none.\n` +
       `- If the question is outside your domain, say so briefly and redirect.\n` +
       `- You have board tools available. If asked to open, update, or list issues, use them — don't just say you will.\n` +
-      `- Only reference PR numbers, issue numbers, or URLs that appear in the context above. Never invent or guess links.\n\n` +
+      `- Only reference PR numbers, issue numbers, or URLs that appear in the context above. Never invent or guess links.\n` +
+      `- When discussing work priorities, reference the roadmap. Flag off-roadmap suggestions as such.\n\n` +
       `Write only your reply. No name prefix.`;
 
     const tools = [
@@ -736,6 +766,7 @@ export class DeliberationEngine {
     projectContext: string,
     roadmapContext: string,
     projectSlug?: string,
+    slicingMode?: boolean,
   ): Promise<void> {
     // Fetch memory BEFORE generating so the agent knows what it already raised and won't repeat it.
     let memory: string | undefined;
@@ -746,6 +777,14 @@ export class DeliberationEngine {
         /* optional */
       }
     }
+
+    const slicingOption = slicingMode
+      ? `- Propose breaking a large roadmap item into smaller tickets: name the item, suggest 2-3 sub-tasks with a one-sentence scope each. Ask the team: "Does this split make sense?"\n`
+      : '';
+    const slicingGuidance = slicingMode
+      ? `- When proposing ticket slices, be specific: name the parent roadmap item, list concrete sub-tasks with clear boundaries. Example: "The 'Add Gemini CLI provider' roadmap item could split into: 1) Add provider config + CLI flag, 2) Implement invocation strategy, 3) Add integration test. Thoughts?"\n` +
+        `- Only propose slicing for items that are clearly too large or underspecified. Don't slice items that are already focused enough.\n`
+      : '';
 
     const prompt =
       `You are ${persona.name}, ${persona.role}.\n` +
@@ -759,7 +798,9 @@ export class DeliberationEngine {
       `- Flag something you've been thinking about from your domain (security concern, test gap, architectural question, implementation idea)\n` +
       `- Suggest an improvement or raise a "have we thought about..." question\n` +
       `- Share a concrete observation about the current state of the project\n` +
-      `- Offer to kick off a task: "I can run a review on X if nobody's on it"\n\n` +
+      `- Offer to kick off a task: "I can run a review on X if nobody's on it"\n` +
+      slicingOption +
+      `\n` +
       `Rules:\n` +
       `- Stay in your lane. Only bring up things relevant to your expertise.\n` +
       `- Be specific — name the feature, file, or concern. No vague "we should think about things."\n` +
@@ -770,6 +811,7 @@ export class DeliberationEngine {
       `- If you don't have an exact PR/issue number, describe the pattern or location instead. "The retry logic in the queue worker has no backoff" is better than "we should think about resilience."\n` +
       `- When you reference code, use path format: \`path/to/file.ts#L42-L45\`.\n` +
       `- Your memory (in your system prompt) records what you've previously raised. Do NOT repeat a topic you already flagged — pick something fresh and different.\n` +
+      slicingGuidance +
       `- If you genuinely have nothing useful to say, write exactly: SKIP\n\n` +
       `Write only your message. No name prefix.`;
 

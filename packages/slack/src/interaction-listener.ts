@@ -2,12 +2,14 @@ import {
   IAgentPersona,
   INightWatchConfig,
   IRegistryEntry,
+  compileRoadmapForPersona,
   createLogger,
   generatePersonaAvatar,
   getDb,
   getRepositories,
   getRoadmapStatus,
 } from '@night-watch/core';
+import type { IRoadmapStatus } from '@night-watch/core';
 
 const log = createLogger('slack');
 import { SocketModeClient } from '@slack/socket-mode';
@@ -55,7 +57,15 @@ export class SlackInteractionListener {
       markChannelActivity: (ch) => this.state.markChannelActivity(ch),
       markPersonaReply: (ch, ts, pid) => this.state.markPersonaReply(ch, ts, pid),
     };
-    this.replyHandler = new CascadingReplyHandler(this.slackClient, this.engine, this.state);
+    this.replyHandler = new CascadingReplyHandler(
+      this.slackClient,
+      this.engine,
+      this.state,
+      (ch, persona) => {
+        const projects = getRepositories().projectRegistry.getAll();
+        return this.buildRoadmapForPersona(ch, projects, persona);
+      },
+    );
     this.triggerRouter = new TriggerRouter(
       this.parser,
       this.slackClient,
@@ -76,6 +86,7 @@ export class SlackInteractionListener {
         markChannelActivity: (ch) => this.state.markChannelActivity(ch),
         buildProjectContext: (ch, p) => this.buildProjectContext(ch, p),
         buildRoadmapContext: (ch, p) => this.buildRoadmapContext(ch, p),
+        buildRoadmapForPersona: (ch, p, persona) => this.buildRoadmapForPersona(ch, p, persona),
       },
     );
   }
@@ -308,6 +319,20 @@ export class SlackInteractionListener {
       : `Registered projects: ${projects.map((p) => p.name).join(', ')}.`;
   }
 
+  private getRoadmapStatusForChannel(
+    channel: string,
+    projects: IRegistryEntry[],
+  ): IRoadmapStatus | null {
+    const inChannel = projects.find((p) => p.slackChannelId === channel);
+    const project = inChannel ?? projects[0];
+    if (!project) return null;
+    try {
+      return getRoadmapStatus(project.path, this.config);
+    } catch {
+      return null;
+    }
+  }
+
   private buildRoadmapContext(channel: string, projects: IRegistryEntry[]): string {
     if (projects.length === 0) return '';
     const inChannel = projects.find((p) => p.slackChannelId === channel);
@@ -332,6 +357,16 @@ export class SlackInteractionListener {
         }
       })
       .join('\n');
+  }
+
+  private buildRoadmapForPersona(
+    channel: string,
+    projects: IRegistryEntry[],
+    persona: IAgentPersona,
+  ): string {
+    const status = this.getRoadmapStatusForChannel(channel, projects);
+    if (!status) return '';
+    return compileRoadmapForPersona(persona, status);
   }
 
   private async handleInboundMessage(event: IInboundSlackEvent): Promise<void> {
@@ -429,6 +464,7 @@ export class SlackInteractionListener {
             text,
             persona,
             fullContext,
+            this.buildRoadmapForPersona(channel, projects, persona),
           );
           lastPersonaId = persona.id;
         }
@@ -589,12 +625,14 @@ export class SlackInteractionListener {
   ): Promise<void> {
     await this.replyHandler.applyHumanResponseTiming(channel, ts, persona);
     log.info('replying as agent', { agent: persona.name, channel });
+    const projects = getRepositories().projectRegistry.getAll();
     const postedText = await this.engine.replyAsAgent(
       channel,
       threadTs,
       text,
       persona,
       fullContext,
+      this.buildRoadmapForPersona(channel, projects, persona),
     );
     this.state.markPersonaReply(channel, threadTs, persona.id);
     this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id);

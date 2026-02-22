@@ -283,6 +283,25 @@ describe('deliberation-builders', () => {
       const contextSection = prompt.match(/## Context\n(.+?)##/s)?.[1] ?? '';
       expect(contextSection.length).toBeLessThan(2500);
     });
+
+    it('should include roadmap section when context provided', () => {
+      const trigger = buildTrigger('pr_review');
+      const prompt = buildContributionPrompt(buildPersona(), trigger, '', 1, 'roadmap content');
+      expect(prompt).toContain('## Roadmap Priorities');
+      expect(prompt).toContain('roadmap content');
+    });
+
+    it('should include soft guardrail in step 2', () => {
+      const trigger = buildTrigger('pr_review');
+      const prompt = buildContributionPrompt(buildPersona(), trigger, '', 1, 'roadmap content');
+      expect(prompt).toContain('Ground your feedback in the project roadmap');
+    });
+
+    it('should omit roadmap section when no context', () => {
+      const trigger = buildTrigger('pr_review');
+      const prompt = buildContributionPrompt(buildPersona(), trigger, '', 1);
+      expect(prompt).not.toContain('Roadmap Priorities');
+    });
   });
 
   describe('formatThreadHistory', () => {

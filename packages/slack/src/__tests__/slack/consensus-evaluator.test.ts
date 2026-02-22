@@ -1070,6 +1070,132 @@ describe('ConsensusEvaluator', () => {
     });
   });
 
+  // --- evaluateConsensus — roadmap context injection -----------------------
+
+  describe('evaluateConsensus — roadmap context injection', () => {
+    it('should include roadmap in consensus prompt when roadmapContext is provided', async () => {
+      const carlos = buildPersona();
+      const repos = buildRepos();
+      vi.mocked(getRepositories).mockReturnValue(
+        repos as unknown as ReturnType<typeof getRepositories>,
+      );
+      vi.mocked(findCarlos).mockReturnValue(carlos);
+
+      let capturedPrompt = '';
+      vi.mocked(callAIForContribution).mockImplementation((_persona, _config, prompt) => {
+        capturedPrompt = prompt;
+        return Promise.resolve('APPROVE: Looks good.');
+      });
+
+      await evaluator.evaluateConsensus(
+        'disc-1',
+        buildTrigger(),
+        buildCallbacks(),
+        'Phase 1: Auth\nPhase 2: Payments',
+      );
+
+      expect(capturedPrompt).toContain('Roadmap priorities:');
+      expect(capturedPrompt).toContain('Phase 1: Auth');
+      expect(capturedPrompt).toContain(
+        'Consider whether the discussion outcomes align with roadmap priorities.',
+      );
+    });
+
+    it('should not include roadmap section when roadmapContext is undefined', async () => {
+      const carlos = buildPersona();
+      const repos = buildRepos();
+      vi.mocked(getRepositories).mockReturnValue(
+        repos as unknown as ReturnType<typeof getRepositories>,
+      );
+      vi.mocked(findCarlos).mockReturnValue(carlos);
+
+      let capturedPrompt = '';
+      vi.mocked(callAIForContribution).mockImplementation((_persona, _config, prompt) => {
+        capturedPrompt = prompt;
+        return Promise.resolve('APPROVE: Looks good.');
+      });
+
+      await evaluator.evaluateConsensus('disc-1', buildTrigger(), buildCallbacks());
+
+      expect(capturedPrompt).not.toContain('Roadmap priorities:');
+    });
+  });
+
+  // --- evaluateIssueReviewConsensus — roadmap context injection ------------
+
+  describe('evaluateIssueReviewConsensus — roadmap context injection', () => {
+    it('should include roadmap in issue review prompt when roadmapContext is provided', async () => {
+      const carlos = buildPersona();
+      const repos = buildRepos({ triggerType: 'issue_review', status: 'active' });
+      vi.mocked(getRepositories).mockReturnValue(
+        repos as unknown as ReturnType<typeof getRepositories>,
+      );
+      vi.mocked(findCarlos).mockReturnValue(carlos);
+
+      let capturedPrompt = '';
+      vi.mocked(callAIForContribution).mockImplementation((_persona, _config, prompt) => {
+        capturedPrompt = prompt;
+        return Promise.resolve('READY: Valid issue.');
+      });
+
+      const trigger = buildTrigger({ type: 'issue_review', ref: 'org/repo#5' });
+      await evaluator.evaluateIssueReviewConsensus(
+        'disc-1',
+        trigger,
+        'Q1 Roadmap: ship auth refactor',
+      );
+
+      expect(capturedPrompt).toContain('Roadmap priorities:');
+      expect(capturedPrompt).toContain('Q1 Roadmap: ship auth refactor');
+    });
+
+    it('should not include roadmap section in issue review prompt when roadmapContext is undefined', async () => {
+      const carlos = buildPersona();
+      const repos = buildRepos({ triggerType: 'issue_review', status: 'active' });
+      vi.mocked(getRepositories).mockReturnValue(
+        repos as unknown as ReturnType<typeof getRepositories>,
+      );
+      vi.mocked(findCarlos).mockReturnValue(carlos);
+
+      let capturedPrompt = '';
+      vi.mocked(callAIForContribution).mockImplementation((_persona, _config, prompt) => {
+        capturedPrompt = prompt;
+        return Promise.resolve('DRAFT: Needs more context.');
+      });
+
+      const trigger = buildTrigger({ type: 'issue_review', ref: 'org/repo#5' });
+      await evaluator.evaluateIssueReviewConsensus('disc-1', trigger);
+
+      expect(capturedPrompt).not.toContain('Roadmap priorities:');
+    });
+
+    it('should pass roadmapContext through from evaluateConsensus to evaluateIssueReviewConsensus', async () => {
+      const carlos = buildPersona();
+      const repos = buildRepos({ triggerType: 'issue_review' });
+      vi.mocked(getRepositories).mockReturnValue(
+        repos as unknown as ReturnType<typeof getRepositories>,
+      );
+      vi.mocked(findCarlos).mockReturnValue(carlos);
+
+      let capturedPrompt = '';
+      vi.mocked(callAIForContribution).mockImplementation((_persona, _config, prompt) => {
+        capturedPrompt = prompt;
+        return Promise.resolve('DRAFT: Needs more context.');
+      });
+
+      const trigger = buildTrigger({ type: 'issue_review', ref: 'org/repo#5' });
+      await evaluator.evaluateConsensus(
+        'disc-1',
+        trigger,
+        buildCallbacks(),
+        'Roadmap: Q2 security audit',
+      );
+
+      expect(capturedPrompt).toContain('Roadmap priorities:');
+      expect(capturedPrompt).toContain('Roadmap: Q2 security audit');
+    });
+  });
+
   // --- evaluateConsensus — non-code_watch triggers -------------------------
 
   describe('evaluateConsensus — non-code_watch triggers do not trigger issue opener', () => {
