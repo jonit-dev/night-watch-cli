@@ -4,22 +4,31 @@
 
 import { compileSoul, createLogger } from '@night-watch/core';
 import type { IAgentPersona, INightWatchConfig } from '@night-watch/core';
-import { joinBaseUrl, resolvePersonaAIConfig } from './provider.js';
+import { joinBaseUrl, resolveGlobalAIConfig, resolvePersonaAIConfig } from './provider.js';
 import type { IAnthropicTool, ToolRegistry } from './tools.js';
 
 const log = createLogger('ai');
 
-const RETRY_DELAYS_MS = [1_000, 3_000];
+const RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
 
 /**
- * Fetch with automatic retry on network errors (TypeError: fetch failed).
- * API-level errors (non-2xx) are NOT retried — those are surfaced immediately.
+ * Fetch with automatic retry on network errors (TypeError: fetch failed)
+ * and transient server errors (5xx).
  */
 async function fetchWithRetry(url: string, options: RequestInit): Promise<Response> {
   let lastErr: unknown;
+  let lastResponse: Response | undefined;
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
     try {
-      return await fetch(url, options);
+      const response = await fetch(url, options);
+      if (response.status >= 500 && attempt < RETRY_DELAYS_MS.length) {
+        const delay = RETRY_DELAYS_MS[attempt];
+        log.warn('API server error, retrying', { status: response.status, attempt: attempt + 1, delayMs: delay });
+        await new Promise((r) => setTimeout(r, delay));
+        lastResponse = response;
+        continue;
+      }
+      return response;
     } catch (err) {
       lastErr = err;
       const delay = RETRY_DELAYS_MS[attempt];
@@ -29,6 +38,7 @@ async function fetchWithRetry(url: string, options: RequestInit): Promise<Respon
       }
     }
   }
+  if (lastResponse) return lastResponse;
   throw lastErr;
 }
 
@@ -108,6 +118,78 @@ export async function callAIForContribution(
   }
 
   return `[${persona.name}: No AI provider configured]`;
+}
+
+/**
+ * Make a simple AI call (no persona, no soul) for routing/utility purposes.
+ * Uses global AI config — not persona-specific config.
+ */
+export async function callSimpleAI(
+  systemPrompt: string,
+  userPrompt: string,
+  config: INightWatchConfig,
+  maxTokens = 256,
+): Promise<string> {
+  const resolved = resolveGlobalAIConfig(config);
+
+  if (resolved.provider === 'anthropic') {
+    const apiKey =
+      resolved.envVars['ANTHROPIC_API_KEY'] ??
+      resolved.envVars['ANTHROPIC_AUTH_TOKEN'] ??
+      process.env.ANTHROPIC_API_KEY ??
+      process.env.ANTHROPIC_AUTH_TOKEN ??
+      '';
+
+    const response = await fetchWithRetry(joinBaseUrl(resolved.baseUrl, '/v1/messages'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: resolved.model,
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }],
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Anthropic API error: ${response.status} ${error}`);
+    }
+
+    const data = (await response.json()) as { content: Array<{ type: string; text: string }> };
+    return data.content[0]?.text?.trim() ?? '';
+  } else {
+    const apiKey = resolved.envVars['OPENAI_API_KEY'] ?? process.env.OPENAI_API_KEY ?? '';
+
+    const response = await fetchWithRetry(joinBaseUrl(resolved.baseUrl, '/v1/chat/completions'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: resolved.model,
+        max_tokens: maxTokens,
+        temperature: resolved.temperature,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`OpenAI API error: ${response.status} ${error}`);
+    }
+
+    const data = (await response.json()) as { choices: Array<{ message: { content: string } }> };
+    return data.choices[0]?.message?.content?.trim() ?? '';
+  }
 }
 
 /**

@@ -27,6 +27,7 @@ import {
   resolvePersonasByPlainName,
   selectFollowUpPersona,
 } from './personas.js';
+import { matchPersonaToMessage } from './ai/persona-matcher.js';
 import { extractErrorMessage, sleep } from './utils.js';
 import { ThreadStateManager } from './thread-state-manager.js';
 import { TriggerRouter } from './trigger-router.js';
@@ -618,19 +619,16 @@ export class SlackInteractionListener {
       }
     }
 
-    // Guaranteed fallback reply — someone always responds.
-    const randomPersona = this.state.pickRandomPersona(personas, channel, threadTs);
-    if (randomPersona) {
-      log.info('fallback engage', { agent: randomPersona.name, channel });
-      await this.replyAndFollowUp(
+    // Guaranteed fallback reply — AI matcher selects the most suitable persona.
+    const aiPersona = await matchPersonaToMessage(text, personas, this.config).catch(() => null);
+    const fallbackPersona = aiPersona ?? this.state.pickRandomPersona(personas, channel, threadTs);
+    if (fallbackPersona) {
+      log.info('fallback engage', {
+        agent: fallbackPersona.name,
         channel,
-        threadTs,
-        ts,
-        text,
-        randomPersona,
-        personas,
-        fullContext,
-      );
+        source: aiPersona ? 'ai-matched' : 'random',
+      });
+      await this.replyAndFollowUp(channel, threadTs, ts, text, fallbackPersona, personas, fullContext);
       return;
     }
 

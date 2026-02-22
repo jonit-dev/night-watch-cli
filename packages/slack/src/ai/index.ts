@@ -12,5 +12,7 @@ export {
   executeBoardTool,
   executeCodebaseQuery,
   executeReadRoadmap,
+  fetchRepoLabels,
 } from './tools.js';
-export { callAIForContribution, callAIWithTools } from './client.js';
+export { callAIForContribution, callAIWithTools, callSimpleAI } from './client.js';
+export { matchPersonaToMessage } from './persona-matcher.js';

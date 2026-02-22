@@ -15,6 +15,7 @@ let mockProjectDir: string;
 
 vi.mock("child_process", () => ({
   execSync: vi.fn(),
+  execFile: vi.fn(),
   spawn: vi.fn(),
 }));
 
@@ -30,6 +31,7 @@ const mockBoardProvider = {
   getIssue: vi.fn(),
   getIssuesByColumn: vi.fn(),
   setupBoard: vi.fn(),
+  ensureLabels: vi.fn().mockResolvedValue({ created: 0, skipped: 15, failed: 0 }),
 };
 vi.mock("@night-watch/core/board/factory.js", () => ({
   createBoardProvider: vi.fn(() => mockBoardProvider),

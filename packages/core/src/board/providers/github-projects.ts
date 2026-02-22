@@ -9,6 +9,7 @@ import {
   IBoardProviderConfig,
   ICreateIssueInput,
 } from "@/board/types.js";
+import { NIGHT_WATCH_LABELS } from "@/board/labels.js";
 import { getRepoNwo, getViewerLogin, graphql } from "./github-graphql.js";
 
 // ---------------------------------------------------------------------------
@@ -656,6 +657,32 @@ export class GitHubProjectsProvider implements IBoardProvider {
     return { id: project.id, number: project.number, title: project.title, url: project.url };
   }
 
+  async ensureLabels(): Promise<{ created: number; skipped: number; failed: number }> {
+    let created = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const label of NIGHT_WATCH_LABELS) {
+      try {
+        execFileSync(
+          "gh",
+          ["label", "create", label.name, "--description", label.description, "--color", label.color, "--repo", this.getRepo()],
+          { cwd: this.cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
+        );
+        created++;
+      } catch (err) {
+        const output = err instanceof Error ? err.message : String(err);
+        if (output.includes("already exists") || output.includes("Label already exists")) {
+          skipped++;
+        } else {
+          failed++;
+        }
+      }
+    }
+
+    return { created, skipped, failed };
+  }
+
   async getBoard(): Promise<IBoardInfo | null> {
     const projectNumber = this.config.projectNumber;
     if (!projectNumber) {
@@ -699,7 +726,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
     const { projectId, fieldId, optionIds } = await this.ensureProjectCache();
 
     // Create the issue via gh CLI (outputs URL, e.g. https://github.com/owner/repo/issues/123)
-    const issueArgs = [
+    const baseArgs = [
       "issue",
       "create",
       "--title",
@@ -710,15 +737,27 @@ export class GitHubProjectsProvider implements IBoardProvider {
       repo,
     ];
 
-    if (input.labels && input.labels.length > 0) {
-      issueArgs.push("--label", input.labels.join(","));
-    }
+    const labelArgs: string[] =
+      input.labels && input.labels.length > 0
+        ? ["--label", input.labels.join(",")]
+        : [];
 
-    const issueUrl = execFileSync("gh", issueArgs, {
-      cwd: this.cwd,
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
+    let issueUrl: string;
+    try {
+      issueUrl = execFileSync("gh", [...baseArgs, ...labelArgs], {
+        cwd: this.cwd,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
+    } catch (err) {
+      if (labelArgs.length === 0) throw err;
+      // Labels may not exist in the repo yet — retry without them
+      issueUrl = execFileSync("gh", baseArgs, {
+        cwd: this.cwd,
+        encoding: "utf-8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
+    }
 
     const issueNumber = parseInt(issueUrl.split("/").pop() ?? "", 10);
     if (!issueNumber) {

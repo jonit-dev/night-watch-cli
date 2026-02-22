@@ -12,6 +12,9 @@
     "verify": {
       "dependsOn": ["^build"],
       "outputs": []
+    },
+    "lint": {
+      "outputs": []
     }
   }
 }

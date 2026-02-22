@@ -54,6 +54,7 @@ import {
   executeBoardTool,
   executeCodebaseQuery,
   executeReadRoadmap,
+  fetchRepoLabels,
   resolvePersonaAIConfig,
 } from './ai/index.js';
 import type { ToolRegistry } from './ai/index.js';
@@ -286,7 +287,8 @@ export class DeliberationEngine {
     try {
       if (useTools) {
         const boardConfig = this.board.resolveBoardConfig(discussion.projectPath);
-        const tools = [buildCodebaseQueryTool(), ...(boardConfig ? buildBoardTools() : [])];
+        const repoLabels = boardConfig ? fetchRepoLabels(discussion.projectPath) : [];
+        const tools = [buildCodebaseQueryTool(), ...(boardConfig ? buildBoardTools(repoLabels) : [])];
         const registry: ToolRegistry = new Map();
         const codebaseProvider = (this.config.providerEnv?.['CODEBASE_QUERY_PROVIDER'] ??
           'claude') as 'claude' | 'codex';
@@ -301,7 +303,7 @@ export class DeliberationEngine {
           ),
         );
         if (boardConfig) {
-          for (const tool of buildBoardTools()) {
+          for (const tool of buildBoardTools(repoLabels)) {
             registry.set(tool.name, (input) =>
               executeBoardTool(tool.name, input, boardConfig, discussion.projectPath),
             );
@@ -470,10 +472,11 @@ export class DeliberationEngine {
         if (useTools) {
           const boardConfig = this.board.resolveBoardConfig(trigger.projectPath);
           const roadmapFile = this.config.roadmapScanner.roadmapPath;
+          const repoLabels = boardConfig ? fetchRepoLabels(trigger.projectPath) : [];
           const tools = [
             ...buildFilesystemTools(),
             buildCodebaseQueryTool(),
-            ...(boardConfig ? buildBoardTools() : []),
+            ...(boardConfig ? buildBoardTools(repoLabels) : []),
           ];
           const registry: ToolRegistry = new Map();
           registry.set('read_roadmap', () =>
@@ -490,7 +493,7 @@ export class DeliberationEngine {
             ),
           );
           if (boardConfig) {
-            for (const tool of buildBoardTools()) {
+            for (const tool of buildBoardTools(repoLabels)) {
               registry.set(tool.name, (input) =>
                 executeBoardTool(tool.name, input, boardConfig, trigger.projectPath),
               );
@@ -756,9 +759,10 @@ export class DeliberationEngine {
       `- Only reference PR numbers, issue numbers, or URLs that appear in the context above. Never invent or guess links.\n\n` +
       `Write only your reply. No name prefix.`;
 
+    const repoLabels = boardConfig && projectPathForTools ? fetchRepoLabels(projectPathForTools) : [];
     const tools = [
       ...(useTools ? [...buildFilesystemTools(), buildCodebaseQueryTool()] : []),
-      ...(boardConfig ? buildBoardTools() : []),
+      ...(boardConfig ? buildBoardTools(repoLabels) : []),
     ];
 
     let message: string;
@@ -780,13 +784,23 @@ export class DeliberationEngine {
           ),
         );
         if (boardConfig) {
-          for (const tool of buildBoardTools()) {
+          for (const tool of buildBoardTools(repoLabels)) {
             registry.set(tool.name, (input) =>
               executeBoardTool(tool.name, input, boardConfig, projectPathForTools!),
             );
           }
         }
-        message = await callAIWithTools(persona, this.config, prompt, tools, registry, replyMemory);
+        try {
+          message = await callAIWithTools(persona, this.config, prompt, tools, registry, replyMemory);
+        } catch (toolsErr) {
+          // Tools call failed (e.g. persistent API error) — fall back to a plain reply
+          // so the agent always responds rather than silently disappearing.
+          log.warn('tools call failed, falling back to plain reply', {
+            agent: persona.name,
+            error: extractErrorMessage(toolsErr),
+          });
+          message = await callAIForContribution(persona, this.config, prompt, 1024, replyMemory);
+        }
       } else {
         // Allow up to 1024 tokens for ad-hoc replies so agents can write substantive responses
         message = await callAIForContribution(persona, this.config, prompt, 1024, replyMemory);
