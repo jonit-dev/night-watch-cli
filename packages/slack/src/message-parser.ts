@@ -154,7 +154,16 @@ export class MessageParser {
 
     const prNumber = prUrlMatch?.[3] ?? prPathMatch?.[1] ?? prHashMatch?.[1];
     const repoHintFromUrl = prUrlMatch?.[2]?.toLowerCase();
-    const candidates = [match?.[2]?.toLowerCase(), repoHintFromUrl].filter(
+    // Secondary scan: look for explicit "on/for {name}" anywhere in the message.
+    // Handles cases like "run yarn verify on night-watch-cli project" where the
+    // project name appears after the command words, not immediately after the verb.
+    const onForMatch = normalized.match(
+      /\b(?:on|for)\s+([a-z0-9][a-z0-9._/-]*)\s*(?:project|repo|codebase|branch)?\b/,
+    );
+    const onForHint =
+      onForMatch?.[1] && !JOB_STOPWORDS.has(onForMatch[1]) ? onForMatch[1] : undefined;
+
+    const candidates = [onForHint, match?.[2]?.toLowerCase(), repoHintFromUrl].filter(
       (value): value is string => Boolean(value && !JOB_STOPWORDS.has(value)),
     );
     const projectHint = candidates[0];

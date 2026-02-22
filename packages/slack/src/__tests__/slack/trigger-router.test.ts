@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { IAgentPersona } from '@night-watch/core';
 import type { IRegistryEntry } from '@night-watch/core';
 import { getRepositories } from '@night-watch/core';
+import * as projectMatcher from '../../ai/project-matcher.js';
 import { ContextFetcher } from '../../context-fetcher.js';
 import { DeliberationEngine } from '../../deliberation.js';
 import { JobSpawner } from '../../job-spawner.js';
@@ -21,6 +22,11 @@ vi.mock('@night-watch/core', async (importOriginal) => {
     getRepositories: vi.fn(),
   };
 });
+
+// Mock project-matcher to avoid real AI calls in unit tests
+vi.mock('../../ai/project-matcher.js', () => ({
+  matchProjectToMessage: vi.fn().mockResolvedValue(null),
+}));
 
 // ── Minimal builder helpers ──────────────────────────────────────────────────
 
@@ -164,6 +170,8 @@ function buildRouter(projects: IRegistryEntry[] = []): {
 describe('TriggerRouter', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset project matcher to null so individual tests can override as needed.
+    vi.mocked(projectMatcher.matchProjectToMessage).mockResolvedValue(null);
   });
 
   describe('isMessageAddressedToBot', () => {
@@ -492,6 +500,39 @@ describe('TriggerRouter', () => {
         '1700000000.001',
       );
       expect(jobSpawner.spawnDirectProviderRequest).not.toHaveBeenCalled();
+    });
+
+    it('resolves project via AI matcher when regex fails but AI identifies it', async () => {
+      const { router, jobSpawner } = buildRouter([
+        buildProject('p1', 'Alpha', '/repos/alpha', 'C001'),
+        buildProject('p2', 'Beta', '/repos/beta', 'C002'),
+      ]);
+      vi.mocked(projectMatcher.matchProjectToMessage).mockResolvedValue(
+        buildProject('p2', 'Beta', '/repos/beta', 'C002'),
+      );
+      const personas = [buildPersona('p1', 'Dev')];
+      const projects = [
+        buildProject('p1', 'Alpha', '/repos/alpha', 'C001'),
+        buildProject('p2', 'Beta', '/repos/beta', 'C002'),
+      ];
+      const ctx: ITriggerContext = {
+        event: buildEvent({ type: 'message', text: 'claude investigate the beta pipeline issue' }),
+        channel: 'C003', // No channel match
+        threadTs: '1700000000.001',
+        messageTs: '1700000000.001',
+        personas,
+        projects,
+      };
+      const result = await router.tryRoute(ctx);
+      expect(result).toBe(true);
+      expect(jobSpawner.spawnDirectProviderRequest).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ name: 'Beta' }),
+        'C003',
+        '1700000000.001',
+        personas[0],
+        expect.any(Object),
+      );
     });
 
     it('returns false for provider request without bot address or command', async () => {

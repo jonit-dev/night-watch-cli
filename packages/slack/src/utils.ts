@@ -157,22 +157,30 @@ export function buildSubprocessEnv(
 }
 
 /**
- * Resolve the path to night-watch-cli's tsconfig.json for use as TSX_TSCONFIG_PATH.
+ * Resolve the path to night-watch-cli's tsconfig.base.json for use as TSX_TSCONFIG_PATH.
  *
  * tsx has a known bug (https://github.com/privatenumber/tsx/issues/482) where path
  * alias resolution uses cwd rather than the source file location when spawning a
  * subprocess with a different cwd. Setting TSX_TSCONFIG_PATH forces tsx to use the
  * correct tsconfig regardless of cwd.
  *
- * Supports both dev (src/cli.ts) and built (dist/src/cli.js) layouts.
+ * IMPORTANT: Must point to tsconfig.base.json, NOT a package-level tsconfig.
+ * Package tsconfigs have "include" patterns that scope decorator support to their
+ * own package, breaking cross-package imports (e.g. core decorators fail when
+ * TSX_TSCONFIG_PATH points to packages/cli/tsconfig.json).
  */
 export function getNightWatchTsconfigPath(): string | null {
+  // When running via tsx CLI, argv[1] is tsx/dist/cli.mjs and argv[2] is the actual entry.
   const cliEntry = process.argv[1];
-  if (!cliEntry) return null;
-  const srcDir = path.dirname(cliEntry);
+  const actualEntry =
+    cliEntry && isTsxInvokerPath(cliEntry) ? process.argv[2] ?? cliEntry : cliEntry;
+  if (!actualEntry) return null;
+  const srcDir = path.dirname(actualEntry);
+  // Walk up from the entry to find tsconfig.base.json at the monorepo root.
   const candidates = [
-    path.resolve(srcDir, '..', 'tsconfig.json'), // dev:   src/ -> root
-    path.resolve(srcDir, '..', '..', 'tsconfig.json'), // built: dist/src/ -> root
+    path.resolve(srcDir, '..', 'tsconfig.base.json'), // single-pkg: src/ -> root
+    path.resolve(srcDir, '..', '..', 'tsconfig.base.json'), // built: dist/src/ -> root
+    path.resolve(srcDir, '..', '..', '..', 'tsconfig.base.json'), // monorepo: packages/cli/src/ -> root
   ];
   return candidates.find((c) => fs.existsSync(c)) ?? null;
 }

@@ -207,6 +207,28 @@ describe('MessageParser URL extraction', () => {
     });
   });
 
+  describe('parseSlackJobRequest - project hint extraction', () => {
+    it('extracts project hint from "on {project}" anywhere in the message', () => {
+      const result = parser.parseSlackJobRequest(
+        'can someone run yarn verify on night-watch-cli project and report me a TLDR',
+      );
+      expect(result?.job).toBe('run');
+      expect(result?.projectHint).toBe('night-watch-cli');
+    });
+
+    it('extracts project hint from "for {project}" anywhere in the message', () => {
+      const result = parser.parseSlackJobRequest('can someone qa for my-awesome-app repo');
+      expect(result?.job).toBe('qa');
+      expect(result?.projectHint).toBe('my-awesome-app');
+    });
+
+    it('prefers "on {project}" hint over verb-adjacent token', () => {
+      // "run yarn" would capture "yarn" without the secondary scan
+      const result = parser.parseSlackJobRequest('run npm test on backend-api');
+      expect(result?.projectHint).toBe('backend-api');
+    });
+  });
+
   describe('parseSlackJobRequest edge cases', () => {
     it('handles PR URLs with port numbers', () => {
       const result = parser.parseSlackJobRequest('review https://github.com:443/test/repo/pull/42');

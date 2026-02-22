@@ -11,8 +11,10 @@ export {
   buildFilesystemTools,
   executeBoardTool,
   executeCodebaseQuery,
+  executeReadFile,
   executeReadRoadmap,
   fetchRepoLabels,
 } from './tools.js';
 export { callAIForContribution, callAIWithTools, callSimpleAI } from './client.js';
 export { matchPersonaToMessage } from './persona-matcher.js';
+export { matchProjectToMessage } from './project-matcher.js';
