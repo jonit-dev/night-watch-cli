@@ -280,6 +280,11 @@ export async function callAIWithTools(
           result = handler ? await handler(block.input) : `Unknown tool: ${block.name}`;
         } catch (err) {
           result = `Error: ${String(err)}`;
+          log.error(`tool call failed: ${block.name}`, {
+            agent: persona.name,
+            error: String(err),
+            input: JSON.stringify(block.input).slice(0, 200),
+          });
         }
         log.info(`tool result: ${block.name}`, {
           agent: persona.name,

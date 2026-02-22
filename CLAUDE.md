@@ -1,5 +1,6 @@
 # Critical
 
+- Don't trust, verify. Always write tests for new features and bug fixes. Changed some code? Try to validate it somehow.
 - Favor composition over inheritance, use tsyringe
 - Favor SRP, DRY, KISS, YAGNI, SOLID principles
 

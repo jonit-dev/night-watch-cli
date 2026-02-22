@@ -16,6 +16,7 @@ import type { IJobSpawnerCallbacks } from './job-spawner.js';
 import { MessageParser } from './message-parser.js';
 import type { IInboundSlackEvent, ISlackIssueReviewable } from './message-parser.js';
 import { ThreadStateManager } from './thread-state-manager.js';
+import { matchProjectToMessage } from './ai/project-matcher.js';
 import { buildCurrentCliInvocation, normalizeProjectRef, stripSlackUserMentions } from './utils.js';
 
 const log = createLogger('trigger-router');
@@ -143,6 +144,21 @@ export class TriggerRouter {
     );
   }
 
+  /**
+   * Resolve a target project: tries fast channel/hint matching first, then falls back
+   * to an AI inference from the message text before giving up.
+   */
+  private async resolveProject(
+    text: string,
+    channel: string,
+    projects: IRegistryEntry[],
+    hint?: string,
+  ): Promise<IRegistryEntry | null> {
+    const fast = this.resolveTargetProject(channel, projects, hint);
+    if (fast) return fast;
+    return matchProjectToMessage(text, projects, this.config).catch(() => null);
+  }
+
   private async triggerDirectProviderIfRequested(
     event: IInboundSlackEvent,
     channel: string,
@@ -171,7 +187,12 @@ export class TriggerRouter {
       personas[0];
     if (!persona) return false;
 
-    const targetProject = this.resolveTargetProject(channel, projects, request.projectHint);
+    const targetProject = await this.resolveProject(
+      event.text ?? '',
+      channel,
+      projects,
+      request.projectHint,
+    );
     if (!targetProject) {
       const projectNames = projects.map((p) => p.name).join(', ') || '(none registered)';
       await this.slackClient.postAsAgent(
@@ -255,7 +276,12 @@ export class TriggerRouter {
 
     if (!persona) return false;
 
-    const targetProject = this.resolveTargetProject(channel, projects, request.projectHint);
+    const targetProject = await this.resolveProject(
+      event.text ?? '',
+      channel,
+      projects,
+      request.projectHint,
+    );
     if (!targetProject) {
       const projectNames = projects.map((p) => p.name).join(', ') || '(none registered)';
       await this.slackClient.postAsAgent(
@@ -338,7 +364,12 @@ export class TriggerRouter {
       personas[0];
     if (!persona) return false;
 
-    const targetProject = this.resolveTargetProject(channel, projects, request.repoHint);
+    const targetProject = await this.resolveProject(
+      event.text ?? '',
+      channel,
+      projects,
+      request.repoHint,
+    );
     if (!targetProject) {
       const projectNames = projects.map((p) => p.name).join(', ') || '(none registered)';
       await this.slackClient.postAsAgent(

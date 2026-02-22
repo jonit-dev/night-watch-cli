@@ -35,13 +35,18 @@ export interface IJobSpawnerCallbacks {
   markPersonaReply(channel: string, threadTs: string, personaId: string): void;
 }
 
-function extractLastMeaningfulLines(output: string, maxLines = 4): string {
+/**
+ * Extract the most useful lines from process output for error logging.
+ * For stack traces, the error message is at the top, not the bottom.
+ * Returns the first few non-empty lines (where the actual error is).
+ */
+function extractErrorSummary(output: string, maxLines = 8): string {
   const lines = output
     .split(/\r?\n/)
-    .map((line) => line.trim())
+    .map((line) => line.replace(/\x1b\[[0-9;]*m/g, '').trim()) // eslint-disable-line no-control-regex
     .filter(Boolean);
   if (lines.length === 0) return '';
-  return lines.slice(-maxLines).join(' | ');
+  return lines.slice(0, maxLines).join(' | ');
 }
 
 @injectable()
@@ -162,7 +167,7 @@ export class JobSpawner {
       });
       const parsed = parseScriptResult(output);
       const status = parsed?.status ? ` (${parsed.status})` : '';
-      const detail = extractLastMeaningfulLines(output);
+      const detail = extractErrorSummary(output);
 
       if (code === 0) {
         let doneMessage: string;
@@ -273,7 +278,7 @@ export class JobSpawner {
         exit: code ?? 'unknown',
       });
 
-      const detail = extractLastMeaningfulLines(output);
+      const detail = extractErrorSummary(output);
       if (code === 0) {
         await this.slackClient.postAsAgent(
           channel,
@@ -364,7 +369,7 @@ export class JobSpawner {
       }
 
       if (code !== 0) {
-        const detail = extractLastMeaningfulLines(output);
+        const detail = extractErrorSummary(output);
         if (detail) {
           log.warn('audit failure detail', { project: project.name, detail });
         }

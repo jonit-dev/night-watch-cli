@@ -7,18 +7,18 @@ import {
   HORIZON_LABELS,
   PRIORITY_LABELS,
   createBoardProvider,
+  createLogger,
   isValidCategory,
   isValidHorizon,
   isValidPriority,
 } from '@night-watch/core';
 import type { BoardColumnName, IBoardProviderConfig } from '@night-watch/core';
-import { execFile, execFileSync } from 'child_process';
+
+const log = createLogger('tools');
+import { execFileSync, spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { promisify } from 'util';
-
-const execFileAsync = promisify(execFile);
-import { buildSubprocessEnv, extractErrorMessage } from '../utils.js';
+import { buildSubprocessEnv } from '../utils.js';
 
 /**
  * Return the names of all labels that currently exist in the repo.
@@ -172,6 +172,23 @@ export function buildFilesystemTools(): IAnthropicTool[] {
         properties: {},
       },
     },
+    {
+      name: 'read_file',
+      description:
+        'Read any file in the project by relative path. Use this to read a specific file by name or path — it is instant and does NOT spawn an AI subprocess. ' +
+        'Prefer this over query_codebase whenever you want to see the contents of a known file.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description:
+              'Relative path from the project root (e.g. "packages/slack/src/deliberation.ts") or just a filename (e.g. "deliberation.ts") for fuzzy lookup.',
+          },
+        },
+        required: ['path'],
+      },
+    },
   ];
 }
 
@@ -258,10 +275,10 @@ export function buildCodebaseQueryTool(provider: 'claude' | 'codex' = 'claude'):
   return {
     name: 'query_codebase',
     description:
-      `Run a one-shot question against the project codebase using ${provider}. ` +
-      'Use this whenever you need to reference actual code — find a function, read a file, check an endpoint, etc. ' +
-      'The result will contain real code snippets you can quote directly in your reply. ' +
-      'Always call this before making a specific code claim or pointing at a file.',
+      `Run an AI-powered analysis of the project codebase using ${provider}. ` +
+      'Use this for open-ended searches: finding all usages of a function, tracing a flow across multiple files, or answering "how does X work". ' +
+      'Do NOT use this just to read a specific file by path — use read_file for that (it is instant). ' +
+      'query_codebase spawns a subprocess and takes 30-120 seconds; only call it when read_file is insufficient.',
     input_schema: {
       type: 'object',
       properties: {
@@ -280,7 +297,7 @@ export function buildCodebaseQueryTool(provider: 'claude' | 'codex' = 'claude'):
  * Execute a query_codebase tool call by spawning the AI provider synchronously.
  * Returns the provider output (code snippets, explanations) as a string.
  */
-export async function executeCodebaseQuery(
+export function executeCodebaseQuery(
   prompt: string,
   projectPath: string,
   provider: 'claude' | 'codex' = 'claude',
@@ -291,21 +308,68 @@ export async function executeCodebaseQuery(
       ? ['-p', prompt, '--dangerously-skip-permissions']
       : ['--quiet', '--yolo', '--prompt', prompt];
 
-  try {
-    const { stdout } = await execFileAsync(provider, args, {
+  const TIMEOUT_MS = 120_000;
+  const MAX_OUTPUT = 512 * 1024;
+
+  return new Promise((resolve) => {
+    const child = spawn(provider, args, {
       cwd: projectPath,
-      encoding: 'utf-8',
-      timeout: 60_000,
-      maxBuffer: 256 * 1024,
+      stdio: ['ignore', 'pipe', 'pipe'],
       env: buildSubprocessEnv(providerEnv ?? {}),
     });
-    return (stdout as string).trim().slice(0, 6000) || '(no output)';
-  } catch (err) {
-    const msg = extractErrorMessage(err);
-    const stderr = (err as Record<string, unknown>).stderr;
-    const detail = typeof stderr === 'string' && stderr.trim() ? ` | stderr: ${stderr.trim().slice(0, 300)}` : '';
-    return `Provider query failed: ${msg}${detail}`;
-  }
+
+    let stdout = '';
+    let stderr = '';
+    let killed = false;
+
+    child.stdout.setEncoding('utf-8');
+    child.stderr.setEncoding('utf-8');
+
+    child.stdout.on('data', (chunk: string) => {
+      if (stdout.length < MAX_OUTPUT) stdout += chunk;
+    });
+    child.stderr.on('data', (chunk: string) => {
+      if (stderr.length < MAX_OUTPUT) stderr += chunk;
+    });
+
+    const timer = setTimeout(() => {
+      killed = true;
+      child.kill('SIGTERM');
+    }, TIMEOUT_MS);
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      log.error('query_codebase spawn failed', { provider, error: String(err) });
+      resolve(`Provider query failed: ${String(err)}`);
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (killed) {
+        log.error('query_codebase timed out', {
+          provider,
+          projectPath,
+          timeoutMs: TIMEOUT_MS,
+          stdoutChars: stdout.length,
+          stderrPreview: stderr.trim().slice(0, 300),
+        });
+        resolve(`Provider query failed: timed out after ${TIMEOUT_MS / 1000}s`);
+        return;
+      }
+      if (code !== 0) {
+        const detail = stderr.trim() ? ` | stderr: ${stderr.trim().slice(0, 300)}` : '';
+        log.error('query_codebase subprocess failed', {
+          provider,
+          projectPath,
+          exitCode: String(code),
+          stderrPreview: stderr.trim().slice(0, 300),
+        });
+        resolve(`Provider query failed: exit code ${code}${detail}`);
+        return;
+      }
+      resolve(stdout.trim().slice(0, 6000) || '(no output)');
+    });
+  });
 }
 
 /**

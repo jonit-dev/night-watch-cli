@@ -14,24 +14,25 @@ import {
   createLogger,
   getRepositories,
 } from '@night-watch/core';
-
-const log = createLogger('deliberation');
-import { type ISlackMessage, SlackClient } from './client.js';
 import { basename } from 'node:path';
-import { BoardIntegration } from './board-integration.js';
-import { ConsensusEvaluator } from './consensus-evaluator.js';
-import type { IConsensusCallbacks } from './consensus-evaluator.js';
+import type { ToolRegistry } from './ai/index.js';
 import {
-  buildCurrentCliInvocation,
-  buildSubprocessEnv,
-  extractErrorMessage,
-  formatCommandForLog,
-  getNightWatchTsconfigPath,
-  normalizeText,
-  sleep,
-} from './utils.js';
-import { humanizeSlackReply, isSkipMessage } from './humanizer.js';
-import { findCarlos, findDev, getParticipatingPersonas } from './personas.js';
+  buildBoardTools,
+  buildCodebaseQueryTool,
+  buildFilesystemTools,
+  callAIForContribution,
+  callAIWithTools,
+  executeBoardTool,
+  executeCodebaseQuery,
+  executeReadFile,
+  executeReadRoadmap,
+  fetchRepoLabels,
+  resolvePersonaAIConfig,
+} from './ai/index.js';
+import { BoardIntegration } from './board-integration.js';
+import { type ISlackMessage, SlackClient } from './client.js';
+import type { IConsensusCallbacks } from './consensus-evaluator.js';
+import { ConsensusEvaluator } from './consensus-evaluator.js';
 import {
   MAX_AGENT_THREAD_REPLIES,
   buildContributionPrompt,
@@ -45,19 +46,19 @@ import {
   humanDelay,
   loadPrDiffExcerpt,
 } from './deliberation-builders.js';
+import { humanizeSlackReply, isSkipMessage } from './humanizer.js';
+import { findCarlos, findDev, getParticipatingPersonas } from './personas.js';
 import {
-  buildBoardTools,
-  buildCodebaseQueryTool,
-  buildFilesystemTools,
-  callAIForContribution,
-  callAIWithTools,
-  executeBoardTool,
-  executeCodebaseQuery,
-  executeReadRoadmap,
-  fetchRepoLabels,
-  resolvePersonaAIConfig,
-} from './ai/index.js';
-import type { ToolRegistry } from './ai/index.js';
+  buildCurrentCliInvocation,
+  buildSubprocessEnv,
+  extractErrorMessage,
+  formatCommandForLog,
+  getNightWatchTsconfigPath,
+  normalizeText,
+  sleep,
+} from './utils.js';
+
+const log = createLogger('deliberation');
 
 // Re-export humanizeSlackReply for backwards compatibility with existing tests
 
@@ -108,7 +109,6 @@ export class DeliberationEngine {
     const match = projects.find((p) => p.slackChannelId === channel) ?? projects[0];
     return match ? basename(match.path) : undefined;
   }
-
 
   private humanizeForPost(
     channel: string,
@@ -287,19 +287,28 @@ export class DeliberationEngine {
     try {
       if (useTools) {
         const boardConfig = this.board.resolveBoardConfig(discussion.projectPath);
+        const roadmapFile = this.config.roadmapScanner.roadmapPath;
         const repoLabels = boardConfig ? fetchRepoLabels(discussion.projectPath) : [];
-        const tools = [buildCodebaseQueryTool(), ...(boardConfig ? buildBoardTools(repoLabels) : [])];
+        const tools = [
+          ...buildFilesystemTools(),
+          buildCodebaseQueryTool(),
+          ...(boardConfig ? buildBoardTools(repoLabels) : []),
+        ];
         const registry: ToolRegistry = new Map();
+        registry.set('read_roadmap', () =>
+          Promise.resolve(executeReadRoadmap(discussion.projectPath, roadmapFile)),
+        );
+        registry.set('read_file', (input) =>
+          Promise.resolve(executeReadFile(String(input['path'] ?? ''), discussion.projectPath)),
+        );
         const codebaseProvider = (this.config.providerEnv?.['CODEBASE_QUERY_PROVIDER'] ??
           'claude') as 'claude' | 'codex';
         registry.set('query_codebase', (input) =>
-          Promise.resolve(
-            executeCodebaseQuery(
-              String(input['prompt'] ?? ''),
-              discussion.projectPath,
-              codebaseProvider,
-              this.config.providerEnv,
-            ),
+          executeCodebaseQuery(
+            String(input['prompt'] ?? ''),
+            discussion.projectPath,
+            codebaseProvider,
+            this.config.providerEnv,
           ),
         );
         if (boardConfig) {
@@ -318,7 +327,13 @@ export class DeliberationEngine {
           memory,
         );
       } else {
-        message = await callAIForContribution(persona, this.config, contributionPrompt, undefined, memory);
+        message = await callAIForContribution(
+          persona,
+          this.config,
+          contributionPrompt,
+          undefined,
+          memory,
+        );
       }
     } catch (err) {
       const errMsg = extractErrorMessage(err);
@@ -481,6 +496,9 @@ export class DeliberationEngine {
           const registry: ToolRegistry = new Map();
           registry.set('read_roadmap', () =>
             Promise.resolve(executeReadRoadmap(trigger.projectPath, roadmapFile)),
+          );
+          registry.set('read_file', (input) =>
+            Promise.resolve(executeReadFile(String(input['path'] ?? ''), trigger.projectPath)),
           );
           const codebaseProvider = (this.config.providerEnv?.['CODEBASE_QUERY_PROVIDER'] ??
             'claude') as 'claude' | 'codex';
@@ -726,9 +744,9 @@ export class DeliberationEngine {
     }
 
     const toolGuidance = useTools
-      ? `- You have tools: read_roadmap (read ROADMAP.md), query_codebase (AI-powered codebase search), and board tools.\n` +
-        `- ALWAYS use read_roadmap or query_codebase before making claims about file contents, task status, or implementation details. Never guess.\n` +
-        `- Use query_codebase for file lookups and open-ended searches ("find all usages of X", "show me path/to/file.ts").\n` +
+      ? `- You have tools: read_file (instant file read), read_roadmap (read ROADMAP.md), query_codebase (AI-powered codebase search), and board tools.\n` +
+        `- ALWAYS verify before making claims about file contents, task status, or implementation details. Never guess or make up information. Be truthful and precise.\n` +
+        `- Use read_file when you know the file path (instant). Use query_codebase for open-ended searches ("find all usages of X", "how does auth work").\n` +
         `- After reading, cite with \`path/to/file.ts#L42-L45\` and quote the actual line.\n`
       : `- When referencing code, always include the file path: \`path/to/file.ts#L42-L45\`. No vague "in the auth module" — name the file.\n`;
 
@@ -759,7 +777,8 @@ export class DeliberationEngine {
       `- Only reference PR numbers, issue numbers, or URLs that appear in the context above. Never invent or guess links.\n\n` +
       `Write only your reply. No name prefix.`;
 
-    const repoLabels = boardConfig && projectPathForTools ? fetchRepoLabels(projectPathForTools) : [];
+    const repoLabels =
+      boardConfig && projectPathForTools ? fetchRepoLabels(projectPathForTools) : [];
     const tools = [
       ...(useTools ? [...buildFilesystemTools(), buildCodebaseQueryTool()] : []),
       ...(boardConfig ? buildBoardTools(repoLabels) : []),
@@ -772,6 +791,9 @@ export class DeliberationEngine {
         const roadmapFile = this.config.roadmapScanner.roadmapPath;
         registry.set('read_roadmap', () =>
           Promise.resolve(executeReadRoadmap(projectPathForTools!, roadmapFile)),
+        );
+        registry.set('read_file', (input) =>
+          Promise.resolve(executeReadFile(String(input['path'] ?? ''), projectPathForTools!)),
         );
         const codebaseProvider = (this.config.providerEnv?.['CODEBASE_QUERY_PROVIDER'] ??
           'claude') as 'claude' | 'codex';
@@ -791,7 +813,14 @@ export class DeliberationEngine {
           }
         }
         try {
-          message = await callAIWithTools(persona, this.config, prompt, tools, registry, replyMemory);
+          message = await callAIWithTools(
+            persona,
+            this.config,
+            prompt,
+            tools,
+            registry,
+            replyMemory,
+          );
         } catch (toolsErr) {
           // Tools call failed (e.g. persistent API error) — fall back to a plain reply
           // so the agent always responds rather than silently disappearing.
