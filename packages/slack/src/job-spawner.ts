@@ -4,7 +4,12 @@
  * as child processes from Slack interactions.
  */
 
-import { IAgentPersona, INightWatchConfig, parseScriptResult } from '@night-watch/core';
+import {
+  IAgentPersona,
+  INightWatchConfig,
+  createLogger,
+  parseScriptResult,
+} from '@night-watch/core';
 import type { IRegistryEntry } from '@night-watch/core';
 import { spawn } from 'child_process';
 import * as fs from 'fs';
@@ -16,9 +21,12 @@ import type { ISlackProviderRequest, TSlackJobName } from './message-parser.js';
 import {
   buildCurrentCliInvocation,
   buildSubprocessEnv,
+  extractErrorMessage,
   formatCommandForLog,
   getNightWatchTsconfigPath,
 } from './utils.js';
+
+const log = createLogger('job-spawner');
 
 const MAX_JOB_OUTPUT_CHARS = 12_000;
 
@@ -60,9 +68,11 @@ export class JobSpawner {
     const invocationArgs = buildCurrentCliInvocation([job]);
     const prRef = opts?.prNumber ? ` PR #${opts.prNumber}` : '';
     if (!invocationArgs) {
-      console.warn(
-        `[slack][job] ${persona.name} cannot start ${job} for ${project.name}${prRef ? ` (${prRef.trim()})` : ''}: CLI entry path unavailable`,
-      );
+      log.warn('cannot start job: CLI entry path unavailable', {
+        persona: persona.name,
+        job,
+        project: project.name,
+      });
       await this.slackClient.postAsAgent(
         channel,
         `Can't start that ${job} right now — runtime issue. Checking it.`,
@@ -74,9 +84,12 @@ export class JobSpawner {
       return;
     }
 
-    console.log(
-      `[slack][job] persona=${persona.name} project=${project.name}${opts?.prNumber ? ` pr=${opts.prNumber}` : ''} spawn=${formatCommandForLog(process.execPath, invocationArgs)}`,
-    );
+    log.info('spawning job', {
+      persona: persona.name,
+      project: project.name,
+      ...(opts?.prNumber ? { pr: opts.prNumber } : {}),
+      spawn: formatCommandForLog(process.execPath, invocationArgs),
+    });
 
     const tsconfigPath = getNightWatchTsconfigPath();
     const child = spawn(process.execPath, invocationArgs, {
@@ -99,9 +112,13 @@ export class JobSpawner {
       }),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    console.log(
-      `[slack][job] ${persona.name} spawned ${job} for ${project.name}${opts?.prNumber ? ` (PR #${opts.prNumber})` : ''} pid=${child.pid ?? 'unknown'}`,
-    );
+    log.info('job spawned', {
+      persona: persona.name,
+      job,
+      project: project.name,
+      ...(opts?.prNumber ? { pr: opts.prNumber } : {}),
+      pid: child.pid ?? 'unknown',
+    });
 
     let output = '';
     let errored = false;
@@ -117,9 +134,13 @@ export class JobSpawner {
 
     child.on('error', async (err) => {
       errored = true;
-      console.warn(
-        `[slack][job] ${persona.name} ${job} spawn error for ${project.name}${opts?.prNumber ? ` (PR #${opts.prNumber})` : ''}: ${err.message}`,
-      );
+      log.warn('job spawn error', {
+        persona: persona.name,
+        job,
+        project: project.name,
+        ...(opts?.prNumber ? { pr: opts.prNumber } : {}),
+        error: err.message,
+      });
       await this.slackClient.postAsAgent(
         channel,
         `Couldn't kick off that ${job}. Error logged — looking into it.`,
@@ -132,9 +153,13 @@ export class JobSpawner {
 
     child.on('close', async (code) => {
       if (errored) return;
-      console.log(
-        `[slack][job] ${persona.name} ${job} finished for ${project.name}${opts?.prNumber ? ` (PR #${opts.prNumber})` : ''} exit=${code ?? 'unknown'}`,
-      );
+      log.info('job finished', {
+        persona: persona.name,
+        job,
+        project: project.name,
+        ...(opts?.prNumber ? { pr: opts.prNumber } : {}),
+        exit: code ?? 'unknown',
+      });
       const parsed = parseScriptResult(output);
       const status = parsed?.status ? ` (${parsed.status})` : '';
       const detail = extractLastMeaningfulLines(output);
@@ -151,7 +176,7 @@ export class JobSpawner {
         await this.slackClient.postAsAgent(channel, doneMessage, persona, threadTs);
       } else {
         if (detail) {
-          console.warn(`[slack][job] ${persona.name} ${job} failure detail: ${detail}`);
+          log.warn('job failure detail', { persona: persona.name, job, detail });
         }
         await this.slackClient.postAsAgent(
           channel,
@@ -161,7 +186,11 @@ export class JobSpawner {
         );
       }
       if (code !== 0 && status) {
-        console.warn(`[slack][job] ${persona.name} ${job} status=${status.replace(/[()]/g, '')}`);
+        log.warn('job non-zero status', {
+          persona: persona.name,
+          job,
+          status: status.replace(/[()]/g, ''),
+        });
       }
       callbacks?.markChannelActivity(channel);
       callbacks?.markPersonaReply(channel, threadTs, persona.id);
@@ -182,9 +211,12 @@ export class JobSpawner {
         ? ['-p', request.prompt, '--dangerously-skip-permissions']
         : ['--quiet', '--yolo', '--prompt', request.prompt];
 
-    console.log(
-      `[slack][provider] persona=${persona.name} provider=${request.provider} project=${project.name} spawn=${formatCommandForLog(request.provider, args)}`,
-    );
+    log.info('spawning provider', {
+      persona: persona.name,
+      provider: request.provider,
+      project: project.name,
+      spawn: formatCommandForLog(request.provider, args),
+    });
 
     const child = spawn(request.provider, args, {
       cwd: project.path,
@@ -194,9 +226,12 @@ export class JobSpawner {
       }),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    console.log(
-      `[slack][provider] ${persona.name} spawned ${request.provider} for ${project.name} pid=${child.pid ?? 'unknown'}`,
-    );
+    log.info('provider spawned', {
+      persona: persona.name,
+      provider: request.provider,
+      project: project.name,
+      pid: child.pid ?? 'unknown',
+    });
 
     let output = '';
     let errored = false;
@@ -213,9 +248,12 @@ export class JobSpawner {
 
     child.on('error', async (err) => {
       errored = true;
-      console.warn(
-        `[slack][provider] ${persona.name} ${request.provider} spawn error for ${project.name}: ${err.message}`,
-      );
+      log.warn('provider spawn error', {
+        persona: persona.name,
+        provider: request.provider,
+        project: project.name,
+        error: err.message,
+      });
       await this.slackClient.postAsAgent(
         channel,
         `Couldn't start ${providerLabel}. Error logged — looking into it.`,
@@ -228,9 +266,12 @@ export class JobSpawner {
 
     child.on('close', async (code) => {
       if (errored) return;
-      console.log(
-        `[slack][provider] ${persona.name} ${request.provider} finished for ${project.name} exit=${code ?? 'unknown'}`,
-      );
+      log.info('provider finished', {
+        persona: persona.name,
+        provider: request.provider,
+        project: project.name,
+        exit: code ?? 'unknown',
+      });
 
       const detail = extractLastMeaningfulLines(output);
       if (code === 0) {
@@ -242,9 +283,11 @@ export class JobSpawner {
         );
       } else {
         if (detail) {
-          console.warn(
-            `[slack][provider] ${persona.name} ${request.provider} failure detail: ${detail}`,
-          );
+          log.warn('provider failure detail', {
+            persona: persona.name,
+            provider: request.provider,
+            detail,
+          });
         }
         await this.slackClient.postAsAgent(
           channel,
@@ -265,23 +308,24 @@ export class JobSpawner {
     callbacks?: IJobSpawnerCallbacks,
   ): void {
     if (!fs.existsSync(project.path)) {
-      console.warn(
-        `[slack][codewatch] audit skipped for ${project.name}: missing project path ${project.path}`,
-      );
+      log.warn('audit skipped: missing project path', {
+        project: project.name,
+        path: project.path,
+      });
       return;
     }
 
     const invocationArgs = buildCurrentCliInvocation(['audit']);
     if (!invocationArgs) {
-      console.warn(
-        `[slack][codewatch] audit spawn failed for ${project.name}: CLI entry path unavailable`,
-      );
+      log.warn('audit spawn failed: CLI entry path unavailable', { project: project.name });
       return;
     }
 
-    console.log(
-      `[slack][codewatch] spawning audit for ${project.name} → ${channel} cmd=${formatCommandForLog(process.execPath, invocationArgs)}`,
-    );
+    log.info('spawning audit', {
+      project: project.name,
+      channel,
+      cmd: formatCommandForLog(process.execPath, invocationArgs),
+    });
 
     const startedAt = Date.now();
     const tsconfigPath = getNightWatchTsconfigPath();
@@ -294,9 +338,7 @@ export class JobSpawner {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    console.log(
-      `[slack][codewatch] audit spawned for ${project.name} pid=${child.pid ?? 'unknown'}`,
-    );
+    log.info('audit spawned', { project: project.name, pid: child.pid ?? 'unknown' });
     let output = '';
     // eslint-disable-next-line sonarjs/no-identical-functions
     const appendOutput = (chunk: Buffer): void => {
@@ -312,13 +354,11 @@ export class JobSpawner {
     let spawnErrored = false;
     child.on('error', (err) => {
       spawnErrored = true;
-      console.warn(`[slack][codewatch] audit spawn error for ${project.name}: ${err.message}`);
+      log.warn('audit spawn error', { project: project.name, error: err.message });
     });
 
     child.on('close', async (code) => {
-      console.log(
-        `[slack][codewatch] audit finished for ${project.name} exit=${code ?? 'unknown'}`,
-      );
+      log.info('audit finished', { project: project.name, exit: code ?? 'unknown' });
       if (spawnErrored) {
         return;
       }
@@ -326,7 +366,7 @@ export class JobSpawner {
       if (code !== 0) {
         const detail = extractLastMeaningfulLines(output);
         if (detail) {
-          console.warn(`[slack][codewatch] audit failure detail for ${project.name}: ${detail}`);
+          log.warn('audit failure detail', { project: project.name, detail });
         }
         return;
       }
@@ -340,21 +380,21 @@ export class JobSpawner {
       } catch {
         const parsed = parseScriptResult(output);
         if (parsed?.status?.startsWith('skip_')) {
-          console.log(`[slack][codewatch] audit skipped for ${project.name} (${parsed.status})`);
+          log.info('audit skipped', { project: project.name, status: parsed.status });
         } else {
-          console.log(`[slack][codewatch] no audit report found at ${reportPath}`);
+          log.info('no audit report found', { project: project.name, path: reportPath });
         }
         return;
       }
 
       // Ignore old reports when an audit exits early without producing a fresh output.
       if (reportStat.mtimeMs + 1000 < startedAt) {
-        console.log(`[slack][codewatch] stale audit report ignored at ${reportPath}`);
+        log.info('stale audit report ignored', { project: project.name, path: reportPath });
         return;
       }
 
       if (!report) {
-        console.log(`[slack][codewatch] empty audit report ignored at ${reportPath}`);
+        log.info('empty audit report ignored', { project: project.name, path: reportPath });
         return;
       }
 
@@ -362,8 +402,10 @@ export class JobSpawner {
         await this.engine.handleAuditReport(report, project.name, project.path, channel);
         callbacks?.markChannelActivity(channel);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[slack][codewatch] handleAuditReport failed for ${project.name}: ${msg}`);
+        log.warn('handleAuditReport failed', {
+          project: project.name,
+          error: extractErrorMessage(err),
+        });
       }
     });
   }

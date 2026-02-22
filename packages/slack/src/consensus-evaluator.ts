@@ -16,22 +16,16 @@ import type { BoardIntegration } from './board-integration.js';
 import { callAIForContribution } from './ai/index.js';
 import { humanizeSlackReply, isSkipMessage } from './humanizer.js';
 import { findCarlos, findDev, getParticipatingPersonas } from './personas.js';
-import { MAX_ROUNDS, formatThreadHistory } from './deliberation-builders.js';
-import { sleep } from './utils.js';
+import {
+  MAX_AGENT_THREAD_REPLIES,
+  MAX_ROUNDS,
+  countThreadReplies,
+  formatThreadHistory,
+  humanDelay,
+} from './deliberation-builders.js';
+import { extractErrorMessage, sleep } from './utils.js';
 
 const log = createLogger('consensus-evaluator');
-
-const HUMAN_DELAY_MIN_MS = 20_000;
-const HUMAN_DELAY_MAX_MS = 60_000;
-const MAX_AGENT_THREAD_REPLIES = 4;
-
-function humanDelay(): number {
-  return HUMAN_DELAY_MIN_MS + Math.random() * (HUMAN_DELAY_MAX_MS - HUMAN_DELAY_MIN_MS);
-}
-
-function countThreadReplies(messages: { ts: string }[]): number {
-  return Math.max(0, messages.length - 1);
-}
 
 export interface IConsensusCallbacks {
   runContributionRound(
@@ -122,7 +116,7 @@ Write the prefix and your message. Nothing else.`;
       try {
         decision = await callAIForContribution(carlos, this.config, consensusPrompt);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = extractErrorMessage(err);
         log.warn('AI consensus evaluation failed', { error: msg });
         decision = 'HUMAN: AI evaluation failed — needs manual review';
       }
@@ -283,7 +277,7 @@ Be concise and decisive. No recap of the whole thread. Write the prefix and your
     try {
       decision = await callAIForContribution(lead, this.config, consensusPrompt);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = extractErrorMessage(err);
       log.warn('issue-review: consensus evaluation failed', { error: msg });
       decision = 'DRAFT: AI evaluation failed — leaving in Draft for manual review';
     }

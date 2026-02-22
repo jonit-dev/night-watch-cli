@@ -1,6 +1,7 @@
 # Night Watch Slack Agent System -- Architecture Documentation
 
 > Generated: 2026-02-21
+> Last updated: 2026-02-21
 > Scope: Multi-agent Slack bot architecture within the Night Watch CLI monorepo
 > Status: Living document -- reflects current `main` branch state
 
@@ -991,3 +992,26 @@ sequenceDiagram
 | `/home/joao/projects/night-watch-cli/packages/slack/src/ai/client.ts`                                           | slack   | callAIForContribution, callAIWithTools                 |
 | `/home/joao/projects/night-watch-cli/packages/slack/src/ai/provider.ts`                                         | slack   | resolvePersonaAIConfig, resolveGlobalAIConfig          |
 | `/home/joao/projects/night-watch-cli/packages/slack/src/ai/tools.ts`                                            | slack   | Tool definitions for agentic loop                      |
+
+---
+
+## Changelog
+
+### 2026-02-21 — Batch 1 architectural cleanup
+
+**H1 — Deduplicated shared utilities (`deliberation-builders.ts` is now single source of truth)**
+
+`humanDelay()`, `countThreadReplies()`, and `MAX_AGENT_THREAD_REPLIES` were copy-pasted across `deliberation.ts`, `consensus-evaluator.ts`, and `deliberation-builders.ts`. All three are now defined and exported only from `deliberation-builders.ts`. Both consumers import them from there.
+
+**M4 — `JobSpawner` now uses structured logger**
+
+All 13 `console.log`/`console.warn` calls in `packages/slack/src/job-spawner.ts` replaced with `createLogger('job-spawner')` calls using structured key=value fields (consistent with every other file in the package).
+
+**M5 — Removed redundant `shouldIgnoreInboundSlackEvent` guard**
+
+`handleInboundMessage()` contained a dead `shouldIgnoreInboundSlackEvent` check that could never trigger — the method is only called from `handleEventsApi`, which already applies the same guard before dispatching. The redundant check was removed.
+
+**L4 — `extractErrorMessage()` used consistently across 9 files**
+
+The utility `extractErrorMessage(err)` exists in `utils.ts` precisely to avoid the repeated `err instanceof Error ? err.message : String(err)` pattern. 17 remaining inline occurrences were replaced across:
+`deliberation.ts`, `consensus-evaluator.ts`, `job-spawner.ts`, `interaction-listener.ts`, `proactive-loop.ts`, `board-integration.ts`, `notify.ts`, `channel-manager.ts`, `ai/tools.ts`.

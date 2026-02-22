@@ -13,6 +13,7 @@ import {
 } from '@night-watch/core';
 import type { BoardColumnName, IBoardProviderConfig } from '@night-watch/core';
 import { execFileSync } from 'child_process';
+import { extractErrorMessage } from '../utils.js';
 
 export interface IAnthropicTool {
   name: string;
@@ -173,7 +174,7 @@ export function executeCodebaseQuery(
     });
     return output.trim().slice(0, 6000) || '(no output)';
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = extractErrorMessage(err);
     return `Provider query failed: ${msg}`;
   }
 }

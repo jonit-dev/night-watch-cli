@@ -26,6 +26,7 @@ import type { IConsensusCallbacks } from './consensus-evaluator.js';
 import {
   buildCurrentCliInvocation,
   buildSubprocessEnv,
+  extractErrorMessage,
   formatCommandForLog,
   getNightWatchTsconfigPath,
   normalizeText,
@@ -34,6 +35,7 @@ import {
 import { humanizeSlackReply, isSkipMessage } from './humanizer.js';
 import { findCarlos, findDev, getParticipatingPersonas } from './personas.js';
 import {
+  MAX_AGENT_THREAD_REPLIES,
   buildContributionPrompt,
   buildOpeningMessage,
   chooseRoundContributors,
@@ -62,7 +64,6 @@ import type { ToolRegistry } from './ai/index.js';
 export { humanizeSlackReply } from './humanizer.js';
 
 const MAX_CONTRIBUTIONS_PER_ROUND = 2;
-const MAX_AGENT_THREAD_REPLIES = 4;
 const DISCUSSION_RESUME_DELAY_MS = 60_000;
 const DISCUSSION_REPLAY_GUARD_MS = 30 * 60_000;
 
@@ -450,8 +451,10 @@ export class DeliberationEngine {
           memory,
         );
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        log.warn('AI contribution failed', { agent: persona.name, error: msg });
+        log.warn('AI contribution failed', {
+          agent: persona.name,
+          error: extractErrorMessage(err),
+        });
         message = '';
       }
 

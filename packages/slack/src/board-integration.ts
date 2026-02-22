@@ -20,7 +20,7 @@ import { callAIForContribution } from './ai/index.js';
 import { humanizeSlackReply } from './humanizer.js';
 import { findCarlos, findDev } from './personas.js';
 import { buildIssueTitleFromTrigger } from './deliberation-builders.js';
-import { buildCurrentCliInvocation } from './utils.js';
+import { buildCurrentCliInvocation, extractErrorMessage } from './utils.js';
 
 const log = createLogger('board-integration');
 
@@ -336,7 +336,11 @@ ${trigger.context}`;
     };
     const titlePrompt = `Convert this one-liner into a clean imperative-mood Git issue title (max 80 chars). No prefix like "fix:" — just the action.\nOne-liner: "${slackOneliner}"\nExamples:\n- "add timeout to auth middleware"\n- "remove duplicate validation in signup flow"\n- "fix N+1 query in user list endpoint"\nWrite only the title.`;
     const generatedTitle = await callAIForContribution(devPersona, this.config, titlePrompt, 64);
-    const issueTitle = `fix: ${generatedTitle.toLowerCase().replace(/[.!?]+$/, '').slice(0, 80)}`;
+    // eslint-disable-next-line sonarjs/slow-regex
+    const issueTitle = `fix: ${generatedTitle
+      .toLowerCase()
+      .replace(/[.!?]+$/, '')
+      .slice(0, 80)}`;
     const issueBody = await this.generateIssueBody(fakeTrigger, devPersona).catch(() =>
       report.slice(0, 1200),
     );
@@ -371,8 +375,7 @@ ${trigger.context}`;
     try {
       await this.slackClient.postAsAgent(channel, slackMsg, devPersona);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      log.warn('audit: failed to post Slack notification', { error: msg });
+      log.warn('audit: failed to post Slack notification', { error: extractErrorMessage(err) });
     }
   }
 }

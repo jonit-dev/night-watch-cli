@@ -11,6 +11,9 @@ import { findCarlos } from './personas.js';
 /** Maximum number of deliberation rounds per discussion. */
 export const MAX_ROUNDS = 2;
 
+/** Maximum number of agent replies allowed in a single thread. */
+export const MAX_AGENT_THREAD_REPLIES = 4;
+
 /**
  * Generate the opening message text for a discussion
  */

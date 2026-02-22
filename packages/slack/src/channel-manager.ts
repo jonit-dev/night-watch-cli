@@ -5,6 +5,7 @@
 
 import { INightWatchConfig, getRepositories } from '@night-watch/core';
 import { SlackClient } from './client.js';
+import { extractErrorMessage } from './utils.js';
 
 /**
  * Slugify a project name for use as a Slack channel name.
@@ -70,7 +71,7 @@ export class ChannelManager {
 
       return channelId;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = extractErrorMessage(err);
       console.warn(`Failed to create Slack channel for project ${projectName}: ${message}`);
       return null;
     }
@@ -106,7 +107,7 @@ export class ChannelManager {
       await this.slackClient.archiveChannel(project.slackChannelId);
       repos.projectRegistry.updateSlackChannel(projectPath, '');
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = extractErrorMessage(err);
       console.warn(`Failed to archive Slack channel for project ${projectName}: ${message}`);
     }
   }
@@ -137,7 +138,7 @@ export class ChannelManager {
       const text = `Shipped: ${prTitle} → ${branch}${prUrl ? `\n${prUrl}` : ''}`;
       await this.slackClient.postAsAgent(channel, text, dev);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const message = extractErrorMessage(err);
       console.warn(`Failed to post release announcement: ${message}`);
     }
   }
@@ -167,7 +168,7 @@ export class ChannelManager {
     try {
       await this.slackClient.postAsAgent(channel, message, persona);
     } catch (err) {
-      const message2 = err instanceof Error ? err.message : String(err);
+      const message2 = extractErrorMessage(err);
       console.warn(`Failed to post announcement: ${message2}`);
     }
   }

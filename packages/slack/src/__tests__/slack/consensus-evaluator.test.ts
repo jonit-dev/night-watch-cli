@@ -34,11 +34,15 @@ vi.mock('../../personas.js', () => ({
 
 vi.mock('../../deliberation-builders.js', () => ({
   MAX_ROUNDS: 2,
+  MAX_AGENT_THREAD_REPLIES: 4,
   formatThreadHistory: vi.fn(() => 'Thread history'),
+  countThreadReplies: vi.fn((messages: { ts: string }[]) => Math.max(0, messages.length - 1)),
+  humanDelay: vi.fn(() => 0),
 }));
 
 vi.mock('../../utils.js', () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
+  extractErrorMessage: vi.fn((err: unknown) => (err instanceof Error ? err.message : String(err))),
 }));
 
 // --- imports after mocks ------------------------------------------------

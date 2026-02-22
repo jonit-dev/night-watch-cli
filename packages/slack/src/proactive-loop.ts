@@ -20,6 +20,7 @@ import { DeliberationEngine } from './deliberation.js';
 import { JobSpawner } from './job-spawner.js';
 import type { IJobSpawnerCallbacks } from './job-spawner.js';
 import { findCarlos } from './personas.js';
+import { extractErrorMessage } from './utils.js';
 
 const PROACTIVE_IDLE_MS = 20 * 60_000; // 20 min
 const PROACTIVE_MIN_INTERVAL_MS = 90 * 60_000; // per channel
@@ -162,8 +163,7 @@ export class ProactiveLoop {
         this.callbacks.markChannelActivity(channel);
         log.info('proactive message posted', { agent: persona.name, channel, slicingMode });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        log.warn('proactive message failed', { error: msg, channel });
+        log.warn('proactive message failed', { error: extractErrorMessage(err), channel });
       }
     }
   }
