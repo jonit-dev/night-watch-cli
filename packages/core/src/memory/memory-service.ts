@@ -31,7 +31,6 @@ import {
   NIGHT_WATCH_DIR,
   WORKING_CHAR_BUDGET,
 } from './memory-constants.js';
-import { CORE_CATEGORIES } from './memory-types.js';
 import { buildCompactionPrompt, buildReflectionPrompt } from './reflection-prompts.js';
 
 const log = createLogger('memory');
@@ -130,7 +129,10 @@ export class MemoryService {
       const coreExists = await pathExists(corePath);
       const workingExists = await pathExists(workingPath);
       if (!coreExists && !workingExists) {
-        log.info('migrating legacy main.md to working.md', { agent: personaName, project: projectSlug });
+        log.info('migrating legacy main.md to working.md', {
+          agent: personaName,
+          project: projectSlug,
+        });
         await rename(legacyPath, workingPath);
         await writeFile(corePath, '', { encoding: 'utf-8' });
       }
@@ -222,7 +224,8 @@ export class MemoryService {
 
     // Validate compaction output
     const condensedLines = condensed.split('\n').filter((l) => l.trim().length > 0);
-    const startsWithBullet = condensed.trimStart().startsWith('- [') || condensed.trimStart().startsWith('- ');
+    const startsWithBullet =
+      condensed.trimStart().startsWith('- [') || condensed.trimStart().startsWith('- ');
     const withinLineTarget = condensedLines.length <= COMPACTION_TARGET_LINES;
 
     if (!startsWithBullet || !withinLineTarget) {
@@ -275,7 +278,11 @@ export class MemoryService {
       });
     }
 
-    log.info('lesson promoted to core memory', { agent: personaName, project: projectSlug, lesson });
+    log.info('lesson promoted to core memory', {
+      agent: personaName,
+      project: projectSlug,
+      lesson,
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -434,9 +441,7 @@ export class MemoryService {
           synthesisPrompt,
         );
 
-        const coreLessonLine = synthesized
-          .split('\n')
-          .find((l) => l.trimStart().startsWith('- '));
+        const coreLessonLine = synthesized.split('\n').find((l) => l.trimStart().startsWith('- '));
 
         if (coreLessonLine) {
           const coreLesson = coreLessonLine.trimStart().slice(2).trim();
@@ -450,14 +455,12 @@ export class MemoryService {
     // Remove promoted lessons from working.md
     if (promoted.length > 0) {
       const promotedSet = new Set(promoted);
-      const filteredLines = content
-        .split('\n')
-        .filter((line) => {
-          const lessonText = line.trimStart().startsWith('- ')
-            ? line.trimStart().slice(2).trim()
-            : null;
-          return lessonText === null || !promotedSet.has(lessonText);
-        });
+      const filteredLines = content.split('\n').filter((line) => {
+        const lessonText = line.trimStart().startsWith('- ')
+          ? line.trimStart().slice(2).trim()
+          : null;
+        return lessonText === null || !promotedSet.has(lessonText);
+      });
       await writeFile(workingPath, filteredLines.join('\n'), { encoding: 'utf-8' });
       log.info('promoted lessons removed from working memory', {
         agent: personaName,
@@ -567,11 +570,52 @@ function parseDateSections(content: string): IDateSection[] {
 
 /** Stop-words to exclude from similarity comparison. */
 const STOP_WORDS = new Set([
-  'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
-  'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could',
-  'should', 'may', 'might', 'shall', 'to', 'of', 'in', 'for', 'on', 'with',
-  'at', 'by', 'from', 'and', 'or', 'but', 'not', 'this', 'that', 'it',
-  'its', 'we', 'you', 'i', 'they', 'them', 'their',
+  'a',
+  'an',
+  'the',
+  'is',
+  'are',
+  'was',
+  'were',
+  'be',
+  'been',
+  'being',
+  'have',
+  'has',
+  'had',
+  'do',
+  'does',
+  'did',
+  'will',
+  'would',
+  'could',
+  'should',
+  'may',
+  'might',
+  'shall',
+  'to',
+  'of',
+  'in',
+  'for',
+  'on',
+  'with',
+  'at',
+  'by',
+  'from',
+  'and',
+  'or',
+  'but',
+  'not',
+  'this',
+  'that',
+  'it',
+  'its',
+  'we',
+  'you',
+  'i',
+  'they',
+  'them',
+  'their',
 ]);
 
 /** Return significant words from a lesson string. */
@@ -600,7 +644,14 @@ function lessonsSimilar(a: string, b: string): boolean {
 }
 
 /** Known memory category tags emitted by the reflection prompt. */
-const VALID_CATEGORIES = new Set(['PATTERN', 'DECISION', 'ARCHITECTURE', 'OBSERVATION', 'HYPOTHESIS', 'TODO']);
+const VALID_CATEGORIES = new Set([
+  'PATTERN',
+  'DECISION',
+  'ARCHITECTURE',
+  'OBSERVATION',
+  'HYPOTHESIS',
+  'TODO',
+]);
 
 /**
  * Extract the category tag from a lesson string formatted as:

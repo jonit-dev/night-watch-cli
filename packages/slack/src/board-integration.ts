@@ -336,10 +336,9 @@ ${trigger.context}`;
     };
     const titlePrompt = `Convert this one-liner into a clean imperative-mood Git issue title (max 80 chars). No prefix like "fix:" — just the action.\nOne-liner: "${slackOneliner}"\nExamples:\n- "add timeout to auth middleware"\n- "remove duplicate validation in signup flow"\n- "fix N+1 query in user list endpoint"\nWrite only the title.`;
     const generatedTitle = await callAIForContribution(devPersona, this.config, titlePrompt, 64);
-    // eslint-disable-next-line sonarjs/slow-regex
     const issueTitle = `fix: ${generatedTitle
       .toLowerCase()
-      .replace(/[.!?]+$/, '')
+      .replace(/[.!?]+$/u, '') // eslint-disable-line sonarjs/slow-regex
       .slice(0, 80)}`;
     const issueBody = await this.generateIssueBody(fakeTrigger, devPersona).catch(() =>
       report.slice(0, 1200),
