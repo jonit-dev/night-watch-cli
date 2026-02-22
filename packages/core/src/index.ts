@@ -28,6 +28,7 @@ export * from './utils/notify.js';
 export * from './utils/prd-states.js';
 export * from './utils/prd-utils.js';
 export * from './utils/registry.js';
+export * from './utils/roadmap-context-compiler.js';
 export * from './utils/roadmap-parser.js';
 export * from './utils/roadmap-scanner.js';
 export * from './utils/roadmap-state.js';
@@ -56,4 +57,5 @@ export type {
   IMemoryEntry,
   IReflectionContext,
   LlmCaller,
+  IRoadmapContextOptions,
 } from './shared/types.js';

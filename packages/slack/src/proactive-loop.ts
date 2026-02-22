@@ -3,7 +3,13 @@
  * Periodically sends idle-channel messages and code-watch audits.
  */
 
-import { IAgentPersona, INightWatchConfig, createLogger, getRepositories } from '@night-watch/core';
+import {
+  IAgentPersona,
+  INightWatchConfig,
+  createLogger,
+  getRepositories,
+  isLeadRole,
+} from '@night-watch/core';
 
 const log = createLogger('proactive');
 import type { IRegistryEntry } from '@night-watch/core';
@@ -13,16 +19,23 @@ import { injectable } from 'tsyringe';
 import { DeliberationEngine } from './deliberation.js';
 import { JobSpawner } from './job-spawner.js';
 import type { IJobSpawnerCallbacks } from './job-spawner.js';
+import { findCarlos } from './personas.js';
 
 const PROACTIVE_IDLE_MS = 20 * 60_000; // 20 min
 const PROACTIVE_MIN_INTERVAL_MS = 90 * 60_000; // per channel
 const PROACTIVE_SWEEP_INTERVAL_MS = 60_000;
 const PROACTIVE_CODEWATCH_MIN_INTERVAL_MS = 3 * 60 * 60_000; // per project
+const SLICING_INTERVAL_MS = 4 * 60 * 60_000; // 4 hours — less frequent than regular proactive
 
 export interface IProactiveLoopCallbacks {
   markChannelActivity(channel: string): void;
   buildProjectContext(channel: string, projects: IRegistryEntry[]): string;
   buildRoadmapContext(channel: string, projects: IRegistryEntry[]): string;
+  buildRoadmapForPersona?(
+    channel: string,
+    projects: IRegistryEntry[],
+    persona: IAgentPersona,
+  ): string;
 }
 
 @injectable()
@@ -35,6 +48,7 @@ export class ProactiveLoop {
   private readonly channelActivityAt: Map<string, number>;
   private readonly lastProactiveAt = new Map<string, number>();
   private readonly lastCodeWatchAt = new Map<string, number>();
+  private readonly lastSlicingSweepAt = new Map<string, number>();
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
@@ -113,11 +127,25 @@ export class ProactiveLoop {
       if (now - lastActivity < PROACTIVE_IDLE_MS) continue;
       if (now - lastProactive < PROACTIVE_MIN_INTERVAL_MS) continue;
 
-      const persona = this.pickRandomPersona(personas);
+      // Check if it's time for a slicing sweep (less frequent — every 4h)
+      const lastSlicing = this.lastSlicingSweepAt.get(channel) ?? 0;
+      const slicingMode = now - lastSlicing >= SLICING_INTERVAL_MS;
+
+      // Pick persona: for slicing mode prefer lead roles (Carlos); otherwise random
+      let persona: IAgentPersona | null;
+      if (slicingMode) {
+        const carlos = findCarlos(personas);
+        const leadPersonas = personas.filter((p) => isLeadRole(p.role));
+        persona = carlos ?? leadPersonas[0] ?? this.pickRandomPersona(personas);
+      } else {
+        persona = this.pickRandomPersona(personas);
+      }
       if (!persona) continue;
 
       const projectContext = this.callbacks.buildProjectContext(channel, projects);
-      const roadmapContext = this.callbacks.buildRoadmapContext(channel, projects);
+      const roadmapContext = this.callbacks.buildRoadmapForPersona
+        ? this.callbacks.buildRoadmapForPersona(channel, projects, persona)
+        : this.callbacks.buildRoadmapContext(channel, projects);
       const projectSlug = basename(project.path);
 
       try {
@@ -127,10 +155,12 @@ export class ProactiveLoop {
           projectContext,
           roadmapContext,
           projectSlug,
+          slicingMode,
         );
         this.lastProactiveAt.set(channel, now);
+        if (slicingMode) this.lastSlicingSweepAt.set(channel, now);
         this.callbacks.markChannelActivity(channel);
-        log.info('proactive message posted', { agent: persona.name, channel });
+        log.info('proactive message posted', { agent: persona.name, channel, slicingMode });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         log.warn('proactive message failed', { error: msg, channel });

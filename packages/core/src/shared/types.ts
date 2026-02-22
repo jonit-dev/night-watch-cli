@@ -272,6 +272,14 @@ export interface IDiscussionTrigger {
   threadTs?: string; // If set, skip opener post and anchor discussion in this existing thread
 }
 
+// ==================== Roadmap Context ====================
+
+export interface IRoadmapContextOptions {
+  mode: 'full' | 'summary';
+  /** Character cap for the compiled output. Defaults: full=3000, summary=800 */
+  maxChars?: number;
+}
+
 // ==================== Agent Memory ====================
 
 export interface IMemoryEntry {
