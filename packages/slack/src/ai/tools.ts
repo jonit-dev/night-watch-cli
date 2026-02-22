@@ -12,7 +12,12 @@ import {
   isValidPriority,
 } from '@night-watch/core';
 import type { BoardColumnName, IBoardProviderConfig } from '@night-watch/core';
-import { execFileSync } from 'child_process';
+import { execFile } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 import { extractErrorMessage } from '../utils.js';
 
 export interface IAnthropicTool {
@@ -122,6 +127,100 @@ export function buildBoardTools(): IAnthropicTool[] {
 }
 
 /**
+ * Returns tool definitions for direct filesystem access within the project.
+ * read_roadmap: read ROADMAP.md without needing a path.
+ * read_file: read any file by relative path.
+ * These are synchronous and cheap — no subprocess needed.
+ */
+export function buildFilesystemTools(): IAnthropicTool[] {
+  return [
+    {
+      name: 'read_roadmap',
+      description:
+        'Read the ROADMAP.md file for this project. Use this when asked about roadmap items, priorities, task status, or what has been done vs pending.',
+      input_schema: {
+        type: 'object',
+        properties: {},
+      },
+    },
+  ];
+}
+
+/**
+ * Execute a read_roadmap tool call. Returns raw file content or a not-found message.
+ */
+export function executeReadRoadmap(projectPath: string, roadmapFilename = 'ROADMAP.md'): string {
+  const fullPath = path.join(projectPath, roadmapFilename);
+  if (!fs.existsSync(fullPath)) return `ROADMAP.md not found at ${fullPath}`;
+  return fs.readFileSync(fullPath, 'utf-8');
+}
+
+/**
+ * Execute a read_file tool call. Validates the path stays within the project.
+ * If the path is just a filename (no directory separator) and is not found at the exact
+ * relative path, fall back to a recursive search of the project tree.
+ */
+export function executeReadFile(relPath: string, projectPath: string): string {
+  const resolved = path.resolve(projectPath, relPath);
+  if (!resolved.startsWith(path.resolve(projectPath))) {
+    return 'Error: path outside project directory.';
+  }
+
+  // Exact path lookup
+  if (fs.existsSync(resolved)) {
+    const stat = fs.statSync(resolved);
+    if (stat.isDirectory()) return `${relPath} is a directory, not a file.`;
+    const content = fs.readFileSync(resolved, 'utf-8');
+    const MAX = 10_000;
+    return content.length > MAX ? content.slice(0, MAX) + `\n\n[truncated — ${content.length} chars total]` : content;
+  }
+
+  // Fuzzy fallback: if the caller passed just a filename, search the tree
+  if (!relPath.includes('/') && !relPath.includes('\\')) {
+    const matches = findFilesInProject(relPath, projectPath);
+    if (matches.length === 1) {
+      const rel = path.relative(projectPath, matches[0]);
+      const content = fs.readFileSync(matches[0], 'utf-8');
+      const MAX = 10_000;
+      const body = content.length > MAX ? content.slice(0, MAX) + `\n\n[truncated — ${content.length} chars total]` : content;
+      return `// Found at: ${rel}\n${body}`;
+    }
+    if (matches.length > 1) {
+      const rels = matches.map((m) => path.relative(projectPath, m));
+      return `Multiple files named "${relPath}" found — please specify the full path:\n${rels.map((r) => `  ${r}`).join('\n')}`;
+    }
+  }
+
+  return `File not found: ${relPath}`;
+}
+
+/**
+ * Recursively find all files with the given filename under `dir`.
+ * Skips node_modules, .git, and dist to keep it fast.
+ */
+function findFilesInProject(filename: string, dir: string, depth = 0): string[] {
+  const SKIP = new Set(['node_modules', '.git', 'dist', '.turbo', 'coverage', '.next']);
+  const MAX_DEPTH = 8;
+  if (depth > MAX_DEPTH) return [];
+  const results: string[] = [];
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (SKIP.has(entry.name)) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isFile() && entry.name === filename) {
+        results.push(full);
+      } else if (entry.isDirectory()) {
+        results.push(...findFilesInProject(filename, full, depth + 1));
+      }
+    }
+  } catch {
+    // ignore permission errors
+  }
+  return results;
+}
+
+/**
  * Returns an Anthropic tool definition that lets an agent query the project codebase
  * by spawning the configured AI provider (claude/codex) in the project directory.
  * Use this instead of rolling custom file-read/grep tools.
@@ -152,27 +251,26 @@ export function buildCodebaseQueryTool(provider: 'claude' | 'codex' = 'claude'):
  * Execute a query_codebase tool call by spawning the AI provider synchronously.
  * Returns the provider output (code snippets, explanations) as a string.
  */
-export function executeCodebaseQuery(
+export async function executeCodebaseQuery(
   prompt: string,
   projectPath: string,
   provider: 'claude' | 'codex' = 'claude',
   providerEnv?: Record<string, string>,
-): string {
+): Promise<string> {
   const args =
     provider === 'claude'
       ? ['-p', prompt, '--dangerously-skip-permissions']
       : ['--quiet', '--yolo', '--prompt', prompt];
 
   try {
-    const output = execFileSync(provider, args, {
+    const { stdout } = await execFileAsync(provider, args, {
       cwd: projectPath,
       encoding: 'utf-8',
-      stdio: ['ignore', 'pipe', 'pipe'],
       timeout: 60_000,
       maxBuffer: 256 * 1024,
       env: { ...process.env, ...(providerEnv ?? {}) },
     });
-    return output.trim().slice(0, 6000) || '(no output)';
+    return (stdout as string).trim().slice(0, 6000) || '(no output)';
   } catch (err) {
     const msg = extractErrorMessage(err);
     return `Provider query failed: ${msg}`;

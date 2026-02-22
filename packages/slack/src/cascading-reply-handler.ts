@@ -32,7 +32,6 @@ export class CascadingReplyHandler {
     private readonly slackClient: SlackClient,
     private readonly engine: DeliberationEngine,
     private readonly state: ThreadStateManager,
-    private readonly roadmapCallback?: (channel: string, persona: IAgentPersona) => string,
   ) {}
 
   /**
@@ -79,7 +78,6 @@ export class CascadingReplyHandler {
         postedText,
         persona,
         projectContext,
-        this.roadmapCallback?.(channel, persona),
       );
       this.state.markPersonaReply(channel, threadTs, persona.id);
       this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id);
@@ -115,7 +113,6 @@ export class CascadingReplyHandler {
       text,
       persona,
       projectContext,
-      this.roadmapCallback?.(channel, persona),
     );
     this.state.markPersonaReply(channel, threadTs, persona.id);
     this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id);
@@ -168,7 +165,6 @@ export class CascadingReplyHandler {
         text,
         persona,
         projectContext,
-        this.roadmapCallback?.(channel, persona),
       );
       this.state.markPersonaReply(channel, threadTs, persona.id);
       this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id);

@@ -39,6 +39,8 @@ export interface IRoadmapStatus {
   status: "idle" | "scanning" | "complete" | "disabled" | "no-roadmap";
   /** All roadmap items with processing status */
   items: Array<IRoadmapItem & { processed: boolean; prdFile?: string }>;
+  /** Raw ROADMAP.md file content for agent reference */
+  rawContent?: string;
 }
 
 /**
@@ -80,37 +82,27 @@ export function getRoadmapStatus(
 ): IRoadmapStatus {
   const roadmapPath = path.join(projectDir, config.roadmapScanner.roadmapPath);
 
-  // Check if enabled
-  if (!config.roadmapScanner.enabled) {
-    return {
-      found: false,
-      enabled: false,
-      totalItems: 0,
-      processedItems: 0,
-      pendingItems: 0,
-      status: "disabled",
-      items: [],
-    };
-  }
+  const scannerEnabled = config.roadmapScanner.enabled;
 
-  // Check if roadmap file exists
+  // Check if roadmap file exists — always read it regardless of scanner enabled flag.
+  // The scanner enabled flag controls PRD generation, not agent visibility.
   if (!fs.existsSync(roadmapPath)) {
     return {
       found: false,
-      enabled: true,
+      enabled: scannerEnabled,
       totalItems: 0,
       processedItems: 0,
       pendingItems: 0,
-      status: "no-roadmap",
+      status: scannerEnabled ? "no-roadmap" : "disabled",
       items: [],
     };
   }
 
-  // Parse roadmap
+  // Parse roadmap — always, so agents can reference the file content
   const content = fs.readFileSync(roadmapPath, "utf-8");
   const items = parseRoadmap(content);
 
-  // Load state
+  // Load state (PRD processing status)
   const prdDir = path.join(projectDir, config.prdDir);
   const state = loadRoadmapState(prdDir);
 
@@ -141,7 +133,9 @@ export function getRoadmapStatus(
 
   // Determine status
   let status: IRoadmapStatus["status"];
-  if (pendingItems === 0 && statusItems.length > 0) {
+  if (!scannerEnabled) {
+    status = "disabled";
+  } else if (pendingItems === 0 && statusItems.length > 0) {
     status = "complete";
   } else {
     status = "idle";
@@ -149,12 +143,13 @@ export function getRoadmapStatus(
 
   return {
     found: true,
-    enabled: true,
+    enabled: scannerEnabled,
     totalItems: items.length,
     processedItems,
     pendingItems,
     status,
     items: statusItems,
+    rawContent: content,
   };
 }
 

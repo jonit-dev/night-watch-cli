@@ -11,10 +11,8 @@ import {
   IReflectionContext,
   ISlackDiscussion,
   MemoryService,
-  compileRoadmapForPersona,
   createLogger,
   getRepositories,
-  getRoadmapStatus,
 } from '@night-watch/core';
 
 const log = createLogger('deliberation');
@@ -46,15 +44,16 @@ import {
   hasConcreteCodeContext,
   humanDelay,
   loadPrDiffExcerpt,
-  pickMaxSentences,
 } from './deliberation-builders.js';
 import {
   buildBoardTools,
   buildCodebaseQueryTool,
+  buildFilesystemTools,
   callAIForContribution,
   callAIWithTools,
   executeBoardTool,
   executeCodebaseQuery,
+  executeReadRoadmap,
   resolvePersonaAIConfig,
 } from './ai/index.js';
 import type { ToolRegistry } from './ai/index.js';
@@ -63,7 +62,7 @@ import type { ToolRegistry } from './ai/index.js';
 
 export { humanizeSlackReply } from './humanizer.js';
 
-const MAX_CONTRIBUTIONS_PER_ROUND = 2;
+const MAX_CONTRIBUTIONS_PER_ROUND = 3;
 const DISCUSSION_RESUME_DELAY_MS = 60_000;
 const DISCUSSION_REPLAY_GUARD_MS = 30 * 60_000;
 
@@ -95,7 +94,7 @@ export class DeliberationEngine {
     const projects = repos.projectRegistry.getAll();
     const channelProject = projects.find((p) => p.slackChannelId === channel);
     if (channelProject?.path) return channelProject.path;
-    return projects.length === 1 ? projects[0].path : null;
+    return projects[0]?.path ?? null;
   }
 
   private resolveReplyProjectSlug(
@@ -109,18 +108,6 @@ export class DeliberationEngine {
     return match ? basename(match.path) : undefined;
   }
 
-  private buildRoadmapContextForLead(projectPath: string, personas: IAgentPersona[]): string {
-    const carlos = findCarlos(personas);
-    const leadPersonas = personas.filter((p) => p.role.toLowerCase().includes('lead'));
-    const persona = carlos ?? leadPersonas[0] ?? personas[0];
-    if (!persona) return '';
-    try {
-      const status = getRoadmapStatus(projectPath, this.config);
-      return compileRoadmapForPersona(persona, status);
-    } catch {
-      return '';
-    }
-  }
 
   private humanizeForPost(
     channel: string,
@@ -135,8 +122,6 @@ export class DeliberationEngine {
     return humanizeSlackReply(raw, {
       allowEmoji: count % 3 === 0,
       allowNonFacialEmoji: count % 9 === 0,
-      maxSentences: pickMaxSentences(),
-      maxChars: 280 + Math.floor(Math.random() * 160), // 280-440
     });
   }
 
@@ -244,15 +229,10 @@ export class DeliberationEngine {
     await this.runContributionRound(discussion.id, reviewers, resolvedTrigger, openingText);
 
     // Check consensus after first round
-    const roadmapCtxForConsensus = this.buildRoadmapContextForLead(
-      resolvedTrigger.projectPath,
-      personas,
-    );
     await this.consensus.evaluateConsensus(
       discussion.id,
       resolvedTrigger,
       this.makeConsensusCallbacks(),
-      roadmapCtxForConsensus,
     );
 
     return repos.slackDiscussion.getById(discussion.id)!;
@@ -282,19 +262,66 @@ export class DeliberationEngine {
       context: historyText,
     };
 
+    // Fetch persona memory to inject into system prompt (optional — ignore errors)
+    const projectSlug = basename(discussion.projectPath);
+    let memory: string | undefined;
+    try {
+      memory = await this.memoryService.getMemory(persona.name, projectSlug);
+    } catch {
+      /* optional */
+    }
+
+    const resolved = resolvePersonaAIConfig(persona, this.config);
+    const useTools = Boolean(discussion.projectPath && resolved.provider === 'anthropic');
+
     const contributionPrompt = buildContributionPrompt(
       persona,
       trigger,
       historyText,
       discussion.round,
+      useTools,
     );
 
     let message: string;
     try {
-      message = await callAIForContribution(persona, this.config, contributionPrompt);
+      if (useTools) {
+        const boardConfig = this.board.resolveBoardConfig(discussion.projectPath);
+        const tools = [buildCodebaseQueryTool(), ...(boardConfig ? buildBoardTools() : [])];
+        const registry: ToolRegistry = new Map();
+        const codebaseProvider = (this.config.providerEnv?.['CODEBASE_QUERY_PROVIDER'] ??
+          'claude') as 'claude' | 'codex';
+        registry.set('query_codebase', (input) =>
+          Promise.resolve(
+            executeCodebaseQuery(
+              String(input['prompt'] ?? ''),
+              discussion.projectPath,
+              codebaseProvider,
+              this.config.providerEnv,
+            ),
+          ),
+        );
+        if (boardConfig) {
+          for (const tool of buildBoardTools()) {
+            registry.set(tool.name, (input) =>
+              executeBoardTool(tool.name, input, boardConfig, discussion.projectPath),
+            );
+          }
+        }
+        message = await callAIWithTools(
+          persona,
+          this.config,
+          contributionPrompt,
+          tools,
+          registry,
+          memory,
+        );
+      } else {
+        message = await callAIForContribution(persona, this.config, contributionPrompt, undefined, memory);
+      }
     } catch (err) {
-      log.error('callAIForContribution failed', { agent: persona.name, error: String(err) });
-      message = `[Contribution from ${persona.name} unavailable — AI provider not configured]`;
+      const errMsg = extractErrorMessage(err);
+      log.error('AI contribution failed', { agent: persona.name, error: errMsg });
+      message = `[${persona.name} error: ${errMsg}]`;
     }
 
     if (message) {
@@ -360,10 +387,6 @@ export class DeliberationEngine {
           threadTs,
         );
         await sleep(humanDelay());
-        const roadmapCtxForHuman = this.buildRoadmapContextForLead(
-          discussion.projectPath,
-          personas,
-        );
         await this.consensus.evaluateConsensus(
           discussion.id,
           {
@@ -373,7 +396,6 @@ export class DeliberationEngine {
             context: '',
           },
           this.makeConsensusCallbacks(),
-          roadmapCtxForHuman,
         );
       })().finally(() => {
         this.humanResumeTimers.delete(discussion.id);
@@ -391,7 +413,6 @@ export class DeliberationEngine {
     personas: IAgentPersona[],
     trigger: IDiscussionTrigger,
     currentContext: string,
-    roadmapCallback?: (persona: IAgentPersona) => string,
   ): Promise<void> {
     const repos = getRepositories();
     const discussion = repos.slackDiscussion.getById(discussionId);
@@ -425,14 +446,6 @@ export class DeliberationEngine {
       const updatedDiscussion = repos.slackDiscussion.getById(discussionId);
       if (!updatedDiscussion || updatedDiscussion.status !== 'active') break;
 
-      const contributionPrompt = buildContributionPrompt(
-        persona,
-        trigger,
-        historyText,
-        updatedDiscussion.round,
-        roadmapCallback?.(persona),
-      );
-
       // Fetch persona memory to inject into the system prompt (optional — ignore errors)
       let memory: string | undefined;
       try {
@@ -441,15 +454,65 @@ export class DeliberationEngine {
         /* optional */
       }
 
+      const resolved = resolvePersonaAIConfig(persona, this.config);
+      const useTools = Boolean(trigger.projectPath && resolved.provider === 'anthropic');
+
+      const contributionPrompt = buildContributionPrompt(
+        persona,
+        trigger,
+        historyText,
+        updatedDiscussion.round,
+        useTools,
+      );
+
       let message: string;
       try {
-        message = await callAIForContribution(
-          persona,
-          this.config,
-          contributionPrompt,
-          undefined,
-          memory,
-        );
+        if (useTools) {
+          const boardConfig = this.board.resolveBoardConfig(trigger.projectPath);
+          const roadmapFile = this.config.roadmapScanner.roadmapPath;
+          const tools = [
+            ...buildFilesystemTools(),
+            buildCodebaseQueryTool(),
+            ...(boardConfig ? buildBoardTools() : []),
+          ];
+          const registry: ToolRegistry = new Map();
+          registry.set('read_roadmap', () =>
+            Promise.resolve(executeReadRoadmap(trigger.projectPath, roadmapFile)),
+          );
+          const codebaseProvider = (this.config.providerEnv?.['CODEBASE_QUERY_PROVIDER'] ??
+            'claude') as 'claude' | 'codex';
+          registry.set('query_codebase', (input) =>
+            executeCodebaseQuery(
+              String(input['prompt'] ?? ''),
+              trigger.projectPath,
+              codebaseProvider,
+              this.config.providerEnv,
+            ),
+          );
+          if (boardConfig) {
+            for (const tool of buildBoardTools()) {
+              registry.set(tool.name, (input) =>
+                executeBoardTool(tool.name, input, boardConfig, trigger.projectPath),
+              );
+            }
+          }
+          message = await callAIWithTools(
+            persona,
+            this.config,
+            contributionPrompt,
+            tools,
+            registry,
+            memory,
+          );
+        } else {
+          message = await callAIForContribution(
+            persona,
+            this.config,
+            contributionPrompt,
+            undefined,
+            memory,
+          );
+        }
       } catch (err) {
         log.warn('AI contribution failed', {
           agent: persona.name,
@@ -599,7 +662,6 @@ export class DeliberationEngine {
     incomingText: string,
     persona: IAgentPersona,
     projectContext?: string,
-    roadmapContext?: string,
   ): Promise<string> {
     let history: ISlackMessage[] = [];
     try {
@@ -660,34 +722,42 @@ export class DeliberationEngine {
       }
     }
 
-    const codebaseGuidance = useTools
-      ? `- You have a query_codebase tool. Before making any code claim, call it first. Then cite what you found using GitHub permalink format: \`path/to/file.ts#L42-L45\` with an inline snippet. Like a teammate who pulled it up in their editor.\n`
+    const toolGuidance = useTools
+      ? `- You have tools: read_roadmap (read ROADMAP.md), query_codebase (AI-powered codebase search), and board tools.\n` +
+        `- ALWAYS use read_roadmap or query_codebase before making claims about file contents, task status, or implementation details. Never guess.\n` +
+        `- Use query_codebase for file lookups and open-ended searches ("find all usages of X", "show me path/to/file.ts").\n` +
+        `- After reading, cite with \`path/to/file.ts#L42-L45\` and quote the actual line.\n`
       : `- When referencing code, always include the file path: \`path/to/file.ts#L42-L45\`. No vague "in the auth module" — name the file.\n`;
+
+    log.info('replyAsAgent', {
+      agent: persona.name,
+      useTools,
+      projectPath: projectPathForTools,
+      hasProjectContext: Boolean(projectContext),
+    });
 
     const prompt =
       `You are ${persona.name}, ${persona.role}.\n` +
       `Your teammates: Dev (implementer), Carlos (tech lead), Maya (security), Priya (QA).\n\n` +
       (projectContext ? `Project context:\n${projectContext}\n\n` : '') +
-      (roadmapContext ? `Roadmap priorities:\n${roadmapContext}\n\n` : '') +
       (historyText ? `Thread so far:\n${historyText}\n\n` : '') +
       `Latest message: "${incomingText}"\n\n` +
-      `Respond in your own voice. This is Slack — keep it conversational, 1-3 sentences max.\n` +
+      `Respond in your own voice. This is Slack — keep it conversational. Say as much or as little as the topic needs.\n` +
       `- Talk like a colleague who actually gives a damn, not a bot. No "Great question", "Of course", or "I hope this helps".\n` +
       `- Engage with the thread — if teammates said something you agree or disagree with, react to it directly.\n` +
       `- Tag a teammate by name naturally if their domain is more relevant ("Carlos would know better", "Maya, thoughts?").\n` +
       casualGuidance +
       urlGuidance +
-      codebaseGuidance +
+      toolGuidance +
       `- No markdown headings or bullet lists. Inline backticks and short code blocks are fine when quoting actual code.\n` +
       `- Emojis: one max, only if it fits. Default to none.\n` +
       `- If the question is outside your domain, say so briefly and redirect.\n` +
-      `- You have board tools available. If asked to open, update, or list issues, use them — don't just say you will.\n` +
-      `- Only reference PR numbers, issue numbers, or URLs that appear in the context above. Never invent or guess links.\n` +
-      `- When discussing work priorities, reference the roadmap. Flag off-roadmap suggestions as such.\n\n` +
+      `- Use board tools if asked to open, update, or list issues — don't just say you will.\n` +
+      `- Only reference PR numbers, issue numbers, or URLs that appear in the context above. Never invent or guess links.\n\n` +
       `Write only your reply. No name prefix.`;
 
     const tools = [
-      ...(useTools ? [buildCodebaseQueryTool()] : []),
+      ...(useTools ? [...buildFilesystemTools(), buildCodebaseQueryTool()] : []),
       ...(boardConfig ? buildBoardTools() : []),
     ];
 
@@ -695,16 +765,18 @@ export class DeliberationEngine {
     try {
       if (useTools && tools.length > 0) {
         const registry: ToolRegistry = new Map();
+        const roadmapFile = this.config.roadmapScanner.roadmapPath;
+        registry.set('read_roadmap', () =>
+          Promise.resolve(executeReadRoadmap(projectPathForTools!, roadmapFile)),
+        );
         const codebaseProvider = (this.config.providerEnv?.['CODEBASE_QUERY_PROVIDER'] ??
           'claude') as 'claude' | 'codex';
         registry.set('query_codebase', (input) =>
-          Promise.resolve(
-            executeCodebaseQuery(
-              String(input['prompt'] ?? ''),
-              projectPathForTools!,
-              codebaseProvider,
-              this.config.providerEnv,
-            ),
+          executeCodebaseQuery(
+            String(input['prompt'] ?? ''),
+            projectPathForTools!,
+            codebaseProvider,
+            this.config.providerEnv,
           ),
         );
         if (boardConfig) {
@@ -714,14 +786,14 @@ export class DeliberationEngine {
             );
           }
         }
-        message = await callAIWithTools(persona, this.config, prompt, tools, registry);
+        message = await callAIWithTools(persona, this.config, prompt, tools, registry, replyMemory);
       } else {
         // Allow up to 1024 tokens for ad-hoc replies so agents can write substantive responses
         message = await callAIForContribution(persona, this.config, prompt, 1024, replyMemory);
       }
     } catch (err) {
-      log.error('ad-hoc reply failed', { agent: persona.name, error: String(err) });
-      message = `[Reply from ${persona.name} unavailable — AI provider not configured]`;
+      log.error('ad-hoc reply failed', { agent: persona.name, error: extractErrorMessage(err) });
+      message = '';
     }
 
     if (message) {
@@ -796,7 +868,7 @@ export class DeliberationEngine {
       `The channel has been quiet — you want to share something useful, not just fill silence.\n\n` +
       (projectContext ? `Project context: ${projectContext}\n\n` : '') +
       (roadmapContext ? `Roadmap/PRD status:\n${roadmapContext}\n\n` : '') +
-      `Write a SHORT proactive message (1-2 sentences) that does ONE of these:\n` +
+      `Write a proactive message that does ONE of these:\n` +
       `- Question a roadmap priority or ask if something should be reordered\n` +
       `- Flag something you've been thinking about from your domain (security concern, test gap, architectural question, implementation idea)\n` +
       `- Suggest an improvement or raise a "have we thought about..." question\n` +

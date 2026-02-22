@@ -34,7 +34,7 @@ vi.mock('../../personas.js', () => ({
 
 vi.mock('../../deliberation-builders.js', () => ({
   MAX_ROUNDS: 2,
-  MAX_AGENT_THREAD_REPLIES: 4,
+  MAX_AGENT_THREAD_REPLIES: 6,
   formatThreadHistory: vi.fn(() => 'Thread history'),
   countThreadReplies: vi.fn((messages: { ts: string }[]) => Math.max(0, messages.length - 1)),
   humanDelay: vi.fn(() => 0),
@@ -573,13 +573,16 @@ describe('ConsensusEvaluator', () => {
       );
       vi.mocked(findCarlos).mockReturnValue(carlos);
 
-      // Mock 5 replies (4 agent replies + original message = 5, which exceeds MAX_AGENT_THREAD_REPLIES=4)
+      // Mock 7 replies (6 agent replies + original message = 7, which exceeds MAX_AGENT_THREAD_REPLIES=6)
       vi.mocked(slackClient.getChannelHistory).mockResolvedValue([
         { ts: '1.0', channel: 'C01', text: 'Original', username: 'Dev' },
         { ts: '2.0', channel: 'C01', text: 'Reply 1', username: 'Maya' },
         { ts: '3.0', channel: 'C01', text: 'Reply 2', username: 'Carlos' },
         { ts: '4.0', channel: 'C01', text: 'Reply 3', username: 'Priya' },
         { ts: '5.0', channel: 'C01', text: 'Reply 4', username: 'Dev' },
+        { ts: '6.0', channel: 'C01', text: 'Reply 5', username: 'Maya' },
+        { ts: '7.0', channel: 'C01', text: 'Reply 6', username: 'Carlos' },
+        { ts: '8.0', channel: 'C01', text: 'Reply 7', username: 'Priya' },
       ]);
 
       await evaluator.evaluateConsensus('disc-1', buildTrigger(), buildCallbacks());
@@ -696,12 +699,14 @@ describe('ConsensusEvaluator', () => {
       vi.mocked(findCarlos).mockReturnValue(carlos);
       vi.mocked(callAIForContribution).mockResolvedValue('CHANGES: Fix the tests.');
 
-      // 2 replies means repliesUsed=1, repliesLeft=3 which is NOT < 3, so we need repliesUsed=2
-      // repliesUsed=2 means repliesLeft=2 which is < 3
+      // With MAX_AGENT_THREAD_REPLIES=6: need repliesUsed>=4 for repliesLeft<3
+      // 5 messages: repliesUsed=4, repliesLeft=6-4=2 which is < 3
       vi.mocked(slackClient.getChannelHistory).mockResolvedValue([
         { ts: '1.0', channel: 'C01', text: 'Original', username: 'Dev' },
         { ts: '2.0', channel: 'C01', text: 'Reply 1', username: 'Maya' },
         { ts: '3.0', channel: 'C01', text: 'Reply 2', username: 'Carlos' },
+        { ts: '4.0', channel: 'C01', text: 'Reply 3', username: 'Priya' },
+        { ts: '5.0', channel: 'C01', text: 'Reply 4', username: 'Dev' },
       ]);
 
       await evaluator.evaluateConsensus('disc-1', buildTrigger(), callbacks);
@@ -1071,132 +1076,6 @@ describe('ConsensusEvaluator', () => {
       expect(callbacks.runContributionRound).toHaveBeenCalledOnce();
       // Should NOT have called AI a second time (exited on status check)
       expect(callAIForContribution).toHaveBeenCalledOnce();
-    });
-  });
-
-  // --- evaluateConsensus — roadmap context injection -----------------------
-
-  describe('evaluateConsensus — roadmap context injection', () => {
-    it('should include roadmap in consensus prompt when roadmapContext is provided', async () => {
-      const carlos = buildPersona();
-      const repos = buildRepos();
-      vi.mocked(getRepositories).mockReturnValue(
-        repos as unknown as ReturnType<typeof getRepositories>,
-      );
-      vi.mocked(findCarlos).mockReturnValue(carlos);
-
-      let capturedPrompt = '';
-      vi.mocked(callAIForContribution).mockImplementation((_persona, _config, prompt) => {
-        capturedPrompt = prompt;
-        return Promise.resolve('APPROVE: Looks good.');
-      });
-
-      await evaluator.evaluateConsensus(
-        'disc-1',
-        buildTrigger(),
-        buildCallbacks(),
-        'Phase 1: Auth\nPhase 2: Payments',
-      );
-
-      expect(capturedPrompt).toContain('Roadmap priorities:');
-      expect(capturedPrompt).toContain('Phase 1: Auth');
-      expect(capturedPrompt).toContain(
-        'Consider whether the discussion outcomes align with roadmap priorities.',
-      );
-    });
-
-    it('should not include roadmap section when roadmapContext is undefined', async () => {
-      const carlos = buildPersona();
-      const repos = buildRepos();
-      vi.mocked(getRepositories).mockReturnValue(
-        repos as unknown as ReturnType<typeof getRepositories>,
-      );
-      vi.mocked(findCarlos).mockReturnValue(carlos);
-
-      let capturedPrompt = '';
-      vi.mocked(callAIForContribution).mockImplementation((_persona, _config, prompt) => {
-        capturedPrompt = prompt;
-        return Promise.resolve('APPROVE: Looks good.');
-      });
-
-      await evaluator.evaluateConsensus('disc-1', buildTrigger(), buildCallbacks());
-
-      expect(capturedPrompt).not.toContain('Roadmap priorities:');
-    });
-  });
-
-  // --- evaluateIssueReviewConsensus — roadmap context injection ------------
-
-  describe('evaluateIssueReviewConsensus — roadmap context injection', () => {
-    it('should include roadmap in issue review prompt when roadmapContext is provided', async () => {
-      const carlos = buildPersona();
-      const repos = buildRepos({ triggerType: 'issue_review', status: 'active' });
-      vi.mocked(getRepositories).mockReturnValue(
-        repos as unknown as ReturnType<typeof getRepositories>,
-      );
-      vi.mocked(findCarlos).mockReturnValue(carlos);
-
-      let capturedPrompt = '';
-      vi.mocked(callAIForContribution).mockImplementation((_persona, _config, prompt) => {
-        capturedPrompt = prompt;
-        return Promise.resolve('READY: Valid issue.');
-      });
-
-      const trigger = buildTrigger({ type: 'issue_review', ref: 'org/repo#5' });
-      await evaluator.evaluateIssueReviewConsensus(
-        'disc-1',
-        trigger,
-        'Q1 Roadmap: ship auth refactor',
-      );
-
-      expect(capturedPrompt).toContain('Roadmap priorities:');
-      expect(capturedPrompt).toContain('Q1 Roadmap: ship auth refactor');
-    });
-
-    it('should not include roadmap section in issue review prompt when roadmapContext is undefined', async () => {
-      const carlos = buildPersona();
-      const repos = buildRepos({ triggerType: 'issue_review', status: 'active' });
-      vi.mocked(getRepositories).mockReturnValue(
-        repos as unknown as ReturnType<typeof getRepositories>,
-      );
-      vi.mocked(findCarlos).mockReturnValue(carlos);
-
-      let capturedPrompt = '';
-      vi.mocked(callAIForContribution).mockImplementation((_persona, _config, prompt) => {
-        capturedPrompt = prompt;
-        return Promise.resolve('DRAFT: Needs more context.');
-      });
-
-      const trigger = buildTrigger({ type: 'issue_review', ref: 'org/repo#5' });
-      await evaluator.evaluateIssueReviewConsensus('disc-1', trigger);
-
-      expect(capturedPrompt).not.toContain('Roadmap priorities:');
-    });
-
-    it('should pass roadmapContext through from evaluateConsensus to evaluateIssueReviewConsensus', async () => {
-      const carlos = buildPersona();
-      const repos = buildRepos({ triggerType: 'issue_review' });
-      vi.mocked(getRepositories).mockReturnValue(
-        repos as unknown as ReturnType<typeof getRepositories>,
-      );
-      vi.mocked(findCarlos).mockReturnValue(carlos);
-
-      let capturedPrompt = '';
-      vi.mocked(callAIForContribution).mockImplementation((_persona, _config, prompt) => {
-        capturedPrompt = prompt;
-        return Promise.resolve('DRAFT: Needs more context.');
-      });
-
-      const trigger = buildTrigger({ type: 'issue_review', ref: 'org/repo#5' });
-      await evaluator.evaluateConsensus(
-        'disc-1',
-        trigger,
-        buildCallbacks(),
-        'Roadmap: Q2 security audit',
-      );
-
-      expect(capturedPrompt).toContain('Roadmap priorities:');
-      expect(capturedPrompt).toContain('Roadmap: Q2 security audit');
     });
   });
 

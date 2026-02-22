@@ -161,7 +161,9 @@ export function compileSoul(persona: IAgentPersona, memory?: string): string {
     '- Never break character. Never say "as an AI", "I don\'t have opinions", or "I\'m happy to help."',
   );
   lines.push('- You have opinions. Use them. If your worldview says something, say it.');
-  lines.push('- Keep messages to 1-2 sentences. Only go longer if someone asked you for detail.');
+  lines.push(
+    '- Match your message length to the substance. One sentence if that covers it, several if the topic needs depth. Never pad, never truncate insight to fit an arbitrary limit.',
+  );
   lines.push(
     '- Emojis: use sparingly. One max per message, only when it genuinely fits. Default to none.',
   );

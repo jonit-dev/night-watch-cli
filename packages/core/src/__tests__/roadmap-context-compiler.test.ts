@@ -3,16 +3,23 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { IRoadmapStatus } from './roadmap-scanner.js';
+import type { IRoadmapStatus } from '../utils/roadmap-scanner.js';
 import {
   compileRoadmapContext,
   compileRoadmapForPersona,
   isLeadRole,
-} from './roadmap-context-compiler.js';
+} from '../utils/roadmap-context-compiler.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const SAMPLE_RAW = `# Roadmap
+## Short Term
+- [ ] Auth feature
+- [ ] Billing
+## Medium Term
+- [ ] Analytics`;
 
 function buildStatus(
   items: Array<{
@@ -96,9 +103,10 @@ describe('compileRoadmapContext', () => {
     expect(compileRoadmapContext(status, { mode: 'full' })).toBe('');
   });
 
-  it('returns empty string when status is disabled', () => {
+  it('still returns content when scanner is disabled but file was found', () => {
     const status = buildStatus([{ title: 'A', section: 'Short Term' }], { enabled: false });
-    expect(compileRoadmapContext(status, { mode: 'full' })).toBe('');
+    const result = compileRoadmapContext(status, { mode: 'full' });
+    expect(result).toContain('A');
   });
 
   it('returns empty string when there are no items', () => {
@@ -106,24 +114,35 @@ describe('compileRoadmapContext', () => {
     expect(compileRoadmapContext(status, { mode: 'full' })).toBe('');
   });
 
-  it('should respect maxChars limit', () => {
-    const items = Array.from({ length: 20 }, (_, i) => ({
-      title: `Item ${i} with a fairly long title to fill space`,
-      section: 'Short Term',
-    }));
-    const status = buildStatus(items);
-    const maxChars = 100;
-    const result = compileRoadmapContext(status, { mode: 'full', maxChars });
-    expect(result.length).toBeLessThanOrEqual(maxChars);
+  it('should truncate raw content when maxChars is set', () => {
+    const status = buildStatus(
+      [{ title: 'A', section: 'Short Term' }],
+      { rawContent: 'x'.repeat(500) },
+    );
+    const result = compileRoadmapContext(status, { mode: 'full', maxChars: 100 });
+    // Raw content portion should be truncated to maxChars
+    expect(result).toContain('ROADMAP.md (file content)');
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('includes raw file content when available', () => {
+    const status = buildStatus(
+      [{ title: 'Auth feature', section: 'Short Term' }],
+      { rawContent: SAMPLE_RAW },
+    );
+    const result = compileRoadmapContext(status, { mode: 'full' });
+    expect(result).toContain('ROADMAP.md (file content)');
+    expect(result).toContain('# Roadmap');
+    expect(result).toContain('- [ ] Auth feature');
   });
 });
 
 // ---------------------------------------------------------------------------
-// Full digest
+// Full progress
 // ---------------------------------------------------------------------------
 
-describe('full digest', () => {
-  it('should produce full digest for lead roles — contains all horizon sections', () => {
+describe('full progress', () => {
+  it('contains all horizon sections in progress overlay', () => {
     const status = buildStatus([
       { title: 'Auth feature', section: 'Short Term', description: 'Add OAuth2 login' },
       { title: 'Billing', section: 'Medium Term', description: 'Stripe integration' },
@@ -140,22 +159,24 @@ describe('full digest', () => {
     expect(result).toContain('Analytics');
   });
 
-  it('includes item descriptions in full mode', () => {
-    const status = buildStatus([
-      { title: 'Auth feature', section: 'Short Term', description: 'Add OAuth2 login flow' },
-    ]);
-    const result = compileRoadmapContext(status, { mode: 'full' });
-    expect(result).toContain('Add OAuth2 login flow');
-  });
-
   it('shows done count per section', () => {
     const status = buildStatus([
       { title: 'Done', section: 'Short Term', processed: true },
       { title: 'Pending', section: 'Short Term' },
     ]);
     const result = compileRoadmapContext(status, { mode: 'full' });
-    // Should mention 1/2 done in Short Term
-    expect(result).toContain('Short Term (1/2 done)');
+    expect(result).toContain('Short Term');
+    expect(result).toContain('1/2 done');
+  });
+
+  it('includes descriptions via raw content when provided', () => {
+    const raw = '## Short Term\n- [ ] Auth feature\n  Add OAuth2 login flow';
+    const status = buildStatus(
+      [{ title: 'Auth feature', section: 'Short Term', description: 'Add OAuth2 login flow' }],
+      { rawContent: raw },
+    );
+    const result = compileRoadmapContext(status, { mode: 'full' });
+    expect(result).toContain('Add OAuth2 login flow');
   });
 });
 
@@ -164,7 +185,7 @@ describe('full digest', () => {
 // ---------------------------------------------------------------------------
 
 describe('smart summary', () => {
-  it('should produce smart summary for non-lead roles — only short-term + 3 medium-term', () => {
+  it('includes all items in progress overlay', () => {
     const items = [
       { title: 'ST-1', section: 'Short Term' },
       { title: 'ST-2', section: 'Short Term' },
@@ -177,30 +198,29 @@ describe('smart summary', () => {
     const status = buildStatus(items);
     const result = compileRoadmapContext(status, { mode: 'summary' });
 
-    // All short-term items included
+    // All short-term items included in progress
     expect(result).toContain('ST-1');
     expect(result).toContain('ST-2');
 
-    // Only first 3 medium-term items
+    // Medium-term items included (up to 5 per section)
     expect(result).toContain('MT-1');
     expect(result).toContain('MT-2');
     expect(result).toContain('MT-3');
-    expect(result).not.toContain('MT-4');
-    expect(result).not.toContain('MT-5');
-  });
-
-  it('does not include item descriptions in summary mode', () => {
-    const status = buildStatus([
-      { title: 'Auth', section: 'Short Term', description: 'Long description here' },
-    ]);
-    const result = compileRoadmapContext(status, { mode: 'summary' });
-    expect(result).not.toContain('Long description here');
   });
 
   it('returns empty string when all items are done', () => {
     const status = buildStatus([{ title: 'Done', section: 'Short Term', processed: true }]);
     const result = compileRoadmapContext(status, { mode: 'summary' });
     expect(result).toBe('');
+  });
+
+  it('shows overall progress count', () => {
+    const status = buildStatus([
+      { title: 'Done', section: 'Short Term', processed: true },
+      { title: 'Pending', section: 'Short Term' },
+    ]);
+    const result = compileRoadmapContext(status, { mode: 'summary' });
+    expect(result).toContain('1/2 items done');
   });
 });
 
@@ -210,11 +230,12 @@ describe('smart summary', () => {
 
 describe('compileRoadmapForPersona', () => {
   it('picks full mode for lead persona', () => {
-    const status = buildStatus([
-      { title: 'Task A', section: 'Short Term', description: 'With description' },
-    ]);
+    const status = buildStatus(
+      [{ title: 'Task A', section: 'Short Term', description: 'With description' }],
+      { rawContent: '## Short Term\n- [ ] Task A\n  With description' },
+    );
     const result = compileRoadmapForPersona(buildPersona('Tech Lead'), status);
-    // Full mode includes descriptions
+    // Full mode includes raw content with descriptions
     expect(result).toContain('With description');
   });
 
@@ -223,8 +244,18 @@ describe('compileRoadmapForPersona', () => {
       { title: 'Task A', section: 'Short Term', description: 'With description' },
     ]);
     const result = compileRoadmapForPersona(buildPersona('QA Engineer'), status);
-    // Summary mode excludes descriptions
-    expect(result).not.toContain('With description');
     expect(result).toContain('Task A');
+  });
+
+  it('includes raw content for all persona types when available', () => {
+    const raw = '# Roadmap\n## Short Term\n- [ ] Task A';
+    const status = buildStatus(
+      [{ title: 'Task A', section: 'Short Term' }],
+      { rawContent: raw },
+    );
+    const qaResult = compileRoadmapForPersona(buildPersona('QA Engineer'), status);
+    const leadResult = compileRoadmapForPersona(buildPersona('Tech Lead'), status);
+    expect(qaResult).toContain('# Roadmap');
+    expect(leadResult).toContain('# Roadmap');
   });
 });

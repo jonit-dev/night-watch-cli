@@ -226,18 +226,32 @@ describe('humanizer utilities', () => {
       expect(result).not.toMatch(/^Of course/);
     });
 
-    it('limits sentence count', () => {
+    it('does not truncate sentences by default', () => {
       const input =
         'First sentence. Second sentence. Third sentence. Fourth sentence. Fifth sentence.';
       const result = humanizeSlackReply(input, defaultOptions);
       const sentences = result.split(/(?<=[.!?])\s+/).filter(Boolean);
-      expect(sentences.length).toBeLessThanOrEqual(MAX_HUMANIZED_SENTENCES);
+      expect(sentences.length).toBe(5);
     });
 
-    it('trims to max characters with ellipsis', () => {
-      const longText = 'a'.repeat(MAX_HUMANIZED_CHARS + 100);
+    it('limits sentence count when explicit maxSentences provided', () => {
+      const input =
+        'First sentence. Second sentence. Third sentence. Fourth sentence. Fifth sentence.';
+      const result = humanizeSlackReply(input, { ...defaultOptions, maxSentences: 3 });
+      const sentences = result.split(/(?<=[.!?])\s+/).filter(Boolean);
+      expect(sentences.length).toBeLessThanOrEqual(3);
+    });
+
+    it('does not trim to max characters by default', () => {
+      const longText = 'Word '.repeat(200).trim();
       const result = humanizeSlackReply(longText, defaultOptions);
-      expect(result.length).toBeLessThanOrEqual(MAX_HUMANIZED_CHARS);
+      expect(result).not.toMatch(/\.\.\.$/);
+    });
+
+    it('trims to max characters with ellipsis when explicit maxChars provided', () => {
+      const longText = 'a'.repeat(500);
+      const result = humanizeSlackReply(longText, { ...defaultOptions, maxChars: 400 });
+      expect(result.length).toBeLessThanOrEqual(400);
       expect(result).toMatch(/\.\.\.$/);
     });
 

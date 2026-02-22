@@ -252,7 +252,7 @@ compileSoul(persona: IAgentPersona, memory?: string): string
     - Avoid canned chatbot phrases: "great question", "of course", "certainly", etc.
     - Avoid AI filler words: "additionally", "moreover", "pivotal", "crucial", etc.
     - No markdown formatting in Slack, no bullet lists, no headings
-    - Keep messages to 1-2 sentences
+    - Match message length to substance — one sentence if that covers it, several if the topic needs depth; never pad, never truncate insight
     - Say concrete things with file paths, not vague observations
 12. **Operating Rules:** Never break character, have opinions, tag teammates
 13. **Modes:** Skill modes (pr_review, incident, proactive)
@@ -284,6 +284,8 @@ The `DeliberationEngine` is the central orchestrator for all agent interactions 
 | `replyAsAgent(channel, threadTs, text, persona, ctx, roadmap)`        | Ad-hoc reply outside formal discussions                    |
 | `postProactiveMessage(channel, persona, ctx, roadmap, slug, slicing)` | AI-generated proactive observation                         |
 | `triggerPRRefinement(discussionId, changes, prNumber)`                | Spawn reviewer process with Slack feedback                 |
+| `analyzeCodeCandidate(fileContext, signalSummary, location)`          | Have Dev evaluate whether a scanner finding is worth raising |
+| `handleAuditReport(report, projectName, projectPath, channel)`        | Triage audit report, file GitHub issue if warranted, post Slack ping |
 
 ### Discussion Lifecycle
 
@@ -320,8 +322,8 @@ stateDiagram-v2
 Each contribution round (`runContributionRound`):
 
 1. Fetch thread history (last 10 messages)
-2. Count existing replies; compute remaining budget (`MAX_AGENT_THREAD_REPLIES = 4` total replies minus existing minus 1 for consensus)
-3. Choose contributors via `chooseRoundContributors()` (exclude Carlos to save him for consensus; max 2 per round)
+2. Count existing replies; compute remaining budget (`MAX_AGENT_THREAD_REPLIES = 6` total replies minus existing minus 1 for consensus)
+3. Choose contributors via `chooseRoundContributors()` (exclude Carlos to save him for consensus; max 3 per round)
 4. For each contributor:
    a. Check discussion is still active
    b. Build contribution prompt with trigger context, thread history, round number, roadmap context
@@ -350,8 +352,7 @@ Every AI-generated message passes through `humanizeForPost()` before posting:
    - Deduplicates repeated sentences
    - Applies emoji policy (strip, keep facial only, or allow)
    - Limits to 1 emoji max
-   - Trims to sentence count (varies: 1-3 sentences randomly via `pickMaxSentences()`)
-   - Hard character cap: 280-440 characters (randomized)
+   - No hard sentence or character cap applied by default (`maxSentences` and `maxChars` both default to `Infinity`); callers may pass explicit limits via options
 
 ---
 
@@ -588,7 +589,7 @@ For `issue_review` triggers, a separate evaluation path is used:
 | Constant                   | Value                                 |
 | -------------------------- | ------------------------------------- |
 | `MAX_ROUNDS`               | 2 (from deliberation-builders.ts)     |
-| `MAX_AGENT_THREAD_REPLIES` | 4 total per thread                    |
+| `MAX_AGENT_THREAD_REPLIES` | 6 total per thread                    |
 | `HUMAN_DELAY_MIN/MAX_MS`   | 20-60 seconds between consensus posts |
 
 ---
@@ -711,10 +712,12 @@ The roadmap context compiler transforms `IRoadmapStatus` into a string injected 
 
 ### Two Modes
 
-| Mode              | Target Audience     | Content                                                                          |
-| ----------------- | ------------------- | -------------------------------------------------------------------------------- |
-| **Full digest**   | Lead roles (Carlos) | All sections with pending items, descriptions, done counts. Max 3,000 chars      |
-| **Smart summary** | All other roles     | Pending short-term items + first 3 medium-term items. Titles only. Max 800 chars |
+Both modes now include **raw ROADMAP.md file content** (up to 6,000 chars) so agents can reference exact sections and wording, followed by a **progress overlay**.
+
+| Mode              | Target Audience     | Progress Overlay Content                                                                     |
+| ----------------- | ------------------- | -------------------------------------------------------------------------------------------- |
+| **Full digest**   | Lead roles (Carlos) | All sections with done/total counts + all pending item titles. Max 2,000 chars for overlay   |
+| **Smart summary** | All other roles     | Total done/total count + up to 5 pending items per section by title. Max 600 chars for overlay |
 
 ### Role Detection
 
@@ -754,12 +757,13 @@ Persona modelConfig (if set)
 - Makes a single API call (Anthropic Messages API or OpenAI Chat Completions)
 - Returns generated text
 
-**`callAIWithTools(persona, config, prompt, tools, registry)`**
+**`callAIWithTools(persona, config, prompt, tools, registry, memory?)`**
 
 - Anthropic-only, agentic tool-use loop
 - Up to 5 iterations of tool calls
-- Supports `query_codebase` and board integration tools
+- Supports `query_codebase`, `read_file`, `read_roadmap`, and board integration tools
 - Executes tool calls via the registry Map and feeds results back
+- Accepts optional `memory` string injected into the system prompt via `compileSoul`
 
 ### Default Parameters
 
@@ -996,6 +1000,14 @@ sequenceDiagram
 ---
 
 ## Changelog
+
+### 2026-02-21 — Doc corrections
+
+- **Soul Compiler step 11:** Removed stale "1-2 sentence" rule; now reflects the flexible length-matches-substance rule
+- **Humanizer:** Removed stale sentence/char cap description; `maxSentences`/`maxChars` default to `Infinity`; `pickMaxSentences()` is defined but not called in the pipeline
+- **Deliberation Engine:** `MAX_AGENT_THREAD_REPLIES` corrected to 6 (was 4); max contributions per round corrected to 3 (was 2); added `analyzeCodeCandidate` and `handleAuditReport` to Core Methods table
+- **`callAIWithTools`:** Added `memory?` parameter to signature; added `read_file` / `read_roadmap` to supported tools
+- **Roadmap Context Compiler:** Substantially rewrote Two Modes section — compiler now includes raw ROADMAP.md content (up to 6,000 chars) plus a progress overlay; updated char budgets and per-section item limits
 
 ### 2026-02-21 — Batch 1 architectural cleanup
 

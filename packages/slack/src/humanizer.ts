@@ -5,8 +5,8 @@
 
 import { normalizeText } from './utils.js';
 
-export const MAX_HUMANIZED_SENTENCES = 3;
-export const MAX_HUMANIZED_CHARS = 400;
+export const MAX_HUMANIZED_SENTENCES = Infinity;
+export const MAX_HUMANIZED_CHARS = Infinity;
 
 export interface IHumanizeSlackReplyOptions {
   allowEmoji?: boolean;
