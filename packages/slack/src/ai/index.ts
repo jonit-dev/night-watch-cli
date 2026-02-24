@@ -9,10 +9,12 @@ export {
   buildBoardTools,
   buildCodebaseQueryTool,
   buildFilesystemTools,
+  buildShellTool,
   executeBoardTool,
   executeCodebaseQuery,
   executeReadFile,
   executeReadRoadmap,
+  executeShellCommand,
   fetchRepoLabels,
 } from './tools.js';
 export { callAIForContribution, callAIWithTools, callSimpleAI } from './client.js';

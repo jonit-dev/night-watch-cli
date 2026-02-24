@@ -208,12 +208,11 @@ describe('MessageParser URL extraction', () => {
   });
 
   describe('parseSlackJobRequest - project hint extraction', () => {
-    it('extracts project hint from "on {project}" anywhere in the message', () => {
+    it('does not match "run" job (let agent handle it via tools)', () => {
       const result = parser.parseSlackJobRequest(
         'can someone run yarn verify on night-watch-cli project and report me a TLDR',
       );
-      expect(result?.job).toBe('run');
-      expect(result?.projectHint).toBe('night-watch-cli');
+      expect(result).toBeNull();
     });
 
     it('extracts project hint from "for {project}" anywhere in the message', () => {
@@ -222,9 +221,8 @@ describe('MessageParser URL extraction', () => {
       expect(result?.projectHint).toBe('my-awesome-app');
     });
 
-    it('prefers "on {project}" hint over verb-adjacent token', () => {
-      // "run yarn" would capture "yarn" without the secondary scan
-      const result = parser.parseSlackJobRequest('run npm test on backend-api');
+    it('prefers "on {project}" hint over verb-adjacent token (review job)', () => {
+      const result = parser.parseSlackJobRequest('review npm test on backend-api');
       expect(result?.projectHint).toBe('backend-api');
     });
   });
@@ -244,10 +242,9 @@ describe('MessageParser URL extraction', () => {
       expect(result).toEqual({ job: 'review', prNumber: '42' });
     });
 
-    it('filters project hints that are stopwords', () => {
-      const result = parser.parseSlackJobRequest('run for the project please');
-      // All potential hints are stopwords, so no project hint
-      expect(result).toEqual({ job: 'run' }); // projectHint is undefined
+    it('filters project hints that are stopwords (review job)', () => {
+      const result = parser.parseSlackJobRequest('review for the project please');
+      expect(result).toEqual({ job: 'review' });
     });
 
     it('handles malformed PR URLs gracefully', () => {

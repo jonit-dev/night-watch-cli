@@ -160,6 +160,7 @@ export interface ISlackBotConfig {
   discussionEnabled: boolean;
   replicateApiToken?: string; // For AI-generated persona avatars (Flux)
   serverBaseUrl?: string; // Public base URL of the Night Watch server (e.g. https://my-ngrok.io) used to serve local avatar images to Slack
+  commandBlacklist?: string[]; // Shell commands blocked from agent execution (default: ['rm'])
 }
 
 // ==================== Agent Personas ====================
