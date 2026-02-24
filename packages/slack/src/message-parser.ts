@@ -150,7 +150,7 @@ export class MessageParser {
     const inferredReviewJob = conflictSignal || (hasPrReference && requestSignal);
     const job: TSlackJobName | undefined =
       explicitJob ?? (inferredReviewJob ? 'review' : undefined);
-    if (!job || !['run', 'review', 'qa'].includes(job)) return null;
+    if (!job || !['review', 'qa'].includes(job)) return null;
 
     const prNumber = prUrlMatch?.[3] ?? prPathMatch?.[1] ?? prHashMatch?.[1];
     const repoHintFromUrl = prUrlMatch?.[2]?.toLowerCase();

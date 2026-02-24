@@ -594,8 +594,8 @@ describe('TriggerRouter', () => {
       expect(result).toBe(false);
     });
 
-    it('handles run job request when addressed to bot', async () => {
-      const { router, slackClient, jobSpawner } = buildRouter([
+    it('does not route "run" keyword to job spawner — agent handles it via tools', async () => {
+      const { router, jobSpawner } = buildRouter([
         buildProject('p1', 'Alpha', '/repos/alpha', 'C001'),
       ]);
       const personas = [buildPersona('p1', 'Dev')];
@@ -609,22 +609,8 @@ describe('TriggerRouter', () => {
         projects,
       };
       const result = await router.tryRoute(ctx);
-      expect(result).toBe(true);
-      expect(jobSpawner.spawnNightWatchJob).toHaveBeenCalledWith(
-        'run',
-        projects[0],
-        'C001',
-        '1700000000.001',
-        personas[0],
-        expect.any(Object),
-        expect.any(Object),
-      );
-      expect(slackClient.postAsAgent).toHaveBeenCalledWith(
-        'C001',
-        expect.stringContaining('Starting the run'),
-        personas[0],
-        '1700000000.001',
-      );
+      expect(result).toBe(false);
+      expect(jobSpawner.spawnNightWatchJob).not.toHaveBeenCalled();
     });
 
     it('handles review job request and selects Carlos persona', async () => {
@@ -749,7 +735,7 @@ describe('TriggerRouter', () => {
       );
     });
 
-    it('asks for project when ambiguous', async () => {
+    it('does not route "run" to job spawner even when project is ambiguous', async () => {
       const { router, slackClient, jobSpawner } = buildRouter([
         buildProject('p1', 'Alpha', '/repos/alpha', 'C001'),
         buildProject('p2', 'Beta', '/repos/beta', 'C002'),
@@ -761,20 +747,15 @@ describe('TriggerRouter', () => {
       ];
       const ctx: ITriggerContext = {
         event: buildEvent({ type: 'message', text: 'night watch run' }),
-        channel: 'C003', // Channel not mapped to any project
+        channel: 'C003',
         threadTs: '1700000000.001',
         messageTs: '1700000000.001',
         personas,
         projects,
       };
       const result = await router.tryRoute(ctx);
-      expect(result).toBe(true);
-      expect(slackClient.postAsAgent).toHaveBeenCalledWith(
-        'C003',
-        expect.stringContaining('Which project?'),
-        personas[0],
-        '1700000000.001',
-      );
+      expect(result).toBe(false);
+      expect(slackClient.postAsAgent).not.toHaveBeenCalled();
       expect(jobSpawner.spawnNightWatchJob).not.toHaveBeenCalled();
     });
 
@@ -1033,6 +1014,27 @@ describe('TriggerRouter', () => {
       const { router } = buildRouter();
       const result = router.resolveProjectByHint([], 'any-hint');
       expect(result).toBeNull();
+    });
+
+    it('matches scoped npm package by partial name hint', () => {
+      const { router } = buildRouter();
+      const projects = [
+        buildProject('p1', '@jonit-dev/night-watch-cli', '/repos/night-watch-cli'),
+        buildProject('p2', 'autopilotrank', '/repos/autopilotrank'),
+        buildProject('p3', 'nw-test', '/repos/nw-test'),
+      ];
+      const result = router.resolveProjectByHint(projects, 'night-watch-cli');
+      expect(result?.id).toBe('p1');
+    });
+
+    it('matches scoped npm package by short hint', () => {
+      const { router } = buildRouter();
+      const projects = [
+        buildProject('p1', '@jonit-dev/night-watch-cli', '/repos/night-watch-cli'),
+        buildProject('p2', 'autopilotrank', '/repos/autopilotrank'),
+      ];
+      const result = router.resolveProjectByHint(projects, 'night-watch');
+      expect(result?.id).toBe('p1');
     });
   });
 

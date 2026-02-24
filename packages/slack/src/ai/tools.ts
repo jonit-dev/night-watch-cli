@@ -218,7 +218,9 @@ export function executeReadFile(relPath: string, projectPath: string): string {
     if (stat.isDirectory()) return `${relPath} is a directory, not a file.`;
     const content = fs.readFileSync(resolved, 'utf-8');
     const MAX = 10_000;
-    return content.length > MAX ? content.slice(0, MAX) + `\n\n[truncated — ${content.length} chars total]` : content;
+    return content.length > MAX
+      ? content.slice(0, MAX) + `\n\n[truncated — ${content.length} chars total]`
+      : content;
   }
 
   // Fuzzy fallback: if the caller passed just a filename, search the tree
@@ -228,7 +230,10 @@ export function executeReadFile(relPath: string, projectPath: string): string {
       const rel = path.relative(projectPath, matches[0]);
       const content = fs.readFileSync(matches[0], 'utf-8');
       const MAX = 10_000;
-      const body = content.length > MAX ? content.slice(0, MAX) + `\n\n[truncated — ${content.length} chars total]` : content;
+      const body =
+        content.length > MAX
+          ? content.slice(0, MAX) + `\n\n[truncated — ${content.length} chars total]`
+          : content;
       return `// Found at: ${rel}\n${body}`;
     }
     if (matches.length > 1) {
@@ -368,6 +373,96 @@ export function executeCodebaseQuery(
         return;
       }
       resolve(stdout.trim().slice(0, 6000) || '(no output)');
+    });
+  });
+}
+
+/**
+ * Returns an Anthropic tool definition that lets an agent run a shell command
+ * in the project directory.
+ */
+export function buildShellTool(projectPath?: string): IAnthropicTool {
+  const cwdNote = projectPath
+    ? ` The working directory is already set to \`${projectPath}\` — do NOT prefix commands with \`cd\` or an absolute path; just run them directly (e.g. \`yarn verify\`, not \`cd ${projectPath} && yarn verify\`).`
+    : '';
+  return {
+    name: 'run_command',
+    description:
+      `Run a shell command in the project directory.${cwdNote} Use this to execute build commands, run tests, check git status, or perform other shell operations. ` +
+      'Destructive commands (e.g. rm) are blocked by a configurable blacklist.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        command: {
+          type: 'string',
+          description: 'The shell command to execute (e.g. "yarn verify", "git status").',
+        },
+      },
+      required: ['command'],
+    },
+  };
+}
+
+/**
+ * Execute a shell command in the project directory.
+ * Blocks any command whose base executable name appears in `blacklist`.
+ * Returns combined stdout+stderr (truncated to 4000 chars) or an error string.
+ */
+export function executeShellCommand(
+  command: string,
+  projectPath: string,
+  blacklist: string[],
+): Promise<string> {
+  const baseName = command.trim().split(/\s+/)[0] ?? '';
+  if (blacklist.includes(baseName)) {
+    return Promise.resolve(`Command '${baseName}' is blacklisted.`);
+  }
+
+  const TIMEOUT_MS = 30_000;
+  const MAX_OUTPUT = 4_000;
+
+  return new Promise((resolve) => {
+    const child = spawn('sh', ['-c', command], {
+      cwd: projectPath,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    let stdout = '';
+    let stderr = '';
+    let killed = false;
+
+    child.stdout.setEncoding('utf-8');
+    child.stderr.setEncoding('utf-8');
+
+    child.stdout.on('data', (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
+
+    const timer = setTimeout(() => {
+      killed = true;
+      child.kill('SIGTERM');
+    }, TIMEOUT_MS);
+
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      resolve(`Command failed to start: ${String(err)}`);
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (killed) {
+        resolve(`Command timed out after ${TIMEOUT_MS / 1000}s`);
+        return;
+      }
+      const combined = (stdout + stderr).slice(0, MAX_OUTPUT);
+      if (code !== 0) {
+        resolve(`Exit code ${code}:\n${combined}`);
+        return;
+      }
+      resolve(combined || '(no output)');
     });
   });
 }

@@ -171,11 +171,8 @@ describe('Slack interaction listener helpers', () => {
   });
 
   describe('parseSlackJobRequest', () => {
-    it('parses a job command with project hint', () => {
-      expect(parser.parseSlackJobRequest('<@UBOT> please run night-watch-cli now')).toEqual({
-        job: 'run',
-        projectHint: 'night-watch-cli',
-      });
+    it('does not parse "run" as a job (agent handles via tools)', () => {
+      expect(parser.parseSlackJobRequest('<@UBOT> please run night-watch-cli now')).toBeNull();
     });
 
     it('parses a job command without project hint', () => {

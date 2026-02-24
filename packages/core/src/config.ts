@@ -291,6 +291,10 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     if (typeof rawSlack.appToken === 'string') {
       slack.appToken = rawSlack.appToken;
     }
+    const commandBlacklist = readStringArray(rawSlack.commandBlacklist);
+    if (commandBlacklist) {
+      slack.commandBlacklist = commandBlacklist;
+    }
     normalized.slack = slack;
   }
 
@@ -423,8 +427,7 @@ function mergeConfigs(
       merged.fallbackOnRateLimit = fileConfig.fallbackOnRateLimit;
     if (fileConfig.claudeModel !== undefined) merged.claudeModel = fileConfig.claudeModel;
     if (fileConfig.qa !== undefined) merged.qa = { ...merged.qa, ...fileConfig.qa };
-    if (fileConfig.slack !== undefined)
-      merged.slack = { ...merged.slack, ...fileConfig.slack };
+    if (fileConfig.slack !== undefined) merged.slack = { ...merged.slack, ...fileConfig.slack };
   }
 
   // Merge env config (takes precedence)
@@ -460,8 +463,7 @@ function mergeConfigs(
     merged.fallbackOnRateLimit = envConfig.fallbackOnRateLimit;
   if (envConfig.claudeModel !== undefined) merged.claudeModel = envConfig.claudeModel;
   if (envConfig.qa !== undefined) merged.qa = { ...merged.qa, ...envConfig.qa };
-  if (envConfig.slack !== undefined)
-    merged.slack = { ...merged.slack, ...envConfig.slack };
+  if (envConfig.slack !== undefined) merged.slack = { ...merged.slack, ...envConfig.slack };
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
 

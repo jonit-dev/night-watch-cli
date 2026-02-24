@@ -5,6 +5,7 @@
  */
 
 import {
+  DEFAULT_COMMAND_BLACKLIST,
   IAgentPersona,
   IDiscussionTrigger,
   INightWatchConfig,
@@ -20,12 +21,14 @@ import {
   buildBoardTools,
   buildCodebaseQueryTool,
   buildFilesystemTools,
+  buildShellTool,
   callAIForContribution,
   callAIWithTools,
   executeBoardTool,
   executeCodebaseQuery,
   executeReadFile,
   executeReadRoadmap,
+  executeShellCommand,
   fetchRepoLabels,
   resolvePersonaAIConfig,
 } from './ai/index.js';
@@ -292,6 +295,7 @@ export class DeliberationEngine {
         const tools = [
           ...buildFilesystemTools(),
           buildCodebaseQueryTool(),
+          buildShellTool(discussion.projectPath),
           ...(boardConfig ? buildBoardTools(repoLabels) : []),
         ];
         const registry: ToolRegistry = new Map();
@@ -309,6 +313,13 @@ export class DeliberationEngine {
             discussion.projectPath,
             codebaseProvider,
             this.config.providerEnv,
+          ),
+        );
+        registry.set('run_command', (input) =>
+          executeShellCommand(
+            String(input['command'] ?? ''),
+            discussion.projectPath,
+            this.config.slack?.commandBlacklist ?? DEFAULT_COMMAND_BLACKLIST,
           ),
         );
         if (boardConfig) {
@@ -491,6 +502,7 @@ export class DeliberationEngine {
           const tools = [
             ...buildFilesystemTools(),
             buildCodebaseQueryTool(),
+            buildShellTool(trigger.projectPath),
             ...(boardConfig ? buildBoardTools(repoLabels) : []),
           ];
           const registry: ToolRegistry = new Map();
@@ -508,6 +520,13 @@ export class DeliberationEngine {
               trigger.projectPath,
               codebaseProvider,
               this.config.providerEnv,
+            ),
+          );
+          registry.set('run_command', (input) =>
+            executeShellCommand(
+              String(input['command'] ?? ''),
+              trigger.projectPath,
+              this.config.slack?.commandBlacklist ?? DEFAULT_COMMAND_BLACKLIST,
             ),
           );
           if (boardConfig) {
@@ -744,9 +763,9 @@ export class DeliberationEngine {
     }
 
     const toolGuidance = useTools
-      ? `- You have tools: read_file (instant file read), read_roadmap (read ROADMAP.md), query_codebase (AI-powered codebase search), and board tools.\n` +
+      ? `- You have tools: read_file (instant file read), read_roadmap (read ROADMAP.md), query_codebase (AI-powered codebase search), run_command (run shell commands), and board tools.\n` +
         `- ALWAYS verify before making claims about file contents, task status, or implementation details. Never guess or make up information. Be truthful and precise.\n` +
-        `- Use read_file when you know the file path (instant). Use query_codebase for open-ended searches ("find all usages of X", "how does auth work").\n` +
+        `- Use read_file when you know the file path (instant). Use query_codebase for open-ended searches ("find all usages of X", "how does auth work"). Use run_command to run build/test commands — the cwd is already the project root, just pass the command directly (e.g. \`yarn verify\`).\n` +
         `- After reading, cite with \`path/to/file.ts#L42-L45\` and quote the actual line.\n`
       : `- When referencing code, always include the file path: \`path/to/file.ts#L42-L45\`. No vague "in the auth module" — name the file.\n`;
 
@@ -780,7 +799,13 @@ export class DeliberationEngine {
     const repoLabels =
       boardConfig && projectPathForTools ? fetchRepoLabels(projectPathForTools) : [];
     const tools = [
-      ...(useTools ? [...buildFilesystemTools(), buildCodebaseQueryTool()] : []),
+      ...(useTools
+        ? [
+            ...buildFilesystemTools(),
+            buildCodebaseQueryTool(),
+            buildShellTool(projectPathForTools ?? undefined),
+          ]
+        : []),
       ...(boardConfig ? buildBoardTools(repoLabels) : []),
     ];
 
@@ -803,6 +828,13 @@ export class DeliberationEngine {
             projectPathForTools!,
             codebaseProvider,
             this.config.providerEnv,
+          ),
+        );
+        registry.set('run_command', (input) =>
+          executeShellCommand(
+            String(input['command'] ?? ''),
+            projectPathForTools!,
+            this.config.slack?.commandBlacklist ?? DEFAULT_COMMAND_BLACKLIST,
           ),
         );
         if (boardConfig) {

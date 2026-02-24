@@ -128,6 +128,8 @@ export class TriggerRouter {
       projects.find((p) => base(p) === h) ??
       projects.find((p) => normalizeProjectRef(p.name).includes(h)) ??
       projects.find((p) => base(p).includes(h)) ??
+      projects.find((p) => h.includes(normalizeProjectRef(p.name))) ??
+      projects.find((p) => h.includes(base(p))) ??
       null
     );
   }

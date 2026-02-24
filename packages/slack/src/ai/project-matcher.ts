@@ -6,6 +6,7 @@
 import type { INightWatchConfig, IRegistryEntry } from '@night-watch/core';
 import { createLogger } from '@night-watch/core';
 import { callSimpleAI } from './client.js';
+import { normalizeProjectRef } from '../utils.js';
 
 const log = createLogger('project-matcher');
 
@@ -36,7 +37,14 @@ export async function matchProjectToMessage(
 
     if (!cleaned || cleaned.toLowerCase() === 'none') return null;
 
-    const matched = projects.find((p) => p.name.toLowerCase() === cleaned.toLowerCase()) ?? null;
+    // Try exact match first, then fall back to normalized matching so partial names
+    // like "night-watch-cli" resolve to "@jonit-dev/night-watch-cli".
+    const cleanedNorm = normalizeProjectRef(cleaned);
+    const matched =
+      projects.find((p) => p.name.toLowerCase() === cleaned.toLowerCase()) ??
+      projects.find((p) => normalizeProjectRef(p.name) === cleanedNorm) ??
+      projects.find((p) => normalizeProjectRef(p.name).includes(cleanedNorm)) ??
+      null;
 
     if (!matched) {
       log.warn('project-matcher returned unrecognized name', { raw, cleaned });

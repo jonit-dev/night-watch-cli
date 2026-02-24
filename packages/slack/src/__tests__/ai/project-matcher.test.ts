@@ -32,7 +32,11 @@ describe('matchProjectToMessage', () => {
 
   it('returns matching project on exact name match', async () => {
     vi.mocked(client.callSimpleAI).mockResolvedValue('@jonit-dev/night-watch-cli');
-    const result = await matchProjectToMessage('run yarn verify on night-watch-cli', projects, config);
+    const result = await matchProjectToMessage(
+      'run yarn verify on night-watch-cli',
+      projects,
+      config,
+    );
     expect(result).toBe(nightWatch);
   });
 
@@ -85,5 +89,21 @@ describe('matchProjectToMessage', () => {
     const userPrompt = vi.mocked(client.callSimpleAI).mock.calls[0]![1];
     expect(userPrompt).toContain('x'.repeat(500));
     expect(userPrompt).not.toContain('x'.repeat(501));
+  });
+
+  it('matches scoped package when AI returns partial name', async () => {
+    vi.mocked(client.callSimpleAI).mockResolvedValue('night-watch-cli');
+    const result = await matchProjectToMessage(
+      'run yarn verify on night-watch-cli',
+      projects,
+      config,
+    );
+    expect(result).toBe(nightWatch);
+  });
+
+  it('matches scoped package when AI returns name without scope', async () => {
+    vi.mocked(client.callSimpleAI).mockResolvedValue('night-watch');
+    const result = await matchProjectToMessage('check night-watch', projects, config);
+    expect(result).toBe(nightWatch);
   });
 });
