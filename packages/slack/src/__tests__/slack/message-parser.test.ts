@@ -296,6 +296,22 @@ describe('MessageParser URL extraction', () => {
       expect(result?.projectHint).toBeUndefined();
       expect(result?.prompt).toBe('project fix bugs');
     });
+
+    it('parses "claude code" alias and keeps project hint extraction', () => {
+      const result = parser.parseSlackProviderRequest(
+        'run claude code on night-watch-cli: review CI failure logs',
+      );
+      expect(result).toEqual({
+        provider: 'claude',
+        projectHint: 'night-watch-cli',
+        prompt: 'review CI failure logs',
+      });
+    });
+
+    it('returns null when only provider alias is provided without prompt', () => {
+      expect(parser.parseSlackProviderRequest('claude code')).toBeNull();
+      expect(parser.parseSlackProviderRequest('codex cli')).toBeNull();
+    });
   });
 
   describe('shouldIgnoreInboundSlackEvent edge cases', () => {

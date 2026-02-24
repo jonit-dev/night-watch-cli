@@ -7,7 +7,13 @@ import { createHash } from 'crypto';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { CLAIM_FILE_EXTENSION, LOCK_FILE_PREFIX, LOG_DIR, QA_LOG_NAME } from '../constants.js';
+import {
+  AUDIT_LOG_NAME,
+  CLAIM_FILE_EXTENSION,
+  LOCK_FILE_PREFIX,
+  LOG_DIR,
+  QA_LOG_NAME,
+} from '../constants.js';
 import { getPrdStatesForProject } from './prd-states.js';
 import { INightWatchConfig } from '../types.js';
 import { generateMarker, getEntries, getProjectEntries } from './crontab.js';
@@ -111,6 +117,13 @@ export function executorLockPath(projectDir: string): string {
  */
 export function reviewerLockPath(projectDir: string): string {
   return `${LOCK_FILE_PREFIX}pr-reviewer-${projectRuntimeKey(projectDir)}.lock`;
+}
+
+/**
+ * Compute the lock file path for the QA runner of a given project directory.
+ */
+export function qaLockPath(projectDir: string): string {
+  return `${LOCK_FILE_PREFIX}qa-${projectRuntimeKey(projectDir)}.lock`;
 }
 
 /**
@@ -630,6 +643,7 @@ export function collectLogInfo(projectDir: string): ILogInfo[] {
     { name: 'executor', fileName: 'executor.log' },
     { name: 'reviewer', fileName: 'reviewer.log' },
     { name: 'qa', fileName: `${QA_LOG_NAME}.log` },
+    { name: 'audit', fileName: `${AUDIT_LOG_NAME}.log` },
   ];
   return logEntries.map(({ name, fileName }) => {
     const logPath = path.join(projectDir, LOG_DIR, fileName);
@@ -672,10 +686,14 @@ export function fetchStatusSnapshot(
 
   const executorLock = checkLockFile(executorLockPath(projectDir));
   const reviewerLock = checkLockFile(reviewerLockPath(projectDir));
+  const qaLock = checkLockFile(qaLockPath(projectDir));
+  const auditLock = checkLockFile(auditLockPath(projectDir));
 
   const processes: IProcessInfo[] = [
     { name: 'executor', running: executorLock.running, pid: executorLock.pid },
     { name: 'reviewer', running: reviewerLock.running, pid: reviewerLock.pid },
+    { name: 'qa', running: qaLock.running, pid: qaLock.pid },
+    { name: 'audit', running: auditLock.running, pid: auditLock.pid },
   ];
 
   const prds = collectPrdInfo(projectDir, config.prdDir, config.maxRuntime);

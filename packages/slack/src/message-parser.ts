@@ -235,10 +235,11 @@ export class MessageParser {
     if (!withoutMentions.trim()) return null;
 
     // Explicit direct-provider invocation from Slack, e.g.:
-    // "claude fix the flaky tests", "run codex on repo-x: investigate CI failures"
+    // "claude fix the flaky tests", "run codex on repo-x: investigate CI failures",
+    // "run claude code on repo-x: investigate CI failures"
     const prefixMatch = withoutMentions.match(
       // eslint-disable-next-line sonarjs/regex-complexity
-      /^\s*(?:can\s+(?:you|someone|anyone)\s+)?(?:please\s+)?(?:(?:run|use|invoke|trigger|ask)\s+)?(claude|codex)\b[\s:,-]*/i,
+      /^\s*(?:can\s+(?:you|someone|anyone)\s+)?(?:please\s+)?(?:(?:run|use|invoke|trigger|ask)\s+)?(claude|codex)(?:[\s-]+(?:code|cli))?\b[\s:,-]*/i,
     );
     if (!prefixMatch) return null;
 

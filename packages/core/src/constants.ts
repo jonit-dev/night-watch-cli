@@ -160,12 +160,15 @@ export const REVIEWER_LOG_NAME = 'reviewer';
 // Log file extensions
 export const EXECUTOR_LOG_FILE = 'executor.log';
 export const REVIEWER_LOG_FILE = 'reviewer.log';
+export const QA_LOG_FILE = `${QA_LOG_NAME}.log`;
+export const AUDIT_LOG_FILE = `${AUDIT_LOG_NAME}.log`;
 
 // Mapping from logical API names to actual file names
 export const LOG_FILE_NAMES: Record<string, string> = {
   executor: EXECUTOR_LOG_NAME,
   reviewer: REVIEWER_LOG_NAME,
   qa: QA_LOG_NAME,
+  audit: AUDIT_LOG_NAME,
 };
 
 // Global Registry

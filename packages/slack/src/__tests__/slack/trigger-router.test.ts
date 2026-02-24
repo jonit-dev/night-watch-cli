@@ -473,6 +473,39 @@ describe('TriggerRouter', () => {
       );
     });
 
+    it('handles "claude code" alias and routes to hinted project', async () => {
+      const { router, jobSpawner } = buildRouter([
+        buildProject('p1', 'Alpha', '/repos/alpha', 'C001'),
+        buildProject('p2', 'Beta', '/repos/beta', 'C002'),
+      ]);
+      const personas = [buildPersona('p1', 'Dev')];
+      const projects = [
+        buildProject('p1', 'Alpha', '/repos/alpha', 'C001'),
+        buildProject('p2', 'Beta', '/repos/beta', 'C002'),
+      ];
+      const ctx: ITriggerContext = {
+        event: buildEvent({
+          type: 'message',
+          text: 'run claude code on beta: investigate flaky tests',
+        }),
+        channel: 'C001',
+        threadTs: '1700000000.001',
+        messageTs: '1700000000.001',
+        personas,
+        projects,
+      };
+      const result = await router.tryRoute(ctx);
+      expect(result).toBe(true);
+      expect(jobSpawner.spawnDirectProviderRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: 'claude', prompt: 'investigate flaky tests' }),
+        projects[1], // Beta project
+        'C001',
+        '1700000000.001',
+        personas[0],
+        expect.any(Object),
+      );
+    });
+
     it('asks for project when ambiguous and posts clarification', async () => {
       const { router, slackClient, jobSpawner } = buildRouter([
         buildProject('p1', 'Alpha', '/repos/alpha', 'C001'),

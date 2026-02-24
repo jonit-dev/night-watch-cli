@@ -56,6 +56,22 @@ import {
   VALID_PROVIDERS,
 } from './constants.js';
 
+const ENV_VAR_NAME_PATTERN = /^[A-Za-z_]\w*$/;
+
+function isValidEnvVarName(name: string): boolean {
+  return ENV_VAR_NAME_PATTERN.test(name);
+}
+
+function sanitizeProviderEnv(env: Record<string, string>): Record<string, string> {
+  const sanitized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (isValidEnvVarName(key)) {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
 /**
  * Get the default configuration values
  */
@@ -187,7 +203,7 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   if (rawProviderEnv) {
     const env: Record<string, string> = {};
     for (const [key, value] of Object.entries(rawProviderEnv)) {
-      if (typeof value === 'string') {
+      if (typeof value === 'string' && isValidEnvVarName(key)) {
         env[key] = value;
       }
     }
@@ -465,6 +481,7 @@ function mergeConfigs(
   if (envConfig.qa !== undefined) merged.qa = { ...merged.qa, ...envConfig.qa };
   if (envConfig.slack !== undefined) merged.slack = { ...merged.slack, ...envConfig.slack };
 
+  merged.providerEnv = sanitizeProviderEnv(merged.providerEnv);
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
 
   return merged;

@@ -255,6 +255,7 @@ find_eligible_prd() {
   fi
 
   local open_branches
+  local branch_prefix="${NW_BRANCH_PREFIX:-night-watch}"
   open_branches=$(gh pr list --state open --json headRefName --jq '.[].headRefName' 2>/dev/null || echo "")
 
   for prd_path in ${prd_files}; do
@@ -274,9 +275,11 @@ find_eligible_prd() {
       continue
     fi
 
-    # Skip if a PR already exists for this PRD
-    if echo "${open_branches}" | grep -qF "${prd_name}"; then
-      log "SKIP-PRD: ${prd_file} — open PR already exists"
+    # Skip only when the exact PRD branch already has an open PR.
+    # Substring matching can incorrectly block unrelated branches.
+    local expected_branch="${branch_prefix}/${prd_name}"
+    if echo "${open_branches}" | grep -xqF "${expected_branch}"; then
+      log "SKIP-PRD: ${prd_file} — open PR already exists on ${expected_branch}"
       continue
     fi
 

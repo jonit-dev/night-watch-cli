@@ -7,6 +7,10 @@ import { Command } from 'commander';
 import * as path from 'path';
 import * as fs from 'fs';
 import {
+  AUDIT_LOG_FILE,
+  EXECUTOR_LOG_FILE,
+  QA_LOG_FILE,
+  REVIEWER_LOG_FILE,
   dim,
   generateMarker,
   getEntries,
@@ -52,7 +56,14 @@ export function performUninstall(
     if (!options?.keepLogs) {
       const logDir = path.join(projectDir, 'logs');
       if (fs.existsSync(logDir)) {
-        const logFiles = ['executor.log', 'reviewer.log', 'slicer.log', 'audit.log'];
+        const logFiles = [
+          EXECUTOR_LOG_FILE,
+          REVIEWER_LOG_FILE,
+          QA_LOG_FILE,
+          'qa.log', // backward compatibility for older installs
+          'slicer.log',
+          AUDIT_LOG_FILE,
+        ];
         logFiles.forEach((logFile) => {
           const logPath = path.join(logDir, logFile);
           if (fs.existsSync(logPath)) {
@@ -119,7 +130,14 @@ export function uninstallCommand(program: Command): void {
         if (!options.keepLogs) {
           const logDir = path.join(projectDir, 'logs');
           if (fs.existsSync(logDir)) {
-            const logFiles = ['executor.log', 'reviewer.log', 'slicer.log', 'audit.log'];
+            const logFiles = [
+              EXECUTOR_LOG_FILE,
+              REVIEWER_LOG_FILE,
+              QA_LOG_FILE,
+              'qa.log', // backward compatibility for older installs
+              'slicer.log',
+              AUDIT_LOG_FILE,
+            ];
             let logsRemoved = 0;
 
             logFiles.forEach((logFile) => {

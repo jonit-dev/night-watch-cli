@@ -372,7 +372,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
   done
 
   emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}"
-  exit 0
+  exit "${EXIT_CODE}"
 fi
 
 REVIEW_WORKTREE_BASENAME="${PROJECT_NAME}-nw-review-runner"
@@ -526,3 +526,4 @@ if [ "${AUTO_MERGE}" = "1" ] && [ ${EXIT_CODE} -eq 0 ]; then
 fi
 
 emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}"
+exit "${EXIT_CODE}"

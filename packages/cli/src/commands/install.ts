@@ -8,8 +8,10 @@ import { execSync } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import {
+  AUDIT_LOG_FILE,
   INightWatchConfig,
   LOG_DIR,
+  QA_LOG_FILE,
   dim,
   generateMarker,
   getEntries,
@@ -207,7 +209,7 @@ export function performInstall(
     const installQa = disableQa ? false : config.qa.enabled;
     if (installQa) {
       const qaSchedule = applyScheduleOffset(config.qa.schedule, offset);
-      const qaLog = path.join(logDir, 'qa.log');
+      const qaLog = path.join(logDir, QA_LOG_FILE);
       const qaEntry = `${qaSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} qa >> ${shellQuote(qaLog)} 2>&1  ${marker}`;
       entries.push(qaEntry);
     }
@@ -217,7 +219,7 @@ export function performInstall(
     const installAudit = disableAudit ? false : config.audit.enabled;
     if (installAudit) {
       const auditSchedule = applyScheduleOffset(config.audit.schedule, offset);
-      const auditLog = path.join(logDir, 'audit.log');
+      const auditLog = path.join(logDir, AUDIT_LOG_FILE);
       const auditEntry = `${auditSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} audit >> ${shellQuote(auditLog)} 2>&1  ${marker}`;
       entries.push(auditEntry);
     }
@@ -347,7 +349,7 @@ export function installCommand(program: Command): void {
         // QA entry (if enabled)
         let qaLog: string | undefined;
         if (installQa) {
-          qaLog = path.join(logDir, 'qa.log');
+          qaLog = path.join(logDir, QA_LOG_FILE);
           const qaSchedule = applyScheduleOffset(config.qa.schedule, offset);
           const qaEntry = `${qaSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} qa >> ${shellQuote(qaLog)} 2>&1  ${marker}`;
           entries.push(qaEntry);
@@ -360,7 +362,7 @@ export function installCommand(program: Command): void {
         // Audit entry (if enabled)
         let auditLog: string | undefined;
         if (installAudit) {
-          auditLog = path.join(logDir, 'audit.log');
+          auditLog = path.join(logDir, AUDIT_LOG_FILE);
           const auditSchedule = applyScheduleOffset(config.audit.schedule, offset);
           const auditEntry = `${auditSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} audit >> ${shellQuote(auditLog)} 2>&1  ${marker}`;
           entries.push(auditEntry);
