@@ -54,6 +54,7 @@ export class CascadingReplyHandler {
     personas: IAgentPersona[],
     projectContext: string,
     skipPersonaId: string,
+    projectPathOverride?: string,
   ): Promise<void> {
     if (!postedText) return;
 
@@ -72,15 +73,24 @@ export class CascadingReplyHandler {
       // Small human-like delay before the tagged persona responds
       await sleep(this.state.randomInt(RESPONSE_DELAY_MIN_MS * 2, RESPONSE_DELAY_MAX_MS * 3));
       // replyAsAgent fetches thread history internally so the persona sees the conversation
-      await this.engine.replyAsAgent(
-        channel,
-        threadTs,
-        postedText,
-        persona,
-        projectContext,
-      );
+      if (projectPathOverride) {
+        await this.engine.replyAsAgent(
+          channel,
+          threadTs,
+          postedText,
+          persona,
+          projectContext,
+          projectPathOverride,
+        );
+      } else {
+        await this.engine.replyAsAgent(channel, threadTs, postedText, persona, projectContext);
+      }
       this.state.markPersonaReply(channel, threadTs, persona.id);
-      this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id);
+      if (projectPathOverride) {
+        this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id, projectPathOverride);
+      } else {
+        this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id);
+      }
     }
   }
 
@@ -96,6 +106,7 @@ export class CascadingReplyHandler {
     personas: IAgentPersona[],
     projectContext: string,
     excludePersonaId: string,
+    projectPathOverride?: string,
   ): Promise<void> {
     if (Math.random() > PIGGYBACK_REPLY_PROBABILITY) return;
 
@@ -107,24 +118,43 @@ export class CascadingReplyHandler {
     const persona = others[Math.floor(Math.random() * others.length)];
     await sleep(this.state.randomInt(PIGGYBACK_DELAY_MIN_MS, PIGGYBACK_DELAY_MAX_MS));
 
-    const postedText = await this.engine.replyAsAgent(
-      channel,
-      threadTs,
-      text,
-      persona,
-      projectContext,
-    );
+    const postedText = projectPathOverride
+      ? await this.engine.replyAsAgent(
+          channel,
+          threadTs,
+          text,
+          persona,
+          projectContext,
+          projectPathOverride,
+        )
+      : await this.engine.replyAsAgent(channel, threadTs, text, persona, projectContext);
     this.state.markPersonaReply(channel, threadTs, persona.id);
-    this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id);
+    if (projectPathOverride) {
+      this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id, projectPathOverride);
+    } else {
+      this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id);
+    }
     if (postedText) {
-      await this.followAgentMentions(
-        postedText,
-        channel,
-        threadTs,
-        personas,
-        projectContext,
-        persona.id,
-      );
+      if (projectPathOverride) {
+        await this.followAgentMentions(
+          postedText,
+          channel,
+          threadTs,
+          personas,
+          projectContext,
+          persona.id,
+          projectPathOverride,
+        );
+      } else {
+        await this.followAgentMentions(
+          postedText,
+          channel,
+          threadTs,
+          personas,
+          projectContext,
+          persona.id,
+        );
+      }
     }
   }
 
@@ -139,6 +169,7 @@ export class CascadingReplyHandler {
     text: string,
     personas: IAgentPersona[],
     projectContext: string,
+    projectPathOverride?: string,
   ): Promise<void> {
     const available = personas.filter(
       (p) => !this.state.isPersonaOnCooldown(channel, threadTs, p.id),
@@ -159,25 +190,44 @@ export class CascadingReplyHandler {
       } else {
         await this.applyHumanResponseTiming(channel, messageTs, persona);
       }
-      const postedText = await this.engine.replyAsAgent(
-        channel,
-        threadTs,
-        text,
-        persona,
-        projectContext,
-      );
+      const postedText = projectPathOverride
+        ? await this.engine.replyAsAgent(
+            channel,
+            threadTs,
+            text,
+            persona,
+            projectContext,
+            projectPathOverride,
+          )
+        : await this.engine.replyAsAgent(channel, threadTs, text, persona, projectContext);
       this.state.markPersonaReply(channel, threadTs, persona.id);
-      this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id);
+      if (projectPathOverride) {
+        this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id, projectPathOverride);
+      } else {
+        this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id);
+      }
       if (i === 0) firstPostedPersonaId = persona.id;
       if (postedText && i === participants.length - 1 && firstPostedPersonaId) {
-        await this.followAgentMentions(
-          postedText,
-          channel,
-          threadTs,
-          personas,
-          projectContext,
-          persona.id,
-        );
+        if (projectPathOverride) {
+          await this.followAgentMentions(
+            postedText,
+            channel,
+            threadTs,
+            personas,
+            projectContext,
+            persona.id,
+            projectPathOverride,
+          );
+        } else {
+          await this.followAgentMentions(
+            postedText,
+            channel,
+            threadTs,
+            personas,
+            projectContext,
+            persona.id,
+          );
+        }
       }
     }
   }

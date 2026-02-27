@@ -339,6 +339,25 @@ describe('ThreadStateManager', () => {
       expect(result?.id).toBe('p2');
     });
 
+    it('should remember and retrieve ad-hoc project path', () => {
+      state.rememberAdHocThreadPersona('C1', '1.0', 'p1', '/repos/autopilotrank.com');
+      expect(state.getRememberedAdHocProjectPath('C1', '1.0')).toBe('/repos/autopilotrank.com');
+    });
+
+    it('should preserve existing project path when persona updates without project override', () => {
+      state.rememberAdHocThreadPersona('C1', '1.0', 'p1', '/repos/autopilotrank.com');
+      state.rememberAdHocThreadPersona('C1', '1.0', 'p2');
+      expect(state.getRememberedAdHocProjectPath('C1', '1.0')).toBe('/repos/autopilotrank.com');
+    });
+
+    it('should return null project path after ad-hoc entry expires', () => {
+      vi.useFakeTimers();
+      state.rememberAdHocThreadPersona('C1', '1.0', 'p1', '/repos/autopilotrank.com');
+      vi.advanceTimersByTime(AD_HOC_THREAD_MEMORY_MS + 1);
+      expect(state.getRememberedAdHocProjectPath('C1', '1.0')).toBeNull();
+      vi.useRealTimers();
+    });
+
     it('should handle resetting timer on persona change', () => {
       vi.useFakeTimers();
       const personas = [buildPersona('p1', 'Maya'), buildPersona('p2', 'Carlos')];

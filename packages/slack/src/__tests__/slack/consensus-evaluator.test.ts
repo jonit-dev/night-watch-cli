@@ -436,6 +436,30 @@ describe('ConsensusEvaluator', () => {
     });
   });
 
+  describe('evaluateIssueReviewConsensus — EXECUTE decision', () => {
+    it('marks approved and triggers issue execution path', async () => {
+      const carlos = buildPersona();
+      const repos = buildRepos({ triggerType: 'issue_review', status: 'active' });
+      vi.mocked(getRepositories).mockReturnValue(
+        repos as unknown as ReturnType<typeof getRepositories>,
+      );
+      vi.mocked(findCarlos).mockReturnValue(carlos);
+      vi.mocked(callAIForContribution).mockResolvedValue(
+        'EXECUTE: Clear assignment from the thread, start implementation now.',
+      );
+
+      const trigger = buildTrigger({ type: 'issue_review', ref: 'org/repo#10' });
+      await evaluator.evaluateIssueReviewConsensus('disc-1', trigger);
+
+      expect(repos.slackDiscussion.updateStatus).toHaveBeenCalledWith(
+        'disc-1',
+        'consensus',
+        'approved',
+      );
+      expect(board.triggerIssueStatusUpdate).toHaveBeenCalledWith('execute', 'disc-1', trigger);
+    });
+  });
+
   describe('evaluateIssueReviewConsensus — CLOSE decision', () => {
     it('marks approved and triggers issue status update to close', async () => {
       const carlos = buildPersona();

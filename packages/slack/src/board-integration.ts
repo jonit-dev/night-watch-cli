@@ -4,7 +4,7 @@
  * concerns in a focused, single-responsibility class.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import {
   type IAgentPersona,
   type IBoardProviderConfig,
@@ -20,7 +20,12 @@ import { callAIForContribution } from './ai/index.js';
 import { humanizeSlackReply } from './humanizer.js';
 import { findCarlos, findDev } from './personas.js';
 import { buildIssueTitleFromTrigger } from './deliberation-builders.js';
-import { buildCurrentCliInvocation, extractErrorMessage } from './utils.js';
+import {
+  buildCurrentCliInvocation,
+  buildSubprocessEnv,
+  extractErrorMessage,
+  getNightWatchTsconfigPath,
+} from './utils.js';
 
 const log = createLogger('board-integration');
 
@@ -45,6 +50,71 @@ export class BoardIntegration {
       // Ignore config loading failures and treat as board-not-configured.
     }
     return null;
+  }
+
+  private async moveIssueToColumn(
+    projectPath: string,
+    issueNumber: string,
+    column: 'Ready' | 'In Progress',
+  ): Promise<boolean> {
+    const boardConfig = this.resolveBoardConfig(projectPath);
+    if (boardConfig) {
+      try {
+        const provider = createBoardProvider(boardConfig, projectPath);
+        await provider.moveIssue(Number(issueNumber), column);
+        return true;
+      } catch (err) {
+        log.warn('issue-review: board moveIssue failed, trying CLI fallback', {
+          error: String(err),
+          column,
+        });
+      }
+    }
+
+    const boardArgs = buildCurrentCliInvocation([
+      'board',
+      'move-issue',
+      issueNumber,
+      '--column',
+      column,
+    ]);
+    if (!boardArgs) return false;
+
+    try {
+      execFileSync(process.execPath, boardArgs, {
+        cwd: projectPath,
+        timeout: 15_000,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      return true;
+    } catch {
+      log.warn('issue-review: CLI board fallback also failed', { column });
+      return false;
+    }
+  }
+
+  private spawnIssueRun(projectPath: string, issueNumber: string): boolean {
+    const invocationArgs = buildCurrentCliInvocation(['run']);
+    if (!invocationArgs) return false;
+
+    try {
+      const tsconfigPath = getNightWatchTsconfigPath();
+      const child = spawn(process.execPath, invocationArgs, {
+        cwd: projectPath,
+        detached: true,
+        stdio: 'ignore',
+        env: buildSubprocessEnv({
+          NW_EXECUTION_CONTEXT: 'agent',
+          NW_TARGET_ISSUE: issueNumber,
+          ...(tsconfigPath ? { TSX_TSCONFIG_PATH: tsconfigPath } : {}),
+        }),
+      });
+      child.unref();
+      return true;
+    } catch (err) {
+      log.warn('issue-review: failed to spawn run for execute verdict', { error: String(err) });
+      return false;
+    }
   }
 
   /**
@@ -100,10 +170,11 @@ ${trigger.context}`;
   /**
    * Execute the board/GitHub action for an issue_review verdict.
    * - ready: moves the issue to the Ready column on the board
+   * - execute: moves the issue to In Progress (best effort) and starts executor run
    * - close: closes the issue via `gh issue close`
    */
   async triggerIssueStatusUpdate(
-    verdict: 'ready' | 'close',
+    verdict: 'ready' | 'execute' | 'close',
     discussionId: string,
     trigger: IDiscussionTrigger,
   ): Promise<void> {
@@ -125,50 +196,49 @@ ${trigger.context}`;
     const repoArg = `${owner}/${repo}`;
 
     if (verdict === 'ready') {
-      const boardConfig = this.resolveBoardConfig(trigger.projectPath);
-      if (boardConfig) {
-        try {
-          const provider = createBoardProvider(boardConfig, trigger.projectPath);
-          await provider.moveIssue(Number(issueNumber), 'Ready');
-          await this.slackClient.postAsAgent(
-            discussion.channelId,
-            `Moved #${issueNumber} to Ready.`,
-            executor,
-            discussion.threadTs,
-          );
-          return;
-        } catch (err) {
-          log.warn('issue-review: board moveIssue failed, trying CLI fallback', {
-            error: String(err),
-          });
-        }
+      const moved = await this.moveIssueToColumn(trigger.projectPath, issueNumber, 'Ready');
+      if (moved) {
+        await this.slackClient.postAsAgent(
+          discussion.channelId,
+          `Moved #${issueNumber} to Ready.`,
+          executor,
+          discussion.threadTs,
+        );
       }
-      // CLI fallback
-      const boardArgs = buildCurrentCliInvocation([
-        'board',
-        'move-issue',
-        issueNumber,
-        '--column',
-        'Ready',
-      ]);
-      if (boardArgs) {
-        try {
-          execFileSync(process.execPath, boardArgs, {
-            cwd: trigger.projectPath,
-            timeout: 15_000,
-            stdio: ['ignore', 'pipe', 'pipe'],
-          });
-          await this.slackClient.postAsAgent(
-            discussion.channelId,
-            `Moved #${issueNumber} to Ready.`,
-            executor,
-            discussion.threadTs,
-          );
-        } catch {
-          log.warn('issue-review: CLI board fallback also failed');
-        }
+      return;
+    }
+
+    if (verdict === 'execute') {
+      const moved = await this.moveIssueToColumn(trigger.projectPath, issueNumber, 'In Progress');
+      if (moved) {
+        await this.slackClient.postAsAgent(
+          discussion.channelId,
+          `Moved #${issueNumber} to In Progress.`,
+          executor,
+          discussion.threadTs,
+        );
       }
-    } else if (verdict === 'close') {
+
+      const started = this.spawnIssueRun(trigger.projectPath, issueNumber);
+      if (started) {
+        await this.slackClient.postAsAgent(
+          discussion.channelId,
+          `Starting the run for #${issueNumber} now.`,
+          executor,
+          discussion.threadTs,
+        );
+      } else {
+        await this.slackClient.postAsAgent(
+          discussion.channelId,
+          `Couldn't start the run for #${issueNumber} automatically.`,
+          executor,
+          discussion.threadTs,
+        );
+      }
+      return;
+    }
+
+    if (verdict === 'close') {
       try {
         execFileSync('gh', ['issue', 'close', issueNumber, '-R', repoArg], {
           cwd: trigger.projectPath,

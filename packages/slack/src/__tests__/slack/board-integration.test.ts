@@ -24,6 +24,7 @@ vi.mock('node:child_process', async (importOriginal) => {
   return {
     ...actual,
     execFileSync: vi.fn(),
+    spawn: vi.fn(),
   };
 });
 
@@ -47,17 +48,24 @@ vi.mock('../../deliberation-builders.js', () => ({
 
 vi.mock('../../utils.js', () => ({
   buildCurrentCliInvocation: vi.fn(),
+  buildSubprocessEnv: vi.fn((vars: Record<string, string>) => vars),
+  getNightWatchTsconfigPath: vi.fn(() => null),
 }));
 
 // --- imports after mocks ------------------------------------------------
 
 import { loadConfig, getRepositories, createBoardProvider } from '@night-watch/core';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { callAIForContribution } from '../../ai/index.js';
 import { humanizeSlackReply, isSkipMessage } from '../../humanizer.js';
 import { findDev, findCarlos } from '../../personas.js';
 import { BoardIntegration } from '../../board-integration.js';
 import type { SlackClient } from '../../client.js';
+import {
+  buildCurrentCliInvocation,
+  buildSubprocessEnv,
+  getNightWatchTsconfigPath,
+} from '../../utils.js';
 
 // --- helpers ------------------------------------------------------------
 
@@ -171,6 +179,10 @@ describe('BoardIntegration', () => {
     // Default: humanizeSlackReply passes text through, isSkipMessage checks SKIP
     vi.mocked(humanizeSlackReply).mockImplementation((text) => text);
     vi.mocked(isSkipMessage).mockImplementation((text) => text.trim().toUpperCase() === 'SKIP');
+    vi.mocked(buildCurrentCliInvocation).mockReturnValue(null);
+    vi.mocked(buildSubprocessEnv).mockImplementation((vars) => vars);
+    vi.mocked(getNightWatchTsconfigPath).mockReturnValue(null);
+    vi.mocked(spawn).mockReturnValue({ unref: vi.fn() } as unknown as ReturnType<typeof spawn>);
   });
 
   // --- resolveBoardConfig -----------------------------------------------
@@ -1520,6 +1532,111 @@ describe('BoardIntegration', () => {
         });
 
         expect(mockProvider.moveIssue).toHaveBeenCalledWith(444, 'Ready');
+      });
+    });
+
+    describe('verdict === "execute"', () => {
+      it('moves issue to In Progress and starts run', async () => {
+        const dev = buildPersona();
+        const moveArgs = ['/path/to/cli', 'board', 'move-issue', '555', '--column', 'In Progress'];
+        const runArgs = ['/path/to/cli', 'run'];
+        const unref = vi.fn();
+
+        vi.mocked(getRepositories).mockReturnValue({
+          ...buildRepos(),
+          slackDiscussion: { getById: vi.fn().mockReturnValue(buildDiscussion()) },
+          agentPersona: { getActive: vi.fn().mockReturnValue([dev]) },
+        } as unknown as ReturnType<typeof getRepositories>);
+        vi.mocked(findDev).mockReturnValue(dev);
+        vi.mocked(findCarlos).mockReturnValue(null);
+        vi.mocked(loadConfig).mockReturnValue({
+          boardProvider: undefined,
+        } as unknown as INightWatchConfig);
+        vi.mocked(buildCurrentCliInvocation).mockImplementation((args) => {
+          if (args[0] === 'board') return moveArgs;
+          if (args[0] === 'run') return runArgs;
+          return null;
+        });
+        vi.mocked(execFileSync).mockReturnValue(Buffer.from('Success'));
+        vi.mocked(spawn).mockReturnValue({ unref } as unknown as ReturnType<typeof spawn>);
+
+        await board.triggerIssueStatusUpdate('execute', 'disc-1', {
+          type: 'issue_review',
+          projectPath: '/projects/my-project',
+          ref: 'org/repo#555',
+          context: '',
+        });
+
+        expect(execFileSync).toHaveBeenCalledWith(process.execPath, moveArgs, {
+          cwd: '/projects/my-project',
+          timeout: 15_000,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        expect(buildSubprocessEnv).toHaveBeenCalledWith(
+          expect.objectContaining({
+            NW_EXECUTION_CONTEXT: 'agent',
+            NW_TARGET_ISSUE: '555',
+          }),
+        );
+        expect(spawn).toHaveBeenCalledWith(
+          process.execPath,
+          runArgs,
+          expect.objectContaining({
+            cwd: '/projects/my-project',
+            detached: true,
+            stdio: 'ignore',
+          }),
+        );
+        expect(unref).toHaveBeenCalled();
+        expect(slackClient.postAsAgent).toHaveBeenCalledWith(
+          'C01',
+          'Moved #555 to In Progress.',
+          dev,
+          '100.000',
+        );
+        expect(slackClient.postAsAgent).toHaveBeenCalledWith(
+          'C01',
+          'Starting the run for #555 now.',
+          dev,
+          '100.000',
+        );
+      });
+
+      it("posts a failure note when run can't be started", async () => {
+        const dev = buildPersona();
+        const moveArgs = ['/path/to/cli', 'board', 'move-issue', '556', '--column', 'In Progress'];
+
+        vi.mocked(getRepositories).mockReturnValue({
+          ...buildRepos(),
+          slackDiscussion: { getById: vi.fn().mockReturnValue(buildDiscussion()) },
+          agentPersona: { getActive: vi.fn().mockReturnValue([dev]) },
+        } as unknown as ReturnType<typeof getRepositories>);
+        vi.mocked(findDev).mockReturnValue(dev);
+        vi.mocked(findCarlos).mockReturnValue(null);
+        vi.mocked(loadConfig).mockReturnValue({
+          boardProvider: undefined,
+        } as unknown as INightWatchConfig);
+        vi.mocked(buildCurrentCliInvocation).mockImplementation((args) => {
+          if (args[0] === 'board') return moveArgs;
+          if (args[0] === 'run') return null;
+          return null;
+        });
+        vi.mocked(execFileSync).mockReturnValue(Buffer.from('Success'));
+
+        await board.triggerIssueStatusUpdate('execute', 'disc-1', {
+          type: 'issue_review',
+          projectPath: '/projects/my-project',
+          ref: 'org/repo#556',
+          context: '',
+        });
+
+        expect(spawn).not.toHaveBeenCalled();
+        expect(slackClient.postAsAgent).toHaveBeenCalledWith(
+          'C01',
+          "Couldn't start the run for #556 automatically.",
+          dev,
+          '100.000',
+        );
       });
     });
 

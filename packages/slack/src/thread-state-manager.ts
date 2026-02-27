@@ -66,10 +66,18 @@ export class ThreadStateManager {
 
   // ── Ad-hoc thread memory ───────────────────────────────────────────────────
 
-  rememberAdHocThreadPersona(channel: string, threadTs: string, personaId: string): void {
-    this.adHocThreadState.set(this.adHocKey(channel, threadTs), {
+  rememberAdHocThreadPersona(
+    channel: string,
+    threadTs: string,
+    personaId: string,
+    projectPath?: string,
+  ): void {
+    const key = this.adHocKey(channel, threadTs);
+    const existing = this.adHocThreadState.get(key);
+    this.adHocThreadState.set(key, {
       personaId,
       expiresAt: Date.now() + AD_HOC_THREAD_MEMORY_MS,
+      projectPath: projectPath ?? existing?.projectPath,
     });
   }
 
@@ -86,6 +94,17 @@ export class ThreadStateManager {
       return null;
     }
     return personas.find((p) => p.id === remembered.personaId) ?? null;
+  }
+
+  getRememberedAdHocProjectPath(channel: string, threadTs: string): string | null {
+    const key = this.adHocKey(channel, threadTs);
+    const remembered = this.adHocThreadState.get(key);
+    if (!remembered) return null;
+    if (Date.now() > remembered.expiresAt) {
+      this.adHocThreadState.delete(key);
+      return null;
+    }
+    return remembered.projectPath ?? null;
   }
 
   // ── Issue review cooldown ──────────────────────────────────────────────────

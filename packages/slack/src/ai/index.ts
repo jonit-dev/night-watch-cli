@@ -12,6 +12,7 @@ export {
   buildShellTool,
   executeBoardTool,
   executeCodebaseQuery,
+  getCodebaseQueryAvailability,
   executeReadFile,
   executeReadRoadmap,
   executeShellCommand,

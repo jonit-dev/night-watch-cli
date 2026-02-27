@@ -265,6 +265,7 @@ ${historyText || '(No thread history available)'}
 Based on the discussion above, make the triage call for this issue.
 
 Respond with EXACTLY one of these formats (include the prefix):
+- EXECUTE: [why — direct assignment to start implementation now; trigger executor run immediately]
 - READY: [why — move to Ready column, issue is valid and prioritized]
 - CLOSE: [why — invalid, duplicate, or won't fix]
 - DRAFT: [why — valid but needs more context or lower priority]
@@ -278,6 +279,29 @@ Be concise and decisive. No recap of the whole thread. Write the prefix and your
       const msg = extractErrorMessage(err);
       log.warn('issue-review: consensus evaluation failed', { error: msg });
       decision = 'DRAFT: AI evaluation failed — leaving in Draft for manual review';
+    }
+
+    if (decision.startsWith('EXECUTE')) {
+      const message = humanizeSlackReply(
+        decision.replace(/^EXECUTE:\s*/, '').trim() ||
+          'Execution requested — starting the run now.',
+        { allowEmoji: false, maxSentences: 1 },
+      );
+      if (!isSkipMessage(message)) {
+        await this.slackClient.postAsAgent(
+          discussion.channelId,
+          message,
+          lead,
+          discussion.threadTs,
+        );
+      }
+      repos.slackDiscussion.updateStatus(discussionId, 'consensus', 'approved');
+      await this.board
+        .triggerIssueStatusUpdate('execute', discussionId, trigger)
+        .catch((e: unknown) =>
+          log.warn('issue-review: execute status update failed', { error: String(e) }),
+        );
+      return;
     }
 
     if (decision.startsWith('READY')) {

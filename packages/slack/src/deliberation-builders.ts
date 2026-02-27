@@ -104,6 +104,7 @@ export function buildContributionPrompt(
   threadHistory: string,
   round: number,
   hasTools?: boolean,
+  hasCodebaseQueryTool = true,
 ): string {
   const isFirstRound = round === 1;
   const isFinalRound = round >= MAX_ROUNDS;
@@ -136,7 +137,7 @@ Write a Slack message in your natural voice. Keep it as short or long as the top
 ${isFirstRound ? '- First round: give your initial take from your angle. Be specific.' : '- Follow-up round: respond to what others said. Agree, push back, or add something new.'}
 - React to one specific point already in the thread (use teammate names when available).
 - When referencing code, use GitHub permalink format: \`path/to/file.ts#L42-L45\` followed by a short inline snippet. Example: "\`src/auth/middleware.ts#L23-L25\` — the token check skips expiry validation."
-${hasTools ? '- You have tools: read_roadmap (read ROADMAP.md on-demand), query_codebase (AI-powered search — use this to read any file or search the codebase), run_command (run shell commands — the cwd is already the project root, pass commands directly e.g. `yarn verify`). Before making any code or roadmap claim, call the relevant tool. Cite what you found with file paths and line numbers.\n- You have board tools available. If the discussion concludes that an issue should be opened, use them.' : '- Every code claim MUST include a file path reference. No vague "the auth module" — name the exact file and line range.'}
+${hasTools ? `- You have tools: read_roadmap (read ROADMAP.md on-demand), read_file (instant file reads), run_command (run shell commands — the cwd is already the project root, pass commands directly e.g. \`yarn verify\`).${hasCodebaseQueryTool ? ' query_codebase (AI-powered codebase search) is also available for open-ended lookups.' : ' query_codebase is temporarily unavailable right now — use read_file + run_command instead.'} Before making any code or roadmap claim, call the relevant tool. Cite what you found with file paths and line numbers.\n- You have board tools available. If the discussion concludes that an issue should be opened, use them.` : '- Every code claim MUST include a file path reference. No vague "the auth module" — name the exact file and line range.'}
 - Talk like a teammate, not an assistant. No pleasantries, no filler.
 - Stay in your lane — only comment on your domain unless something crosses into it.
 - Ground your feedback in the project roadmap when relevant. If what you're raising isn't on the roadmap, say so explicitly ("Not on the roadmap, but...").
@@ -152,12 +153,16 @@ ${
   trigger.type === 'issue_review'
     ? `
 Issue Review Guidance:
-- Is this issue actually valid? Does the codebase have this problem, or is it already fixed?
-- Is it worth tracking? Consider: Ready (prioritize now), Draft (valid but not urgent), or Close (invalid/duplicate/won't fix).
-- Use query_codebase to verify code claims before making them.
-- End your message with a clear lean toward READY, CLOSE, or DRAFT.
+- First classify intent from the thread:
+  - If the human is explicitly asking to start implementation now, treat this as execution intent (not a deep triage).
+  - If you're Dev on execution intent, be decisive and state that you're starting the run now.
+  - If you're not Dev and it's execution intent, prefer SKIP unless directly asked for your domain input.
+- For triage intent, decide if the issue is actually valid and worth tracking: Ready (prioritize now), Draft (valid but not urgent), or Close (invalid/duplicate/won't fix).
+- ${hasCodebaseQueryTool ? 'Use query_codebase to verify code claims before making them for triage calls.' : 'query_codebase is unavailable right now — verify with read_file + run_command (e.g. `rg`) before making triage calls.'}
+- End your message with a clear lean toward EXECUTE, READY, CLOSE, or DRAFT.
 
 Examples of good verdicts:
+- "Explicit ask to implement now and ownership is clear. Starting the run for this issue. EXECUTE."
 - "The N+1 query in \`src/api/users.ts#L88-L92\` is real — each list call fires 50 sub-selects. READY."
 - "Already fixed in PR #42, merged last week. The pagination was added at \`src/api/list.ts#L30\`. CLOSE."
 - "Valid concern but need to profile first — could be acceptable for our current scale. DRAFT."`

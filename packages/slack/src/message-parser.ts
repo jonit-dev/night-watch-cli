@@ -57,6 +57,7 @@ export interface ISlackIssuePickupRequest {
 export interface IAdHocThreadState {
   personaId: string;
   expiresAt: number;
+  projectPath?: string;
 }
 
 export interface ISlackIssueReviewable {
@@ -104,8 +105,20 @@ export class MessageParser {
   }
 
   isAmbientTeamMessage(text: string): boolean {
-    const normalized = this.normalizeForParsing(stripSlackUserMentions(text));
+    const withoutMentions = stripSlackUserMentions(text);
+    const normalized = this.normalizeForParsing(withoutMentions);
     if (!normalized) return false;
+
+    // Treat URL-bearing or action-oriented messages as work requests,
+    // even if they start with a casual greeting ("hey team, please review ...").
+    if (
+      /https?:\/\/|<https?:\/\/|github\.com\//i.test(withoutMentions) ||
+      /\b(please|need|can\s+someone|anyone|address|work\s+on|fix|review|check|look\s+at|issue|pr|pull\s+request|bug|error|deploy|auth|schedule|prd|roadmap|task|ticket|implement|tackle)\b/i.test(
+        normalized,
+      )
+    ) {
+      return false;
+    }
 
     if (
       /^(hey|hi|hello|yo|sup)\b/.test(normalized) &&
@@ -216,7 +229,7 @@ export class MessageParser {
     // Requires pickup-intent language or "this issue" + request language
     // "pickup" (one word) is also accepted alongside "pick up" (two words)
     const pickupSignal =
-      /\b(pick\s+up|pickup|work\s+on|implement|tackle|start\s+on|grab|handle\s+this|ship\s+this)\b/i.test(
+      /\b(pick\s+up|pickup|pick\s+this|work\s+on|implement|tackle|start\s+on|grab|handle\s+this|ship\s+this)\b/i.test(
         normalized,
       );
     const requestSignal =

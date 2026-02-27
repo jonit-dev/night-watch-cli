@@ -245,6 +245,7 @@ describe('deliberation-builders', () => {
       const trigger = buildTrigger('issue_review');
       const prompt = buildContributionPrompt(buildPersona(), trigger, '', 1);
       expect(prompt).toContain('Issue Review Guidance');
+      expect(prompt).toContain('EXECUTE');
       expect(prompt).toContain('READY');
       expect(prompt).toContain('CLOSE');
       expect(prompt).toContain('DRAFT');
@@ -271,6 +272,7 @@ describe('deliberation-builders', () => {
     it('should include verdict examples for issue_review', () => {
       const trigger = buildTrigger('issue_review');
       const prompt = buildContributionPrompt(buildPersona(), trigger, '', 1);
+      expect(prompt).toContain('EXECUTE.');
       expect(prompt).toContain('READY.');
       expect(prompt).toContain('CLOSE.');
     });

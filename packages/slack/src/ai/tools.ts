@@ -271,6 +271,125 @@ function findFilesInProject(filename: string, dir: string, depth = 0): string[] 
   return results;
 }
 
+interface ICodebaseQueryHealthState {
+  consecutiveFailures: number;
+  blockedUntil: number;
+  lastError: string;
+  lastFailureAt: number;
+}
+
+export interface ICodebaseQueryAvailability {
+  available: boolean;
+  reason?: string;
+  retryAfterMs?: number;
+}
+
+const DEFAULT_CODEBASE_QUERY_TIMEOUT_MS = 45_000;
+const DEFAULT_CODEBASE_QUERY_FAILURE_THRESHOLD = 1;
+const DEFAULT_CODEBASE_QUERY_COOLDOWN_MS = 3 * 60_000;
+const DEFAULT_CODEBASE_QUERY_MAX_CONCURRENCY = 1;
+const MIN_CODEBASE_QUERY_TIMEOUT_MS = 5_000;
+const MAX_CODEBASE_QUERY_TIMEOUT_MS = 180_000;
+const MIN_CODEBASE_QUERY_FAILURE_THRESHOLD = 1;
+const MAX_CODEBASE_QUERY_FAILURE_THRESHOLD = 5;
+const MIN_CODEBASE_QUERY_COOLDOWN_MS = 30_000;
+const MAX_CODEBASE_QUERY_COOLDOWN_MS = 30 * 60_000;
+const MIN_CODEBASE_QUERY_MAX_CONCURRENCY = 1;
+const MAX_CODEBASE_QUERY_MAX_CONCURRENCY = 4;
+const codebaseQueryHealth = new Map<string, ICodebaseQueryHealthState>();
+const activeCodebaseQueries = new Map<string, number>();
+
+function parseBoundedInt(
+  value: string | undefined,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function getCodebaseQueryScopeKey(projectPath: string, provider: string): string {
+  return `${provider}:${path.resolve(projectPath)}`;
+}
+
+function markCodebaseQuerySuccess(scopeKey: string): void {
+  codebaseQueryHealth.delete(scopeKey);
+}
+
+function markCodebaseQueryFailure(
+  scopeKey: string,
+  reason: string,
+  failureThreshold: number,
+  cooldownMs: number,
+): void {
+  const now = Date.now();
+  const current = codebaseQueryHealth.get(scopeKey);
+  const next: ICodebaseQueryHealthState = {
+    consecutiveFailures: (current?.consecutiveFailures ?? 0) + 1,
+    blockedUntil: current?.blockedUntil ?? 0,
+    lastError: reason,
+    lastFailureAt: now,
+  };
+  if (next.consecutiveFailures >= failureThreshold) {
+    next.blockedUntil = now + cooldownMs;
+    log.warn('query_codebase circuit opened', {
+      scopeKey,
+      consecutiveFailures: next.consecutiveFailures,
+      retryInMs: cooldownMs,
+      reason: reason.slice(0, 200),
+    });
+  }
+  codebaseQueryHealth.set(scopeKey, next);
+}
+
+function claimActiveCodebaseQuerySlot(scopeKey: string, maxConcurrency: number): boolean {
+  const active = activeCodebaseQueries.get(scopeKey) ?? 0;
+  if (active >= maxConcurrency) return false;
+  activeCodebaseQueries.set(scopeKey, active + 1);
+  return true;
+}
+
+function releaseActiveCodebaseQuerySlot(scopeKey: string): void {
+  const active = activeCodebaseQueries.get(scopeKey) ?? 0;
+  if (active <= 1) {
+    activeCodebaseQueries.delete(scopeKey);
+    return;
+  }
+  activeCodebaseQueries.set(scopeKey, active - 1);
+}
+
+export function getCodebaseQueryAvailability(
+  projectPath: string,
+  provider: 'claude' | 'codex',
+): ICodebaseQueryAvailability {
+  const scopeKey = getCodebaseQueryScopeKey(projectPath, provider);
+  const state = codebaseQueryHealth.get(scopeKey);
+  if (!state) return { available: true };
+
+  const now = Date.now();
+  if (state.blockedUntil > now) {
+    return {
+      available: false,
+      reason: state.lastError,
+      retryAfterMs: state.blockedUntil - now,
+    };
+  }
+
+  // Cooldown elapsed — clear state and allow retries.
+  codebaseQueryHealth.delete(scopeKey);
+  return { available: true };
+}
+
+/**
+ * Test helper: clears codebase query circuit-breaker and in-flight state.
+ */
+export function __resetCodebaseQueryStateForTests(): void {
+  codebaseQueryHealth.clear();
+  activeCodebaseQueries.clear();
+}
+
 /**
  * Returns an Anthropic tool definition that lets an agent query the project codebase
  * by spawning the configured AI provider (claude/codex) in the project directory.
@@ -283,7 +402,8 @@ export function buildCodebaseQueryTool(provider: 'claude' | 'codex' = 'claude'):
       `Run an AI-powered analysis of the project codebase using ${provider}. ` +
       'Use this for open-ended searches: finding all usages of a function, tracing a flow across multiple files, or answering "how does X work". ' +
       'Do NOT use this just to read a specific file by path — use read_file for that (it is instant). ' +
-      'query_codebase spawns a subprocess and takes 30-120 seconds; only call it when read_file is insufficient.',
+      'query_codebase spawns a subprocess and can take 30-60 seconds; only call it when read_file is insufficient. ' +
+      'If it returns a provider failure, do not retry in a loop — use read_file/run_command while it recovers.',
     input_schema: {
       type: 'object',
       properties: {
@@ -308,24 +428,85 @@ export function executeCodebaseQuery(
   provider: 'claude' | 'codex' = 'claude',
   providerEnv?: Record<string, string>,
 ): Promise<string> {
+  const timeoutMs = parseBoundedInt(
+    providerEnv?.['CODEBASE_QUERY_TIMEOUT_MS'],
+    DEFAULT_CODEBASE_QUERY_TIMEOUT_MS,
+    MIN_CODEBASE_QUERY_TIMEOUT_MS,
+    MAX_CODEBASE_QUERY_TIMEOUT_MS,
+  );
+  const failureThreshold = parseBoundedInt(
+    providerEnv?.['CODEBASE_QUERY_FAILURE_THRESHOLD'],
+    DEFAULT_CODEBASE_QUERY_FAILURE_THRESHOLD,
+    MIN_CODEBASE_QUERY_FAILURE_THRESHOLD,
+    MAX_CODEBASE_QUERY_FAILURE_THRESHOLD,
+  );
+  const cooldownMs = parseBoundedInt(
+    providerEnv?.['CODEBASE_QUERY_COOLDOWN_MS'],
+    DEFAULT_CODEBASE_QUERY_COOLDOWN_MS,
+    MIN_CODEBASE_QUERY_COOLDOWN_MS,
+    MAX_CODEBASE_QUERY_COOLDOWN_MS,
+  );
+  const maxConcurrency = parseBoundedInt(
+    providerEnv?.['CODEBASE_QUERY_MAX_CONCURRENCY'],
+    DEFAULT_CODEBASE_QUERY_MAX_CONCURRENCY,
+    MIN_CODEBASE_QUERY_MAX_CONCURRENCY,
+    MAX_CODEBASE_QUERY_MAX_CONCURRENCY,
+  );
+  const availability = getCodebaseQueryAvailability(projectPath, provider);
+  if (!availability.available) {
+    const retryInSec = Math.max(1, Math.ceil((availability.retryAfterMs ?? 0) / 1000));
+    return Promise.resolve(
+      `Provider query unavailable: temporary circuit is open after recent failures. Retry in ~${retryInSec}s. Use read_file or run_command instead.`,
+    );
+  }
+
+  const scopeKey = getCodebaseQueryScopeKey(projectPath, provider);
+  if (!claimActiveCodebaseQuerySlot(scopeKey, maxConcurrency)) {
+    return Promise.resolve(
+      'Provider query busy: another query_codebase call is already running for this project. Use read_file for known paths and try later.',
+    );
+  }
+
   const args =
     provider === 'claude'
       ? ['-p', prompt, '--dangerously-skip-permissions']
       : ['--quiet', '--yolo', '--prompt', prompt];
 
-  const TIMEOUT_MS = 120_000;
   const MAX_OUTPUT = 512 * 1024;
 
   return new Promise((resolve) => {
-    const child = spawn(provider, args, {
-      cwd: projectPath,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: buildSubprocessEnv(providerEnv ?? {}),
-    });
-
     let stdout = '';
     let stderr = '';
     let killed = false;
+    let settled = false;
+    let timer: NodeJS.Timeout | null = null;
+
+    const finish = (result: string, failureReason?: string): void => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      releaseActiveCodebaseQuerySlot(scopeKey);
+      if (failureReason) {
+        markCodebaseQueryFailure(scopeKey, failureReason, failureThreshold, cooldownMs);
+      } else {
+        markCodebaseQuerySuccess(scopeKey);
+      }
+      resolve(result);
+    };
+
+    let child;
+    try {
+      child = spawn(provider, args, {
+        cwd: projectPath,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: buildSubprocessEnv(providerEnv ?? {}),
+      });
+    } catch (err) {
+      const message = String(err);
+      log.error('query_codebase spawn threw', { provider, error: message });
+      finish(`Provider query failed: ${message}`, message);
+      return;
+    }
 
     child.stdout.setEncoding('utf-8');
     child.stderr.setEncoding('utf-8');
@@ -337,42 +518,47 @@ export function executeCodebaseQuery(
       if (stderr.length < MAX_OUTPUT) stderr += chunk;
     });
 
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
+      if (settled) return;
       killed = true;
       child.kill('SIGTERM');
-    }, TIMEOUT_MS);
+    }, timeoutMs);
 
     child.on('error', (err) => {
-      clearTimeout(timer);
-      log.error('query_codebase spawn failed', { provider, error: String(err) });
-      resolve(`Provider query failed: ${String(err)}`);
+      if (settled) return;
+      const message = String(err);
+      log.error('query_codebase spawn failed', { provider, error: message });
+      finish(`Provider query failed: ${message}`, message);
     });
 
     child.on('close', (code) => {
-      clearTimeout(timer);
+      if (settled) return;
       if (killed) {
+        const reason = `timed out after ${Math.round(timeoutMs / 1000)}s`;
         log.error('query_codebase timed out', {
           provider,
           projectPath,
-          timeoutMs: TIMEOUT_MS,
+          timeoutMs,
           stdoutChars: stdout.length,
           stderrPreview: stderr.trim().slice(0, 300),
         });
-        resolve(`Provider query failed: timed out after ${TIMEOUT_MS / 1000}s`);
+        finish(`Provider query failed: ${reason}`, reason);
         return;
       }
       if (code !== 0) {
-        const detail = stderr.trim() ? ` | stderr: ${stderr.trim().slice(0, 300)}` : '';
+        const stderrPreview = stderr.trim().slice(0, 300);
+        const detail = stderrPreview ? ` | stderr: ${stderrPreview}` : '';
+        const reason = `exit code ${code}${detail}`;
         log.error('query_codebase subprocess failed', {
           provider,
           projectPath,
           exitCode: String(code),
-          stderrPreview: stderr.trim().slice(0, 300),
+          stderrPreview,
         });
-        resolve(`Provider query failed: exit code ${code}${detail}`);
+        finish(`Provider query failed: ${reason}`, reason);
         return;
       }
-      resolve(stdout.trim().slice(0, 6000) || '(no output)');
+      finish(stdout.trim().slice(0, 6000) || '(no output)');
     });
   });
 }

@@ -205,6 +205,18 @@ describe('MessageParser URL extraction', () => {
       const result = parser.isAmbientTeamMessage('<@U123> hey team');
       expect(result).toBe(true); // After stripping mentions
     });
+
+    it('returns false for greeting + work request language', () => {
+      const result = parser.isAmbientTeamMessage('hey team, can someone review this PR today?');
+      expect(result).toBe(false);
+    });
+
+    it('returns false for greeting + URLs', () => {
+      const result = parser.isAmbientTeamMessage(
+        'hey guys, please address https://github.com/org/repo/issues/42',
+      );
+      expect(result).toBe(false);
+    });
   });
 
   describe('parseSlackJobRequest - project hint extraction', () => {
@@ -255,6 +267,17 @@ describe('MessageParser URL extraction', () => {
   });
 
   describe('parseSlackIssuePickupRequest edge cases', () => {
+    it('parses "pick this PRD" phrasing with issue URL', () => {
+      const result = parser.parseSlackIssuePickupRequest(
+        'hey guys i need someone to pick this PRD https://github.com/ColdstartLabs-ca/autopilotrank.com/issues/26',
+      );
+      expect(result).toEqual({
+        issueNumber: '26',
+        issueUrl: 'https://github.com/ColdstartLabs-ca/autopilotrank.com/issues/26',
+        repoHint: 'autopilotrank.com',
+      });
+    });
+
     it('handles project board URLs with mixed case encoding', () => {
       const url = 'https://github.com/users/test/projects/1?issue=TEST%7Crepo%7C42';
       const result = parser.parseSlackIssuePickupRequest(`pickup ${url}`);

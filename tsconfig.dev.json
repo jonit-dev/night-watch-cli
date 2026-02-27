@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["packages/core/src/*"],
+      "@night-watch/core": ["packages/core/src/index.ts"],
+      "@night-watch/core/*": ["packages/core/src/*"],
+      "@night-watch/slack": ["packages/slack/src/index.ts"],
+      "@night-watch/slack/*": ["packages/slack/src/*"],
+      "@night-watch/server": ["packages/server/src/index.ts"],
+      "@night-watch/server/*": ["packages/server/src/*"],
+      "@jonit-dev/night-watch-cli": ["packages/cli/src/cli.ts"],
+      "@jonit-dev/night-watch-cli/*": ["packages/cli/src/*"]
+    }
+  }
+}

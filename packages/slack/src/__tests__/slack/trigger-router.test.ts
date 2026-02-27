@@ -1,5 +1,8 @@
 import 'reflect-metadata';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import type { IAgentPersona } from '@night-watch/core';
 import type { IRegistryEntry } from '@night-watch/core';
 import { getRepositories } from '@night-watch/core';
@@ -276,6 +279,29 @@ describe('TriggerRouter', () => {
       const result = router.resolveTargetProject('C999', projects);
       expect(result).toBeNull();
     });
+
+    it('resolves a local workspace folder when hint is not in registry', () => {
+      const { router } = buildRouter();
+      const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nw-router-'));
+      const registeredProjectPath = path.join(tmpRoot, 'night-watch-cli');
+      const hintedProjectPath = path.join(tmpRoot, 'autopilotrank.com');
+
+      fs.mkdirSync(registeredProjectPath);
+      fs.mkdirSync(hintedProjectPath);
+
+      const projects = [buildProject('p1', 'Night Watch CLI', registeredProjectPath, 'C001')];
+      try {
+        const result = router.resolveTargetProject('C001', projects, 'autopilotrank.com');
+        expect(result).toEqual(
+          expect.objectContaining({
+            name: 'autopilotrank.com',
+            path: hintedProjectPath,
+          }),
+        );
+      } finally {
+        fs.rmSync(tmpRoot, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('triggerIssueReviewIfFound', () => {
@@ -316,6 +342,30 @@ describe('TriggerRouter', () => {
       // Give fire-and-forget promise time to resolve
       await new Promise((r) => setTimeout(r, 10));
       expect(engine.startDiscussion).toHaveBeenCalledTimes(1);
+    });
+
+    it('routes issue review to URL repo project even when channel is mapped to another project', async () => {
+      const { router, engine } = buildRouter();
+      const projects = [
+        buildProject('p1', 'Night Watch CLI', '/repos/night-watch-cli', 'C001'),
+        buildProject('p2', 'autopilotrank.com', '/repos/autopilotrank.com', 'C999'),
+      ];
+
+      const result = await router.triggerIssueReviewIfFound(
+        'C001',
+        '1.0',
+        'check https://github.com/ColdstartLabs-ca/autopilotrank.com/issues/26',
+        projects,
+      );
+
+      expect(result).toBe(true);
+      await new Promise((r) => setTimeout(r, 10));
+      expect(engine.startDiscussion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectPath: '/repos/autopilotrank.com',
+          ref: 'ColdstartLabs-ca/autopilotrank.com#26',
+        }),
+      );
     });
 
     it('skips review when issue is on cooldown', async () => {
@@ -528,6 +578,32 @@ describe('TriggerRouter', () => {
       expect(result).toBe(true);
       expect(slackClient.postAsAgent).toHaveBeenCalledWith(
         'C003',
+        expect.stringContaining('Which project?'),
+        personas[0],
+        '1700000000.001',
+      );
+      expect(jobSpawner.spawnDirectProviderRequest).not.toHaveBeenCalled();
+    });
+
+    it('asks for project when explicit hint does not resolve (single registered project)', async () => {
+      const { router, slackClient, jobSpawner } = buildRouter([
+        buildProject('p1', 'Alpha', '/repos/alpha', 'C001'),
+      ]);
+      const personas = [buildPersona('p1', 'Dev')];
+      const projects = [buildProject('p1', 'Alpha', '/repos/alpha', 'C001')];
+      const ctx: ITriggerContext = {
+        event: buildEvent({ type: 'app_mention', text: 'claude on unknown-repo fix this' }),
+        channel: 'C001',
+        threadTs: '1700000000.001',
+        messageTs: '1700000000.001',
+        personas,
+        projects,
+      };
+      const result = await router.tryRoute(ctx);
+
+      expect(result).toBe(true);
+      expect(slackClient.postAsAgent).toHaveBeenCalledWith(
+        'C001',
         expect.stringContaining('Which project?'),
         personas[0],
         '1700000000.001',
@@ -943,6 +1019,35 @@ describe('TriggerRouter', () => {
         projects,
       };
       const result = await router.tryRoute(ctx);
+      expect(result).toBe(true);
+      expect(slackClient.postAsAgent).toHaveBeenCalledWith(
+        'C001',
+        expect.stringContaining('Which project?'),
+        personas[0],
+        '1700000000.001',
+      );
+      expect(jobSpawner.spawnNightWatchJob).not.toHaveBeenCalled();
+    });
+
+    it('asks for project when issue URL repo is unknown and only one project is registered', async () => {
+      const { router, slackClient, jobSpawner } = buildRouter([
+        buildProject('p1', 'Alpha', '/repos/alpha', 'C001'),
+      ]);
+      const personas = [buildPersona('p1', 'Dev')];
+      const projects = [buildProject('p1', 'Alpha', '/repos/alpha', 'C001')];
+      const ctx: ITriggerContext = {
+        event: buildEvent({
+          type: 'message',
+          text: 'night watch pick up https://github.com/org/unknown/issues/42',
+        }),
+        channel: 'C001',
+        threadTs: '1700000000.001',
+        messageTs: '1700000000.001',
+        personas,
+        projects,
+      };
+      const result = await router.tryRoute(ctx);
+
       expect(result).toBe(true);
       expect(slackClient.postAsAgent).toHaveBeenCalledWith(
         'C001',

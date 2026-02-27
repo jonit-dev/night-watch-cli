@@ -7,6 +7,8 @@
 import { INightWatchConfig, createLogger, getRepositories } from '@night-watch/core';
 import type { IAgentPersona, IRegistryEntry } from '@night-watch/core';
 import { execFileSync } from 'child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { CascadingReplyHandler } from './cascading-reply-handler.js';
 import { SlackClient } from './client.js';
 import { ContextFetcher } from './context-fetcher.js';
@@ -89,7 +91,7 @@ export class TriggerRouter {
       return false;
     }
 
-    const targetProject = this.resolveTargetProject(channel, projects);
+    const targetProject = this.resolveTargetProject(channel, projects, reviewable.repo);
     if (!targetProject) return false;
 
     const issueContext = await this.contextFetcher
@@ -106,7 +108,13 @@ export class TriggerRouter {
     };
 
     this.state.markIssueReviewed(reviewable.issueUrl);
-    log.info('starting issue review', { ref: reviewable.issueRef, channel, ts });
+    log.info('starting issue review', {
+      ref: reviewable.issueRef,
+      repo: reviewable.repo,
+      project: targetProject.name,
+      channel,
+      ts,
+    });
     void this.engine
       .startDiscussion(trigger)
       .catch((e: unknown) => log.warn('issue-review startDiscussion failed', { error: String(e) }));
@@ -139,11 +147,53 @@ export class TriggerRouter {
     projects: IRegistryEntry[],
     projectHint?: string,
   ): IRegistryEntry | null {
-    if (projectHint) return this.resolveProjectByHint(projects, projectHint);
+    if (projectHint) {
+      const direct = this.resolveProjectByHint(projects, projectHint);
+      if (direct) return direct;
+      return this.resolveWorkspaceProjectByHint(projects, projectHint);
+    }
     return (
       projects.find((p) => p.slackChannelId === channel) ??
       (projects.length === 1 ? projects[0] : null)
     );
+  }
+
+  private resolveWorkspaceProjectByHint(
+    projects: IRegistryEntry[],
+    projectHint: string,
+  ): IRegistryEntry | null {
+    const hint = normalizeProjectRef(projectHint);
+    if (!hint) return null;
+
+    const searchRoots = new Set<string>();
+    for (const project of projects) {
+      const root = path.dirname(project.path);
+      if (root) searchRoots.add(root);
+    }
+    // Fallback root when registry is sparse (common during ad-hoc Slack requests).
+    searchRoots.add(path.dirname(process.cwd()));
+
+    for (const root of searchRoots) {
+      let entries: fs.Dirent[] = [];
+      try {
+        entries = fs.readdirSync(root, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      const matchedDir = entries.find((entry) => {
+        if (!entry.isDirectory()) return false;
+        const candidate = normalizeProjectRef(entry.name);
+        return candidate === hint || candidate.includes(hint) || hint.includes(candidate);
+      });
+      if (!matchedDir) continue;
+
+      const matchedPath = path.resolve(root, matchedDir.name);
+      const existing = projects.find((project) => path.resolve(project.path) === matchedPath);
+      if (existing) return existing;
+      return { name: matchedDir.name, path: matchedPath };
+    }
+
+    return null;
   }
 
   /**
@@ -158,6 +208,8 @@ export class TriggerRouter {
   ): Promise<IRegistryEntry | null> {
     const fast = this.resolveTargetProject(channel, projects, hint);
     if (fast) return fast;
+    // If a hint was explicit but unresolved, do not silently fall back to another project.
+    if (hint) return null;
     return matchProjectToMessage(text, projects, this.config).catch(() => null);
   }
 

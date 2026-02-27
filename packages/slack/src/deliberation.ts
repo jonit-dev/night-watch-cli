@@ -30,6 +30,7 @@ import {
   executeReadRoadmap,
   executeShellCommand,
   fetchRepoLabels,
+  getCodebaseQueryAvailability,
   resolvePersonaAIConfig,
 } from './ai/index.js';
 import { BoardIntegration } from './board-integration.js';
@@ -277,6 +278,11 @@ export class DeliberationEngine {
 
     const resolved = resolvePersonaAIConfig(persona, this.config);
     const useTools = Boolean(discussion.projectPath && resolved.provider === 'anthropic');
+    const codebaseProvider = (this.config.providerEnv?.['CODEBASE_QUERY_PROVIDER'] ??
+      'claude') as 'claude' | 'codex';
+    const codebaseQueryAvailable = useTools
+      ? getCodebaseQueryAvailability(discussion.projectPath, codebaseProvider).available
+      : false;
 
     const contributionPrompt = buildContributionPrompt(
       persona,
@@ -284,6 +290,7 @@ export class DeliberationEngine {
       historyText,
       discussion.round,
       useTools,
+      codebaseQueryAvailable,
     );
 
     let message: string;
@@ -294,7 +301,7 @@ export class DeliberationEngine {
         const repoLabels = boardConfig ? fetchRepoLabels(discussion.projectPath) : [];
         const tools = [
           ...buildFilesystemTools(),
-          buildCodebaseQueryTool(),
+          ...(codebaseQueryAvailable ? [buildCodebaseQueryTool(codebaseProvider)] : []),
           buildShellTool(discussion.projectPath),
           ...(boardConfig ? buildBoardTools(repoLabels) : []),
         ];
@@ -305,16 +312,16 @@ export class DeliberationEngine {
         registry.set('read_file', (input) =>
           Promise.resolve(executeReadFile(String(input['path'] ?? ''), discussion.projectPath)),
         );
-        const codebaseProvider = (this.config.providerEnv?.['CODEBASE_QUERY_PROVIDER'] ??
-          'claude') as 'claude' | 'codex';
-        registry.set('query_codebase', (input) =>
-          executeCodebaseQuery(
-            String(input['prompt'] ?? ''),
-            discussion.projectPath,
-            codebaseProvider,
-            this.config.providerEnv,
-          ),
-        );
+        if (codebaseQueryAvailable) {
+          registry.set('query_codebase', (input) =>
+            executeCodebaseQuery(
+              String(input['prompt'] ?? ''),
+              discussion.projectPath,
+              codebaseProvider,
+              this.config.providerEnv,
+            ),
+          );
+        }
         registry.set('run_command', (input) =>
           executeShellCommand(
             String(input['command'] ?? ''),
@@ -484,6 +491,11 @@ export class DeliberationEngine {
 
       const resolved = resolvePersonaAIConfig(persona, this.config);
       const useTools = Boolean(trigger.projectPath && resolved.provider === 'anthropic');
+      const codebaseProvider = (this.config.providerEnv?.['CODEBASE_QUERY_PROVIDER'] ??
+        'claude') as 'claude' | 'codex';
+      const codebaseQueryAvailable = useTools
+        ? getCodebaseQueryAvailability(trigger.projectPath, codebaseProvider).available
+        : false;
 
       const contributionPrompt = buildContributionPrompt(
         persona,
@@ -491,6 +503,7 @@ export class DeliberationEngine {
         historyText,
         updatedDiscussion.round,
         useTools,
+        codebaseQueryAvailable,
       );
 
       let message: string;
@@ -501,7 +514,7 @@ export class DeliberationEngine {
           const repoLabels = boardConfig ? fetchRepoLabels(trigger.projectPath) : [];
           const tools = [
             ...buildFilesystemTools(),
-            buildCodebaseQueryTool(),
+            ...(codebaseQueryAvailable ? [buildCodebaseQueryTool(codebaseProvider)] : []),
             buildShellTool(trigger.projectPath),
             ...(boardConfig ? buildBoardTools(repoLabels) : []),
           ];
@@ -512,16 +525,16 @@ export class DeliberationEngine {
           registry.set('read_file', (input) =>
             Promise.resolve(executeReadFile(String(input['path'] ?? ''), trigger.projectPath)),
           );
-          const codebaseProvider = (this.config.providerEnv?.['CODEBASE_QUERY_PROVIDER'] ??
-            'claude') as 'claude' | 'codex';
-          registry.set('query_codebase', (input) =>
-            executeCodebaseQuery(
-              String(input['prompt'] ?? ''),
-              trigger.projectPath,
-              codebaseProvider,
-              this.config.providerEnv,
-            ),
-          );
+          if (codebaseQueryAvailable) {
+            registry.set('query_codebase', (input) =>
+              executeCodebaseQuery(
+                String(input['prompt'] ?? ''),
+                trigger.projectPath,
+                codebaseProvider,
+                this.config.providerEnv,
+              ),
+            );
+          }
           registry.set('run_command', (input) =>
             executeShellCommand(
               String(input['command'] ?? ''),
@@ -702,6 +715,7 @@ export class DeliberationEngine {
     incomingText: string,
     persona: IAgentPersona,
     projectContext?: string,
+    projectPathOverride?: string,
   ): Promise<string> {
     let history: ISlackMessage[] = [];
     try {
@@ -730,12 +744,18 @@ export class DeliberationEngine {
       ? `There are linked URLs in the context above — you have seen their title and summary. Reference what the link is actually about if relevant; don't pretend you haven't seen it.\n`
       : '';
 
-    const projectPathForTools = this.resolveReplyProjectPath(channel, threadTs);
+    const projectPathForTools = projectPathOverride ?? this.resolveReplyProjectPath(channel, threadTs);
     const boardConfig = projectPathForTools
       ? this.board.resolveBoardConfig(projectPathForTools)
       : null;
     const resolved = resolvePersonaAIConfig(persona, this.config);
     const useTools = Boolean(projectPathForTools && resolved.provider === 'anthropic');
+    const codebaseProvider = (this.config.providerEnv?.['CODEBASE_QUERY_PROVIDER'] ??
+      'claude') as 'claude' | 'codex';
+    const codebaseQueryAvailable =
+      useTools && projectPathForTools
+        ? getCodebaseQueryAvailability(projectPathForTools, codebaseProvider).available
+        : false;
 
     // For memory: best-effort — fall back to the channel's configured project or first registered
     const replyProjectSlug = this.resolveReplyProjectSlug(channel, projectPathForTools);
@@ -763,9 +783,17 @@ export class DeliberationEngine {
     }
 
     const toolGuidance = useTools
-      ? `- You have tools: read_file (instant file read), read_roadmap (read ROADMAP.md), query_codebase (AI-powered codebase search), run_command (run shell commands), and board tools.\n` +
+      ? `- You have tools: read_file (instant file read), read_roadmap (read ROADMAP.md), run_command (run shell commands), and board tools.${
+          codebaseQueryAvailable
+            ? ' query_codebase (AI-powered codebase search) is also available.'
+            : ' query_codebase is temporarily unavailable while the provider recovers.'
+        }\n` +
         `- ALWAYS verify before making claims about file contents, task status, or implementation details. Never guess or make up information. Be truthful and precise.\n` +
-        `- Use read_file when you know the file path (instant). Use query_codebase for open-ended searches ("find all usages of X", "how does auth work"). Use run_command to run build/test commands — the cwd is already the project root, just pass the command directly (e.g. \`yarn verify\`).\n` +
+        `- Use read_file when you know the file path (instant).${
+          codebaseQueryAvailable
+            ? ' Use query_codebase for open-ended searches ("find all usages of X", "how does auth work").'
+            : ' For open-ended searches while query_codebase is down, combine read_file + run_command (e.g. `rg`, `git grep`, `yarn test`).'
+        } Use run_command to run build/test commands — the cwd is already the project root, just pass the command directly (e.g. \`yarn verify\`).\n` +
         `- After reading, cite with \`path/to/file.ts#L42-L45\` and quote the actual line.\n`
       : `- When referencing code, always include the file path: \`path/to/file.ts#L42-L45\`. No vague "in the auth module" — name the file.\n`;
 
@@ -773,6 +801,7 @@ export class DeliberationEngine {
       agent: persona.name,
       useTools,
       projectPath: projectPathForTools,
+      projectPathOverride: projectPathOverride ?? undefined,
       hasProjectContext: Boolean(projectContext),
     });
 
@@ -802,7 +831,7 @@ export class DeliberationEngine {
       ...(useTools
         ? [
             ...buildFilesystemTools(),
-            buildCodebaseQueryTool(),
+            ...(codebaseQueryAvailable ? [buildCodebaseQueryTool(codebaseProvider)] : []),
             buildShellTool(projectPathForTools ?? undefined),
           ]
         : []),
@@ -820,16 +849,16 @@ export class DeliberationEngine {
         registry.set('read_file', (input) =>
           Promise.resolve(executeReadFile(String(input['path'] ?? ''), projectPathForTools!)),
         );
-        const codebaseProvider = (this.config.providerEnv?.['CODEBASE_QUERY_PROVIDER'] ??
-          'claude') as 'claude' | 'codex';
-        registry.set('query_codebase', (input) =>
-          executeCodebaseQuery(
-            String(input['prompt'] ?? ''),
-            projectPathForTools!,
-            codebaseProvider,
-            this.config.providerEnv,
-          ),
-        );
+        if (codebaseQueryAvailable) {
+          registry.set('query_codebase', (input) =>
+            executeCodebaseQuery(
+              String(input['prompt'] ?? ''),
+              projectPathForTools!,
+              codebaseProvider,
+              this.config.providerEnv,
+            ),
+          );
+        }
         registry.set('run_command', (input) =>
           executeShellCommand(
             String(input['command'] ?? ''),

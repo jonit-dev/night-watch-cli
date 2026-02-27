@@ -312,6 +312,42 @@ export class SlackInteractionListener {
       : `Registered projects: ${projects.map((p) => p.name).join(', ')}.`;
   }
 
+  private resolveAdHocProjectPath(
+    channel: string,
+    threadTs: string,
+    text: string,
+    projects: IRegistryEntry[],
+    githubUrls: string[],
+  ): string | null {
+    if (projects.length === 0) return null;
+
+    const projectHints: string[] = [];
+
+    const issueReviewable = this.parser.parseSlackIssueReviewable(text);
+    if (issueReviewable?.repo) projectHints.push(issueReviewable.repo);
+
+    const pickupRequest = this.parser.parseSlackIssuePickupRequest(text);
+    if (pickupRequest?.repoHint) projectHints.push(pickupRequest.repoHint);
+
+    const jobRequest = this.parser.parseSlackJobRequest(text);
+    if (jobRequest?.projectHint) projectHints.push(jobRequest.projectHint);
+
+    const providerRequest = this.parser.parseSlackProviderRequest(text);
+    if (providerRequest?.projectHint) projectHints.push(providerRequest.projectHint);
+
+    for (const url of githubUrls) {
+      const match = url.match(/github\.com\/[^/\s<>]+\/([^/\s<>]+)/i);
+      if (match?.[1]) projectHints.push(match[1].toLowerCase());
+    }
+
+    for (const hint of [...new Set(projectHints)]) {
+      const project = this.triggerRouter.resolveTargetProject(channel, projects, hint);
+      if (project?.path) return project.path;
+    }
+
+    return this.state.getRememberedAdHocProjectPath(channel, threadTs);
+  }
+
   private getRoadmapStatusForChannel(
     channel: string,
     projects: IRegistryEntry[],
@@ -404,6 +440,7 @@ export class SlackInteractionListener {
     const ts = event.ts as string;
     const threadTs = event.thread_ts ?? ts;
     const text = event.text ?? '';
+    const isAmbientTeamMessage = this.parser.isAmbientTeamMessage(text);
     const messageKey = this.parser.buildInboundMessageKey(channel, ts, event.type);
     this.state.markChannelActivity(channel);
 
@@ -421,6 +458,7 @@ export class SlackInteractionListener {
     // Fetch GitHub issue/PR content from URLs in the message so agents can inspect them.
     const githubUrls = this.parser.extractGitHubIssueUrls(text);
     const genericUrls = this.parser.extractGenericUrls(text);
+    const adHocProjectPath = this.resolveAdHocProjectPath(channel, threadTs, text, projects, githubUrls);
     log.info('processing message', {
       channel,
       thread: threadTs,
@@ -485,6 +523,7 @@ export class SlackInteractionListener {
             text,
             persona,
             fullContext,
+            adHocProjectPath ?? undefined,
           );
           lastPersonaId = persona.id;
         }
@@ -492,11 +531,16 @@ export class SlackInteractionListener {
       }
 
       if (!discussion && mentionedPersonas[0]) {
-        this.state.rememberAdHocThreadPersona(channel, threadTs, mentionedPersonas[0].id);
+        this.state.rememberAdHocThreadPersona(
+          channel,
+          threadTs,
+          mentionedPersonas[0].id,
+          adHocProjectPath ?? undefined,
+        );
       }
 
       // Follow up if the last agent reply mentions other teammates by name.
-      if (lastPosted && lastPersonaId) {
+      if (isAmbientTeamMessage && lastPosted && lastPersonaId) {
         await this.replyHandler.followAgentMentions(
           lastPosted,
           channel,
@@ -504,6 +548,7 @@ export class SlackInteractionListener {
           personas,
           fullContext,
           lastPersonaId,
+          adHocProjectPath ?? undefined,
         );
       }
       return;
@@ -542,6 +587,7 @@ export class SlackInteractionListener {
         followUpPersona,
         personas,
         fullContext,
+        adHocProjectPath,
       );
       return;
     }
@@ -568,13 +614,14 @@ export class SlackInteractionListener {
           followUpPersona,
           personas,
           fullContext,
+          adHocProjectPath,
         );
         return;
       }
     }
 
     // Ambient team messages ("hey guys", "happy friday", "are you all alive?") get multiple replies.
-    if (this.parser.isAmbientTeamMessage(text)) {
+    if (isAmbientTeamMessage) {
       log.info('ambient team message — engaging multiple personas', { channel });
       await this.replyHandler.engageMultiplePersonas(
         channel,
@@ -583,6 +630,7 @@ export class SlackInteractionListener {
         text,
         personas,
         fullContext,
+        adHocProjectPath ?? undefined,
       );
       return;
     }
@@ -600,6 +648,7 @@ export class SlackInteractionListener {
           randomPersona,
           personas,
           fullContext,
+          adHocProjectPath,
         );
         return;
       }
@@ -632,6 +681,7 @@ export class SlackInteractionListener {
         fallbackPersona,
         personas,
         fullContext,
+        adHocProjectPath,
       );
       return;
     }
@@ -647,6 +697,7 @@ export class SlackInteractionListener {
     persona: IAgentPersona,
     personas: IAgentPersona[],
     fullContext: string,
+    adHocProjectPath: string | null = null,
   ): Promise<void> {
     await this.replyHandler.applyHumanResponseTiming(channel, ts, persona);
     log.info('replying as agent', { agent: persona.name, channel });
@@ -656,24 +707,34 @@ export class SlackInteractionListener {
       text,
       persona,
       fullContext,
+      adHocProjectPath ?? undefined,
     );
     this.state.markPersonaReply(channel, threadTs, persona.id);
-    this.state.rememberAdHocThreadPersona(channel, threadTs, persona.id);
-    await this.replyHandler.followAgentMentions(
-      postedText,
+    this.state.rememberAdHocThreadPersona(
       channel,
       threadTs,
-      personas,
-      fullContext,
       persona.id,
+      adHocProjectPath ?? undefined,
     );
-    void this.replyHandler.maybePiggybackReply(
-      channel,
-      threadTs,
-      text,
-      personas,
-      fullContext,
-      persona.id,
-    );
+    if (this.parser.isAmbientTeamMessage(text)) {
+      await this.replyHandler.followAgentMentions(
+        postedText,
+        channel,
+        threadTs,
+        personas,
+        fullContext,
+        persona.id,
+        adHocProjectPath ?? undefined,
+      );
+      void this.replyHandler.maybePiggybackReply(
+        channel,
+        threadTs,
+        text,
+        personas,
+        fullContext,
+        persona.id,
+        adHocProjectPath ?? undefined,
+      );
+    }
   }
 }
