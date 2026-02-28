@@ -2,20 +2,17 @@
  * TypeScript interfaces for Night Watch CLI configuration
  */
 
-import { IBoardProviderConfig } from "./board/types.js";
-import { ISlackBotConfig } from "@/shared/types.js";
-
-export type { ISlackBotConfig };
+import { IBoardProviderConfig } from './board/types.js';
 
 /**
  * Supported AI providers
  */
-export type Provider = "claude" | "codex";
+export type Provider = 'claude' | 'codex';
 
 /**
  * Claude model to use for native (non-proxy) execution
  */
-export type ClaudeModel = "sonnet" | "opus";
+export type ClaudeModel = 'sonnet' | 'opus';
 
 /**
  * Complete Night Watch configuration
@@ -114,12 +111,9 @@ export interface INightWatchConfig {
 
   /** Code audit configuration */
   audit: IAuditConfig;
-
-  /** Slack Bot API configuration (optional) */
-  slack?: ISlackBotConfig;
 }
 
-export type QaArtifacts = "screenshot" | "video" | "both";
+export type QaArtifacts = 'screenshot' | 'video' | 'both';
 
 export interface IQaConfig {
   /** Whether the QA process is enabled */
@@ -147,13 +141,21 @@ export interface IAuditConfig {
   maxRuntime: number;
 }
 
-export type WebhookType = "slack" | "discord" | "telegram";
-export type NotificationEvent = "run_started" | "run_succeeded" | "run_failed" | "run_timeout" | "review_completed" | "pr_auto_merged" | "rate_limit_fallback" | "qa_completed";
+export type WebhookType = 'slack' | 'discord' | 'telegram';
+export type NotificationEvent =
+  | 'run_started'
+  | 'run_succeeded'
+  | 'run_failed'
+  | 'run_timeout'
+  | 'review_completed'
+  | 'pr_auto_merged'
+  | 'rate_limit_fallback'
+  | 'qa_completed';
 
 /**
  * Git merge methods for auto-merge
  */
-export type MergeMethod = "squash" | "merge" | "rebase";
+export type MergeMethod = 'squash' | 'merge' | 'rebase';
 
 export interface IWebhookConfig {
   type: WebhookType;
