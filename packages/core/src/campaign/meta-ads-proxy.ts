@@ -14,7 +14,7 @@ export interface IAdAccount {
   id: string;
   name: string;
   currency: string;
-  timezoneName: string;
+  timezone: string;
   amountSpent: string;
   accountStatus: number;
 }
