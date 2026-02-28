@@ -1,5 +1,4 @@
 import {
-  Blocks,
   Briefcase,
   Calendar,
   ChevronLeft,
@@ -28,7 +27,6 @@ const Sidebar: React.FC = () => {
     { icon: Map, label: 'Roadmap', path: '/roadmap' },
     { icon: Calendar, label: 'Scheduling', path: '/scheduling' },
     { icon: Terminal, label: 'Logs', path: '/logs' },
-    { icon: Blocks, label: 'Integrations', path: '/integrations' },
     { icon: Users, label: 'Agents', path: '/agents' },
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];

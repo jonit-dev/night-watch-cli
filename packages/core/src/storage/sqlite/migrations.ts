@@ -3,10 +3,10 @@
  * Creates all required tables if they do not already exist (idempotent).
  */
 
-import Database from "better-sqlite3";
+import Database from 'better-sqlite3';
 
 /** Current schema version */
-const SCHEMA_VERSION = "1";
+const SCHEMA_VERSION = '1';
 
 /**
  * Run all migrations against the provided database instance.
@@ -69,32 +69,33 @@ export function runMigrations(db: Database.Database): void {
       updated_at            INTEGER NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS slack_discussions (
-      id                TEXT    PRIMARY KEY,
-      project_path      TEXT    NOT NULL,
-      trigger_type      TEXT    NOT NULL,
-      trigger_ref       TEXT    NOT NULL,
-      channel_id        TEXT    NOT NULL,
-      thread_ts         TEXT    NOT NULL,
-      status            TEXT    NOT NULL DEFAULT 'active',
-      round             INTEGER NOT NULL DEFAULT 1,
-      participants_json TEXT    NOT NULL DEFAULT '[]',
-      consensus_result  TEXT,
-      created_at        INTEGER NOT NULL,
-      updated_at        INTEGER NOT NULL
-    );
   `);
 
-  // Add slack_channel_id to projects table if it doesn't exist (migration for Phase 4)
+  // Phase 2 cleanup: drop slack_discussions table (multi-agent deliberation removed)
+  db.exec(`DROP TABLE IF EXISTS slack_discussions`);
+
+  // Phase 2 cleanup: drop slack_channel_id column from projects (no longer needed)
+  // SQLite does not support DROP COLUMN before version 3.35.0; use a safe recreate approach.
   try {
-    db.exec(`ALTER TABLE projects ADD COLUMN slack_channel_id TEXT`);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS projects_new (
+        id         INTEGER PRIMARY KEY,
+        name       TEXT    NOT NULL,
+        path       TEXT    NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL
+      );
+      INSERT OR IGNORE INTO projects_new (id, name, path, created_at)
+        SELECT id, name, path, created_at FROM projects;
+      DROP TABLE projects;
+      ALTER TABLE projects_new RENAME TO projects;
+    `);
   } catch {
-    // Column already exists — this is expected after first run
+    // Projects table already in clean shape — no-op
   }
 
   // Upsert the current schema version into schema_meta
   db.prepare(
     `INSERT INTO schema_meta (key, value) VALUES ('schema_version', ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
   ).run(SCHEMA_VERSION);
 }

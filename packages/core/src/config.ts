@@ -281,16 +281,8 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   if (rawSlack) {
     const slack: ISlackBotConfig = {
       enabled: readBoolean(rawSlack.enabled) ?? DEFAULT_SLACK_BOT_CONFIG.enabled,
-      botToken: readString(rawSlack.botToken) ?? DEFAULT_SLACK_BOT_CONFIG.botToken,
-      autoCreateProjectChannels:
-        readBoolean(rawSlack.autoCreateProjectChannels) ??
-        DEFAULT_SLACK_BOT_CONFIG.autoCreateProjectChannels,
-      discussionEnabled:
-        readBoolean(rawSlack.discussionEnabled) ?? DEFAULT_SLACK_BOT_CONFIG.discussionEnabled,
+      webhookUrl: readString(rawSlack.webhookUrl) ?? DEFAULT_SLACK_BOT_CONFIG.webhookUrl,
     };
-    if (typeof rawSlack.appToken === 'string') {
-      slack.appToken = rawSlack.appToken;
-    }
     normalized.slack = slack;
   }
 
@@ -423,8 +415,7 @@ function mergeConfigs(
       merged.fallbackOnRateLimit = fileConfig.fallbackOnRateLimit;
     if (fileConfig.claudeModel !== undefined) merged.claudeModel = fileConfig.claudeModel;
     if (fileConfig.qa !== undefined) merged.qa = { ...merged.qa, ...fileConfig.qa };
-    if (fileConfig.slack !== undefined)
-      merged.slack = { ...merged.slack, ...fileConfig.slack };
+    if (fileConfig.slack !== undefined) merged.slack = { ...merged.slack, ...fileConfig.slack };
   }
 
   // Merge env config (takes precedence)
@@ -460,8 +451,7 @@ function mergeConfigs(
     merged.fallbackOnRateLimit = envConfig.fallbackOnRateLimit;
   if (envConfig.claudeModel !== undefined) merged.claudeModel = envConfig.claudeModel;
   if (envConfig.qa !== undefined) merged.qa = { ...merged.qa, ...envConfig.qa };
-  if (envConfig.slack !== undefined)
-    merged.slack = { ...merged.slack, ...envConfig.slack };
+  if (envConfig.slack !== undefined) merged.slack = { ...merged.slack, ...envConfig.slack };
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
 

@@ -3,7 +3,6 @@ import { defineConfig } from 'vitest/config';
 
 const coreDir = fileURLToPath(new URL('../core/src', import.meta.url));
 const serverDir = fileURLToPath(new URL('../server/src', import.meta.url));
-const slackDir = fileURLToPath(new URL('../slack/src', import.meta.url));
 const cliDir = fileURLToPath(new URL('./src', import.meta.url));
 
 export default defineConfig({
@@ -30,14 +29,6 @@ export default defineConfig({
       {
         find: '@night-watch/server',
         replacement: `${serverDir}/index.ts`,
-      },
-      {
-        find: /^@night-watch\/slack\/(.+)$/,
-        replacement: `${slackDir}/$1`,
-      },
-      {
-        find: '@night-watch/slack',
-        replacement: `${slackDir}/index.ts`,
       },
       // Core-internal @/ aliases
       {

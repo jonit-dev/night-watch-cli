@@ -305,7 +305,6 @@ export async function sendWebhook(
 
 /**
  * Send notifications to all configured webhooks.
- * For Slack Bot API notifications, call sendSlackBotNotification() from @night-watch/slack.
  */
 export async function sendNotifications(
   config: INightWatchConfig,

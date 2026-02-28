@@ -23,7 +23,6 @@ import { SqliteExecutionHistoryRepository } from '@/storage/repositories/sqlite/
 import { SqlitePrdStateRepository } from '@/storage/repositories/sqlite/prd-state.repository.js';
 import { SqliteProjectRegistryRepository } from '@/storage/repositories/sqlite/project-registry.repository.js';
 import { SqliteRoadmapStateRepository } from '@/storage/repositories/sqlite/roadmap-state.repository.js';
-import { SqliteSlackDiscussionRepository } from '@/storage/repositories/sqlite/slack-discussion.repository.js';
 import { createDbForDir } from '@/storage/sqlite/client.js';
 import { runMigrations } from '@/storage/sqlite/migrations.js';
 
@@ -61,7 +60,6 @@ export function initContainer(projectDir: string): void {
   container.registerSingleton(SqlitePrdStateRepository);
   container.registerSingleton(SqliteProjectRegistryRepository);
   container.registerSingleton(SqliteRoadmapStateRepository);
-  container.registerSingleton(SqliteSlackDiscussionRepository);
 
   // Register MemoryService as a singleton — no DB dependency, pure filesystem.
   container.registerSingleton(MemoryService);

@@ -2,42 +2,42 @@
  * Tests for global-mode project-scoped agent routes.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
-import request from "supertest";
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import request from 'supertest';
 
-import { createGlobalApp } from "../index.js";
-import { closeDb, registerProject, resetRepositories } from "@night-watch/core/utils/registry.js";
+import { createGlobalApp } from '../index.js';
+import { closeDb, registerProject, resetRepositories } from '@night-watch/core/utils/registry.js';
 
 function encodeProjectId(projectPath: string): string {
-  return encodeURIComponent(projectPath.replace(/\//g, "~"));
+  return encodeURIComponent(projectPath.replace(/\//g, '~'));
 }
 
-describe("global server agent routes", () => {
+describe('global server agent routes', () => {
   let tempDir: string;
   let projectDir: string;
   let app: ReturnType<typeof createGlobalApp>;
 
   beforeEach(() => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "night-watch-global-agents-test-"));
-    process.env.NIGHT_WATCH_HOME = path.join(tempDir, ".night-watch-home");
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'night-watch-global-agents-test-'));
+    process.env.NIGHT_WATCH_HOME = path.join(tempDir, '.night-watch-home');
 
-    projectDir = path.join(tempDir, "project-a");
+    projectDir = path.join(tempDir, 'project-a');
     fs.mkdirSync(projectDir, { recursive: true });
-    fs.writeFileSync(path.join(projectDir, "package.json"), JSON.stringify({ name: "project-a" }));
+    fs.writeFileSync(path.join(projectDir, 'package.json'), JSON.stringify({ name: 'project-a' }));
     fs.writeFileSync(
-      path.join(projectDir, "night-watch.config.json"),
+      path.join(projectDir, 'night-watch.config.json'),
       JSON.stringify({
-        projectName: "project-a",
-        defaultBranch: "main",
-        provider: "claude",
+        projectName: 'project-a',
+        defaultBranch: 'main',
+        provider: 'claude',
         reviewerEnabled: true,
-        prdDirectory: "docs/PRDs/night-watch",
+        prdDirectory: 'docs/PRDs/night-watch',
       }),
     );
-    fs.mkdirSync(path.join(projectDir, "docs", "PRDs", "night-watch", "done"), { recursive: true });
+    fs.mkdirSync(path.join(projectDir, 'docs', 'PRDs', 'night-watch', 'done'), { recursive: true });
 
     closeDb();
     resetRepositories();
@@ -52,8 +52,8 @@ describe("global server agent routes", () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("serves /api/projects/:projectId/agents and /seed-defaults", async () => {
-    const projects = await request(app).get("/api/projects");
+  it('serves /api/projects/:projectId/agents and /seed-defaults', async () => {
+    const projects = await request(app).get('/api/projects');
     expect(projects.status).toBe(200);
     expect(Array.isArray(projects.body)).toBe(true);
     const projectName = projects.body[0]?.name as string;
@@ -67,25 +67,6 @@ describe("global server agent routes", () => {
 
     const seed = await request(app).post(`/api/projects/${projectId}/agents/seed-defaults`);
     expect(seed.status).toBe(200);
-    expect(seed.body.message).toContain("seeded");
-  });
-
-  it("serves project-scoped Slack channel routes", async () => {
-    const projects = await request(app).get("/api/projects");
-    expect(projects.status).toBe(200);
-    const projectName = projects.body[0]?.name as string;
-    const projectId = encodeProjectId(projectName);
-
-    const listChannels = await request(app).post(
-      `/api/projects/${projectId}/slack/channels`,
-    ).send({});
-    expect(listChannels.status).toBe(400);
-    expect(listChannels.body.error).toContain("botToken is required");
-
-    const createChannel = await request(app).post(
-      `/api/projects/${projectId}/slack/channels/create`,
-    ).send({});
-    expect(createChannel.status).toBe(400);
-    expect(createChannel.body.error).toContain("botToken is required");
+    expect(seed.body.message).toContain('seeded');
   });
 });

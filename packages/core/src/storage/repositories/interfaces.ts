@@ -3,18 +3,17 @@
  * These interfaces define the API that concrete SQLite implementations must satisfy.
  */
 
-import { IRegistryEntry } from "@/utils/registry.js";
-import { IExecutionRecord } from "@/utils/execution-history.js";
-import { IPrdStateEntry } from "@/utils/prd-states.js";
-import { IRoadmapState } from "@/utils/roadmap-state.js";
-import { ConsensusResult, CreateAgentPersonaInput, DiscussionStatus, IAgentPersona, ISlackDiscussion, TriggerType, UpdateAgentPersonaInput } from "@/shared/types.js";
+import { IRegistryEntry } from '@/utils/registry.js';
+import { IExecutionRecord } from '@/utils/execution-history.js';
+import { IPrdStateEntry } from '@/utils/prd-states.js';
+import { IRoadmapState } from '@/utils/roadmap-state.js';
+import { CreateAgentPersonaInput, IAgentPersona, UpdateAgentPersonaInput } from '@/shared/types.js';
 
 export interface IProjectRegistryRepository {
   getAll(): IRegistryEntry[];
   upsert(entry: IRegistryEntry): void;
   remove(path: string): boolean;
   clear(): void;
-  updateSlackChannel(path: string, channelId: string): void;
 }
 
 export interface IExecutionHistoryRepository {
@@ -48,15 +47,4 @@ export interface IAgentPersonaRepository {
   seedDefaultsOnFirstRun(): void;
   seedDefaults(): void;
   patchDefaultAvatarUrls(): void;
-}
-
-export interface ISlackDiscussionRepository {
-  getById(id: string): ISlackDiscussion | null;
-  getActive(projectPath: string): ISlackDiscussion[];
-  getLatestByTrigger(projectPath: string, triggerType: TriggerType, triggerRef: string): ISlackDiscussion | null;
-  create(discussion: Omit<ISlackDiscussion, 'id' | 'createdAt' | 'updatedAt'>): ISlackDiscussion;
-  updateStatus(id: string, status: DiscussionStatus, consensusResult?: ConsensusResult): void;
-  updateRound(id: string, round: number): void;
-  addParticipant(id: string, agentId: string): void;
-  close(id: string): void;
 }

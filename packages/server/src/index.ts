@@ -24,8 +24,6 @@ import {
   scanRoadmap,
   validateRegistry,
 } from '@night-watch/core';
-import { type ISlackStack, createSlackStack } from '@night-watch/slack/factory.js';
-
 import { errorHandler } from './middleware/error-handler.middleware.js';
 import { setupGracefulShutdown } from './middleware/graceful-shutdown.middleware.js';
 import { resolveProject } from './middleware/project-resolver.middleware.js';
@@ -35,10 +33,6 @@ import { createActionRoutes, createProjectActionRoutes } from './routes/action.r
 import { createAgentRoutes } from './routes/agent.routes.js';
 import { createBoardRoutes, createProjectBoardRoutes } from './routes/board.routes.js';
 import { createConfigRoutes, createProjectConfigRoutes } from './routes/config.routes.js';
-import {
-  createDiscussionRoutes,
-  createProjectDiscussionRoutes,
-} from './routes/discussion.routes.js';
 import { createDoctorRoutes, createProjectDoctorRoutes } from './routes/doctor.routes.js';
 import { createLogRoutes, createProjectLogRoutes } from './routes/log.routes.js';
 import { createPrdRoutes, createProjectPrdRoutes } from './routes/prd.routes.js';
@@ -48,7 +42,6 @@ import {
   createScheduleInfoRoutes,
   createStatusRoutes,
 } from './routes/status.routes.js';
-import { createSlackRoutes } from './routes/slack.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -123,8 +116,6 @@ export function createApp(projectDir: string): Express {
   app.use('/api/config', createConfigRoutes({ projectDir, getConfig: () => config, reloadConfig }));
   app.use('/api/board', createBoardRoutes({ projectDir, getConfig: () => config }));
   app.use('/api/agents', createAgentRoutes());
-  app.use('/api/slack', createSlackRoutes());
-  app.use('/api/discussions', createDiscussionRoutes({ projectDir }));
   app.use('/api/actions', createActionRoutes({ projectDir, getConfig: () => config, sseClients }));
   app.use(
     '/api/roadmap',
@@ -181,8 +172,6 @@ function createProjectRouter() {
   router.use(createProjectLogRoutes());
   router.use(createProjectBoardRoutes());
   router.use('/agents', createAgentRoutes());
-  router.use('/slack', createSlackRoutes());
-  router.use(createProjectDiscussionRoutes());
   router.use(createProjectActionRoutes({ projectSseClients }));
   router.use(createProjectRoadmapRoutes());
 
@@ -239,31 +228,15 @@ export function startServer(projectDir: string, port: number): void {
   bootContainer();
   const config = loadConfig(projectDir);
   const app = createApp(projectDir);
-  const { listener } = createSlackStack(config);
 
   const server = app.listen(port, () => {
     console.log(`\nNight Watch UI  http://localhost:${port}`);
     console.log(`Project         ${projectDir}`);
     console.log(`Provider        ${config.provider}`);
-    const slack = config.slack;
-    if (slack?.enabled && slack.botToken) {
-      console.log(`Slack           enabled — channels auto-created per project`);
-      if (slack.replicateApiToken) console.log(`Avatar gen      Replicate Flux enabled`);
-    } else {
-      console.log(`Slack           not configured`);
-    }
     console.log('');
   });
 
-  void listener.start().catch((err: unknown) => {
-    console.warn(
-      `Slack interaction listener failed to start: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  });
-
-  setupGracefulShutdown(server, async () => {
-    await listener.stop();
-  });
+  setupGracefulShutdown(server);
 }
 
 export function startGlobalServer(port: number): void {
@@ -285,38 +258,14 @@ export function startGlobalServer(port: number): void {
   console.log(`\nNight Watch Global UI`);
   console.log(`Managing ${valid.length} project(s):`);
   for (const p of valid) {
-    const cfg = loadConfig(p.path);
-    const slackStatus = cfg.slack?.enabled && cfg.slack.botToken ? 'slack:on' : 'slack:off';
-    const avatarStatus = cfg.slack?.replicateApiToken ? ' avatar-gen:on' : '';
-    console.log(`  - ${p.name} (${p.path}) [${slackStatus}${avatarStatus}]`);
+    console.log(`  - ${p.name} (${p.path})`);
   }
 
   const app = createGlobalApp();
-  const listenersBySlackToken = new Map<string, ISlackStack>();
-  for (const project of valid) {
-    const cfg = loadConfig(project.path);
-    const slack = cfg.slack;
-    if (!slack?.enabled || !slack.discussionEnabled || !slack.botToken || !slack.appToken) continue;
-    const key = `${slack.botToken}:${slack.appToken}`;
-    if (!listenersBySlackToken.has(key)) {
-      listenersBySlackToken.set(key, createSlackStack(cfg));
-    }
-  }
-  const stacks = Array.from(listenersBySlackToken.values());
 
   const server = app.listen(port, () => {
     console.log(`Night Watch Global UI running at http://localhost:${port}`);
   });
 
-  for (const { listener } of stacks) {
-    void listener.start().catch((err: unknown) => {
-      console.warn(
-        `Slack interaction listener failed to start: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    });
-  }
-
-  setupGracefulShutdown(server, async () => {
-    await Promise.allSettled(stacks.map(({ listener }) => listener.stop()));
-  });
+  setupGracefulShutdown(server);
 }

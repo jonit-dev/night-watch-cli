@@ -3,19 +3,18 @@
  * Manages project entries via the SQLite repository layer.
  */
 
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 
-import { CONFIG_FILE_NAME, GLOBAL_CONFIG_DIR, REGISTRY_FILE_NAME } from "../constants.js";
-import { getRepositories, resetRepositories } from "../storage/repositories/index.js";
-import { closeDb } from "../storage/sqlite/client.js";
-import { getProjectName } from "./status-data.js";
+import { CONFIG_FILE_NAME, GLOBAL_CONFIG_DIR, REGISTRY_FILE_NAME } from '../constants.js';
+import { getRepositories, resetRepositories } from '../storage/repositories/index.js';
+import { closeDb } from '../storage/sqlite/client.js';
+import { getProjectName } from './status-data.js';
 
 export interface IRegistryEntry {
   name: string;
   path: string;
-  slackChannelId?: string;
 }
 
 /**

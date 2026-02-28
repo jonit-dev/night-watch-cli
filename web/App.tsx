@@ -7,7 +7,6 @@ import { useGlobalMode } from './hooks/useGlobalMode';
 import Agents from './pages/Agents';
 import Board from './pages/Board';
 import Dashboard from './pages/Dashboard';
-import Integrations from './pages/Integrations';
 import Logs from './pages/Logs';
 import PRs from './pages/PRs';
 import Roadmap from './pages/Roadmap';
@@ -37,7 +36,6 @@ const App: React.FC = () => {
                 <Route path="/scheduling" element={<Scheduling />} />
                 <Route path="/logs" element={<Logs />} />
                 <Route path="/roadmap" element={<Roadmap />} />
-                <Route path="/integrations" element={<Integrations />} />
                 <Route path="/agents" element={<Agents />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

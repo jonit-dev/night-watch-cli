@@ -14,11 +14,15 @@ import {
   INotificationConfig,
   IWebhookConfig,
   IRoadmapScannerConfig,
-  ISlackBotConfig,
   updateConfig,
   useApi,
   toggleRoadmapScanner,
 } from '../api';
+
+interface ISimplifiedSlackConfig {
+  enabled: boolean;
+  webhookUrl: string;
+}
 
 type ConfigForm = {
   provider: INightWatchConfig['provider'];
@@ -37,14 +41,12 @@ type ConfigForm = {
   prdPriority: string[];
   roadmapScanner: IRoadmapScannerConfig;
   templatesDir: string;
-  slack: ISlackBotConfig;
+  slack: ISimplifiedSlackConfig;
 };
 
-const DEFAULT_SLACK_CONFIG: ISlackBotConfig = {
+const DEFAULT_SLACK_CONFIG: ISimplifiedSlackConfig = {
   enabled: false,
-  botToken: '',
-  autoCreateProjectChannels: false,
-  discussionEnabled: false,
+  webhookUrl: '',
 };
 
 const toFormState = (config: INightWatchConfig): ConfigForm => ({
@@ -68,7 +70,10 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
     autoScanInterval: 300,
   },
   templatesDir: config.templatesDir || '.night-watch/templates',
-  slack: config.slack ?? DEFAULT_SLACK_CONFIG,
+  slack: {
+    enabled: config.slack?.enabled ?? false,
+    webhookUrl: (config.slack as any)?.webhookUrl ?? '',
+  },
 });
 
 // Helper to check if a value looks sensitive
@@ -778,14 +783,14 @@ const Settings: React.FC = () => {
     },
     {
       id: 'slack',
-      label: 'Slack Bot',
+      label: 'Slack',
       content: (
         <Card className="p-6 space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-medium text-slate-200">Slack Bot Integration</h3>
+              <h3 className="text-lg font-medium text-slate-200">Slack Notifications</h3>
               <p className="text-sm text-slate-400">
-                Post notifications as agent personas using the Slack Bot API
+                Send notifications to Slack via an incoming webhook
               </p>
             </div>
             <Switch
@@ -795,40 +800,13 @@ const Settings: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 gap-6 pt-4 border-t border-slate-800">
-            <div className="relative">
-              <Input
-                label="Bot Token (xoxb-...)"
-                type="password"
-                value={form.slack.botToken}
-                onChange={(e) => updateField('slack', { ...form.slack, botToken: e.target.value })}
-                placeholder="xoxb-..."
-                helperText="OAuth Bot Token from your Slack App settings"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-4 pt-4 border-t border-slate-800">
-            <h4 className="text-sm font-medium text-slate-300">Channels</h4>
-            <p className="text-xs text-slate-500">
-              Channels are automatically created per project (e.g. <code>#proj-my-app</code>). All agent messages, deliberations, and notifications for a project are posted to that project&apos;s channel.
-            </p>
-          </div>
-
-          <div className="space-y-4 pt-4 border-t border-slate-800">
-            <h4 className="text-sm font-medium text-slate-300">Options</h4>
-            <Switch
-              label="Auto-create project channels"
-              checked={form.slack.autoCreateProjectChannels}
-              onChange={(checked) =>
-                updateField('slack', { ...form.slack, autoCreateProjectChannels: checked })
-              }
-            />
-            <Switch
-              label="Enable agent deliberation"
-              checked={form.slack.discussionEnabled}
-              onChange={(checked) =>
-                updateField('slack', { ...form.slack, discussionEnabled: checked })
-              }
+            <Input
+              label="Webhook URL"
+              type="text"
+              value={form.slack.webhookUrl}
+              onChange={(e) => updateField('slack', { ...form.slack, webhookUrl: e.target.value })}
+              placeholder="https://hooks.slack.com/services/..."
+              helperText="Incoming Webhook URL from your Slack App settings"
             />
           </div>
         </Card>
