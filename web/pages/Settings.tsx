@@ -10,6 +10,7 @@ import { useStore } from '../store/useStore';
 import {
   fetchConfig,
   fetchDoctor,
+  IBoardProviderConfig,
   INightWatchConfig,
   INotificationConfig,
   IWebhookConfig,
@@ -36,6 +37,7 @@ type ConfigForm = {
   prdPriority: string[];
   roadmapScanner: IRoadmapScannerConfig;
   templatesDir: string;
+  boardProvider: IBoardProviderConfig;
 };
 
 const toFormState = (config: INightWatchConfig): ConfigForm => ({
@@ -59,6 +61,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
     autoScanInterval: 300,
   },
   templatesDir: config.templatesDir || '.night-watch/templates',
+  boardProvider: config.boardProvider || { enabled: true, provider: 'github' },
 });
 
 // Helper to check if a value looks sensitive
@@ -593,6 +596,7 @@ const Settings: React.FC = () => {
         prdPriority: form.prdPriority,
         roadmapScanner: form.roadmapScanner,
         templatesDir: form.templatesDir,
+        boardProvider: form.boardProvider,
       });
 
       addToast({
@@ -809,6 +813,65 @@ const Settings: React.FC = () => {
               />
             </div>
           )}
+        </Card>
+      ),
+    },
+    {
+      id: 'board',
+      label: 'Board',
+      content: (
+        <Card className="p-6 space-y-6">
+          <h3 className="text-lg font-medium text-slate-200">Board Provider</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Select
+              label="Board Provider"
+              value={form.boardProvider.provider}
+              onChange={(val) =>
+                updateField('boardProvider', {
+                  ...form.boardProvider,
+                  provider: val as 'github' | 'local',
+                })
+              }
+              options={[
+                { label: 'GitHub Projects', value: 'github' },
+                { label: 'Local (SQLite)', value: 'local' },
+              ]}
+            />
+            {form.boardProvider.provider === 'github' && (
+              <>
+                <Input
+                  label="Project Number"
+                  type="number"
+                  value={String(form.boardProvider.projectNumber || '')}
+                  onChange={(e) =>
+                    updateField('boardProvider', {
+                      ...form.boardProvider,
+                      projectNumber: e.target.value ? Number(e.target.value) : undefined,
+                    })
+                  }
+                  helperText="GitHub Projects V2 project number"
+                />
+                <Input
+                  label="Repository"
+                  value={form.boardProvider.repo || ''}
+                  onChange={(e) =>
+                    updateField('boardProvider', {
+                      ...form.boardProvider,
+                      repo: e.target.value || undefined,
+                    })
+                  }
+                  helperText="owner/repo (auto-detected if empty)"
+                />
+              </>
+            )}
+            {form.boardProvider.provider === 'local' && (
+              <div className="md:col-span-2">
+                <p className="text-sm text-slate-400">
+                  Local board uses SQLite for storage — no additional configuration needed.
+                </p>
+              </div>
+            )}
+          </div>
         </Card>
       ),
     },

@@ -70,6 +70,20 @@ export interface INightWatchConfig {
   prdPriority: string[];
   roadmapScanner: IRoadmapScannerConfig;
   templatesDir: string;
+  boardProvider: IBoardProviderConfig;
+}
+
+// ==================== Board Provider Config ====================
+
+export type BoardProviderType = 'github' | 'local';
+
+export interface IBoardProviderConfig {
+  enabled: boolean;
+  provider: BoardProviderType;
+  /** GitHub Projects V2 project number (set after `board setup`) */
+  projectNumber?: number;
+  /** Repository owner/name (auto-detected from git remote) */
+  repo?: string;
 }
 
 // ==================== PRD Info ====================

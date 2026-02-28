@@ -69,6 +69,26 @@ export function runMigrations(db: Database.Database): void {
       updated_at            INTEGER NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS kanban_issues (
+      number      INTEGER PRIMARY KEY AUTOINCREMENT,
+      title       TEXT    NOT NULL,
+      body        TEXT    NOT NULL DEFAULT '',
+      column_name TEXT    NOT NULL DEFAULT 'Draft',
+      labels_json TEXT    NOT NULL DEFAULT '[]',
+      assignees_json TEXT NOT NULL DEFAULT '[]',
+      is_closed   INTEGER NOT NULL DEFAULT 0,
+      created_at  INTEGER NOT NULL,
+      updated_at  INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_kanban_column
+      ON kanban_issues(column_name, is_closed);
+
+    CREATE TABLE IF NOT EXISTS kanban_comments (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      issue_number INTEGER NOT NULL REFERENCES kanban_issues(number),
+      body        TEXT    NOT NULL,
+      created_at  INTEGER NOT NULL
+    );
   `);
 
   // Phase 2 cleanup: drop slack_discussions table (multi-agent deliberation removed)

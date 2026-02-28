@@ -3,6 +3,7 @@
  * These interfaces define the API that concrete SQLite implementations must satisfy.
  */
 
+import { BoardColumnName } from '@/board/types.js';
 import { IRegistryEntry } from '@/utils/registry.js';
 import { IExecutionRecord } from '@/utils/execution-history.js';
 import { IPrdStateEntry } from '@/utils/prd-states.js';
@@ -47,4 +48,33 @@ export interface IAgentPersonaRepository {
   seedDefaultsOnFirstRun(): void;
   seedDefaults(): void;
   patchDefaultAvatarUrls(): void;
+}
+
+export interface IKanbanIssue {
+  number: number;
+  title: string;
+  body: string;
+  columnName: BoardColumnName;
+  labels: string[];
+  assignees: string[];
+  isClosed: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface ICreateKanbanIssueInput {
+  title: string;
+  body?: string;
+  columnName?: BoardColumnName;
+  labels?: string[];
+}
+
+export interface IKanbanIssueRepository {
+  create(input: ICreateKanbanIssueInput): IKanbanIssue;
+  getByNumber(number: number): IKanbanIssue | null;
+  getAll(includeClosed?: boolean): IKanbanIssue[];
+  getByColumn(column: BoardColumnName): IKanbanIssue[];
+  move(number: number, targetColumn: BoardColumnName): void;
+  close(number: number): void;
+  addComment(number: number, body: string): void;
 }
