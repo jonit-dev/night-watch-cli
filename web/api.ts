@@ -14,7 +14,6 @@ import type {
   IPrInfo,
   ILogInfo,
   IRoadmapScannerConfig,
-  ISlackBotConfig,
   IStatusSnapshot,
   IRoadmapItem,
   IRoadmapStatus,
@@ -37,7 +36,6 @@ export type {
   IPrInfo,
   ILogInfo,
   IRoadmapScannerConfig,
-  ISlackBotConfig,
   IStatusSnapshot,
   IRoadmapItem,
   IRoadmapStatus,
@@ -293,27 +291,6 @@ export async function deleteAgent(id: string): Promise<void> {
     throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
   }
   // 204 No Content — do not parse response body
-}
-
-// ==================== Slack ====================
-
-export interface ISlackChannel {
-  id: string;
-  name: string;
-}
-
-export function fetchSlackChannels(botToken: string): Promise<ISlackChannel[]> {
-  return apiFetch<ISlackChannel[]>(apiPath('/api/slack/channels'), {
-    method: 'POST',
-    body: JSON.stringify({ botToken }),
-  });
-}
-
-export function createSlackChannel(botToken: string, name: string): Promise<{ channelId: string; inviteWarning?: string; welcomeMessagePosted?: boolean }> {
-  return apiFetch<{ channelId: string; inviteWarning?: string; welcomeMessagePosted?: boolean }>(apiPath('/api/slack/channels/create'), {
-    method: 'POST',
-    body: JSON.stringify({ botToken, name }),
-  });
 }
 
 // ==================== Board ====================

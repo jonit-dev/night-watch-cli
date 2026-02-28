@@ -154,12 +154,7 @@ export interface IRoadmapStatus {
 
 export interface ISlackBotConfig {
   enabled: boolean;
-  botToken: string; // xoxb-...
-  appToken?: string; // xapp-... for Socket Mode (optional)
-  autoCreateProjectChannels: boolean;
-  discussionEnabled: boolean;
-  replicateApiToken?: string; // For AI-generated persona avatars (Flux)
-  serverBaseUrl?: string; // Public base URL of the Night Watch server (e.g. https://my-ngrok.io) used to serve local avatar images to Slack
+  webhookUrl: string;
 }
 
 // ==================== Agent Personas ====================
@@ -234,44 +229,6 @@ export type CreateAgentPersonaInput = Pick<IAgentPersona, 'name' | 'role'> & {
 
 export type UpdateAgentPersonaInput = Partial<CreateAgentPersonaInput & { isActive: boolean }>;
 
-// ==================== Slack Deliberation ====================
-
-export type DiscussionStatus = 'active' | 'consensus' | 'blocked' | 'closed';
-export type ConsensusResult = 'approved' | 'changes_requested' | 'human_needed';
-export type TriggerType =
-  | 'pr_review'
-  | 'build_failure'
-  | 'prd_kickoff'
-  | 'code_watch'
-  | 'issue_review'
-  | 'slack_message';
-
-export interface ISlackDiscussion {
-  id: string;
-  projectPath: string;
-  triggerType: TriggerType;
-  triggerRef: string; // PR number, PRD name, etc.
-  channelId: string;
-  threadTs: string;
-  status: DiscussionStatus;
-  round: number;
-  participants: string[]; // Agent IDs that have contributed
-  consensusResult: ConsensusResult | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface IDiscussionTrigger {
-  type: TriggerType;
-  projectPath: string;
-  ref: string; // PR number as string, PRD name, etc.
-  context: string; // PR diff, failure message, PRD summary, etc.
-  prUrl?: string;
-  channelId?: string; // Explicit Slack channel override (e.g., project-specific channel)
-  openingMessage?: string; // Override the generated opening message (e.g., AI-authored observation)
-  threadTs?: string; // If set, skip opener post and anchor discussion in this existing thread
-}
-
 // ==================== Roadmap Context ====================
 
 export interface IRoadmapContextOptions {
@@ -291,11 +248,11 @@ export interface IMemoryEntry {
 }
 
 export interface IReflectionContext {
-  triggerType: TriggerType;
+  triggerType: string;
   outcome: string;
   summary: string;
   filesChanged?: string[];
 }
 
-// LlmCaller — injected by callers (slack package) to avoid circular deps
+// LlmCaller — injected by callers to avoid circular deps
 export type LlmCaller = (systemPrompt: string, userPrompt: string) => Promise<string>;

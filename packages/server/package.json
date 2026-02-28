@@ -22,7 +22,6 @@
   },
   "dependencies": {
     "@night-watch/core": "*",
-    "@night-watch/slack": "*",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "reflect-metadata": "^0.2.2",

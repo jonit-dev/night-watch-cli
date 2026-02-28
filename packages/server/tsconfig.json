@@ -6,35 +6,15 @@
     "rootDir": "./src",
     "baseUrl": ".",
     "paths": {
-      "@night-watch/core": [
-        "../core/src/index.ts"
-      ],
-      "@night-watch/core/*": [
-        "../core/src/*"
-      ],
-      "@night-watch/slack": [
-        "../slack/src/index.ts"
-      ],
-      "@night-watch/slack/*": [
-        "../slack/src/*"
-      ]
+      "@night-watch/core": ["../core/src/index.ts"],
+      "@night-watch/core/*": ["../core/src/*"]
     }
   },
   "references": [
     {
       "path": "../core"
-    },
-    {
-      "path": "../slack"
     }
   ],
-  "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "src/**/*.test.ts",
-    "src/__tests__/**"
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/__tests__/**"]
 }

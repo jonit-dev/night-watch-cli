@@ -26,7 +26,6 @@ import {
   error as uiError,
 } from '@night-watch/core';
 import type { IPrDetails } from '@night-watch/core';
-import { sendSlackBotNotification } from '@night-watch/slack/notify.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -415,16 +414,13 @@ export function runCommand(program: Command): void {
                 exitCode,
                 provider: config.provider,
               };
-              await Promise.allSettled([
-                sendNotifications(
-                  {
-                    ...config,
-                    notifications: { ...config.notifications, webhooks: nonTelegramWebhooks },
-                  },
-                  _rateLimitCtx,
-                ),
-                sendSlackBotNotification(config, _rateLimitCtx),
-              ]);
+              await sendNotifications(
+                {
+                  ...config,
+                  notifications: { ...config.notifications, webhooks: nonTelegramWebhooks },
+                },
+                _rateLimitCtx,
+              );
             }
           }
 
@@ -457,10 +453,7 @@ export function runCommand(program: Command): void {
               additions: prDetails?.additions,
               deletions: prDetails?.deletions,
             };
-            await Promise.allSettled([
-              sendNotifications(config, _ctx),
-              sendSlackBotNotification(config, _ctx),
-            ]);
+            await sendNotifications(config, _ctx);
           } else {
             info('Skipping completion notification (no actionable run result)');
           }

@@ -13,7 +13,6 @@ interface IProjectRow {
   name: string;
   path: string;
   created_at: number;
-  slack_channel_id?: string | null;
 }
 
 @injectable()
@@ -26,13 +25,12 @@ export class SqliteProjectRegistryRepository implements IProjectRegistryReposito
 
   getAll(): IRegistryEntry[] {
     const rows = this.db
-      .prepare<[], IProjectRow>('SELECT name, path, slack_channel_id FROM projects ORDER BY name')
+      .prepare<[], IProjectRow>('SELECT name, path FROM projects ORDER BY name')
       .all();
 
     return rows.map((row) => ({
       name: row.name,
       path: row.path,
-      ...(row.slack_channel_id ? { slackChannelId: row.slack_channel_id } : {}),
     }));
   }
 
@@ -40,12 +38,12 @@ export class SqliteProjectRegistryRepository implements IProjectRegistryReposito
     const createdAt = Math.floor(Date.now() / 1000);
 
     this.db
-      .prepare<[string, string, number, string | null]>(
-        `INSERT INTO projects (name, path, created_at, slack_channel_id)
-         VALUES (?, ?, ?, ?)
-         ON CONFLICT(path) DO UPDATE SET name = excluded.name, slack_channel_id = COALESCE(excluded.slack_channel_id, slack_channel_id)`,
+      .prepare<[string, string, number]>(
+        `INSERT INTO projects (name, path, created_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(path) DO UPDATE SET name = excluded.name`,
       )
-      .run(entry.name, entry.path, createdAt, entry.slackChannelId ?? null);
+      .run(entry.name, entry.path, createdAt);
   }
 
   remove(projectPath: string): boolean {
@@ -58,11 +56,5 @@ export class SqliteProjectRegistryRepository implements IProjectRegistryReposito
 
   clear(): void {
     this.db.prepare('DELETE FROM projects').run();
-  }
-
-  updateSlackChannel(path: string, channelId: string): void {
-    this.db
-      .prepare<[string | null, string]>(`UPDATE projects SET slack_channel_id = ? WHERE path = ?`)
-      .run(channelId || null, path);
   }
 }

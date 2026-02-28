@@ -21,7 +21,6 @@ import {
   error as uiError,
 } from '@night-watch/core';
 import type { IPrDetails } from '@night-watch/core';
-import { sendSlackBotNotification } from '@night-watch/slack/notify.js';
 import { execFileSync } from 'child_process';
 import * as path from 'path';
 
@@ -307,10 +306,7 @@ export function reviewCommand(program: Command): void {
               additions: prDetails?.additions,
               deletions: prDetails?.deletions,
             };
-            await Promise.allSettled([
-              sendNotifications(config, _reviewCtx),
-              sendSlackBotNotification(config, _reviewCtx),
-            ]);
+            await sendNotifications(config, _reviewCtx);
           }
 
           const autoMergedPrNumbers = parseAutoMergedPrNumbers(scriptResult?.data.auto_merged);
@@ -330,10 +326,7 @@ export function reviewCommand(program: Command): void {
               additions: autoMergedPrDetails?.additions,
               deletions: autoMergedPrDetails?.deletions,
             };
-            await Promise.allSettled([
-              sendNotifications(config, _mergeCtx),
-              sendSlackBotNotification(config, _mergeCtx),
-            ]);
+            await sendNotifications(config, _mergeCtx);
           }
         }
 

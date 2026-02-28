@@ -113,14 +113,14 @@ describe('NotificationService', () => {
       expect(text).toContain('my-project');
     });
 
-    it('formats QA completed with human-style text', () => {
+    it('contains project name for qa_completed event', () => {
       const text = service.buildText({
         ...baseCtx,
         event: 'qa_completed',
         prNumber: 5,
         prUrl: 'https://github.com/org/repo/pull/5',
       });
-      expect(text).toContain('Finished QA on');
+      expect(text).toContain('my-project');
     });
   });
 
@@ -279,7 +279,7 @@ describe('NotificationService', () => {
         events: ['run_failed'],
       };
       await expect(
-        service.sendWebhook(webhook, { ...baseCtx, event: 'run_failed' })
+        service.sendWebhook(webhook, { ...baseCtx, event: 'run_failed' }),
       ).resolves.toBeUndefined();
     });
   });
@@ -298,7 +298,11 @@ describe('NotificationService', () => {
         notifications: {
           webhooks: [
             { type: 'slack', url: 'https://hooks.slack.com/1', events: ['run_succeeded'] },
-            { type: 'discord', url: 'https://discord.com/api/webhooks/2', events: ['run_succeeded'] },
+            {
+              type: 'discord',
+              url: 'https://discord.com/api/webhooks/2',
+              events: ['run_succeeded'],
+            },
           ],
         },
       });
@@ -309,9 +313,7 @@ describe('NotificationService', () => {
     it('skips webhooks whose event list does not match', async () => {
       const config = makeConfig({
         notifications: {
-          webhooks: [
-            { type: 'slack', url: 'https://hooks.slack.com/1', events: ['run_failed'] },
-          ],
+          webhooks: [{ type: 'slack', url: 'https://hooks.slack.com/1', events: ['run_failed'] }],
         },
       });
       // ctx.event is run_succeeded — webhook only listens for run_failed

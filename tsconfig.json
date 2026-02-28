@@ -6,7 +6,6 @@
   "references": [
     { "path": "./packages/core" },
     { "path": "./packages/server" },
-    { "path": "./packages/slack" },
     { "path": "./packages/cli" }
   ],
   "files": []

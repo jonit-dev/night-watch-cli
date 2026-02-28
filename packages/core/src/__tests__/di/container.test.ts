@@ -10,7 +10,6 @@ import { SqliteExecutionHistoryRepository } from '@/storage/repositories/sqlite/
 import { SqlitePrdStateRepository } from '@/storage/repositories/sqlite/prd-state.repository.js';
 import { SqliteProjectRegistryRepository } from '@/storage/repositories/sqlite/project-registry.repository.js';
 import { SqliteRoadmapStateRepository } from '@/storage/repositories/sqlite/roadmap-state.repository.js';
-import { SqliteSlackDiscussionRepository } from '@/storage/repositories/sqlite/slack-discussion.repository.js';
 
 describe('DI Container', () => {
   let tmpDir: string;
@@ -67,13 +66,6 @@ describe('DI Container', () => {
     const repo = container.resolve(SqliteRoadmapStateRepository);
     expect(repo).toBeDefined();
     expect(repo).toBeInstanceOf(SqliteRoadmapStateRepository);
-  });
-
-  it('should resolve SqliteSlackDiscussionRepository', () => {
-    initContainer(tmpDir);
-    const repo = container.resolve(SqliteSlackDiscussionRepository);
-    expect(repo).toBeDefined();
-    expect(repo).toBeInstanceOf(SqliteSlackDiscussionRepository);
   });
 
   it('should be idempotent — calling initContainer twice does not throw', () => {

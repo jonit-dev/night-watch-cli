@@ -19,7 +19,6 @@ import {
   error as uiError,
 } from '@night-watch/core';
 import type { ISliceResult } from '@night-watch/core';
-import { sendSlackBotNotification } from '@night-watch/slack/notify.js';
 import * as path from 'path';
 
 /**
@@ -228,10 +227,7 @@ export function sliceCommand(program: Command): void {
             provider: config.provider,
             prTitle: result.item?.title,
           };
-          await Promise.allSettled([
-            sendNotifications(config, _sliceCtx),
-            sendSlackBotNotification(config, _sliceCtx),
-          ]);
+          await sendNotifications(config, _sliceCtx);
         }
 
         process.exit(exitCode);

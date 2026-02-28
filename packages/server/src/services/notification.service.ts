@@ -1,8 +1,8 @@
 /**
  * NotificationService — injectable wrapper around notification utilities.
  *
- * Encapsulates all notification logic (webhook delivery, Slack Bot API posts,
- * and deliberation triggering) in a single, testable service class.
+ * Encapsulates all notification logic (webhook delivery) in a single,
+ * testable service class.
  * The original utils/notify.ts functions continue to work as-is; this class
  * is the DI-friendly entry point for the server layer.
  */
@@ -22,28 +22,24 @@ import {
   sendNotifications,
   sendWebhook,
 } from '@night-watch/core';
-import { buildNotificationText, sendSlackBotNotification } from '@night-watch/slack/notify.js';
 
 export type { INotificationContext };
 
 @injectable()
 export class NotificationService {
   /**
-   * Send all configured notifications (webhooks + Slack Bot API) for a given event.
+   * Send all configured notifications (webhooks) for a given event.
    * Delegates to the battle-tested sendNotifications() function in utils/notify.ts.
    */
   async send(config: INightWatchConfig, ctx: INotificationContext): Promise<void> {
-    await Promise.allSettled([
-      sendNotifications(config, ctx),
-      sendSlackBotNotification(config, ctx),
-    ]);
+    await sendNotifications(config, ctx);
   }
 
   /**
    * Build a human-readable one-line notification text for the given context.
    */
   buildText(ctx: INotificationContext): string {
-    return buildNotificationText(ctx);
+    return buildDescription(ctx);
   }
 
   /**

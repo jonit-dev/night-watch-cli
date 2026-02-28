@@ -19,7 +19,6 @@ import {
   sendNotifications,
   error as uiError,
 } from '@night-watch/core';
-import { sendSlackBotNotification } from '@night-watch/slack/notify.js';
 import * as path from 'path';
 
 /**
@@ -245,10 +244,7 @@ export function qaCommand(program: Command): void {
               additions: prDetails?.additions,
               deletions: prDetails?.deletions,
             };
-            await Promise.allSettled([
-              sendNotifications(config, _qaCtx),
-              sendSlackBotNotification(config, _qaCtx),
-            ]);
+            await sendNotifications(config, _qaCtx);
           }
         }
 
