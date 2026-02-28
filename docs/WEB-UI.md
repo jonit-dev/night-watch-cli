@@ -1,5 +1,7 @@
 # Night Watch Web UI
 
+> Related: [Server API](server-api.md) | [Architecture Overview](architecture-overview.md) | [DEV-ONBOARDING](DEV-ONBOARDING.md) | [CLI Package](cli-package.md)
+
 ## Global Layout
 
 - **Sidebar** (collapsible, left): navigation + project selector
@@ -11,14 +13,14 @@
 
 ## Sidebar Navigation
 
-| Icon | Label        | Route          |
-|------|------------- |----------------|
-| Home | Dashboard    | `/`            |
-| File | PRDs         | `/prds`        |
-| Git  | Pull Requests| `/prs`         |
-| Play | Actions      | `/actions`     |
-| Log  | Logs         | `/logs`        |
-| Gear | Settings     | `/settings`    |
+| Icon | Label         | Route       |
+| ---- | ------------- | ----------- |
+| Home | Dashboard     | `/`         |
+| File | PRDs          | `/prds`     |
+| Git  | Pull Requests | `/prs`      |
+| Play | Actions       | `/actions`  |
+| Log  | Logs          | `/logs`     |
+| Gear | Settings      | `/settings` |
 
 - **Project selector** dropdown at the top of the sidebar (supports multiple projects)
 - **Collapse toggle** at the bottom: full sidebar or icon-only rail
@@ -32,12 +34,12 @@ The landing page. Overview of everything at a glance.
 
 ### Top row: 4 stat cards
 
-| Card             | Value             | Subtitle / Detail                        |
-|------------------|-------------------|------------------------------------------|
-| PRDs Ready       | count             | "of {total} total"                       |
-| PRDs In Progress | count             | show PRD name if exactly 1               |
-| Open PRs         | count             | "{n} need work" in warning color         |
-| Cron Status      | Active / Inactive | next run countdown if active             |
+| Card             | Value             | Subtitle / Detail                |
+| ---------------- | ----------------- | -------------------------------- |
+| PRDs Ready       | count             | "of {total} total"               |
+| PRDs In Progress | count             | show PRD name if exactly 1       |
+| Open PRs         | count             | "{n} need work" in warning color |
+| Cron Status      | Active / Inactive | next run countdown if active     |
 
 Each card is clickable and navigates to the relevant page.
 
@@ -48,7 +50,7 @@ Each card is clickable and navigates to the relevant page.
 Four columns:
 
 | Blocked | Ready | In Progress | Done |
-|---------|-------|-------------|------|
+| ------- | ----- | ----------- | ---- |
 
 - Each PRD is a small card showing name and priority badge
 - Blocked cards show unmet dependency names as red chips
@@ -72,10 +74,10 @@ Each entry: icon + timestamp + one-line description + link to relevant entity.
 
 **Left: Process Status**
 
-| Process  | Status              | PID    | Uptime   |
-|----------|---------------------|--------|----------|
-| Executor | Running / Idle      | 12345  | 3m 22s   |
-| Reviewer | Running / Idle      | —      | —        |
+| Process  | Status         | PID   | Uptime |
+| -------- | -------------- | ----- | ------ |
+| Executor | Running / Idle | 12345 | 3m 22s |
+| Reviewer | Running / Idle | —     | —      |
 
 - Running status shows a green dot, idle shows grey
 - If running: show elapsed time, link to live log
@@ -106,8 +108,8 @@ Each button shows a spinner while executing and a toast on completion/error. Des
 
 **Table view columns:**
 
-| # | Name | Status | Priority | Dependencies | Created | Actions |
-|---|------|--------|----------|--------------|---------|---------|
+| #   | Name | Status | Priority | Dependencies | Created | Actions |
+| --- | ---- | ------ | -------- | ------------ | ------- | ------- |
 
 - Status is a colored badge (green=ready, yellow=in-progress, red=blocked, grey=done)
 - Priority shows position number from `prdPriority` or "—" if unset
@@ -162,8 +164,8 @@ Accessible from the PRD list via a **"Reorder"** toggle button:
 
 ### PR Table
 
-| # | Title | Branch | CI | Review Score | Updated | Actions |
-|---|-------|--------|----|-------------|---------|---------|
+| #   | Title | Branch | CI  | Review Score | Updated | Actions |
+| --- | ----- | ------ | --- | ------------ | ------- | ------- |
 
 - **#** links to GitHub PR
 - **CI** column: icon + color (green check = pass, red X = fail, yellow spinner = pending, grey ? = unknown)
@@ -190,17 +192,18 @@ Center-stage action controls with live feedback.
 ### Action Cards (grid of 4)
 
 Each card has:
+
 - Icon + title
 - Description
 - Primary action button
 - "Last run" timestamp
 
-| Card             | Button          | Description                                     |
-|------------------|------------------|-------------------------------------------------|
-| Execute PRD      | Run Now          | Pick next eligible PRD and execute               |
-| Review PRs       | Review Now       | Check open PRs and fix issues                    |
-| Install Cron     | Install          | Set up scheduled automation                      |
-| Uninstall Cron   | Uninstall        | Remove scheduled automation (confirmation req'd) |
+| Card           | Button     | Description                                      |
+| -------------- | ---------- | ------------------------------------------------ |
+| Execute PRD    | Run Now    | Pick next eligible PRD and execute               |
+| Review PRs     | Review Now | Check open PRs and fix issues                    |
+| Install Cron   | Install    | Set up scheduled automation                      |
+| Uninstall Cron | Uninstall  | Remove scheduled automation (confirmation req'd) |
 
 ### Live Output Panel (below cards)
 
@@ -215,7 +218,7 @@ Each card has:
 Table of past action executions:
 
 | Action | Status | Duration | PRD/PR | Timestamp |
-|--------|--------|----------|--------|-----------|
+| ------ | ------ | -------- | ------ | --------- |
 
 - Clicking a row expands to show full log output inline
 
@@ -257,30 +260,31 @@ Tabbed settings page.
 
 ### Tab: General
 
-| Field            | Input Type       | Notes                                  |
-|------------------|------------------|----------------------------------------|
-| Project Name     | text             | read-only display                      |
-| Provider         | select           | claude / codex                         |
-| Default Branch   | text             | placeholder: "auto-detect"             |
-| PRD Directory    | text             | relative path                          |
-| Branch Prefix    | text             | default "night-watch"                  |
-| Branch Patterns  | tag input        | add/remove patterns (e.g. "feat/")     |
-| Reviewer Enabled | toggle switch    |                                        |
+| Field            | Input Type    | Notes                              |
+| ---------------- | ------------- | ---------------------------------- |
+| Project Name     | text          | read-only display                  |
+| Provider         | select        | claude / codex                     |
+| Default Branch   | text          | placeholder: "auto-detect"         |
+| PRD Directory    | text          | relative path                      |
+| Branch Prefix    | text          | default "night-watch"              |
+| Branch Patterns  | tag input     | add/remove patterns (e.g. "feat/") |
+| Reviewer Enabled | toggle switch |                                    |
 
 ### Tab: Runtime
 
-| Field                | Input Type     | Notes                                |
-|----------------------|----------------|--------------------------------------|
-| Max Runtime          | number + unit  | seconds, show human-readable preview |
-| Reviewer Max Runtime | number + unit  | seconds, show human-readable preview |
-| Min Review Score     | slider 0-100   | shows threshold line                 |
-| Max Log Size         | number + unit  | bytes, show KB/MB preview            |
+| Field                | Input Type    | Notes                                |
+| -------------------- | ------------- | ------------------------------------ |
+| Max Runtime          | number + unit | seconds, show human-readable preview |
+| Reviewer Max Runtime | number + unit | seconds, show human-readable preview |
+| Min Review Score     | slider 0-100  | shows threshold line                 |
+| Max Log Size         | number + unit | bytes, show KB/MB preview            |
 
 ### Tab: Schedules
 
 Side-by-side panels for Executor and Reviewer.
 
 Each panel:
+
 - Cron expression text input with validation
 - Human-readable description below (e.g. "Every hour from 9 AM to 5 PM, Monday through Friday")
 - Preset buttons: Development | Production | Testing | Nightly
@@ -292,6 +296,7 @@ Each panel:
 **Webhook list** (card per webhook):
 
 Each card shows:
+
 - Type icon (Slack / Discord / Telegram)
 - URL (masked, with reveal toggle) or bot token + chat ID
 - Event chips: which events are subscribed
@@ -314,10 +319,10 @@ Each card shows:
 
 Key-value editor for `providerEnv`:
 
-| Key                 | Value              | Actions       |
-|--------------------|--------------------|---------------|
-| ANTHROPIC_API_KEY  | ••••••••••••       | Edit / Delete |
-| API_TIMEOUT_MS     | 30000              | Edit / Delete |
+| Key               | Value        | Actions       |
+| ----------------- | ------------ | ------------- |
+| ANTHROPIC_API_KEY | •••••••••••• | Edit / Delete |
+| API_TIMEOUT_MS    | 30000        | Edit / Delete |
 
 - Values matching sensitive patterns (TOKEN, KEY, SECRET, PASSWORD) are masked with a reveal toggle
 - **+ Add Variable** button: key input + value input
@@ -345,15 +350,15 @@ Accessible via a "Run Health Check" button in Settings or a status bar icon.
 
 ### Health Check Results Panel
 
-| Check                  | Status | Detail                            |
-|------------------------|--------|-----------------------------------|
-| Git Repository         | Pass/Fail | path                           |
-| GitHub CLI (`gh`)      | Pass/Fail | version or error               |
-| Provider CLI           | Pass/Fail | which provider, version        |
-| PRD Directory          | Pass/Fail | path, file count               |
-| Webhooks               | Pass/Fail per webhook | URL validity, events |
-| Cron Installation      | Pass/Fail | entries found or not           |
-| Lock Files             | Info   | stale locks detected             |
+| Check             | Status                | Detail                  |
+| ----------------- | --------------------- | ----------------------- |
+| Git Repository    | Pass/Fail             | path                    |
+| GitHub CLI (`gh`) | Pass/Fail             | version or error        |
+| Provider CLI      | Pass/Fail             | which provider, version |
+| PRD Directory     | Pass/Fail             | path, file count        |
+| Webhooks          | Pass/Fail per webhook | URL validity, events    |
+| Cron Installation | Pass/Fail             | entries found or not    |
+| Lock Files        | Info                  | stale locks detected    |
 
 - Each row: green check / red X / yellow warning icon
 - Expand row for full diagnostic detail
@@ -378,7 +383,7 @@ Accessible via the bell icon in the top bar.
 Table:
 
 | Event | PRD/PR | Status | Webhook | Timestamp |
-|-------|--------|--------|---------|-----------|
+| ----- | ------ | ------ | ------- | --------- |
 
 - Filterable by event type, webhook, status
 - Expandable rows to see full payload sent
@@ -388,38 +393,47 @@ Table:
 ## Shared UI Patterns
 
 ### Confirmation Popovers
+
 All destructive actions (delete PRD, uninstall cron, clear logs) show an inline popover: "Are you sure? This cannot be undone." with Cancel / Confirm buttons.
 
 ### Empty States
+
 Every list/table has a friendly empty state:
+
 - Icon illustration
 - Short message ("No PRDs yet", "No open pull requests")
 - CTA button where appropriate ("Create your first PRD")
 
 ### Loading States
+
 - Skeleton loaders for cards and tables on initial load
 - Spinners on action buttons while executing
 - Progress indicators for long-running operations
 
 ### Responsive Behavior
+
 - Sidebar collapses to icon rail on medium screens, becomes a hamburger menu on mobile
 - Tables switch to card layouts on small screens
 - Dashboard stat cards stack vertically on mobile
 - Log viewer goes full-width on small screens
 
 ### Keyboard Shortcuts
+
 Carry over from the TUI dashboard where applicable:
+
 - `1-6` to switch pages
 - `r` to refresh current view
 - `/` to focus search
 - `?` to show shortcut help overlay
 
 ### Real-time Updates
+
 - Dashboard, PRD statuses, PR statuses, and process info should poll or use a websocket for live updates
 - Stale data indicator if connection is lost (yellow banner at the top)
 - Manual refresh button always available
 
 ### Dark / Light Theme
+
 - Follow system preference by default
 - Manual toggle in the top bar
 - Terminal-style panels (logs, live output) always use dark theme regardless of global setting

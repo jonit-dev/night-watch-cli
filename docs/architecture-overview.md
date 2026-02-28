@@ -1,5 +1,7 @@
 # Night Watch CLI - Architecture Overview
 
+> Related: [DEV-ONBOARDING](DEV-ONBOARDING.md) | [Core Package](core-package.md) | [CLI Package](cli-package.md) | [Server API](server-api.md) | [Build Pipeline](build-pipeline.md) | [Persona & Memory](persona-memory-system.md)
+
 Night Watch CLI is an autonomous PRD executor that uses AI provider CLIs (Claude, Codex) combined with cron scheduling to automatically implement PRD tickets, open pull requests, and fix CI failures.
 
 ---
@@ -22,12 +24,7 @@ graph TB
 
     subgraph Server["packages/server"]
         API["Express REST API<br/>(+ SSE)"]
-    end
-
-    subgraph SlackPkg["packages/slack"]
-        Bot["Slack Bot<br/>(Socket Mode)"]
-        DelibEngine["DeliberationEngine<br/>(multi-agent)"]
-        SlackNotify["Slack Notifications<br/>(Bot API)"]
+        Notify["Notification Service<br/>(webhooks)"]
     end
 
     subgraph External["External Tools"]
@@ -35,7 +32,7 @@ graph TB
         GH["GitHub CLI (gh)"]
         Git["Git"]
         CronDaemon["Cron Daemon"]
-        SlackAPI["Slack API"]
+        WebhookDst["Slack / Telegram / Discord<br/>(webhook destinations)"]
     end
 
     subgraph Storage["Persistence"]
@@ -51,13 +48,11 @@ graph TB
     WebUI -->|HTTP/SSE| API
     API --> Config
     API --> Repos
-    API --> SlackNotify
+    API --> Notify
     Shell --> Provider
     Shell --> GH
     Shell --> Git
-    Bot --> DelibEngine
-    Bot --> SlackAPI
-    SlackNotify --> SlackAPI
+    Notify --> WebhookDst
     Repos --> DB
     CronDaemon -.->|scheduled| CLI
     Shell --> Lock
@@ -285,22 +280,13 @@ night-watch-cli/                    # Yarn workspaces monorepo
 │   │   └── src/
 │   │       ├── cli.ts              # Commander.js program setup
 │   │       └── commands/           # init, run, review, qa, serve, board…
-│   ├── server/                     # REST API + SSE (private)
-│   │   └── src/
-│   │       ├── index.ts            # startServer / startGlobalServer
-│   │       ├── middleware/         # error-handler, graceful-shutdown, SSE
-│   │       ├── routes/             # agents, prds, board, slack…
-│   │       └── services/           # notification.service
-│   ├── slack/                      # Slack bot (private)
-│   │   └── src/
-│   │       ├── client.ts           # SlackClient (WebClient wrapper)
-│   │       ├── deliberation.ts     # DeliberationEngine
-│   │       ├── factory.ts          # createSlackStack()
-│   │       ├── interaction-listener/ # Socket Mode event routing
-│   │       ├── notify.ts           # sendSlackBotNotification()
-│   │       └── proactive-loop.ts   # Proactive message scheduler
-│   └── web/                        # React SPA source (private)
-├── web/                            # Vite build root → web/dist/ (served by server)
+│   └── server/                     # REST API + SSE (private)
+│       └── src/
+│           ├── index.ts            # startServer / startGlobalServer
+│           ├── middleware/         # error-handler, graceful-shutdown, SSE
+│           ├── routes/             # agents, board, config, actions…
+│           └── services/           # notification.service, status.service
+├── web/                            # React + Vite SPA → web/dist/ (served by server)
 ├── docs/PRDs/                      # PRD storage (pending + done/)
 ├── logs/                           # Runtime logs
 ├── package.json                    # Workspace root
@@ -359,6 +345,8 @@ flowchart LR
 | Provider abstraction | Strategy pattern              | Easy to add new AI provider CLIs                          |
 | Config hierarchy     | Defaults < File < Env < Flags | Standard precedence, 12-factor friendly                   |
 | Persistence layer    | SQLite via repository pattern | Structured state with enforced architectural boundary     |
+| DI container         | tsyringe                      | Decorator-based, TypeScript-native                        |
+| AI personas          | Soul/Style/Skill compiler     | Composable prompt layers per agent                        |
 
 ---
 

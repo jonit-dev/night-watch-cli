@@ -15,7 +15,6 @@ import {
   IAgentStyle,
   UpdateAgentPersonaInput,
 } from '@/shared/types.js';
-import { MemoryService } from '@/memory/memory-service.js';
 import { IAgentPersonaRepository } from '../interfaces.js';
 import { DEFAULT_AVATAR_URLS, DEFAULT_PERSONAS } from './agent-persona.defaults.js';
 
@@ -326,7 +325,6 @@ export class SqliteAgentPersonaRepository implements IAgentPersonaRepository {
       existing.modelConfig,
     );
 
-    const oldName = existing.name;
     const newName = input.name ?? existing.name;
 
     this.db
@@ -369,35 +367,11 @@ export class SqliteAgentPersonaRepository implements IAgentPersonaRepository {
         id,
       );
 
-    if (newName !== oldName) {
-      const memoryService = new MemoryService();
-      memoryService
-        .migrateMemory(oldName, newName)
-        .then(() => {
-          console.log(`[persona] migrated memory: ${oldName} → ${newName}`);
-        })
-        .catch((err: unknown) => {
-          console.warn(`[persona] memory migration failed: ${String(err)}`);
-        });
-    }
-
     return this.getById(id)!;
   }
 
   delete(id: string): void {
-    const persona = this.getById(id);
     this.db.prepare<[string]>('DELETE FROM agent_personas WHERE id = ?').run(id);
-    if (persona) {
-      const memoryService = new MemoryService();
-      memoryService
-        .archiveMemory(persona.name)
-        .then(() => {
-          console.log(`[persona] archived memory for: ${persona.name}`);
-        })
-        .catch((err: unknown) => {
-          console.warn(`[persona] memory archive failed: ${String(err)}`);
-        });
-    }
   }
 
   seedDefaultsOnFirstRun(): void {

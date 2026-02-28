@@ -1,5 +1,7 @@
 # Troubleshooting
 
+> Related: [DEV-ONBOARDING](DEV-ONBOARDING.md) | [Commands Reference](commands.md) | [Configuration](configuration.md) | [Local Testing](local-testing.md)
+
 ## "Current directory is not a git repository"
 
 Run `night-watch init` from the root of a git repository:
@@ -73,6 +75,7 @@ chmod 755 logs
 ## PRD not being processed
 
 Check:
+
 1. PRD is in the correct directory (`docs/PRDs/night-watch/`)
 2. Dependencies are satisfied (check `done/` directory)
 3. No open PR already exists for this PRD
