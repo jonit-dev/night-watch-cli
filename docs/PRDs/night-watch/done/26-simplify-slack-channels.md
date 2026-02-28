@@ -3,6 +3,7 @@
 ## Context
 
 Currently the Slack integration uses two parallel channel systems:
+
 1. **4 global topic channels** (`eng`, `prs`, `incidents`, `releases`) — shared across ALL projects
 2. **Per-project channels** (`proj-{slug}`) — optional, underutilized
 
@@ -17,6 +18,7 @@ This creates a mess: agents post about any project into shared channels (mostly 
 **File:** `packages/core/src/shared/types.ts` (lines 155-169)
 
 Remove the `channels` property from `ISlackBotConfig`:
+
 ```diff
  export interface ISlackBotConfig {
    enabled: boolean;
@@ -54,10 +56,7 @@ Remove the `channels` parsing block (lines 282-290). Remove the channel merge in
 Replace the entire function. Instead of routing by trigger type to topic channels, resolve the project's channel from the registry:
 
 ```ts
-export function getChannelForProject(
-  projectPath: string,
-  channelIdOverride?: string,
-): string {
+export function getChannelForProject(projectPath: string, channelIdOverride?: string): string {
   if (channelIdOverride) return channelIdOverride;
   const repos = getRepositories();
   const projects = repos.projectRegistry.getAll();
@@ -143,6 +142,7 @@ No change needed — the template doesn't include `slack` config at all.
 ### 12. Update tests
 
 Files to update:
+
 - `packages/slack/src/__tests__/slack/channel-manager.test.ts` — remove `channels` from `buildConfig()`, update `postReleaseAnnouncement`/`postEngAnnouncement` tests
 - `packages/slack/src/__tests__/slack/board-integration.test.ts` (line 118) — remove `channels` from config
 - `packages/slack/src/__tests__/slack/consensus-evaluator.test.ts` (line 104) — remove `channels` from config

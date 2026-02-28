@@ -127,6 +127,7 @@ sequenceDiagram
 **Implementation:**
 
 - [ ] In `web/api.ts`, update `NightWatchConfig` interface:
+
   ```typescript
   export interface NightWatchConfig {
     defaultBranch: string;
@@ -158,6 +159,7 @@ sequenceDiagram
     slicerMaxRuntime: number;
   }
   ```
+
 - [ ] In `Settings.tsx`, expand `ConfigForm` type:
   ```typescript
   type ConfigForm = {
@@ -183,8 +185,8 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
+| Test File     | Test Name              | Assertion      |
+| ------------- | ---------------------- | -------------- |
 | `yarn verify` | TypeScript compilation | No type errors |
 
 **Verification Plan:**
@@ -214,6 +216,7 @@ sequenceDiagram
 - [ ] Add validation: key names must be valid env var names (uppercase, underscores)
 
 **UI Layout:**
+
 ```
 +-------------------------------------------+
 | Provider Environment Variables            |
@@ -231,12 +234,12 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| Manual | Add new env var | Variable appears in list, saved to config |
-| Manual | Delete env var | Variable removed from list and config |
-| Manual | Edit env var | Value updates correctly |
-| Manual | Save settings | providerEnv persisted to night-watch.config.json |
+| Test File | Test Name       | Assertion                                        |
+| --------- | --------------- | ------------------------------------------------ |
+| Manual    | Add new env var | Variable appears in list, saved to config        |
+| Manual    | Delete env var  | Variable removed from list and config            |
+| Manual    | Edit env var    | Value updates correctly                          |
+| Manual    | Save settings   | providerEnv persisted to night-watch.config.json |
 
 **Verification Plan:**
 
@@ -270,6 +273,7 @@ sequenceDiagram
 - [ ] Update `handleSave` to include `notifications` in payload
 
 **UI Layout:**
+
 ```
 +-------------------------------------------+
 | Notification Webhooks                     |
@@ -297,12 +301,12 @@ Add Webhook Modal:
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| Manual | Add Telegram webhook | Webhook saved with botToken, chatId, events |
-| Manual | Add Slack webhook | Webhook saved with url, events |
-| Manual | Delete webhook | Webhook removed from config |
-| Manual | Edit events | Event selection updates correctly |
+| Test File | Test Name            | Assertion                                   |
+| --------- | -------------------- | ------------------------------------------- |
+| Manual    | Add Telegram webhook | Webhook saved with botToken, chatId, events |
+| Manual    | Add Slack webhook    | Webhook saved with url, events              |
+| Manual    | Delete webhook       | Webhook removed from config                 |
+| Manual    | Edit events          | Event selection updates correctly           |
 
 **Verification Plan:**
 
@@ -333,6 +337,7 @@ Add Webhook Modal:
 - [ ] Update `handleSave` to include `roadmapScanner` in payload
 
 **UI Layout:**
+
 ```
 +-------------------------------------------+
 | Roadmap Scanner                           |
@@ -350,11 +355,11 @@ Add Webhook Modal:
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| Manual | Toggle scanner | enabled/disabled state updates |
-| Manual | Change interval | New interval saved |
-| Manual | Save settings | roadmapScanner persisted to config |
+| Test File | Test Name       | Assertion                          |
+| --------- | --------------- | ---------------------------------- |
+| Manual    | Toggle scanner  | enabled/disabled state updates     |
+| Manual    | Change interval | New interval saved                 |
+| Manual    | Save settings   | roadmapScanner persisted to config |
 
 **Verification Plan:**
 
@@ -388,6 +393,7 @@ Add Webhook Modal:
 - [ ] Add form validation with user-friendly error messages
 
 **UI Layout:**
+
 ```
 +-------------------------------------------+
 | Advanced Settings                         |
@@ -405,12 +411,12 @@ Add Webhook Modal:
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| Manual | Change templatesDir | New value saved |
-| Manual | Set cronScheduleOffset | Value validated (0-59) |
-| Manual | Set maxRetries | Value validated (>=1) |
-| Manual | Add branch pattern | Pattern added to array |
+| Test File | Test Name              | Assertion              |
+| --------- | ---------------------- | ---------------------- |
+| Manual    | Change templatesDir    | New value saved        |
+| Manual    | Set cronScheduleOffset | Value validated (0-59) |
+| Manual    | Set maxRetries         | Value validated (>=1)  |
+| Manual    | Add branch pattern     | Pattern added to array |
 
 **Verification Plan:**
 
@@ -458,11 +464,11 @@ Add Webhook Modal:
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| Manual | Change settings across tabs | All changes saved atomically |
-| Manual | Invalid config | API returns 400 with field-specific error |
-| Manual | Save while server busy | Loading state shown, no double-submit |
+| Test File | Test Name                   | Assertion                                 |
+| --------- | --------------------------- | ----------------------------------------- |
+| Manual    | Change settings across tabs | All changes saved atomically              |
+| Manual    | Invalid config              | API returns 400 with field-specific error |
+| Manual    | Save while server busy      | Loading state shown, no double-submit     |
 
 **Verification Plan:**
 
@@ -493,11 +499,13 @@ Add Webhook Modal:
 ## 6. Integration Points Checklist
 
 **How will this feature be reached?**
+
 - [x] Entry point identified: `/settings` route (existing)
 - [x] Caller file identified: `App.tsx` router (no changes needed)
 - [x] Registration/wiring needed: None - existing route
 
 **Is this user-facing?**
+
 - [x] YES -> UI components required:
   - Provider Env editor (add/edit/delete env vars)
   - Webhook editor (add/edit/delete webhooks)
@@ -506,6 +514,7 @@ Add Webhook Modal:
   - Masked input component for secrets
 
 **Full user flow:**
+
 1. User clicks "Settings" in sidebar
 2. Triggers: React Router navigates to `/settings`
 3. Reaches new feature via: Settings page loads with expanded tabs
@@ -515,20 +524,20 @@ Add Webhook Modal:
 
 ## 7. UI Component Summary
 
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| `ProviderEnvEditor` | Settings.tsx (inline) | Add/edit/delete provider env vars |
-| `WebhookEditor` | Settings.tsx (inline) | Add/edit/delete notification webhooks |
-| `MaskedInput` | New component or inline | Show/hide sensitive values |
-| `TagInput` | Settings.tsx (inline) | Array input for branchPatterns, prdPriority |
+| Component           | Location                | Purpose                                     |
+| ------------------- | ----------------------- | ------------------------------------------- |
+| `ProviderEnvEditor` | Settings.tsx (inline)   | Add/edit/delete provider env vars           |
+| `WebhookEditor`     | Settings.tsx (inline)   | Add/edit/delete notification webhooks       |
+| `MaskedInput`       | New component or inline | Show/hide sensitive values                  |
+| `TagInput`          | Settings.tsx (inline)   | Array input for branchPatterns, prdPriority |
 
 ---
 
 ## 8. Risk Assessment
 
-| Risk | Mitigation |
-|------|------------|
-| Breaking existing config | Config writer preserves unknown keys; API validates input |
-| Large form state | Use React useState with single form object; no Redux needed |
-| API token exposure | Mask by default; only show on explicit user action |
-| Invalid config saves | Server-side validation returns 400 with clear error messages |
+| Risk                     | Mitigation                                                   |
+| ------------------------ | ------------------------------------------------------------ |
+| Breaking existing config | Config writer preserves unknown keys; API validates input    |
+| Large form state         | Use React useState with single form object; no Redux needed  |
+| API token exposure       | Mask by default; only show on explicit user action           |
+| Invalid config saves     | Server-side validation returns 400 with clear error messages |

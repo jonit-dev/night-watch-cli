@@ -178,12 +178,12 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `packages/slack/src/__tests__/deliberation-builders.test.ts` | `should include citation format rule in contribution prompt` | `expect(prompt).toContain('path/to/file.ts#L')` |
-| `packages/slack/src/__tests__/deliberation-builders.test.ts` | `should use relaxed skip logic (ALL three no)` | `expect(prompt).toContain('answer no to ALL three')` |
-| `packages/slack/src/__tests__/deliberation-builders.test.ts` | `should include verdict examples for issue_review` | `expect(prompt).toContain('READY.')` and `expect(prompt).toContain('CLOSE.')` |
-| `packages/slack/src/__tests__/ai/provider.test.ts` | `should default maxTokens to 1024` | `expect(config.maxTokens).toBe(1024)` |
+| Test File                                                    | Test Name                                                    | Assertion                                                                     |
+| ------------------------------------------------------------ | ------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `packages/slack/src/__tests__/deliberation-builders.test.ts` | `should include citation format rule in contribution prompt` | `expect(prompt).toContain('path/to/file.ts#L')`                               |
+| `packages/slack/src/__tests__/deliberation-builders.test.ts` | `should use relaxed skip logic (ALL three no)`               | `expect(prompt).toContain('answer no to ALL three')`                          |
+| `packages/slack/src/__tests__/deliberation-builders.test.ts` | `should include verdict examples for issue_review`           | `expect(prompt).toContain('READY.')` and `expect(prompt).toContain('CLOSE.')` |
+| `packages/slack/src/__tests__/ai/provider.test.ts`           | `should default maxTokens to 1024`                           | `expect(config.maxTokens).toBe(1024)`                                         |
 
 **Verification Plan:**
 
@@ -204,13 +204,20 @@ sequenceDiagram
 **Implementation:**
 
 - [ ] Create `packages/core/src/memory/memory-types.ts`:
+
   ```typescript
-  export type MemoryCategory = 'PATTERN' | 'DECISION' | 'ARCHITECTURE' | 'OBSERVATION' | 'HYPOTHESIS' | 'TODO';
+  export type MemoryCategory =
+    | 'PATTERN'
+    | 'DECISION'
+    | 'ARCHITECTURE'
+    | 'OBSERVATION'
+    | 'HYPOTHESIS'
+    | 'TODO';
   export const CORE_CATEGORIES: MemoryCategory[] = ['PATTERN', 'DECISION', 'ARCHITECTURE'];
   export const WORKING_CATEGORIES: MemoryCategory[] = ['OBSERVATION', 'HYPOTHESIS', 'TODO'];
 
   export interface IMemoryTier {
-    core: string;    // from core.md
+    core: string; // from core.md
     working: string; // from working.md
   }
   ```
@@ -258,14 +265,14 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `packages/core/src/__tests__/memory-service.test.ts` | `should read tiered memory (core + working)` | Returns string containing `## Core Lessons` and `## Working Memory` |
-| `packages/core/src/__tests__/memory-service.test.ts` | `should migrate main.md to working.md on first read` | `main.md` renamed, `working.md` exists |
-| `packages/core/src/__tests__/memory-service.test.ts` | `should append reflection to working.md only` | `working.md` updated, `core.md` unchanged |
-| `packages/core/src/__tests__/memory-service.test.ts` | `should not compact core.md` | After compact, `core.md` unchanged |
-| `packages/core/src/__tests__/memory-service.test.ts` | `should validate compaction output format` | Invalid LLM output rejected, original preserved |
-| `packages/core/src/__tests__/memory-service.test.ts` | `should return empty tiers when no files exist` | Returns `## Core Lessons\n\n## Working Memory\n` |
+| Test File                                            | Test Name                                            | Assertion                                                           |
+| ---------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------- |
+| `packages/core/src/__tests__/memory-service.test.ts` | `should read tiered memory (core + working)`         | Returns string containing `## Core Lessons` and `## Working Memory` |
+| `packages/core/src/__tests__/memory-service.test.ts` | `should migrate main.md to working.md on first read` | `main.md` renamed, `working.md` exists                              |
+| `packages/core/src/__tests__/memory-service.test.ts` | `should append reflection to working.md only`        | `working.md` updated, `core.md` unchanged                           |
+| `packages/core/src/__tests__/memory-service.test.ts` | `should not compact core.md`                         | After compact, `core.md` unchanged                                  |
+| `packages/core/src/__tests__/memory-service.test.ts` | `should validate compaction output format`           | Invalid LLM output rejected, original preserved                     |
+| `packages/core/src/__tests__/memory-service.test.ts` | `should return empty tiers when no files exist`      | Returns `## Core Lessons\n\n## Working Memory\n`                    |
 
 **Verification Plan:**
 
@@ -287,6 +294,7 @@ sequenceDiagram
 - [ ] In `reflection-prompts.ts:buildReflectionPrompt()` (:67-76):
   - Change bullet count from "1-3" to "1-5"
   - Add category requirement and few-shot examples:
+
     ```
     Respond with 1-5 categorized bullet points. Each bullet MUST follow this format:
     - [CATEGORY] lesson text (ref: path/to/file.ts#L42-L45)
@@ -338,12 +346,12 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `packages/core/src/__tests__/reflection-prompts.test.ts` | `should include category format in reflection prompt` | `expect(prompt).toContain('[CATEGORY]')` |
+| Test File                                                | Test Name                                               | Assertion                                                                                |
+| -------------------------------------------------------- | ------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `packages/core/src/__tests__/reflection-prompts.test.ts` | `should include category format in reflection prompt`   | `expect(prompt).toContain('[CATEGORY]')`                                                 |
 | `packages/core/src/__tests__/reflection-prompts.test.ts` | `should include good/bad examples in reflection prompt` | `expect(prompt).toContain('GOOD lessons')` and `expect(prompt).toContain('BAD lessons')` |
-| `packages/core/src/__tests__/reflection-prompts.test.ts` | `should instruct compaction to preserve refs` | `expect(prompt).toContain('ref: path#L42')` |
-| `packages/core/src/__tests__/soul-compiler.test.ts` | `should inject tiered memory sections` | `expect(result).toContain('## Core Lessons')` |
+| `packages/core/src/__tests__/reflection-prompts.test.ts` | `should instruct compaction to preserve refs`           | `expect(prompt).toContain('ref: path#L42')`                                              |
+| `packages/core/src/__tests__/soul-compiler.test.ts`      | `should inject tiered memory sections`                  | `expect(result).toContain('## Core Lessons')`                                            |
 
 **Verification Plan:**
 
@@ -368,7 +376,10 @@ sequenceDiagram
     ```typescript
     const titlePrompt = `Convert this one-liner into a clean imperative-mood Git issue title (max 80 chars). No prefix like "fix:" — just the action.\nOne-liner: "${slackOneliner}"\nExamples:\n- "add timeout to auth middleware"\n- "remove duplicate validation in signup flow"\n- "fix N+1 query in user list endpoint"\nWrite only the title.`;
     const generatedTitle = await callAIForContribution(devPersona, this.config, titlePrompt, 64);
-    const issueTitle = `fix: ${generatedTitle.toLowerCase().replace(/[.!?]+$/, '').slice(0, 80)}`;
+    const issueTitle = `fix: ${generatedTitle
+      .toLowerCase()
+      .replace(/[.!?]+$/, '')
+      .slice(0, 80)}`;
     ```
   - Change `body.slice(0, 600)` to `body.slice(0, 1200)` at lines 231 and 240
 
@@ -394,12 +405,12 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `packages/slack/src/__tests__/humanizer.test.ts` | `should keep "Of course" when followed by substantive content` | `expect(humanizeSlackReply('Of course, the auth check at middleware.ts#L23 skips expiry')).toContain('Of course')` |
-| `packages/slack/src/__tests__/humanizer.test.ts` | `should strip "Of course" when followed by generic filler` | `expect(humanizeSlackReply('Of course, I think we should consider...')).not.toMatch(/^Of course/)` |
-| `packages/slack/src/__tests__/context-fetcher.test.ts` | `should fetch up to 4 URLs` | Verify `.slice(0, 4)` behavior |
-| `packages/slack/src/__tests__/board-integration.test.ts` | `should use longer body preview (1200 chars)` | Verify truncation at 1200 |
+| Test File                                                | Test Name                                                      | Assertion                                                                                                          |
+| -------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `packages/slack/src/__tests__/humanizer.test.ts`         | `should keep "Of course" when followed by substantive content` | `expect(humanizeSlackReply('Of course, the auth check at middleware.ts#L23 skips expiry')).toContain('Of course')` |
+| `packages/slack/src/__tests__/humanizer.test.ts`         | `should strip "Of course" when followed by generic filler`     | `expect(humanizeSlackReply('Of course, I think we should consider...')).not.toMatch(/^Of course/)`                 |
+| `packages/slack/src/__tests__/context-fetcher.test.ts`   | `should fetch up to 4 URLs`                                    | Verify `.slice(0, 4)` behavior                                                                                     |
+| `packages/slack/src/__tests__/board-integration.test.ts` | `should use longer body preview (1200 chars)`                  | Verify truncation at 1200                                                                                          |
 
 **Verification Plan:**
 
@@ -412,15 +423,18 @@ sequenceDiagram
 
 ```markdown
 **How will this feature be reached?**
+
 - [x] Entry point identified: all existing agent flows (deliberation, ad-hoc, proactive, consensus, issue-review)
 - [x] Caller files identified: deliberation.ts, consensus-evaluator.ts, board-integration.ts, proactive-loop.ts
 - [x] Registration/wiring needed: memory-types.ts exported from core/index.ts
 
 **Is this user-facing?**
+
 - [x] YES → agents produce visibly better Slack messages with code citations
 - [x] NO new UI needed — improvements are in prompt quality and memory format
 
 **Full user flow:**
+
 1. User opens a PR or triggers a code_watch scan
 2. Deliberation engine calls agents with updated prompts (citation rules, 1024 tokens)
 3. Agents respond with `path/to/file.ts#L42-L45` references and richer analysis

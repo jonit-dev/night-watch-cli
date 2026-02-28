@@ -51,12 +51,12 @@ Developers can push code that fails type checks or tests, causing CI pipeline fa
 
 ### Key Decisions
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Hook Manager | husky v9 | Most popular, simple, supports all hook types |
-| Staged Linter | lint-staged | Only checks changed files, faster feedback |
-| Hook Timing | pre-push (not pre-commit) | Pre-push allows WIP commits; tests run once before sharing code |
-| Lint Auto-fix | Yes | Auto-fix trivial issues (formatting, imports) to reduce friction |
+| Decision      | Choice                    | Rationale                                                        |
+| ------------- | ------------------------- | ---------------------------------------------------------------- |
+| Hook Manager  | husky v9                  | Most popular, simple, supports all hook types                    |
+| Staged Linter | lint-staged               | Only checks changed files, faster feedback                       |
+| Hook Timing   | pre-push (not pre-commit) | Pre-push allows WIP commits; tests run once before sharing code  |
+| Lint Auto-fix | Yes                       | Auto-fix trivial issues (formatting, imports) to reduce friction |
 
 ### Data Changes
 
@@ -83,8 +83,8 @@ None required. This is configuration-only.
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
+| Test File           | Test Name        | Assertion                               |
+| ------------------- | ---------------- | --------------------------------------- |
 | Manual verification | `ls -la .husky/` | Directory exists with `_/` subdirectory |
 
 **User Verification:**
@@ -117,8 +117,8 @@ None required. This is configuration-only.
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
+| Test File           | Test Name                    | Assertion            |
+| ------------------- | ---------------------------- | -------------------- |
 | Manual verification | Stage a file with lint issue | Auto-fixed on commit |
 
 **User Verification:**
@@ -139,6 +139,7 @@ None required. This is configuration-only.
 **Implementation:**
 
 - [ ] Create pre-push hook:
+
   ```bash
   #!/usr/bin/env sh
   . "$(dirname -- "$0")/_/husky.sh"
@@ -151,15 +152,16 @@ None required. This is configuration-only.
 
   echo "All checks passed!"
   ```
+
 - [ ] Make hook executable: `chmod +x .husky/pre-push`
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| Manual verification | Introduce type error, try to push | Push blocked with error message |
-| Manual verification | Introduce failing test, try to push | Push blocked with test failure |
-| Manual verification | All checks pass, push | Push succeeds |
+| Test File           | Test Name                           | Assertion                       |
+| ------------------- | ----------------------------------- | ------------------------------- |
+| Manual verification | Introduce type error, try to push   | Push blocked with error message |
+| Manual verification | Introduce failing test, try to push | Push blocked with test failure  |
+| Manual verification | All checks pass, push               | Push succeeds                   |
 
 **User Verification:**
 
@@ -245,9 +247,7 @@ git push origin main --dry-run
     "lint-staged": "^15.0.0"
   },
   "lint-staged": {
-    "src/**/*.ts": [
-      "eslint --fix"
-    ]
+    "src/**/*.ts": ["eslint --fix"]
   }
 }
 ```

@@ -109,17 +109,17 @@ flowchart TB
 
 ## 3. Design Principles (Enforced Throughout)
 
-| Principle | Application |
-|-----------|-------------|
-| **SRP** | Each file/class does one thing. Route modules handle HTTP. Services handle business logic. Repositories handle data. |
-| **OCP** | New routes/services added without modifying existing ones. DI container is the extension point. |
-| **LSP** | Repository interfaces define contracts. Any implementation (SQLite, in-memory for tests) is substitutable. |
-| **ISP** | Small, focused interfaces. `IAgentPersonaRepository` not `IEverythingRepository`. |
-| **DIP** | High-level modules (routes, services) depend on injected classes, not global singletons. Composition root wires everything. |
-| **KISS** | Automatic class-based DI — no manual tokens. Plain functions where classes aren't needed. |
-| **DRY** | Shared error handler middleware. Shared route-wiring pattern. Shared types in `@night-watch/core`. |
-| **YAGNI** | No speculative abstractions. No generic "BaseService". No middleware we don't need today. |
-| **Composition > Inheritance** | Routes are factory functions, not classes extending `BaseRoute`. Services compose other services, not inherit. |
+| Principle                     | Application                                                                                                                 |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **SRP**                       | Each file/class does one thing. Route modules handle HTTP. Services handle business logic. Repositories handle data.        |
+| **OCP**                       | New routes/services added without modifying existing ones. DI container is the extension point.                             |
+| **LSP**                       | Repository interfaces define contracts. Any implementation (SQLite, in-memory for tests) is substitutable.                  |
+| **ISP**                       | Small, focused interfaces. `IAgentPersonaRepository` not `IEverythingRepository`.                                           |
+| **DIP**                       | High-level modules (routes, services) depend on injected classes, not global singletons. Composition root wires everything. |
+| **KISS**                      | Automatic class-based DI — no manual tokens. Plain functions where classes aren't needed.                                   |
+| **DRY**                       | Shared error handler middleware. Shared route-wiring pattern. Shared types in `@night-watch/core`.                          |
+| **YAGNI**                     | No speculative abstractions. No generic "BaseService". No middleware we don't need today.                                   |
+| **Composition > Inheritance** | Routes are factory functions, not classes extending `BaseRoute`. Services compose other services, not inherit.              |
 
 ---
 
@@ -129,18 +129,18 @@ flowchart TB
 
 **File naming pattern:** `<name>.<type>.ts` — dot-separated, kebab-case name, type suffix.
 
-| Item | Convention | Example |
-|------|-----------|---------|
-| Services | `<name>.service.ts` | `notification.service.ts`, `status.service.ts` |
-| Routes | `<name>.routes.ts` | `board.routes.ts`, `agent.routes.ts` |
-| Middleware | `<name>.middleware.ts` | `error-handler.middleware.ts`, `project-resolver.middleware.ts` |
-| Repositories | `<name>.repository.ts` | `agent-persona.repository.ts`, `prd-state.repository.ts` |
-| Tests | `<name>.<type>.test.ts` | `notification.service.test.ts`, `board.routes.test.ts` |
-| Types | `<name>.types.ts` or `types.ts` | `slack.types.ts`, `types.ts` (for package-wide) |
-| Plain modules | `kebab-case.ts` (no type suffix) | `soul-compiler.ts`, `humanizer.ts`, `client.ts` |
-| Classes | `PascalCase` | `SlackClient`, `NotificationService` |
-| Interfaces | `I` prefix + PascalCase | `IAgentPersonaRepository`, `INotificationService` |
-| Index files | Re-export public API only | `packages/core/src/index.ts` |
+| Item          | Convention                       | Example                                                         |
+| ------------- | -------------------------------- | --------------------------------------------------------------- |
+| Services      | `<name>.service.ts`              | `notification.service.ts`, `status.service.ts`                  |
+| Routes        | `<name>.routes.ts`               | `board.routes.ts`, `agent.routes.ts`                            |
+| Middleware    | `<name>.middleware.ts`           | `error-handler.middleware.ts`, `project-resolver.middleware.ts` |
+| Repositories  | `<name>.repository.ts`           | `agent-persona.repository.ts`, `prd-state.repository.ts`        |
+| Tests         | `<name>.<type>.test.ts`          | `notification.service.test.ts`, `board.routes.test.ts`          |
+| Types         | `<name>.types.ts` or `types.ts`  | `slack.types.ts`, `types.ts` (for package-wide)                 |
+| Plain modules | `kebab-case.ts` (no type suffix) | `soul-compiler.ts`, `humanizer.ts`, `client.ts`                 |
+| Classes       | `PascalCase`                     | `SlackClient`, `NotificationService`                            |
+| Interfaces    | `I` prefix + PascalCase          | `IAgentPersonaRepository`, `INotificationService`               |
+| Index files   | Re-export public API only        | `packages/core/src/index.ts`                                    |
 
 **When to use a type suffix:** When the file is a clearly typed architectural component (service, route, middleware, repository). For utility modules, standalone classes, or simple helpers — plain kebab-case without a suffix.
 
@@ -293,9 +293,9 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `src/__tests__/di/container.test.ts` | `should initialize container without errors` | `expect(() => initContainer(tmpDir)).not.toThrow()` |
+| Test File                            | Test Name                                     | Assertion                                                               |
+| ------------------------------------ | --------------------------------------------- | ----------------------------------------------------------------------- |
+| `src/__tests__/di/container.test.ts` | `should initialize container without errors`  | `expect(() => initContainer(tmpDir)).not.toThrow()`                     |
 | `src/__tests__/di/container.test.ts` | `should resolve SqliteAgentPersonaRepository` | `expect(container.resolve(SqliteAgentPersonaRepository)).toBeDefined()` |
 
 **Verification Plan:**
@@ -330,10 +330,10 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `src/__tests__/di/container.test.ts` | `should resolve repositories via DI` | All 6 repos resolve and have expected methods |
-| `src/__tests__/storage/agent-persona-repository.test.ts` | (existing tests) | All pass without modification |
+| Test File                                                | Test Name                            | Assertion                                     |
+| -------------------------------------------------------- | ------------------------------------ | --------------------------------------------- |
+| `src/__tests__/di/container.test.ts`                     | `should resolve repositories via DI` | All 6 repos resolve and have expected methods |
+| `src/__tests__/storage/agent-persona-repository.test.ts` | (existing tests)                     | All pass without modification                 |
 
 **Verification Plan:**
 
@@ -379,10 +379,10 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `src/__tests__/server.test.ts` | (all existing) | All pass without modification |
-| `src/__tests__/server-agents-routes.test.ts` | (all existing) | All pass without modification |
+| Test File                                           | Test Name      | Assertion                     |
+| --------------------------------------------------- | -------------- | ----------------------------- |
+| `src/__tests__/server.test.ts`                      | (all existing) | All pass without modification |
+| `src/__tests__/server-agents-routes.test.ts`        | (all existing) | All pass without modification |
 | `src/__tests__/server-global-agents-routes.test.ts` | (all existing) | All pass without modification |
 
 **Verification Plan:**
@@ -425,13 +425,13 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `src/__tests__/server/services/notification.service.test.ts` | `should send webhook for run_started event` | Webhook called with correct payload |
-| `src/__tests__/server/services/status.service.test.ts` | `should build status snapshot` | Snapshot contains prds, processes, crontab |
-| `src/__tests__/server/services/roadmap.service.test.ts` | `should return roadmap status` | Returns items with correct processed/pending counts |
-| `src/__tests__/utils/notify.test.ts` | (existing) | Still pass via re-export wrappers |
-| `src/__tests__/roadmap-scanner.test.ts` | (existing) | Still pass via re-export wrappers |
+| Test File                                                    | Test Name                                   | Assertion                                           |
+| ------------------------------------------------------------ | ------------------------------------------- | --------------------------------------------------- |
+| `src/__tests__/server/services/notification.service.test.ts` | `should send webhook for run_started event` | Webhook called with correct payload                 |
+| `src/__tests__/server/services/status.service.test.ts`       | `should build status snapshot`              | Snapshot contains prds, processes, crontab          |
+| `src/__tests__/server/services/roadmap.service.test.ts`      | `should return roadmap status`              | Returns items with correct processed/pending counts |
+| `src/__tests__/utils/notify.test.ts`                         | (existing)                                  | Still pass via re-export wrappers                   |
+| `src/__tests__/roadmap-scanner.test.ts`                      | (existing)                                  | Still pass via re-export wrappers                   |
 
 **Verification Plan:**
 
@@ -468,12 +468,12 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `src/__tests__/di/container.test.ts` | `should resolve full dependency graph` | All tokens resolve without error |
-| `src/__tests__/di/container.test.ts` | `should allow test overrides` | `createTestContainer()` with mock repo works |
-| `src/__tests__/slack/interaction-listener.test.ts` | (existing) | Pass with injected deps |
-| `src/__tests__/slack/deliberation.test.ts` | (existing) | Pass with injected deps |
+| Test File                                          | Test Name                              | Assertion                                    |
+| -------------------------------------------------- | -------------------------------------- | -------------------------------------------- |
+| `src/__tests__/di/container.test.ts`               | `should resolve full dependency graph` | All tokens resolve without error             |
+| `src/__tests__/di/container.test.ts`               | `should allow test overrides`          | `createTestContainer()` with mock repo works |
+| `src/__tests__/slack/interaction-listener.test.ts` | (existing)                             | Pass with injected deps                      |
+| `src/__tests__/slack/deliberation.test.ts`         | (existing)                             | Pass with injected deps                      |
 
 **Verification Plan:**
 
@@ -527,11 +527,11 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| All existing tests | All names | Pass in their new package locations |
-| Root build | `yarn build` | All packages compile without errors |
-| Root test | `yarn test` | All packages tests pass |
+| Test File          | Test Name    | Assertion                           |
+| ------------------ | ------------ | ----------------------------------- |
+| All existing tests | All names    | Pass in their new package locations |
+| Root build         | `yarn build` | All packages compile without errors |
+| Root test          | `yarn test`  | All packages tests pass             |
 
 **Verification Plan:**
 
@@ -563,13 +563,13 @@ sequenceDiagram
 
 ## 8. Risks & Mitigations
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|-----------|--------|------------|
-| Import path breakage during monorepo move | High | Medium | Phase 6 is standalone — run full test suite after every batch of file moves. Use `git mv` to preserve history. |
-| Tsyringe decorator issues with ESM | Medium | High | Test decorator support early in Phase 1. Fall back to manual `container.register()` if decorators are problematic with NodeNext module resolution. |
-| Test flakiness during DI migration | Medium | Medium | Keep `getRepositories()` working as fallback during Phases 1-4. Only remove in Phase 5. |
-| npm publish breaks with monorepo | Medium | High | Test `npm publish --dry-run` in Phase 6. Keep `packages/cli` as the sole published package with correct `files` array. |
-| Reflect-metadata polyfill conflicts | Low | Medium | Import `reflect-metadata` once at the CLI entry point, before any other imports. |
+| Risk                                      | Likelihood | Impact | Mitigation                                                                                                                                         |
+| ----------------------------------------- | ---------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Import path breakage during monorepo move | High       | Medium | Phase 6 is standalone — run full test suite after every batch of file moves. Use `git mv` to preserve history.                                     |
+| Tsyringe decorator issues with ESM        | Medium     | High   | Test decorator support early in Phase 1. Fall back to manual `container.register()` if decorators are problematic with NodeNext module resolution. |
+| Test flakiness during DI migration        | Medium     | Medium | Keep `getRepositories()` working as fallback during Phases 1-4. Only remove in Phase 5.                                                            |
+| npm publish breaks with monorepo          | Medium     | High   | Test `npm publish --dry-run` in Phase 6. Keep `packages/cli` as the sole published package with correct `files` array.                             |
+| Reflect-metadata polyfill conflicts       | Low        | Medium | Import `reflect-metadata` once at the CLI entry point, before any other imports.                                                                   |
 
 ---
 
@@ -579,6 +579,7 @@ After each phase lands, update `CLAUDE.md` to enforce the new architecture. The 
 
 ```markdown
 ## Architecture rules
+
 - All dependencies via Tsyringe constructor injection — never call `getRepositories()`, `getDb()`, or `loadConfig()` directly in services/routes. Only `src/di/container.ts` wires implementations.
 - File naming: `<name>.<type>.ts` for architectural components — `board.routes.ts`, `notification.service.ts`, `error-handler.middleware.ts`, `agent-persona.repository.ts`. Plain `kebab-case.ts` for non-architectural modules.
 - Routes in `src/server/routes/<domain>.routes.ts`, services in `src/server/services/<domain>.service.ts`. No inline handlers or business logic in route files.
@@ -588,12 +589,12 @@ After each phase lands, update `CLAUDE.md` to enforce the new architecture. The 
 
 **Phase-by-phase CLAUDE.md additions:**
 
-| After Phase | Add to CLAUDE.md |
-|-------------|-----------------|
-| 1-2 | DI rule: never call `getRepositories()`, `getDb()`, or `loadConfig()` outside the composition root. |
-| 3 | File naming: `<name>.<type>.ts` convention. Routes in `<domain>.routes.ts`. |
-| 4 | Services in `<domain>.service.ts`. No business logic in route files. |
-| 6 | Monorepo imports via `@night-watch/core`. No file over 400 LOC. Replace `@/*` alias rule with package imports. |
+| After Phase | Add to CLAUDE.md                                                                                               |
+| ----------- | -------------------------------------------------------------------------------------------------------------- |
+| 1-2         | DI rule: never call `getRepositories()`, `getDb()`, or `loadConfig()` outside the composition root.            |
+| 3           | File naming: `<name>.<type>.ts` convention. Routes in `<domain>.routes.ts`.                                    |
+| 4           | Services in `<domain>.service.ts`. No business logic in route files.                                           |
+| 6           | Monorepo imports via `@night-watch/core`. No file over 400 LOC. Replace `@/*` alias rule with package imports. |
 
 After Phase 6, replace the existing `@/*` path alias instruction with the `@night-watch/*` package import rule.
 
