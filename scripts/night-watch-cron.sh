@@ -109,7 +109,7 @@ if [ "${NW_BOARD_ENABLED:-}" = "true" ]; then
     ISSUE_TITLE_RAW=$(printf '%s' "${ISSUE_JSON}" | jq -r '.title // empty' 2>/dev/null || true)
     ISSUE_BODY=$(printf '%s' "${ISSUE_JSON}" | jq -r '.body // empty' 2>/dev/null || true)
   else
-    ISSUE_JSON=$(find_eligible_board_issue)
+    ISSUE_JSON=$(find_eligible_board_issue) || true
     if [ -z "${ISSUE_JSON}" ]; then
       log "SKIP: No eligible issues in Ready column (board mode)"
       emit_result "skip_no_eligible_prd"
