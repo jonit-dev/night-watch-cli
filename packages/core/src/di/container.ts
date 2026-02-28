@@ -8,16 +8,13 @@
  *
  * Phase 5: Service classes (NotificationService, StatusService, RoadmapService) are
  * registered by the server package via extendContainerWithServices() after the core
- * container is initialized. Slack instances are registered by the composition root
- * (server/index.ts) after the config is loaded — they require runtime configuration
- * values (tokens, config) that are not available at container bootstrap time.
+ * container is initialized.
  */
 
 import 'reflect-metadata';
 
 import { container } from 'tsyringe';
 
-import { MemoryService } from '@/memory/memory-service.js';
 import { SqliteAgentPersonaRepository } from '@/storage/repositories/sqlite/agent-persona.repository.js';
 import { SqliteExecutionHistoryRepository } from '@/storage/repositories/sqlite/execution-history.repository.js';
 import { SqlitePrdStateRepository } from '@/storage/repositories/sqlite/prd-state.repository.js';
@@ -60,9 +57,6 @@ export function initContainer(projectDir: string): void {
   container.registerSingleton(SqlitePrdStateRepository);
   container.registerSingleton(SqliteProjectRegistryRepository);
   container.registerSingleton(SqliteRoadmapStateRepository);
-
-  // Register MemoryService as a singleton — no DB dependency, pure filesystem.
-  container.registerSingleton(MemoryService);
 }
 
 /**

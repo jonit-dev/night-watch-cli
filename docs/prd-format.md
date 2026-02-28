@@ -1,5 +1,7 @@
 # PRD Format
 
+> Related: [Architecture Overview](architecture-overview.md) | [Commands Reference](commands.md) | [Configuration](configuration.md) | [CLI Package](cli-package.md)
+
 Night Watch looks for PRD files in `docs/PRDs/night-watch/` (configurable via `prdDir`). PRDs are markdown files with optional dependency declarations.
 
 ---
@@ -10,15 +12,18 @@ Night Watch looks for PRD files in `docs/PRDs/night-watch/` (configurable via `p
 # Feature: User Authentication
 
 ## Overview
+
 Implement user authentication using JWT tokens.
 
 ## Requirements
+
 - [ ] Login endpoint
 - [ ] Logout endpoint
 - [ ] Token refresh
 - [ ] Password hashing
 
 ## Acceptance Criteria
+
 - Users can log in with email/password
 - Tokens expire after 24 hours
 - All endpoints have proper error handling
@@ -34,9 +39,11 @@ Implement user authentication using JWT tokens.
 Depends on: Feature: User Authentication
 
 ## Overview
+
 Add user profile management.
 
 ## Requirements
+
 - [ ] Profile page
 - [ ] Edit profile
 - [ ] Avatar upload
@@ -54,6 +61,7 @@ When a PRD specifies `Depends on:`, Night Watch will only process it after the d
 4. **Done** — The PRD file is moved to `docs/PRDs/night-watch/done/`
 
 PRDs are skipped if:
+
 - They have unmet dependencies (the depended-on PRD is not yet in `done/`)
 - An open PR already exists for the PRD
 - A lock file indicates another execution is in progress

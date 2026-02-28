@@ -236,23 +236,3 @@ export interface IRoadmapContextOptions {
   /** Character cap for the compiled output. Defaults: full=3000, summary=800 */
   maxChars?: number;
 }
-
-// ==================== Agent Memory ====================
-
-export interface IMemoryEntry {
-  date: string; // ISO date string e.g. "2026-02-20"
-  persona: string;
-  project: string;
-  lessons: string[];
-  category?: string;
-}
-
-export interface IReflectionContext {
-  triggerType: string;
-  outcome: string;
-  summary: string;
-  filesChanged?: string[];
-}
-
-// LlmCaller — injected by callers to avoid circular deps
-export type LlmCaller = (systemPrompt: string, userPrompt: string) => Promise<string>;

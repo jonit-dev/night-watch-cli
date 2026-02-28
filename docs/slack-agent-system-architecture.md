@@ -1,9 +1,11 @@
 # Night Watch Slack Agent System -- Architecture Documentation
 
+> **DEPRECATED:** `packages/slack` and the multi-agent deliberation engine were removed in commit `46637a0`. This document is kept for **historical reference only**. Slack webhook notifications remain via `packages/server/src/services/notification.service.ts`. The persona system (soul compiler, memory service) remains in `packages/core`.
+>
 > Generated: 2026-02-21
-> Last updated: 2026-02-21
-> Scope: Multi-agent Slack bot architecture within the Night Watch CLI monorepo
-> Status: Living document -- reflects current `main` branch state
+> Scope: Multi-agent Slack bot architecture (removed February 2026)
+>
+> Related: [Persona & Memory System](persona-memory-system.md) | [Core Package](core-package.md) | [Server API](server-api.md) | [Architecture Overview](architecture-overview.md)
 
 ---
 
@@ -276,15 +278,15 @@ The `DeliberationEngine` is the central orchestrator for all agent interactions 
 
 ### Core Methods
 
-| Method                                                                | Purpose                                                    |
-| --------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `startDiscussion(trigger)`                                            | Create a new discussion thread from a trigger event        |
-| `contributeAsAgent(discussionId, persona)`                            | Have a specific agent contribute to an existing discussion |
-| `handleHumanMessage(channel, threadTs, message, userId)`              | Handle a human message posted in a discussion thread       |
-| `replyAsAgent(channel, threadTs, text, persona, ctx, roadmap)`        | Ad-hoc reply outside formal discussions                    |
-| `postProactiveMessage(channel, persona, ctx, roadmap, slug, slicing)` | AI-generated proactive observation                         |
-| `triggerPRRefinement(discussionId, changes, prNumber)`                | Spawn reviewer process with Slack feedback                 |
-| `analyzeCodeCandidate(fileContext, signalSummary, location)`          | Have Dev evaluate whether a scanner finding is worth raising |
+| Method                                                                | Purpose                                                              |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `startDiscussion(trigger)`                                            | Create a new discussion thread from a trigger event                  |
+| `contributeAsAgent(discussionId, persona)`                            | Have a specific agent contribute to an existing discussion           |
+| `handleHumanMessage(channel, threadTs, message, userId)`              | Handle a human message posted in a discussion thread                 |
+| `replyAsAgent(channel, threadTs, text, persona, ctx, roadmap)`        | Ad-hoc reply outside formal discussions                              |
+| `postProactiveMessage(channel, persona, ctx, roadmap, slug, slicing)` | AI-generated proactive observation                                   |
+| `triggerPRRefinement(discussionId, changes, prNumber)`                | Spawn reviewer process with Slack feedback                           |
+| `analyzeCodeCandidate(fileContext, signalSummary, location)`          | Have Dev evaluate whether a scanner finding is worth raising         |
 | `handleAuditReport(report, projectName, projectPath, channel)`        | Triage audit report, file GitHub issue if warranted, post Slack ping |
 
 ### Discussion Lifecycle
@@ -714,9 +716,9 @@ The roadmap context compiler transforms `IRoadmapStatus` into a string injected 
 
 Both modes now include **raw ROADMAP.md file content** (up to 6,000 chars) so agents can reference exact sections and wording, followed by a **progress overlay**.
 
-| Mode              | Target Audience     | Progress Overlay Content                                                                     |
-| ----------------- | ------------------- | -------------------------------------------------------------------------------------------- |
-| **Full digest**   | Lead roles (Carlos) | All sections with done/total counts + all pending item titles. Max 2,000 chars for overlay   |
+| Mode              | Target Audience     | Progress Overlay Content                                                                       |
+| ----------------- | ------------------- | ---------------------------------------------------------------------------------------------- |
+| **Full digest**   | Lead roles (Carlos) | All sections with done/total counts + all pending item titles. Max 2,000 chars for overlay     |
 | **Smart summary** | All other roles     | Total done/total count + up to 5 pending items per section by title. Max 600 chars for overlay |
 
 ### Role Detection

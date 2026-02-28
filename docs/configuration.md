@@ -1,5 +1,7 @@
 # Configuration
 
+> Related: [Core Package](core-package.md) | [Commands Reference](commands.md) | [CLI Package](cli-package.md) | [Architecture Overview](architecture-overview.md)
+
 Configuration is loaded in this order (later overrides earlier):
 
 1. Default values
@@ -36,23 +38,23 @@ Create `night-watch.config.json` in your project root:
 
 ### Config Fields
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `defaultBranch` | string | `""` (auto-detect) | Default branch name (e.g. `main`) |
-| `provider` | string | `"claude"` | AI provider (`claude` or `codex`) |
-| `reviewerEnabled` | boolean | `true` | Enable the PR reviewer |
-| `prdDir` | string | `"docs/PRDs/night-watch"` | Directory containing PRD files |
-| `maxRuntime` | number | `7200` | Max runtime in seconds for PRD execution |
-| `reviewerMaxRuntime` | number | `3600` | Max runtime in seconds for PR reviewer |
-| `branchPrefix` | string | `"night-watch"` | Prefix for created branches |
-| `branchPatterns` | string[] | `["feat/", "night-watch/"]` | Branch patterns for PR reviewer |
-| `minReviewScore` | number | `80` | Min review score (out of 100) |
-| `maxLogSize` | number | `524288` | Max log file size in bytes (512 KB) |
-| `cronSchedule` | string | `"0 0-21 * * *"` | Cron schedule for executor |
-| `reviewerSchedule` | string | `"0 0,3,6,9,12,15,18,21 * * *"` | Cron schedule for reviewer |
-| `providerEnv` | object | `{}` | Custom env vars passed to the provider CLI |
-| `fallbackOnRateLimit` | boolean | `false` | Fall back to native Claude when proxy returns 429 |
-| `claudeModel` | string | `"sonnet"` | Claude model for native execution (`"sonnet"` or `"opus"`) |
+| Field                 | Type     | Default                         | Description                                                |
+| --------------------- | -------- | ------------------------------- | ---------------------------------------------------------- |
+| `defaultBranch`       | string   | `""` (auto-detect)              | Default branch name (e.g. `main`)                          |
+| `provider`            | string   | `"claude"`                      | AI provider (`claude` or `codex`)                          |
+| `reviewerEnabled`     | boolean  | `true`                          | Enable the PR reviewer                                     |
+| `prdDir`              | string   | `"docs/PRDs/night-watch"`       | Directory containing PRD files                             |
+| `maxRuntime`          | number   | `7200`                          | Max runtime in seconds for PRD execution                   |
+| `reviewerMaxRuntime`  | number   | `3600`                          | Max runtime in seconds for PR reviewer                     |
+| `branchPrefix`        | string   | `"night-watch"`                 | Prefix for created branches                                |
+| `branchPatterns`      | string[] | `["feat/", "night-watch/"]`     | Branch patterns for PR reviewer                            |
+| `minReviewScore`      | number   | `80`                            | Min review score (out of 100)                              |
+| `maxLogSize`          | number   | `524288`                        | Max log file size in bytes (512 KB)                        |
+| `cronSchedule`        | string   | `"0 0-21 * * *"`                | Cron schedule for executor                                 |
+| `reviewerSchedule`    | string   | `"0 0,3,6,9,12,15,18,21 * * *"` | Cron schedule for reviewer                                 |
+| `providerEnv`         | object   | `{}`                            | Custom env vars passed to the provider CLI                 |
+| `fallbackOnRateLimit` | boolean  | `false`                         | Fall back to native Claude when proxy returns 429          |
+| `claudeModel`         | string   | `"sonnet"`                      | Claude model for native execution (`"sonnet"` or `"opus"`) |
 
 ---
 
@@ -60,23 +62,23 @@ Create `night-watch.config.json` in your project root:
 
 All Night Watch env vars are prefixed with `NW_`:
 
-| Variable | Config Key |
-|----------|------------|
-| `NW_DEFAULT_BRANCH` | `defaultBranch` |
-| `NW_PRD_DIR` | `prdDir` |
-| `NW_MAX_RUNTIME` | `maxRuntime` |
-| `NW_REVIEWER_MAX_RUNTIME` | `reviewerMaxRuntime` |
-| `NW_BRANCH_PREFIX` | `branchPrefix` |
-| `NW_BRANCH_PATTERNS` | `branchPatterns` (JSON array or comma-separated) |
-| `NW_MIN_REVIEW_SCORE` | `minReviewScore` |
-| `NW_MAX_LOG_SIZE` | `maxLogSize` |
-| `NW_CRON_SCHEDULE` | `cronSchedule` |
-| `NW_REVIEWER_SCHEDULE` | `reviewerSchedule` |
-| `NW_PROVIDER` | `provider` |
-| `NW_REVIEWER_ENABLED` | `reviewerEnabled` |
-| `NW_REVIEWER_PARALLEL` | reviewer parallel fan-out (`1` enabled, `0` disabled) |
-| `NW_FALLBACK_ON_RATE_LIMIT` | `fallbackOnRateLimit` |
-| `NW_CLAUDE_MODEL` | `claudeModel` |
+| Variable                    | Config Key                                            |
+| --------------------------- | ----------------------------------------------------- |
+| `NW_DEFAULT_BRANCH`         | `defaultBranch`                                       |
+| `NW_PRD_DIR`                | `prdDir`                                              |
+| `NW_MAX_RUNTIME`            | `maxRuntime`                                          |
+| `NW_REVIEWER_MAX_RUNTIME`   | `reviewerMaxRuntime`                                  |
+| `NW_BRANCH_PREFIX`          | `branchPrefix`                                        |
+| `NW_BRANCH_PATTERNS`        | `branchPatterns` (JSON array or comma-separated)      |
+| `NW_MIN_REVIEW_SCORE`       | `minReviewScore`                                      |
+| `NW_MAX_LOG_SIZE`           | `maxLogSize`                                          |
+| `NW_CRON_SCHEDULE`          | `cronSchedule`                                        |
+| `NW_REVIEWER_SCHEDULE`      | `reviewerSchedule`                                    |
+| `NW_PROVIDER`               | `provider`                                            |
+| `NW_REVIEWER_ENABLED`       | `reviewerEnabled`                                     |
+| `NW_REVIEWER_PARALLEL`      | reviewer parallel fan-out (`1` enabled, `0` disabled) |
+| `NW_FALLBACK_ON_RATE_LIMIT` | `fallbackOnRateLimit`                                 |
+| `NW_CLAUDE_MODEL`           | `claudeModel`                                         |
 
 ---
 
@@ -106,6 +108,7 @@ The `providerEnv` field lets you pass arbitrary environment variables to the pro
 ```
 
 How it works:
+
 - **Runtime** — Variables are injected into the spawned provider CLI process when running `night-watch run` or `night-watch review`
 - **Cron** — Variables are exported in each cron entry when running `night-watch install`, so automated runs inherit them
 - **Dry run** — Variables are displayed under "Environment Variables" when using `--dry-run`
@@ -139,10 +142,10 @@ When using a third-party proxy (e.g. GLM-5 via a custom `ANTHROPIC_BASE_URL`), t
 
 `claudeModel` controls which model is used for native (non-proxy) execution:
 
-| Value | Model ID |
-|-------|----------|
+| Value                | Model ID            |
+| -------------------- | ------------------- |
 | `"sonnet"` (default) | `claude-sonnet-4-6` |
-| `"opus"` | `claude-opus-4-6` |
+| `"opus"`             | `claude-opus-4-6`   |
 
 This applies both when `provider` is `"claude"` with no proxy configured, and when the fallback is triggered.
 
@@ -175,22 +178,22 @@ Night Watch can send notifications to Slack, Discord, or Telegram when runs comp
 
 ### Webhook Types
 
-| Type | Required Fields | Description |
-|------|----------------|-------------|
-| `slack` | `url`, `events` | Slack incoming webhook URL |
-| `discord` | `url`, `events` | Discord webhook URL |
-| `telegram` | `botToken`, `chatId`, `events` | Telegram Bot API |
+| Type       | Required Fields                | Description                |
+| ---------- | ------------------------------ | -------------------------- |
+| `slack`    | `url`, `events`                | Slack incoming webhook URL |
+| `discord`  | `url`, `events`                | Discord webhook URL        |
+| `telegram` | `botToken`, `chatId`, `events` | Telegram Bot API           |
 
 ### Events
 
-| Event | Fires When |
-|-------|-----------|
-| `run_succeeded` | PRD execution completed successfully and PR was opened |
-| `run_failed` | PRD execution failed |
-| `run_timeout` | PRD execution exceeded `maxRuntime` |
-| `review_completed` | PR review cycle completed |
+| Event                 | Fires When                                                  |
+| --------------------- | ----------------------------------------------------------- |
+| `run_succeeded`       | PRD execution completed successfully and PR was opened      |
+| `run_failed`          | PRD execution failed                                        |
+| `run_timeout`         | PRD execution exceeded `maxRuntime`                         |
+| `review_completed`    | PR review cycle completed                                   |
 | `rate_limit_fallback` | Proxy returned 429 and execution fell back to native Claude |
-| `pr_auto_merged` | PR was automatically merged after passing CI and review |
+| `pr_auto_merged`      | PR was automatically merged after passing CI and review     |
 
 ### Telegram Setup
 
@@ -221,6 +224,7 @@ export NW_NOTIFICATIONS='{"webhooks":[{"type":"telegram","botToken":"...","chatI
 ### Validation
 
 Run `night-watch doctor` to validate your webhook configuration. It checks:
+
 - Slack URLs start with `https://hooks.slack.com/`
 - Discord URLs start with `https://discord.com/api/webhooks/`
 - Telegram webhooks have both `botToken` and `chatId`

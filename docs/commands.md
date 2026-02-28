@@ -1,5 +1,7 @@
 # Commands Reference
 
+> Related: [CLI Package](cli-package.md) | [Configuration](configuration.md) | [DEV-ONBOARDING](DEV-ONBOARDING.md) | [Local Testing](local-testing.md)
+
 ## `night-watch init`
 
 Initialize Night Watch in your project. Creates all necessary directories, configuration files, and provider slash commands.
@@ -12,6 +14,7 @@ night-watch init --provider codex     # Use codex provider
 ```
 
 **What it creates:**
+
 - `docs/PRDs/night-watch/done/` — Directory for completed PRDs
 - `docs/PRDs/night-watch/NIGHT-WATCH-SUMMARY.md` — Progress tracking file
 - `logs/` — Log files directory (added to .gitignore)
@@ -20,6 +23,7 @@ night-watch init --provider codex     # Use codex provider
 - `night-watch.config.json` — Configuration file
 
 **Prerequisites:**
+
 - Git repository
 - GitHub CLI (`gh`) authenticated
 - Provider CLI installed (Claude CLI or Codex)
@@ -64,6 +68,7 @@ night-watch install --no-reviewer          # Skip reviewer cron
 ```
 
 **Default Schedules:**
+
 - Executor: `0 0-15 * * *` (hourly from midnight to 3pm UTC)
 - Reviewer: `0 0,3,6,9,12,15 * * *` (every 3 hours)
 
@@ -90,6 +95,7 @@ night-watch status --json    # Output as JSON
 ```
 
 **Status shows:**
+
 - Process status (executor/reviewer running or not)
 - PRD status (pending vs completed)
 - PR status (open PRs on night-watch/feat branches)
@@ -122,12 +128,14 @@ night-watch state migrate --dry-run # Preview what would be migrated
 ```
 
 **What it migrates:**
+
 - `~/.night-watch/projects.json` — project registry
 - `~/.night-watch/history.json` — PRD execution history
 - `~/.night-watch/prd-states.json` — PRD pending-review states
 - `.roadmap-state.json` files found in each registered project's PRD directory
 
 **Behavior:**
+
 - Safe to run multiple times — migration is idempotent. If already migrated, exits immediately with a notice.
 - Creates a timestamped backup of all legacy JSON files in `~/.night-watch/backups/json-migration-<timestamp>/` before making any changes.
 - The legacy JSON files are not deleted; they remain as-is alongside the backup.
