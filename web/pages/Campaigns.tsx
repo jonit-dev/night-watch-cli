@@ -120,7 +120,7 @@ const Campaigns: React.FC = () => {
       const result = await syncCampaigns(selectedAccountId ?? undefined);
       addToast({
         title: 'Sync Complete',
-        message: `Synced ${result.synced} campaigns (${result.added} added, ${result.updated} updated)`,
+        message: `Synced ${result.length} campaigns from Meta Ads`,
         type: 'success',
       });
       refetchCampaigns();
