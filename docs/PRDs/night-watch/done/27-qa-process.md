@@ -18,6 +18,7 @@ COMPLEXITY SCORE (sum all that apply):
 **Problem:** Night Watch can execute PRDs and review PRs, but there is no automated quality assurance step that generates and runs tests for the changes introduced in a PR. When the executor creates a PR with new UI or API features, there's no mechanism to automatically produce e2e/integration tests, capture screenshots or video recordings of UI changes, and attach evidence to the PR.
 
 **Files Analyzed:**
+
 - `src/commands/review.ts` — Reviewer CLI command (pattern to mirror exactly)
 - `src/commands/slice.ts` — Slicer CLI command (pattern to mirror for env vars + script invocation)
 - `src/commands/install.ts` — Crontab install logic (extend with QA entry)
@@ -34,6 +35,7 @@ COMPLEXITY SCORE (sum all that apply):
 - `templates/night-watch.config.json` — Config template (add QA defaults)
 
 **Current Behavior:**
+
 - Executor creates PRs with new features from PRDs
 - Reviewer checks CI status and review scores, fixes failing PRs
 - No process generates tests for the changes, captures visual evidence, or validates new features with e2e/integration tests
@@ -42,16 +44,19 @@ COMPLEXITY SCORE (sum all that apply):
 ### Integration Points Checklist
 
 **How will this feature be reached?**
+
 - [x] Entry point identified: `night-watch qa` CLI command + `night-watch-qa-cron.sh` cron script
 - [x] Caller file identified: `src/cli.ts` registers the qa command; `install.ts` adds crontab entry
 - [x] Registration/wiring needed: Register `qaCommand` in `cli.ts`; add QA crontab entry in `install.ts`/`performInstall()`; add QA template to `init.ts`; add QA lock path to `status-data.ts`
 
 **Is this user-facing?**
+
 - [x] YES → CLI command (`night-watch qa`, `night-watch qa --dry-run`)
 - [x] Cron-scheduled automated process (fourth process alongside executor, reviewer, slicer)
 - [x] PR comments with test results, screenshots, and video recordings
 
 **Full user flow:**
+
 1. QA is enabled by default (`qa.enabled: true`); user can disable via `night-watch.config.json`
 2. User runs `night-watch qa` (manual) or cron triggers the QA script
 3. QA script finds open PRs matching `qa.branchPatterns` (defaults to `branchPatterns`)
@@ -66,6 +71,7 @@ COMPLEXITY SCORE (sum all that apply):
 ## 2. Solution
 
 **Approach:**
+
 - Add a **fourth autonomous process** ("qa") mirroring the reviewer pattern — own CLI command, bash cron script, config section, cron schedule
 - The AI agent reads the PR diff and autonomously decides whether tests are needed and what type (UI e2e via Playwright, API integration, or both)
 - For UI tests: Playwright captures screenshots and records video by default (configurable via `qa.artifacts`)
@@ -97,6 +103,7 @@ flowchart LR
 ```
 
 **Key Decisions:**
+
 - **AI-driven classification**: The agent reads the diff and decides test type — no heuristic file-path matching needed
 - **Playwright for UI**: Video recording via `video: 'on'` in Playwright config, screenshots via `screenshot: 'on'`
 - **Commit strategy**: Both generated test files AND artifacts (screenshots/videos) are committed to the PR branch — tests go in `tests/e2e/qa/` and `tests/integration/qa/`, artifacts in `qa-artifacts/`
@@ -156,6 +163,7 @@ sequenceDiagram
 ### Phase 1: Config & Types — Add QA configuration fields
 
 **Files (5):**
+
 - `src/types.ts` — Add `IQaConfig` interface and `qa` field to `INightWatchConfig`; add `qa_completed` to `NotificationEvent`
 - `src/constants.ts` — Add QA default values
 - `src/config.ts` — Add QA config loading from file + env vars; add to `mergeConfigs`
@@ -165,8 +173,9 @@ sequenceDiagram
 **Implementation:**
 
 - [ ] Add `IQaConfig` interface to `src/types.ts`:
+
   ```typescript
-  export type QaArtifacts = "screenshot" | "video" | "both";
+  export type QaArtifacts = 'screenshot' | 'video' | 'both';
 
   export interface IQaConfig {
     /** Whether the QA process is enabled */
@@ -185,30 +194,34 @@ sequenceDiagram
     autoInstallPlaywright: boolean;
   }
   ```
+
 - [ ] Add `qa: IQaConfig` to `INightWatchConfig`
 - [ ] Add `"qa_completed"` to `NotificationEvent` union type
 - [ ] Add constants to `src/constants.ts`:
+
   ```typescript
   export const DEFAULT_QA_ENABLED = true;
-  export const DEFAULT_QA_SCHEDULE = "30 1,7,13,19 * * *"; // 4x daily, offset from reviewer
+  export const DEFAULT_QA_SCHEDULE = '30 1,7,13,19 * * *'; // 4x daily, offset from reviewer
   export const DEFAULT_QA_MAX_RUNTIME = 3600; // 1 hour
-  export const DEFAULT_QA_ARTIFACTS: QaArtifacts = "both";
-  export const DEFAULT_QA_SKIP_LABEL = "skip-qa";
+  export const DEFAULT_QA_ARTIFACTS: QaArtifacts = 'both';
+  export const DEFAULT_QA_SKIP_LABEL = 'skip-qa';
   export const DEFAULT_QA_AUTO_INSTALL_PLAYWRIGHT = true;
 
   export const DEFAULT_QA: IQaConfig = {
-    enabled: DEFAULT_QA_ENABLED,        // true
+    enabled: DEFAULT_QA_ENABLED, // true
     schedule: DEFAULT_QA_SCHEDULE,
     maxRuntime: DEFAULT_QA_MAX_RUNTIME,
     branchPatterns: [],
-    artifacts: DEFAULT_QA_ARTIFACTS,    // "both"
+    artifacts: DEFAULT_QA_ARTIFACTS, // "both"
     skipLabel: DEFAULT_QA_SKIP_LABEL,
     autoInstallPlaywright: DEFAULT_QA_AUTO_INSTALL_PLAYWRIGHT,
   };
 
-  export const QA_LOG_NAME = "night-watch-qa";
+  export const QA_LOG_NAME = 'night-watch-qa';
   ```
+
   Also add `"qa"` key to `LOG_FILE_NAMES` map.
+
 - [ ] In `src/config.ts`:
   - Import new QA types and defaults
   - Add `qa` to `getDefaultConfig()` return
@@ -237,6 +250,7 @@ sequenceDiagram
 | `src/__tests__/config.test.ts` | `should use top-level branchPatterns when qa.branchPatterns is empty` | `expect(effectivePatterns).toEqual(config.branchPatterns)` |
 
 **Verification:**
+
 - `yarn verify` passes
 - Config tests pass with `yarn test src/__tests__/config.test.ts`
 
@@ -245,6 +259,7 @@ sequenceDiagram
 ### Phase 2: Bash Script — QA cron runner
 
 **Files (2):**
+
 - `scripts/night-watch-qa-cron.sh` — New QA cron script
 - `scripts/night-watch-helpers.sh` — No changes needed (reuse existing helpers)
 
@@ -269,6 +284,7 @@ sequenceDiagram
 - [ ] Make script executable: `chmod +x scripts/night-watch-qa-cron.sh`
 
 **Key env vars consumed by the script:**
+
 ```bash
 NW_QA_MAX_RUNTIME="${NW_QA_MAX_RUNTIME:-3600}"
 NW_PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
@@ -287,6 +303,7 @@ NW_DRY_RUN="${NW_DRY_RUN:-0}"
 | `src/__tests__/scripts/qa-smoke.test.ts` | `should emit success result on successful QA` | stdout contains `NIGHT_WATCH_RESULT:success_qa` |
 
 **Verification:**
+
 - Script runs with `bash scripts/night-watch-qa-cron.sh /tmp/test-project` (dry run mode)
 - Lock file created/released correctly
 
@@ -295,6 +312,7 @@ NW_DRY_RUN="${NW_DRY_RUN:-0}"
 ### Phase 3: AI Agent Template — The QA prompt
 
 **Files (1):**
+
 - `templates/night-watch-qa.md` — New AI agent prompt for QA
 
 **Implementation:**
@@ -307,6 +325,7 @@ You are the Night Watch QA agent. Your job is to analyze open PRs, generate appr
 ## Context
 
 You are running inside a worktree checked out to a PR branch. Your goal is to:
+
 1. Analyze what changed in this PR compared to the base branch
 2. Determine if the changes are UI-related, API-related, or both
 3. Generate appropriate tests (Playwright e2e for UI, integration tests for API)
@@ -314,6 +333,7 @@ You are running inside a worktree checked out to a PR branch. Your goal is to:
 5. Commit the tests and artifacts, then comment on the PR with results
 
 ## Environment Variables Available
+
 - `NW_QA_ARTIFACTS` — What to capture: "screenshot", "video", or "both" (default: "both")
 - `NW_QA_AUTO_INSTALL_PLAYWRIGHT` — "1" to auto-install Playwright if missing
 
@@ -323,9 +343,11 @@ You are running inside a worktree checked out to a PR branch. Your goal is to:
 
 Get the diff against the base branch:
 ```
+
 git diff origin/${DEFAULT_BRANCH}...HEAD --name-only
 git diff origin/${DEFAULT_BRANCH}...HEAD --stat
-```
+
+````
 
 Read the changed files to understand what the PR introduces.
 
@@ -373,9 +395,10 @@ Based on the diff, determine:
 **UI Tests:**
 ```bash
 npx playwright test tests/e2e/qa/ --reporter=list
-```
+````
 
 **API Tests:**
+
 ```bash
 npx vitest run tests/integration/qa/ --reporter=verbose
 # (or equivalent for the project's test runner)
@@ -386,6 +409,7 @@ Capture the test output for the report.
 ### Step 6: Collect Artifacts
 
 Move Playwright artifacts (screenshots, videos) to `qa-artifacts/` in the project root:
+
 ```bash
 mkdir -p qa-artifacts
 # Copy from playwright-report/ or test-results/ to qa-artifacts/
@@ -454,12 +478,14 @@ Video artifact committed to \`qa-artifacts/\` — view in the PR's file changes.
 ```
 
 ### Important Rules
+
 - Process each PR **once** per run. Do NOT loop or retry after pushing.
 - Do NOT modify existing project tests — only add new files in `qa/` subdirectories.
 - If tests fail, still commit and report — the failures are useful information.
 - Keep test files self-contained and independent from each other.
 - Follow the project's existing code style and conventions (check CLAUDE.md, package.json scripts, tsconfig).
-```
+
+````
 
 **Tests Required:**
 | Test File | Test Name | Assertion |
@@ -641,15 +667,16 @@ Video artifact committed to \`qa-artifacts/\` — view in the PR's file changes.
     "autoInstallPlaywright": true
   }
 }
-```
+````
 
 ### Environment Variables
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `NW_QA_ENABLED` | boolean | `true` | Enable/disable QA process |
-| `NW_QA_SCHEDULE` | string | `30 1,7,13,19 * * *` | Cron schedule |
-| `NW_QA_MAX_RUNTIME` | number | `3600` | Max runtime in seconds |
-| `NW_QA_ARTIFACTS` | string | `both` | Artifact capture: `screenshot`, `video`, `both` |
-| `NW_QA_SKIP_LABEL` | string | `skip-qa` | GitHub label to skip QA |
-| `NW_QA_AUTO_INSTALL_PLAYWRIGHT` | boolean | `true` | Auto-install Playwright if missing |
-| `NW_QA_BRANCH_PATTERNS` | string | (empty) | Comma-separated branch patterns (falls back to `NW_BRANCH_PATTERNS`) |
+
+| Variable                        | Type    | Default              | Description                                                          |
+| ------------------------------- | ------- | -------------------- | -------------------------------------------------------------------- |
+| `NW_QA_ENABLED`                 | boolean | `true`               | Enable/disable QA process                                            |
+| `NW_QA_SCHEDULE`                | string  | `30 1,7,13,19 * * *` | Cron schedule                                                        |
+| `NW_QA_MAX_RUNTIME`             | number  | `3600`               | Max runtime in seconds                                               |
+| `NW_QA_ARTIFACTS`               | string  | `both`               | Artifact capture: `screenshot`, `video`, `both`                      |
+| `NW_QA_SKIP_LABEL`              | string  | `skip-qa`            | GitHub label to skip QA                                              |
+| `NW_QA_AUTO_INSTALL_PLAYWRIGHT` | boolean | `true`               | Auto-install Playwright if missing                                   |
+| `NW_QA_BRANCH_PATTERNS`         | string  | (empty)              | Comma-separated branch patterns (falls back to `NW_BRANCH_PATTERNS`) |

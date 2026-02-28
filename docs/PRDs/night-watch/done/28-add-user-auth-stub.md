@@ -1,9 +1,6 @@
 # PRD: Add User Auth
 
-
-
 **Complexity: 5 → MEDIUM mode**
-
 
 ```
 COMPLEXITY SCORE (sum all that apply):
@@ -30,23 +27,28 @@ COMPLEXITY SCORE (sum all that apply):
 **Problem:** <!-- 1-2 sentences describing the issue being solved -->
 
 **Files Analyzed:**
+
 <!-- List all files you've inspected before planning -->
 
 **Current Behavior:**
+
 <!-- 3-5 bullets describing current state -->
 
 ### Integration Points Checklist
 
 **How will this feature be reached?**
+
 - [ ] Entry point identified: <!-- e.g., route, event, cron, CLI command -->
 - [ ] Caller file identified: <!-- file that will invoke this new code -->
 - [ ] Registration/wiring needed: <!-- e.g., add route to router, register handler, add menu item -->
 
 **Is this user-facing?**
+
 - [ ] YES → UI components required (list them)
 - [ ] NO → Internal/background feature (explain how it's triggered)
 
 **Full user flow:**
+
 1. User does: <!-- action -->
 2. Triggers: <!-- what code path -->
 3. Reaches new feature via: <!-- specific connection point -->
@@ -57,6 +59,7 @@ COMPLEXITY SCORE (sum all that apply):
 ## 2. Solution
 
 **Approach:**
+
 <!-- 3-5 bullets explaining the chosen solution -->
 
 **Architecture Diagram** <!-- (MEDIUM/HIGH complexity) -->:
@@ -67,6 +70,7 @@ flowchart LR
 ```
 
 **Key Decisions:**
+
 <!-- Library/framework choices, error-handling strategy, reused utilities -->
 
 **Data Changes:** <!-- New schemas/migrations, or "None" -->
@@ -92,6 +96,7 @@ sequenceDiagram
 ## 4. Execution Phases
 
 **CRITICAL RULES:**
+
 1. Each phase = ONE user-testable vertical slice
 2. Max 5 files per phase (split if larger)
 3. Each phase MUST include concrete tests
@@ -100,9 +105,11 @@ sequenceDiagram
 ### Phase 1: [Name] — [User-visible outcome in 1 sentence]
 
 **Files (max 5):**
+
 - `src/path/file.ts` — what changes
 
 **Implementation:**
+
 - [ ] Step 1
 - [ ] Step 2
 
@@ -112,6 +119,7 @@ sequenceDiagram
 | `src/__tests__/feature.test.ts` | `should do X when Y` | `expect(result).toBe(Z)` |
 
 **Verification Plan:**
+
 1. **Unit Tests:** File and test names
 2. **Integration Test:** (if applicable)
 3. **User Verification:**
@@ -125,9 +133,11 @@ sequenceDiagram
 ### Phase 2: [Name] — [User-visible outcome in 1 sentence]
 
 **Files (max 5):**
+
 - `src/path/file.ts` — what changes
 
 **Implementation:**
+
 - [ ] Step 1
 - [ ] Step 2
 
@@ -137,6 +147,7 @@ sequenceDiagram
 | `src/__tests__/feature.test.ts` | `should do X when Y` | `expect(result).toBe(Z)` |
 
 **Verification Plan:**
+
 1. **Unit Tests:** File and test names
 2. **Integration Test:** (if applicable)
 3. **User Verification:**
@@ -150,9 +161,11 @@ sequenceDiagram
 ### Phase 3: [Name] — [User-visible outcome in 1 sentence]
 
 **Files (max 5):**
+
 - `src/path/file.ts` — what changes
 
 **Implementation:**
+
 - [ ] Step 1
 - [ ] Step 2
 
@@ -162,6 +175,7 @@ sequenceDiagram
 | `src/__tests__/feature.test.ts` | `should do X when Y` | `expect(result).toBe(Z)` |
 
 **Verification Plan:**
+
 1. **Unit Tests:** File and test names
 2. **Integration Test:** (if applicable)
 3. **User Verification:**

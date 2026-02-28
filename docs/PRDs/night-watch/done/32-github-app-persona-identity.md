@@ -133,16 +133,19 @@ sequenceDiagram
 
 ```markdown
 **How will this feature be reached?**
+
 - [x] Entry point: `night-watch github-apps setup` CLI command (setup)
 - [x] Entry point: Automatic at runtime when persona interacts with GitHub (token generation)
 - [x] Caller file: `src/utils/github.ts` — all GitHub API functions gain optional persona param
 - [x] Registration: New command registered in `src/cli.ts`
 
 **Is this user-facing?**
+
 - [x] YES → `night-watch github-apps setup` command with interactive output
 - [x] YES → `night-watch github-apps status` subcommand to view setup state
 
 **Full user flow:**
+
 1. User runs: `night-watch github-apps setup`
 2. Triggers: CLI loads personas, generates manifests, opens browser
 3. Reaches new feature via: Commander subcommand
@@ -173,12 +176,12 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `src/__tests__/utils/github-app-auth.test.ts` | `should generate valid JWT with correct claims` | JWT has `iss`, `iat`, `exp` fields; `iss` matches appId |
+| Test File                                     | Test Name                                           | Assertion                                                                |
+| --------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------ |
+| `src/__tests__/utils/github-app-auth.test.ts` | `should generate valid JWT with correct claims`     | JWT has `iss`, `iat`, `exp` fields; `iss` matches appId                  |
 | `src/__tests__/utils/github-app-auth.test.ts` | `should return null when persona has no GitHub App` | `getPersonaGitHubToken()` returns null for persona without `githubAppId` |
-| `src/__tests__/utils/github-app-auth.test.ts` | `should return cached token when not expired` | Second call returns same token without HTTP request |
-| `src/__tests__/utils/github-app-auth.test.ts` | `should fetch new token when cache expired` | After expiry, new HTTP request is made |
+| `src/__tests__/utils/github-app-auth.test.ts` | `should return cached token when not expired`       | Second call returns same token without HTTP request                      |
+| `src/__tests__/utils/github-app-auth.test.ts` | `should fetch new token when cache expired`         | After expiry, new HTTP request is made                                   |
 
 **Verification Plan:**
 
@@ -205,11 +208,11 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `src/__tests__/utils/github.test.ts` | `should use persona token when available` | `execFileSync` called with `Authorization` header |
-| `src/__tests__/utils/github.test.ts` | `should fall back to gh CLI when no persona app` | Standard `gh` call without custom auth |
-| `src/__tests__/commands/review.test.ts` | `should include NW_GITHUB_PERSONA_ID in env vars` | `buildEnvVars` output contains the persona ID |
+| Test File                               | Test Name                                         | Assertion                                         |
+| --------------------------------------- | ------------------------------------------------- | ------------------------------------------------- |
+| `src/__tests__/utils/github.test.ts`    | `should use persona token when available`         | `execFileSync` called with `Authorization` header |
+| `src/__tests__/utils/github.test.ts`    | `should fall back to gh CLI when no persona app`  | Standard `gh` call without custom auth            |
+| `src/__tests__/commands/review.test.ts` | `should include NW_GITHUB_PERSONA_ID in env vars` | `buildEnvVars` output contains the persona ID     |
 
 **Verification Plan:**
 
@@ -266,11 +269,11 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `src/__tests__/commands/github-apps.test.ts` | `should generate valid manifest for persona` | Manifest contains persona name, correct permissions |
-| `src/__tests__/commands/github-apps.test.ts` | `should skip personas already configured` | Personas with `githubAppId` are not re-processed |
-| `src/__tests__/commands/github-apps.test.ts` | `status shows configured state` | Output includes "configured" for personas with appId |
+| Test File                                    | Test Name                                    | Assertion                                            |
+| -------------------------------------------- | -------------------------------------------- | ---------------------------------------------------- |
+| `src/__tests__/commands/github-apps.test.ts` | `should generate valid manifest for persona` | Manifest contains persona name, correct permissions  |
+| `src/__tests__/commands/github-apps.test.ts` | `should skip personas already configured`    | Personas with `githubAppId` are not re-processed     |
+| `src/__tests__/commands/github-apps.test.ts` | `status shows configured state`              | Output includes "configured" for personas with appId |
 
 **User Verification:**
 
@@ -304,9 +307,9 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `src/__tests__/commands/review.test.ts` | `should generate GitHub token for persona` | Token is generated and passed in env vars |
+| Test File                               | Test Name                                     | Assertion                                            |
+| --------------------------------------- | --------------------------------------------- | ---------------------------------------------------- |
+| `src/__tests__/commands/review.test.ts` | `should generate GitHub token for persona`    | Token is generated and passed in env vars            |
 | `src/__tests__/commands/review.test.ts` | `should fall back when no persona configured` | Env vars don't include token, script uses default gh |
 
 **User Verification:**

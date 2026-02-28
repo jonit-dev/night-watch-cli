@@ -41,12 +41,12 @@ Real teams have institutional knowledge. Night Watch agents need it too.
 
 **Persona → Execution Role Mapping (defaults):**
 
-| Persona | Role | Execution Role | Memory Focus |
-|---------|------|---------------|-------------|
-| Dev | Implementer | Executor | Architecture pitfalls, file conventions, patterns that work/fail |
-| Carlos | Tech Lead / Architect | Reviewer + Slicer | Architecture decisions, PR quality patterns, decomposition quality |
-| Priya | QA Engineer | QA | Flaky tests, coverage gaps, testing conventions, edge cases |
-| Maya | Security Reviewer | Security Reviewer | Auth flow issues, dependency vulns, security patterns |
+| Persona | Role                  | Execution Role    | Memory Focus                                                       |
+| ------- | --------------------- | ----------------- | ------------------------------------------------------------------ |
+| Dev     | Implementer           | Executor          | Architecture pitfalls, file conventions, patterns that work/fail   |
+| Carlos  | Tech Lead / Architect | Reviewer + Slicer | Architecture decisions, PR quality patterns, decomposition quality |
+| Priya   | QA Engineer           | QA                | Flaky tests, coverage gaps, testing conventions, edge cases        |
+| Maya    | Security Reviewer     | Security Reviewer | Auth flow issues, dependency vulns, security patterns              |
 
 Carlos doubles as Reviewer and Slicer (Tech Lead naturally owns both code review and roadmap decomposition).
 
@@ -189,13 +189,13 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `packages/core/src/__tests__/memory-service.test.ts` | `should read empty memory for new persona` | `expect(result).toBe('')` |
-| `packages/core/src/__tests__/memory-service.test.ts` | `should append reflection with date header` | File contains date + lessons |
-| `packages/core/src/__tests__/memory-service.test.ts` | `should truncate memory to token budget` | Output length ≤ budget |
+| Test File                                            | Test Name                                   | Assertion                                        |
+| ---------------------------------------------------- | ------------------------------------------- | ------------------------------------------------ |
+| `packages/core/src/__tests__/memory-service.test.ts` | `should read empty memory for new persona`  | `expect(result).toBe('')`                        |
+| `packages/core/src/__tests__/memory-service.test.ts` | `should append reflection with date header` | File contains date + lessons                     |
+| `packages/core/src/__tests__/memory-service.test.ts` | `should truncate memory to token budget`    | Output length ≤ budget                           |
 | `packages/core/src/__tests__/memory-service.test.ts` | `should migrate memory directory on rename` | Old path gone, new path exists with same content |
-| `packages/core/src/__tests__/memory-service.test.ts` | `should archive memory on delete` | Moved to `.archived/` with timestamp |
+| `packages/core/src/__tests__/memory-service.test.ts` | `should archive memory on delete`           | Moved to `.archived/` with timestamp             |
 
 **Verification Plan:**
 
@@ -225,12 +225,12 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
+| Test File                                                | Test Name                                                 | Assertion                                           |
+| -------------------------------------------------------- | --------------------------------------------------------- | --------------------------------------------------- |
 | `packages/core/src/__tests__/reflection-prompts.test.ts` | `should build role-flavored prompt for each persona type` | Prompt includes persona name, role-specific framing |
-| `packages/core/src/__tests__/reflection-prompts.test.ts` | `should include interaction context in prompt` | Prompt contains trigger type, outcome, summary |
-| `packages/core/src/__tests__/memory-service.test.ts` | `should call LLM and append reflection` | Memory file updated with new entry (mock LLM) |
-| `packages/core/src/__tests__/memory-service.test.ts` | `should compact when over threshold` | File reduced to ≤ target lines after compaction |
+| `packages/core/src/__tests__/reflection-prompts.test.ts` | `should include interaction context in prompt`            | Prompt contains trigger type, outcome, summary      |
+| `packages/core/src/__tests__/memory-service.test.ts`     | `should call LLM and append reflection`                   | Memory file updated with new entry (mock LLM)       |
+| `packages/core/src/__tests__/memory-service.test.ts`     | `should compact when over threshold`                      | File reduced to ≤ target lines after compaction     |
 
 **Verification Plan:**
 
@@ -261,11 +261,11 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `packages/slack/src/__tests__/soul-compiler.test.ts` | `should include memory section when memory is provided` | Compiled prompt contains `## Memory` section |
-| `packages/slack/src/__tests__/soul-compiler.test.ts` | `should omit memory section when empty` | Compiled prompt has no `## Memory` |
-| `packages/slack/src/__tests__/deliberation.test.ts` | `should trigger reflection after agent response` | `memoryService.reflect` called with correct context |
+| Test File                                            | Test Name                                               | Assertion                                           |
+| ---------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------- |
+| `packages/slack/src/__tests__/soul-compiler.test.ts` | `should include memory section when memory is provided` | Compiled prompt contains `## Memory` section        |
+| `packages/slack/src/__tests__/soul-compiler.test.ts` | `should omit memory section when empty`                 | Compiled prompt has no `## Memory`                  |
+| `packages/slack/src/__tests__/deliberation.test.ts`  | `should trigger reflection after agent response`        | `memoryService.reflect` called with correct context |
 
 **Verification Plan:**
 
@@ -291,12 +291,12 @@ sequenceDiagram
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `packages/core/src/__tests__/memory-service.test.ts` | `should handle rename when source dir missing` | No error, no-op |
-| `packages/core/src/__tests__/memory-service.test.ts` | `should handle rename collision` | Appends timestamp suffix |
-| `packages/core/src/__tests__/agent-persona.repository.test.ts` | `should migrate memory on persona rename` | Memory directory renamed |
-| `packages/core/src/__tests__/agent-persona.repository.test.ts` | `should archive memory on persona delete` | Memory moved to `.archived/` |
+| Test File                                                      | Test Name                                      | Assertion                    |
+| -------------------------------------------------------------- | ---------------------------------------------- | ---------------------------- |
+| `packages/core/src/__tests__/memory-service.test.ts`           | `should handle rename when source dir missing` | No error, no-op              |
+| `packages/core/src/__tests__/memory-service.test.ts`           | `should handle rename collision`               | Appends timestamp suffix     |
+| `packages/core/src/__tests__/agent-persona.repository.test.ts` | `should migrate memory on persona rename`      | Memory directory renamed     |
+| `packages/core/src/__tests__/agent-persona.repository.test.ts` | `should archive memory on persona delete`      | Memory moved to `.archived/` |
 
 **Verification Plan:**
 

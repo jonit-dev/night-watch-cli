@@ -9,6 +9,7 @@
 **Problem:** The GitHub Projects board is now the primary workflow driver for Night Watch, but the web UI has no awareness of it. Users must use the CLI (`night-watch board status`, `night-watch board move-issue`, etc.) to manage board issues. There is no visual way to see what's in progress, move issues, or create new PRDs from the UI.
 
 **Current state:**
+
 - `GET /api/prds` — lists filesystem PRDs only, unaware of board
 - `web/pages/PRDs.tsx` — shows filesystem-based PRDs, no board column info
 - Dashboard — no board summary widget
@@ -24,14 +25,14 @@
 
 Add board endpoints to `src/server/index.ts` (and the multi-project router):
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/board/status` | Board enabled flag + all issues grouped by column |
-| `GET` | `/api/board/issues` | Flat list of all board issues |
-| `POST` | `/api/board/issues` | Create a new issue (title + body + column) |
-| `PATCH` | `/api/board/issues/:number/move` | Move issue to a column |
-| `POST` | `/api/board/issues/:number/comment` | Add a comment |
-| `DELETE` | `/api/board/issues/:number` | Close an issue |
+| Method   | Path                                | Description                                       |
+| -------- | ----------------------------------- | ------------------------------------------------- |
+| `GET`    | `/api/board/status`                 | Board enabled flag + all issues grouped by column |
+| `GET`    | `/api/board/issues`                 | Flat list of all board issues                     |
+| `POST`   | `/api/board/issues`                 | Create a new issue (title + body + column)        |
+| `PATCH`  | `/api/board/issues/:number/move`    | Move issue to a column                            |
+| `POST`   | `/api/board/issues/:number/comment` | Add a comment                                     |
+| `DELETE` | `/api/board/issues/:number`         | Close an issue                                    |
 
 All endpoints return `{ error: "Board not configured" }` with 404 when `boardProvider.projectNumber` is missing from config.
 
@@ -50,6 +51,7 @@ A Kanban-style board view with 5 columns: **Draft → Ready → In Progress → 
 ### Dashboard Widget
 
 Add a "Board" widget row to `web/pages/Dashboard.tsx`:
+
 - Shows issue count per column as colored badges
 - Shows "Board not configured" if disabled
 - Clicking a column count navigates to Board page filtered to that column
@@ -67,6 +69,7 @@ Add "Board" link to `web/App.tsx` nav alongside PRDs, PRs, Logs, etc.
 **User-visible outcome:** REST API available for all board operations.
 
 **Files:**
+
 - `src/server/index.ts` — add board route handlers
 - `src/server/actions.ts` (or inline) — board action implementations
 
@@ -79,8 +82,8 @@ Add "Board" link to `web/App.tsx` nav alongside PRDs, PRs, Logs, etc.
   const provider = getBoardProvider(config, projectDir);
   const issues = await provider.getAllIssues();
   // Group by column
-  const grouped = { Draft: [], Ready: [], "In Progress": [], Review: [], Done: [] };
-  for (const issue of issues) grouped[issue.column ?? "Draft"].push(issue);
+  const grouped = { Draft: [], Ready: [], 'In Progress': [], Review: [], Done: [] };
+  for (const issue of issues) grouped[issue.column ?? 'Draft'].push(issue);
   res.json({ enabled: true, columns: grouped });
   ```
 - [ ] `GET /api/board/issues` — `provider.getAllIssues()`
@@ -92,6 +95,7 @@ Add "Board" link to `web/App.tsx` nav alongside PRDs, PRs, Logs, etc.
 - [ ] Error handling: 404 when board not configured, 500 for API failures
 
 **Verification:**
+
 - [ ] `yarn verify` passes
 - [ ] `yarn test` — add unit tests for board endpoints in `src/__tests__/server.test.ts`
 
@@ -102,6 +106,7 @@ Add "Board" link to `web/App.tsx` nav alongside PRDs, PRs, Logs, etc.
 **User-visible outcome:** `/board` route shows Kanban board with issues.
 
 **Files:**
+
 - `web/pages/Board.tsx` — new Kanban page
 - `web/api.ts` — add board API client functions
 - `web/App.tsx` — add `/board` route and nav link
@@ -110,15 +115,17 @@ Add "Board" link to `web/App.tsx` nav alongside PRDs, PRs, Logs, etc.
 **Implementation:**
 
 `web/api.ts` additions:
+
 ```ts
-export async function fetchBoardStatus(): Promise<IBoardStatus>
-export async function createBoardIssue(input: ICreateIssueInput): Promise<IBoardIssue>
-export async function moveBoardIssue(number: number, column: BoardColumnName): Promise<void>
-export async function commentBoardIssue(number: number, body: string): Promise<void>
-export async function closeBoardIssue(number: number): Promise<void>
+export async function fetchBoardStatus(): Promise<IBoardStatus>;
+export async function createBoardIssue(input: ICreateIssueInput): Promise<IBoardIssue>;
+export async function moveBoardIssue(number: number, column: BoardColumnName): Promise<void>;
+export async function commentBoardIssue(number: number, body: string): Promise<void>;
+export async function closeBoardIssue(number: number): Promise<void>;
 ```
 
 `web/pages/Board.tsx`:
+
 - State: `status: IBoardStatus | null`, `loading: boolean`, `selectedIssue: IBoardIssue | null`
 - Columns rendered side by side with overflow scroll
 - Each issue card: `#N — Title`, column badge, move dropdown
@@ -128,12 +135,14 @@ export async function closeBoardIssue(number: number): Promise<void>
 - Loading skeleton while fetching
 
 `web/App.tsx`:
+
 ```tsx
 <Route path="/board" element={<Board />} />
 // Nav: <Link to="/board">Board</Link>
 ```
 
 **Verification:**
+
 - [ ] `yarn verify` passes
 - [ ] `cd web && yarn build` succeeds
 - [ ] Board page renders without errors when board is configured
@@ -146,15 +155,18 @@ export async function closeBoardIssue(number: number): Promise<void>
 **User-visible outcome:** Dashboard shows board summary; PRDs page indicates board-linked issues.
 
 **Files:**
+
 - `web/pages/Dashboard.tsx` — add board widget
 - `web/pages/PRDs.tsx` — add board column badge when issue exists
 
 **Implementation:**
 
 Dashboard board widget (add after existing widgets):
+
 ```tsx
-<BoardWidget status={boardStatus} onNavigate={() => navigate("/board")} />
+<BoardWidget status={boardStatus} onNavigate={() => navigate('/board')} />
 ```
+
 - Shows 5 column counts as colored badges
 - "Board not configured" fallback
 - Fetches via `fetchBoardStatus()` on mount
@@ -162,6 +174,7 @@ Dashboard board widget (add after existing widgets):
 PRDs page — for each filesystem PRD, if a board issue with matching title exists, show a badge with its column and link to the issue URL.
 
 **Verification:**
+
 - [ ] Dashboard shows board widget with correct counts
 - [ ] Clicking a column count navigates to `/board`
 - [ ] `yarn verify` + `cd web && yarn build` pass
