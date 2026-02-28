@@ -89,6 +89,24 @@ export function runMigrations(db: Database.Database): void {
       body        TEXT    NOT NULL,
       created_at  INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS campaign_schedules (
+      id                   INTEGER PRIMARY KEY,
+      campaign_id          TEXT    NOT NULL,
+      ad_account_id        TEXT    NOT NULL,
+      campaign_name        TEXT    NOT NULL,
+      start_date           INTEGER NOT NULL,
+      end_date             INTEGER NOT NULL,
+      budget_schedule_json TEXT,
+      status               TEXT    NOT NULL,
+      created_at           INTEGER NOT NULL,
+      updated_at           INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_campaign_schedules_campaign_id
+      ON campaign_schedules(campaign_id);
+    CREATE INDEX IF NOT EXISTS idx_campaign_schedules_date_range
+      ON campaign_schedules(start_date, end_date);
+
   `);
 
   // Phase 2 cleanup: drop slack_discussions table (multi-agent deliberation removed)

@@ -6,6 +6,7 @@ import { ToastContainer } from './components/ui/Toast';
 import { useGlobalMode } from './hooks/useGlobalMode';
 import Agents from './pages/Agents';
 import Board from './pages/Board';
+import Campaigns from './pages/Campaigns';
 import Dashboard from './pages/Dashboard';
 import Logs from './pages/Logs';
 import PRs from './pages/PRs';
@@ -34,6 +35,7 @@ const App: React.FC = () => {
                 <Route path="/prs" element={<PRs />} />
                 <Route path="/board" element={<Board />} />
                 <Route path="/scheduling" element={<Scheduling />} />
+                <Route path="/campaigns" element={<Campaigns />} />
                 <Route path="/logs" element={<Logs />} />
                 <Route path="/roadmap" element={<Roadmap />} />
                 <Route path="/agents" element={<Agents />} />

@@ -4,6 +4,11 @@
  */
 
 import { BoardColumnName } from '@/board/types.js';
+import {
+  CreateCampaignScheduleInput,
+  ICampaignSchedule,
+  UpdateCampaignScheduleInput,
+} from '@/campaign/types.js';
 import { IRegistryEntry } from '@/utils/registry.js';
 import { IExecutionRecord } from '@/utils/execution-history.js';
 import { IPrdStateEntry } from '@/utils/prd-states.js';
@@ -77,4 +82,21 @@ export interface IKanbanIssueRepository {
   move(number: number, targetColumn: BoardColumnName): void;
   close(number: number): void;
   addComment(number: number, body: string): void;
+}
+
+export interface ICampaignScheduleRepository {
+  /** Get all campaign schedules */
+  getAll(): ICampaignSchedule[];
+  /** Get a campaign schedule by its internal ID */
+  getById(id: number): ICampaignSchedule | null;
+  /** Get a campaign schedule by Meta Ads campaign ID */
+  getByCampaignId(campaignId: string): ICampaignSchedule | null;
+  /** Get all schedules that overlap with the given date range (inclusive) */
+  getByDateRange(start: number, end: number): ICampaignSchedule[];
+  /** Create a new campaign schedule */
+  create(schedule: CreateCampaignScheduleInput): ICampaignSchedule;
+  /** Update an existing campaign schedule */
+  update(id: number, updates: UpdateCampaignScheduleInput): ICampaignSchedule | null;
+  /** Delete a campaign schedule by ID */
+  delete(id: number): boolean;
 }
