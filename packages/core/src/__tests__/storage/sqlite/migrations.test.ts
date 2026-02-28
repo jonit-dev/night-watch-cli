@@ -13,6 +13,8 @@ import { runMigrations } from '../../../storage/sqlite/migrations.js';
 const EXPECTED_TABLES = [
   'agent_personas',
   'execution_history',
+  'kanban_comments',
+  'kanban_issues',
   'prd_states',
   'projects',
   'roadmap_states',
@@ -41,7 +43,7 @@ describe('runMigrations', () => {
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' ORDER BY name`)
       .all() as Array<{ name: string }>;
 
-    const tableNames = tables.map((t) => t.name);
+    const tableNames = tables.map((t) => t.name).filter((n) => n !== 'sqlite_sequence');
     expect(tableNames).toEqual(expect.arrayContaining(EXPECTED_TABLES));
     expect(tableNames).toHaveLength(EXPECTED_TABLES.length);
   });
