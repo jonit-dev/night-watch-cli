@@ -13,6 +13,7 @@ import { getDb } from '../sqlite/client.js';
 import { runMigrations } from '../sqlite/migrations.js';
 import {
   IAgentPersonaRepository,
+  ICampaignScheduleRepository,
   IExecutionHistoryRepository,
   IPrdStateRepository,
   IProjectRegistryRepository,
@@ -23,6 +24,7 @@ import { SqliteExecutionHistoryRepository } from './sqlite/execution-history.rep
 import { SqlitePrdStateRepository } from './sqlite/prd-state.repository.js';
 import { SqliteRoadmapStateRepository } from './sqlite/roadmap-state.repository.js';
 import { SqliteAgentPersonaRepository } from './sqlite/agent-persona.repository.js';
+import { SqliteCampaignScheduleRepository } from './sqlite/campaign-schedule.repository.js';
 
 export interface IRepositories {
   projectRegistry: IProjectRegistryRepository;
@@ -30,6 +32,7 @@ export interface IRepositories {
   prdState: IPrdStateRepository;
   roadmapState: IRoadmapStateRepository;
   agentPersona: IAgentPersonaRepository;
+  campaignSchedule: ICampaignScheduleRepository;
 }
 
 let _initialized = false;
@@ -50,6 +53,7 @@ export function getRepositories(): IRepositories {
       prdState: container.resolve(SqlitePrdStateRepository),
       roadmapState: container.resolve(SqliteRoadmapStateRepository),
       agentPersona: container.resolve(SqliteAgentPersonaRepository),
+      campaignSchedule: container.resolve(SqliteCampaignScheduleRepository),
     };
   }
 
@@ -71,6 +75,7 @@ export function getRepositories(): IRepositories {
     prdState: new SqlitePrdStateRepository(db),
     roadmapState: new SqliteRoadmapStateRepository(db),
     agentPersona: new SqliteAgentPersonaRepository(db),
+    campaignSchedule: new SqliteCampaignScheduleRepository(db),
   };
 }
 

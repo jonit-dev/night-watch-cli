@@ -16,6 +16,7 @@ import 'reflect-metadata';
 import { container } from 'tsyringe';
 
 import { SqliteAgentPersonaRepository } from '@/storage/repositories/sqlite/agent-persona.repository.js';
+import { SqliteCampaignScheduleRepository } from '@/storage/repositories/sqlite/campaign-schedule.repository.js';
 import { SqliteExecutionHistoryRepository } from '@/storage/repositories/sqlite/execution-history.repository.js';
 import { SqliteKanbanIssueRepository } from '@/storage/repositories/sqlite/kanban-issue.repository.js';
 import { SqlitePrdStateRepository } from '@/storage/repositories/sqlite/prd-state.repository.js';
@@ -54,6 +55,7 @@ export function initContainer(projectDir: string): void {
 
   // Register each repository as a singleton. Tsyringe will auto-inject the Database via @inject('Database').
   container.registerSingleton(SqliteAgentPersonaRepository);
+  container.registerSingleton(SqliteCampaignScheduleRepository);
   container.registerSingleton(SqliteExecutionHistoryRepository);
   container.registerSingleton(SqliteKanbanIssueRepository);
   container.registerSingleton(SqlitePrdStateRepository);
