@@ -31,6 +31,7 @@ Human writes spec → Machine writes code → Machine reviews code → Machine m
 
 The PRD template (`src/templates/prd-template.ts`) is not a loose document — it is a
 structured contract with:
+
 - Complexity scoring (LOW/MEDIUM/HIGH)
 - Phased execution with max 5 files per phase
 - Concrete test assertions per phase
@@ -51,12 +52,12 @@ The spec-writer becomes the most important role.
 
 Night Watch implements a full autonomous development loop via four cron-scheduled agents:
 
-| Agent | Cadence | Role |
-|-------|---------|------|
-| **Executor** | Hourly | Pick next PRD, implement it, open PR |
+| Agent        | Cadence  | Role                                   |
+| ------------ | -------- | -------------------------------------- |
+| **Executor** | Hourly   | Pick next PRD, implement it, open PR   |
 | **Reviewer** | Every 3h | Review open PRs, auto-merge if passing |
-| **QA** | 4x daily | Generate Playwright tests for PRs |
-| **Slicer** | Every 6h | Scan ROADMAP.md, generate new PRDs |
+| **QA**       | 4x daily | Generate Playwright tests for PRs      |
+| **Slicer**   | Every 6h | Scan ROADMAP.md, generate new PRDs     |
 
 This creates a closed loop:
 
@@ -82,16 +83,16 @@ agents. Each loop should be independently schedulable, observable, and killable.
 
 Night Watch is not fully autonomous. The human touch-points are deliberate:
 
-| Activity | Human | Machine |
-|----------|-------|---------|
-| Roadmap authoring | Yes | No |
-| PRD writing/editing | Yes (or Slicer) | Yes (Slicer) |
-| PRD prioritization & dependencies | Yes | No |
-| Code implementation | No | Yes |
-| Code review | Optional | Yes (min review score) |
-| Merge decision | Optional | Yes (auto-merge threshold) |
-| Monitoring & intervention | Yes (dashboard) | No |
-| Test generation | No | Yes (QA agent) |
+| Activity                          | Human           | Machine                    |
+| --------------------------------- | --------------- | -------------------------- |
+| Roadmap authoring                 | Yes             | No                         |
+| PRD writing/editing               | Yes (or Slicer) | Yes (Slicer)               |
+| PRD prioritization & dependencies | Yes             | No                         |
+| Code implementation               | No              | Yes                        |
+| Code review                       | Optional        | Yes (min review score)     |
+| Merge decision                    | Optional        | Yes (auto-merge threshold) |
+| Monitoring & intervention         | Yes (dashboard) | No                         |
+| Test generation                   | No              | Yes (QA agent)             |
 
 The `minReviewScore` and `autoMerge` configs are the **trust dials**. An org early
 in its AI journey might set `autoMerge: false` and review every PR manually. A mature
@@ -114,7 +115,7 @@ Night Watch has an unusually rich observability surface for a CLI tool:
 - **GitHub Projects board** integration for visual workflow tracking
 
 The roadmap calls out cost tracking and run timelines as upcoming features, with this
-telling note: *"Autonomous agents burning money silently is the #1 trust-killer."*
+telling note: _"Autonomous agents burning money silently is the #1 trust-killer."_
 
 **Playbook principle:** Observability for AI agents needs to be 10x better than for
 human developers. Humans self-report ("I'm stuck", "this is taking longer than
@@ -184,6 +185,7 @@ background process, not a real-time collaboration**. Rather than pair-programmin
 an AI (a la Copilot), Night Watch treats AI as an async worker that operates on a queue.
 
 The default schedule tells the story:
+
 - Executor runs hourly from midnight to 9 PM
 - Reviewer runs every 3 hours
 - QA runs 4 times daily
@@ -286,6 +288,7 @@ is a prototype of autonomous planning). It represents the transition from "AI he
 write code" to "AI writes code while I do other things."
 
 This is the hardest transition in the maturity model because it requires:
+
 - Trust in AI output quality
 - Investment in specification writing
 - Tolerance for async, batch-mode development
