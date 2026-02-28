@@ -1,8 +1,6 @@
-export type BoardColumnName = "Draft" | "Ready" | "In Progress" | "Review" | "Done";
+export type BoardColumnName = 'Draft' | 'Ready' | 'In Progress' | 'Review' | 'Done';
 
-export const BOARD_COLUMNS: BoardColumnName[] = [
-  "Draft", "Ready", "In Progress", "Review", "Done"
-];
+export const BOARD_COLUMNS: BoardColumnName[] = ['Draft', 'Ready', 'In Progress', 'Review', 'Done'];
 
 export interface IBoardInfo {
   id: string;
@@ -66,7 +64,7 @@ export interface IBoardProvider {
   commentOnIssue(issueNumber: number, body: string): Promise<void>;
 }
 
-export type BoardProviderType = "github" | "jira" | "linear";
+export type BoardProviderType = 'github' | 'jira' | 'linear' | 'local';
 
 export interface IBoardProviderConfig {
   enabled: boolean;

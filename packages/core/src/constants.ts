@@ -88,6 +88,8 @@ export const DEFAULT_BOARD_PROVIDER: IBoardProviderConfig = {
   provider: 'github' as const,
 };
 
+export const DEFAULT_LOCAL_BOARD_INFO = { id: 'local', number: 0, title: 'Local Kanban', url: '' };
+
 // Auto-Merge Configuration
 export const DEFAULT_AUTO_MERGE = false;
 export const DEFAULT_AUTO_MERGE_METHOD: MergeMethod = 'squash';

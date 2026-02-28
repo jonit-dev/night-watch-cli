@@ -194,15 +194,17 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose, onM
             ))}
           </div>
           <div className="flex items-center space-x-2 ml-auto">
-            <a
-              href={issue.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center space-x-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-              <span>GitHub</span>
-            </a>
+            {issue.url && !issue.url.startsWith('local://') && (
+              <a
+                href={issue.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center space-x-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                <span>GitHub</span>
+              </a>
+            )}
             <button
               onClick={handleClose}
               disabled={closing}
