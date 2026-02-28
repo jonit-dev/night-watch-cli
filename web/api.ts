@@ -354,6 +354,116 @@ export async function closeBoardIssue(number: number): Promise<void> {
   }
 }
 
+// ==================== Campaigns ====================
+
+export interface ICampaignSchedule {
+  id: number;
+  campaignId: string;
+  adAccountId: string;
+  campaignName: string;
+  startDate: number;
+  endDate: number;
+  budgetSchedule: IBudgetSchedule | null;
+  status: CampaignStatus;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface IBudgetScheduleEntry {
+  date: number;
+  amount: number;
+  note?: string;
+}
+
+export interface IBudgetSchedule {
+  baseAmount: number;
+  schedules: IBudgetScheduleEntry[];
+}
+
+export type CampaignStatus = 'scheduled' | 'active' | 'paused' | 'completed' | 'cancelled';
+
+export type CreateCampaignScheduleInput = Omit<
+  ICampaignSchedule,
+  'id' | 'createdAt' | 'updatedAt'
+>;
+
+export type UpdateCampaignScheduleInput = Partial<CreateCampaignScheduleInput>;
+
+export interface ICampaignWithSchedule {
+  campaignId: string;
+  adAccountId: string;
+  campaignName: string;
+  startDate: number;
+  endDate: number;
+  status: CampaignStatus;
+  schedule: ICampaignSchedule | null;
+}
+
+export interface IAdAccount {
+  id: string;
+  name: string;
+  currency: string;
+  timezone: string;
+}
+
+export interface ISyncResult {
+  synced: number;
+  added: number;
+  updated: number;
+  errors: string[];
+}
+
+export function fetchCampaigns(): Promise<ICampaignWithSchedule[]> {
+  return apiFetch<ICampaignWithSchedule[]>(apiPath('/api/campaigns'));
+}
+
+export function fetchCampaign(campaignId: string): Promise<ICampaignWithSchedule> {
+  return apiFetch<ICampaignWithSchedule>(apiPath(`/api/campaigns/${encodeURIComponent(campaignId)}`));
+}
+
+export function fetchAdAccounts(): Promise<IAdAccount[]> {
+  return apiFetch<IAdAccount[]>(apiPath('/api/campaigns/ad-accounts'));
+}
+
+export function createCampaignSchedule(
+  campaignId: string,
+  schedule: CreateCampaignScheduleInput
+): Promise<ICampaignSchedule> {
+  return apiFetch<ICampaignSchedule>(apiPath(`/api/campaigns/${encodeURIComponent(campaignId)}/schedule`), {
+    method: 'POST',
+    body: JSON.stringify(schedule),
+  });
+}
+
+export function updateCampaignSchedule(
+  campaignId: string,
+  schedule: UpdateCampaignScheduleInput
+): Promise<ICampaignSchedule> {
+  return apiFetch<ICampaignSchedule>(apiPath(`/api/campaigns/${encodeURIComponent(campaignId)}/schedule`), {
+    method: 'PUT',
+    body: JSON.stringify(schedule),
+  });
+}
+
+export async function deleteCampaignSchedule(campaignId: string): Promise<void> {
+  const url = `${API_BASE}${apiPath(`/api/campaigns/${encodeURIComponent(campaignId)}/schedule`)}`;
+  const response = await fetch(url, {
+    headers: { 'Content-Type': 'application/json' },
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+  }
+}
+
+export function syncCampaigns(adAccountId?: string): Promise<ISyncResult> {
+  const query = adAccountId ? `?adAccountId=${encodeURIComponent(adAccountId)}` : '';
+  return apiFetch<ISyncResult>(apiPath(`/api/campaigns/sync${query}`), {
+    method: 'POST',
+  });
+}
+
 // ==================== Actions ====================
 
 export function triggerClearLock(): Promise<{ cleared: boolean }> {

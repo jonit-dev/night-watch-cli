@@ -32,6 +32,7 @@ import { SseClientSet, startSseStatusWatcher } from './middleware/sse.middleware
 import { createActionRoutes, createProjectActionRoutes } from './routes/action.routes.js';
 import { createAgentRoutes } from './routes/agent.routes.js';
 import { createBoardRoutes, createProjectBoardRoutes } from './routes/board.routes.js';
+import { createCampaignRoutes, createProjectCampaignRoutes } from './routes/campaign.routes.js';
 import { createConfigRoutes, createProjectConfigRoutes } from './routes/config.routes.js';
 import { createDoctorRoutes, createProjectDoctorRoutes } from './routes/doctor.routes.js';
 import { createLogRoutes, createProjectLogRoutes } from './routes/log.routes.js';
@@ -116,6 +117,7 @@ export function createApp(projectDir: string): Express {
   app.use('/api/config', createConfigRoutes({ projectDir, getConfig: () => config, reloadConfig }));
   app.use('/api/board', createBoardRoutes({ projectDir, getConfig: () => config }));
   app.use('/api/agents', createAgentRoutes());
+  app.use('/api/campaigns', createCampaignRoutes({ projectDir }));
   app.use('/api/actions', createActionRoutes({ projectDir, getConfig: () => config, sseClients }));
   app.use(
     '/api/roadmap',
@@ -172,6 +174,7 @@ function createProjectRouter() {
   router.use(createProjectLogRoutes());
   router.use(createProjectBoardRoutes());
   router.use('/agents', createAgentRoutes());
+  router.use(createProjectCampaignRoutes());
   router.use(createProjectActionRoutes({ projectSseClients }));
   router.use(createProjectRoadmapRoutes());
 
