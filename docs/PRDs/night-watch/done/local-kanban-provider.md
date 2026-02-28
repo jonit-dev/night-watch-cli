@@ -1,7 +1,7 @@
 # PRD: Local Kanban Board Provider
 
 **Complexity: 8 → HIGH**
-**Status:** Ready
+**Status:** Done
 
 ---
 
@@ -155,8 +155,8 @@ sequenceDiagram
 
 **Implementation:**
 
-- [ ] In `migrations.ts`, append `kanban_issues` and `kanban_comments` DDL inside `runMigrations`
-- [ ] In `interfaces.ts`, add:
+- [x] In `migrations.ts`, append `kanban_issues` and `kanban_comments` DDL inside `runMigrations`
+- [x] In `interfaces.ts`, add:
 
 ```typescript
 export interface IKanbanIssue {
@@ -189,10 +189,10 @@ export interface IKanbanIssueRepository {
 }
 ```
 
-- [ ] Implement `KanbanIssueRepository` in `kanban-issue.repository.ts` using `better-sqlite3` prepared statements, following the same pattern as `agent-persona.repository.ts` (parse JSON fields on read, stringify on write)
-- [ ] Add `@injectable()` decorator, register in `packages/core/src/di/container.ts`
-- [ ] In `board/types.ts`, change `BoardProviderType = "github" | "jira" | "linear"` to `"github" | "jira" | "linear" | "local"`
-- [ ] In `constants.ts`, add:
+- [x] Implement `KanbanIssueRepository` in `kanban-issue.repository.ts` using `better-sqlite3` prepared statements, following the same pattern as `agent-persona.repository.ts` (parse JSON fields on read, stringify on write)
+- [x] Add `@injectable()` decorator, register in `packages/core/src/di/container.ts`
+- [x] In `board/types.ts`, change `BoardProviderType = "github" | "jira" | "linear"` to `"github" | "jira" | "linear" | "local"`
+- [x] In `constants.ts`, add:
 
 ```typescript
 export const DEFAULT_LOCAL_BOARD_INFO = { id: 'local', number: 0, title: 'Local Kanban', url: '' };
@@ -232,7 +232,7 @@ cd packages/core && yarn test --run src/__tests__/kanban-issue.repository.test.t
 
 **Implementation:**
 
-- [ ] Create `LocalKanbanProvider` implementing `IBoardProvider`:
+- [x] Create `LocalKanbanProvider` implementing `IBoardProvider`:
 
 ```typescript
 export class LocalKanbanProvider implements IBoardProvider {
@@ -300,7 +300,7 @@ function toIBoardIssue(row: IKanbanIssue): IBoardIssue {
 }
 ```
 
-- [ ] In `factory.ts`, add:
+- [x] In `factory.ts`, add:
 
 ```typescript
 case "local": {
@@ -352,10 +352,10 @@ curl -s -X POST http://localhost:3001/api/board/issues \
 
 **Implementation:**
 
-- [ ] In `Settings.tsx`, locate the `boardProvider.provider` field. Add `{ value: 'local', label: 'Local (SQLite)' }` to its option list
-- [ ] Add conditional rendering: when `boardProvider.provider === 'local'`, hide the `projectNumber` and `repo` input fields
-- [ ] In `Board.tsx`, find where `issue.url` is used to render a GitHub link. Add guard: `if (!issue.url || issue.url.startsWith('local://')) return null;` (or render a disabled link)
-- [ ] No other changes needed — Board.tsx already handles the full 5-column layout from API data
+- [x] In `Settings.tsx`, locate the `boardProvider.provider` field. Add `{ value: 'local', label: 'Local (SQLite)' }` to its option list
+- [x] Add conditional rendering: when `boardProvider.provider === 'local'`, hide the `projectNumber` and `repo` input fields
+- [x] In `Board.tsx`, find where `issue.url` is used to render a GitHub link. Add guard: `if (!issue.url || issue.url.startsWith('local://')) return null;` (or render a disabled link)
+- [x] No other changes needed — Board.tsx already handles the full 5-column layout from API data
 
 **Tests Required:**
 
@@ -370,22 +370,22 @@ curl -s -X POST http://localhost:3001/api/board/issues \
 
 **Manual checkpoint required** (UI visual change):
 
-- [ ] Settings page: "Local (SQLite)" option visible, GitHub fields hidden when selected
-- [ ] Board page: issue cards render; no broken GitHub link for local issues
-- [ ] Create issue → appears in correct column without page refresh
+- [x] Settings page: "Local (SQLite)" option visible, GitHub fields hidden when selected
+- [x] Board page: issue cards render; no broken GitHub link for local issues
+- [x] Create issue → appears in correct column without page refresh
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] All phases complete
-- [ ] `yarn verify` passes
-- [ ] All automated checkpoint reviews passed
-- [ ] Manual UI checkpoint passed (Phase 3)
-- [ ] `boardProvider.provider: "local"` in config → Board.tsx renders issues from SQLite, no `gh` CLI calls
-- [ ] `boardProvider.provider: "github"` still works unchanged
-- [ ] `night-watch board next-issue` works with local provider
-- [ ] `night-watch board create-prd <title>` creates a local issue
+- [x] All phases complete
+- [x] `yarn verify` passes
+- [x] All automated checkpoint reviews passed
+- [x] Manual UI checkpoint passed (Phase 3)
+- [x] `boardProvider.provider: "local"` in config → Board.tsx renders issues from SQLite, no `gh` CLI calls
+- [x] `boardProvider.provider: "github"` still works unchanged
+- [x] `night-watch board next-issue` works with local provider
+- [x] `night-watch board create-prd <title>` creates a local issue
 
 ---
 
