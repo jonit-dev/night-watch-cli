@@ -28,7 +28,7 @@ const mockAdAccounts: IAdAccount[] = [
     id: 'act_123456',
     name: 'Test Ad Account',
     currency: 'USD',
-    timezoneName: 'America/New_York',
+    timezone: 'America/New_York',
     amountSpent: '10000',
     accountStatus: 1,
   },

@@ -406,13 +406,6 @@ export interface IAdAccount {
   timezone: string;
 }
 
-export interface ISyncResult {
-  synced: number;
-  added: number;
-  updated: number;
-  errors: string[];
-}
-
 export function fetchCampaigns(): Promise<ICampaignWithSchedule[]> {
   return apiFetch<ICampaignWithSchedule[]>(apiPath('/api/campaigns'));
 }
@@ -440,7 +433,7 @@ export function updateCampaignSchedule(
   schedule: UpdateCampaignScheduleInput
 ): Promise<ICampaignSchedule> {
   return apiFetch<ICampaignSchedule>(apiPath(`/api/campaigns/${encodeURIComponent(campaignId)}/schedule`), {
-    method: 'PUT',
+    method: 'POST',
     body: JSON.stringify(schedule),
   });
 }
@@ -457,9 +450,9 @@ export async function deleteCampaignSchedule(campaignId: string): Promise<void> 
   }
 }
 
-export function syncCampaigns(adAccountId?: string): Promise<ISyncResult> {
+export function syncCampaigns(adAccountId?: string): Promise<ICampaignWithSchedule[]> {
   const query = adAccountId ? `?adAccountId=${encodeURIComponent(adAccountId)}` : '';
-  return apiFetch<ISyncResult>(apiPath(`/api/campaigns/sync${query}`), {
+  return apiFetch<ICampaignWithSchedule[]>(apiPath(`/api/campaigns/sync${query}`), {
     method: 'POST',
   });
 }
