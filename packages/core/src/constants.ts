@@ -9,7 +9,6 @@ import {
   INotificationConfig,
   IQaConfig,
   IRoadmapScannerConfig,
-  ISlackBotConfig,
   MergeMethod,
   Provider,
   QaArtifacts,
@@ -126,12 +125,6 @@ export const DEFAULT_AUDIT: IAuditConfig = {
 };
 
 export const AUDIT_LOG_NAME = 'audit';
-
-// Slack Bot Configuration
-export const DEFAULT_SLACK_BOT_CONFIG: ISlackBotConfig = {
-  enabled: false,
-  webhookUrl: '',
-};
 
 // Valid providers
 export const VALID_PROVIDERS: Provider[] = ['claude', 'codex'];

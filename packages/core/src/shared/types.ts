@@ -70,7 +70,6 @@ export interface INightWatchConfig {
   prdPriority: string[];
   roadmapScanner: IRoadmapScannerConfig;
   templatesDir: string;
-  slack?: ISlackBotConfig;
 }
 
 // ==================== PRD Info ====================
@@ -148,13 +147,6 @@ export interface IRoadmapStatus {
   items: IRoadmapItem[];
   lastScan?: string;
   autoScanInterval?: number;
-}
-
-// ==================== Slack Bot Config ====================
-
-export interface ISlackBotConfig {
-  enabled: boolean;
-  webhookUrl: string;
 }
 
 // ==================== Agent Personas ====================

@@ -19,11 +19,6 @@ import {
   toggleRoadmapScanner,
 } from '../api';
 
-interface ISimplifiedSlackConfig {
-  enabled: boolean;
-  webhookUrl: string;
-}
-
 type ConfigForm = {
   provider: INightWatchConfig['provider'];
   defaultBranch: string;
@@ -41,12 +36,6 @@ type ConfigForm = {
   prdPriority: string[];
   roadmapScanner: IRoadmapScannerConfig;
   templatesDir: string;
-  slack: ISimplifiedSlackConfig;
-};
-
-const DEFAULT_SLACK_CONFIG: ISimplifiedSlackConfig = {
-  enabled: false,
-  webhookUrl: '',
 };
 
 const toFormState = (config: INightWatchConfig): ConfigForm => ({
@@ -70,10 +59,6 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
     autoScanInterval: 300,
   },
   templatesDir: config.templatesDir || '.night-watch/templates',
-  slack: {
-    enabled: config.slack?.enabled ?? false,
-    webhookUrl: (config.slack as any)?.webhookUrl ?? '',
-  },
 });
 
 // Helper to check if a value looks sensitive
@@ -608,7 +593,6 @@ const Settings: React.FC = () => {
         prdPriority: form.prdPriority,
         roadmapScanner: form.roadmapScanner,
         templatesDir: form.templatesDir,
-        slack: form.slack,
       });
 
       addToast({
@@ -778,37 +762,6 @@ const Settings: React.FC = () => {
             notifications={form.notifications}
             onChange={(notifications) => updateField('notifications', notifications)}
           />
-        </Card>
-      ),
-    },
-    {
-      id: 'slack',
-      label: 'Slack',
-      content: (
-        <Card className="p-6 space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-medium text-slate-200">Slack Notifications</h3>
-              <p className="text-sm text-slate-400">
-                Send notifications to Slack via an incoming webhook
-              </p>
-            </div>
-            <Switch
-              checked={form.slack.enabled}
-              onChange={(checked) => updateField('slack', { ...form.slack, enabled: checked })}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 pt-4 border-t border-slate-800">
-            <Input
-              label="Webhook URL"
-              type="text"
-              value={form.slack.webhookUrl}
-              onChange={(e) => updateField('slack', { ...form.slack, webhookUrl: e.target.value })}
-              placeholder="https://hooks.slack.com/services/..."
-              helperText="Incoming Webhook URL from your Slack App settings"
-            />
-          </div>
         </Card>
       ),
     },

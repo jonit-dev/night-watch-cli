@@ -14,7 +14,6 @@ import {
   INotificationConfig,
   IQaConfig,
   IRoadmapScannerConfig,
-  ISlackBotConfig,
   IWebhookConfig,
   MergeMethod,
   NotificationEvent,
@@ -49,7 +48,6 @@ import {
   DEFAULT_REVIEWER_MAX_RUNTIME,
   DEFAULT_REVIEWER_SCHEDULE,
   DEFAULT_ROADMAP_SCANNER,
-  DEFAULT_SLACK_BOT_CONFIG,
   DEFAULT_TEMPLATES_DIR,
   VALID_CLAUDE_MODELS,
   VALID_MERGE_METHODS,
@@ -110,9 +108,6 @@ export function getDefaultConfig(): INightWatchConfig {
 
     // Code audit
     audit: { ...DEFAULT_AUDIT },
-
-    // Slack Bot API
-    slack: { ...DEFAULT_SLACK_BOT_CONFIG },
   };
 }
 
@@ -276,16 +271,6 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     normalized.autoMergeMethod = mergeMethod as MergeMethod;
   }
 
-  // Slack Bot Configuration
-  const rawSlack = readObject(rawConfig.slack);
-  if (rawSlack) {
-    const slack: ISlackBotConfig = {
-      enabled: readBoolean(rawSlack.enabled) ?? DEFAULT_SLACK_BOT_CONFIG.enabled,
-      webhookUrl: readString(rawSlack.webhookUrl) ?? DEFAULT_SLACK_BOT_CONFIG.webhookUrl,
-    };
-    normalized.slack = slack;
-  }
-
   // QA Configuration
   const rawQa = readObject(rawConfig.qa);
   if (rawQa) {
@@ -415,7 +400,6 @@ function mergeConfigs(
       merged.fallbackOnRateLimit = fileConfig.fallbackOnRateLimit;
     if (fileConfig.claudeModel !== undefined) merged.claudeModel = fileConfig.claudeModel;
     if (fileConfig.qa !== undefined) merged.qa = { ...merged.qa, ...fileConfig.qa };
-    if (fileConfig.slack !== undefined) merged.slack = { ...merged.slack, ...fileConfig.slack };
   }
 
   // Merge env config (takes precedence)
@@ -451,7 +435,6 @@ function mergeConfigs(
     merged.fallbackOnRateLimit = envConfig.fallbackOnRateLimit;
   if (envConfig.claudeModel !== undefined) merged.claudeModel = envConfig.claudeModel;
   if (envConfig.qa !== undefined) merged.qa = { ...merged.qa, ...envConfig.qa };
-  if (envConfig.slack !== undefined) merged.slack = { ...merged.slack, ...envConfig.slack };
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
 
