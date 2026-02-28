@@ -7,6 +7,7 @@
 ## 1. Context
 
 **Problem:** The PRDs web UI page has several UX issues that make it non-functional for day-to-day operations:
+
 1. Status filter buttons are non-functional (they are static spans, not clickable buttons)
 2. No default filtering - "done" PRDs are shown by default, cluttering the view
 3. Sort button does nothing (no sort implementation)
@@ -15,12 +16,14 @@
 6. Table headers are not clickable for sorting
 
 **Files Analyzed:**
+
 - `web/pages/PRDs.tsx` — Main PRDs page component (needs complete overhaul)
 - `web/pages/PRs.tsx` — Reference implementation with working filter/sort patterns
 - `web/pages/Dashboard.tsx` — Reference for cancel process functionality
 - `web/api.ts` — API client with existing functions: `triggerRun`, `triggerCancel`, `retryPrd`
 
 **Current Behavior:**
+
 - Filter buttons render as static `<span>` elements with no click handlers
 - All PRDs are shown regardless of status
 - Sort button exists but has no implementation
@@ -33,6 +36,7 @@
 ## 2. Solution
 
 **Approach:**
+
 1. **Implement functional status filtering** - Default to showing "ready" PRDs only; add clickable filter buttons following PRs.tsx pattern
 2. **Remove "New PRD" button** - PRDs are created via CLI, not web UI
 3. **Replace sort button with clickable column headers** - Follow PRs.tsx pattern with sort indicators
@@ -68,6 +72,7 @@ flowchart LR
 ```
 
 **Key Decisions:**
+
 - [x] Default filter set to "ready" (not "all") - shows actionable PRDs first
 - [x] Sorting via column header clicks (same UX as PRs page)
 - [x] Actions show contextually: Play for ready/blocked, Stop for in-progress, Retry for done
@@ -120,6 +125,7 @@ sequenceDiagram
 **User-visible outcome:** Filter buttons are functional and default shows only "ready" PRDs.
 
 **Files (1):**
+
 - `web/pages/PRDs.tsx` — Add filter state and logic
 
 **Implementation:**
@@ -134,6 +140,7 @@ sequenceDiagram
 - [ ] Update empty state message to indicate when filter yields no results
 
 **Filter Button Styling (from PRs.tsx pattern):**
+
 ```tsx
 <button
   onClick={() => setFilter('ready')}
@@ -156,6 +163,7 @@ sequenceDiagram
 | Manual | Click filter when no matching PRDs | Empty state shows |
 
 **Verification Plan:**
+
 1. `yarn verify` passes
 2. Manual: Start web UI, navigate to PRDs, verify default filter is "ready"
 3. Manual: Click each filter button, verify correct filtering
@@ -167,6 +175,7 @@ sequenceDiagram
 **User-visible outcome:** Clicking table column headers sorts the table; sort indicators show current sort state.
 
 **Files (1):**
+
 - `web/pages/PRDs.tsx` — Add sort state and logic
 
 **Implementation:**
@@ -200,6 +209,7 @@ sequenceDiagram
 - [ ] Remove the standalone "Sort" button from header
 
 **Sort Logic:**
+
 ```typescript
 const sortedPrds = useMemo(() => {
   const sorted = [...filteredPrds].sort((a, b) => {
@@ -210,7 +220,13 @@ const sortedPrds = useMemo(() => {
         break;
       case 'status':
         // Order: ready < blocked < in-progress < pending-review < done
-        const statusOrder = { 'ready': 0, 'blocked': 1, 'in-progress': 2, 'pending-review': 3, 'done': 4 };
+        const statusOrder = {
+          ready: 0,
+          blocked: 1,
+          'in-progress': 2,
+          'pending-review': 3,
+          done: 4,
+        };
         comparison = (statusOrder[a.status] ?? 5) - (statusOrder[b.status] ?? 5);
         break;
       case 'dependencies':
@@ -232,6 +248,7 @@ const sortedPrds = useMemo(() => {
 | Manual | Sort icon changes | Icon shows up/down based on direction |
 
 **Verification Plan:**
+
 1. `yarn verify` passes
 2. Manual: Click each column header, verify sorting works
 3. Manual: Verify sort direction toggles on repeated clicks
@@ -243,6 +260,7 @@ const sortedPrds = useMemo(() => {
 **User-visible outcome:** Each row has an actions column with context-appropriate action buttons.
 
 **Files (1):**
+
 - `web/pages/PRDs.tsx` — Add actions column
 
 **Implementation:**
@@ -285,10 +303,10 @@ const sortedPrds = useMemo(() => {
     setCancellingPrd(prdName);
     try {
       const result = await triggerCancel('run');
-      const allOk = result.results.every(r => r.success);
+      const allOk = result.results.every((r) => r.success);
       addToast({
         title: allOk ? 'Process Cancelled' : 'Cancel Failed',
-        message: result.results.map(r => r.message).join('; '),
+        message: result.results.map((r) => r.message).join('; '),
         type: allOk ? 'success' : 'error',
       });
       if (allOk) refetch();
@@ -387,6 +405,7 @@ const sortedPrds = useMemo(() => {
 | Manual | Action button shows spinner | While action in progress, spinner shows |
 
 **Verification Plan:**
+
 1. `yarn verify` passes
 2. Manual: For each PRD status, verify correct action button appears
 3. Manual: Click each action type, verify API called and toast shown
@@ -398,6 +417,7 @@ const sortedPrds = useMemo(() => {
 **User-visible outcome:** "New PRD" button is removed; the modal code is removed.
 
 **Files (1):**
+
 - `web/pages/PRDs.tsx` — Remove unused code
 
 **Implementation:**
@@ -416,6 +436,7 @@ const sortedPrds = useMemo(() => {
 | Manual | Click existing PRD | Slide-over still works |
 
 **Verification Plan:**
+
 1. `yarn verify` passes
 2. Manual: Verify no "New PRD" button in header
 3. Manual: Verify clicking PRD row still opens slide-over
@@ -427,6 +448,7 @@ const sortedPrds = useMemo(() => {
 **User-visible outcome:** Card view also has action buttons for consistency.
 
 **Files (1):**
+
 - `web/pages/PRDs.tsx` — Add actions to card view
 
 **Implementation:**
@@ -436,18 +458,39 @@ const sortedPrds = useMemo(() => {
 - [ ] Use same conditional logic for which action to show
 
 **Card Actions Pattern:**
+
 ```tsx
 <div className="mt-4 pt-4 border-t border-slate-800 flex justify-end">
   {prd.status === 'ready' || prd.status === 'blocked' ? (
-    <Button size="sm" onClick={(e) => { e.stopPropagation(); handleExecutePrd(prd.name, e); }}>
+    <Button
+      size="sm"
+      onClick={(e) => {
+        e.stopPropagation();
+        handleExecutePrd(prd.name, e);
+      }}
+    >
       <Play className="h-4 w-4 mr-1" /> Execute
     </Button>
   ) : prd.status === 'in-progress' ? (
-    <Button size="sm" variant="danger" onClick={(e) => { e.stopPropagation(); handleStopPrd(prd.name, e); }}>
+    <Button
+      size="sm"
+      variant="danger"
+      onClick={(e) => {
+        e.stopPropagation();
+        handleStopPrd(prd.name, e);
+      }}
+    >
       <Square className="h-4 w-4 mr-1" /> Stop
     </Button>
   ) : prd.status === 'done' ? (
-    <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handleRetryPrd(prd.name, e); }}>
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={(e) => {
+        e.stopPropagation();
+        handleRetryPrd(prd.name, e);
+      }}
+    >
       <RotateCcw className="h-4 w-4 mr-1" /> Retry
     </Button>
   ) : null}
@@ -461,6 +504,7 @@ const sortedPrds = useMemo(() => {
 | Manual | Click action on card | Action executes, not just card selection |
 
 **Verification Plan:**
+
 1. `yarn verify` passes
 2. Manual: Switch to card view, verify action buttons appear
 3. Manual: Click action on card, verify it executes (doesn't just open slide-over)
@@ -484,28 +528,31 @@ const sortedPrds = useMemo(() => {
 
 ## Summary of Changes
 
-| Component | Before | After |
-|-----------|--------|-------|
-| Filter buttons | Static spans (non-functional) | Clickable buttons with active state |
-| Default filter | None (shows all) | "ready" |
-| Sorting | Standalone button (non-functional) | Clickable column headers with indicators |
-| Actions column | MoreVertical icon (no action) | Play/Stop/Retry based on status |
-| New PRD | Button + Modal | Removed |
-| Card view | No actions | Same action buttons as table |
+| Component      | Before                             | After                                    |
+| -------------- | ---------------------------------- | ---------------------------------------- |
+| Filter buttons | Static spans (non-functional)      | Clickable buttons with active state      |
+| Default filter | None (shows all)                   | "ready"                                  |
+| Sorting        | Standalone button (non-functional) | Clickable column headers with indicators |
+| Actions column | MoreVertical icon (no action)      | Play/Stop/Retry based on status          |
+| New PRD        | Button + Modal                     | Removed                                  |
+| Card view      | No actions                         | Same action buttons as table             |
 
 ---
 
 ## Integration Points Checklist
 
 **How will this feature be reached?**
+
 - [x] Entry point identified: `/prds` route via Sidebar navigation
 - [x] Caller file identified: `web/App.tsx` (routes already configured)
 - [x] Registration/wiring needed: None - route exists
 
 **Is this user-facing?**
+
 - [x] YES → UI components: PRDs.tsx page with filter/sort/actions
 
 **Full user flow:**
+
 1. User does: Click "PRDs" in sidebar
 2. Triggers: Navigate to `/prds` route
 3. Reaches new feature via: PRDs.tsx component renders with enhanced functionality
