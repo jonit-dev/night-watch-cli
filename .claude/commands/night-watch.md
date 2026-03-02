@@ -16,6 +16,7 @@ If `NW_BOARD_ENABLED` is set to `true` in the environment, use board mode instea
 5. **Create worktree and implement** as normal (create branch, worktree, implement, test, commit).
 
 6. **Open PR**: Include `Closes #<issue-number>` in the PR body so the issue auto-closes when merged:
+
    ```
    gh pr create --title "feat: <short title>" --body "Closes #<number>\n\n<summary>"
    ```
@@ -36,7 +37,16 @@ If `NW_BOARD_ENABLED` is set to `true` in the environment, use board mode instea
 
 2. **Check dependencies**: Read each PRD. If it says "Depends on:" another PRD, check if that dependency is already in `docs/PRDs/night-watch/done/`. Skip PRDs with unmet dependencies.
 
-3. **Check for already-in-progress PRDs**: Before processing any PRD, check if a PR already exists for it:
+3. **Clean up stale worktrees** from previous interrupted runs before doing anything else:
+
+   ```bash
+   git worktree list --porcelain | grep '^worktree ' | awk '{print $2}' | grep -- '-nw-' | while read -r wt; do
+     git worktree remove --force "$wt" 2>/dev/null || true
+   done
+   git worktree prune
+   ```
+
+4. **Check for already-in-progress PRDs**: Before processing any PRD, check if a PR already exists for it:
 
    ```
    gh pr list --state open --json headRefName,number,title
@@ -44,7 +54,7 @@ If `NW_BOARD_ENABLED` is set to `true` in the environment, use board mode instea
 
    If a branch matching `night-watch/<prd-filename-without-.md>` already has an open PR, **skip that PRD** -- it's already being handled. Log that you skipped it and move on.
 
-4. **For each PRD** (process ONE at a time, then stop):
+5. **For each PRD** (process ONE at a time, then stop):
 
    a. **Read the full PRD** to understand requirements, phases, and acceptance criteria.
 
@@ -125,10 +135,20 @@ If `NW_BOARD_ENABLED` is set to `true` in the environment, use board mode instea
 
    m. **Commit** the summary update, push main.
 
-   n. **Clean up worktree**: `git worktree remove ../night-watch-cli-nw-<prd-name>`
+   n. **Clean up worktree**:
+
+   ```bash
+   git worktree remove --force ../night-watch-cli-nw-<prd-name>
+   git worktree prune
+   ```
 
    o. **STOP after this PRD**. Do NOT continue to the next PRD. One PRD per run prevents timeouts and reduces risk. The next cron trigger will pick up the next PRD.
 
-5. **On failure**: Do NOT move the PRD to done. Log the failure in NIGHT-WATCH-SUMMARY.md with status "Failed" and the reason. Clean up worktree and **stop** -- do not attempt the next PRD.
+6. **On failure**: Do NOT move the PRD to done. Log the failure in NIGHT-WATCH-SUMMARY.md with status "Failed" and the reason. Always clean up the worktree before stopping:
+   ```bash
+   git worktree remove --force ../night-watch-cli-nw-<prd-name>
+   git worktree prune
+   ```
+   Then **stop** -- do not attempt the next PRD.
 
 Start now. Scan for available PRDs and process the first eligible one.
