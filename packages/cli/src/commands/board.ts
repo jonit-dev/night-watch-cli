@@ -551,7 +551,8 @@ export function boardCommand(program: Command): void {
     .description('Return the next issue from a column (default: Ready), sorted by priority')
     .option('--column <name>', 'Column to fetch from', 'Ready')
     .option('--json', 'Output full issue JSON (for agent consumption)')
-    .action(async (options: { column: string; json: boolean }) =>
+    .option('--all', 'Return all issues (as JSON array when combined with --json)')
+    .action(async (options: { column: string; json: boolean; all: boolean }) =>
       run(async () => {
         const cwd = process.cwd();
         const config = loadConfig(cwd);
@@ -562,6 +563,7 @@ export function boardCommand(program: Command): void {
 
         if (issues.length === 0) {
           if (options.json) {
+            if (options.all) console.log('[]');
             return;
           }
           console.log(`No issues found in ${options.column}`);
@@ -578,6 +580,22 @@ export function boardCommand(program: Command): void {
           if (aOrder !== bOrder) return aOrder - bOrder;
           return a.number - b.number; // Tie-breaker: issue number ascending
         });
+
+        if (options.all) {
+          if (options.json) {
+            console.log(JSON.stringify(sorted, null, 2));
+            return;
+          }
+          for (const issue of sorted) {
+            const priority = extractPriority(issue);
+            const category = extractCategory(issue);
+            console.log(`#${issue.number} ${issue.title}`);
+            if (priority || category) {
+              dim(`  Labels: ${[priority, category].filter(Boolean).join(', ')}`);
+            }
+          }
+          return;
+        }
 
         const issue = sorted[0];
 
