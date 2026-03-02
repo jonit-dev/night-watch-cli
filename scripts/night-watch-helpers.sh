@@ -492,24 +492,65 @@ Proxy quota exhausted - falling back to native Claude (${model})"
 # ── Board mode issue discovery ────────────────────────────────────────────────
 
 # Get the next eligible issue from the board provider.
-# Prints the JSON of the first "Ready" issue to stdout, or nothing if none found.
+# Iterates through Ready issues sorted by priority, skipping any in cooldown.
+# Prints the JSON of the first eligible issue to stdout, or nothing if none found.
 # Returns 0 on success, 1 if no issue found or CLI unavailable.
+#
+# Args:
+#   $1 - project directory (for cooldown history lookup)
+#   $2 - max runtime in seconds (cooldown window, default 7200)
 find_eligible_board_issue() {
+  local project_dir="${1:-}"
+  local max_runtime="${2:-7200}"
+
   local cli_bin
   cli_bin=$(resolve_night_watch_cli) || {
     log "WARN: Cannot find night-watch CLI for board mode"
     return 1
   }
-  local result
-  result=$("${cli_bin}" board next-issue --column "Ready" --json 2>/dev/null) || true
-  if [ -z "${result}" ]; then
+
+  # Fetch all Ready issues sorted by priority
+  local all_issues
+  all_issues=$("${cli_bin}" board next-issue --column "Ready" --all --json 2>/dev/null) || true
+  if [ -z "${all_issues}" ] || [ "${all_issues}" = "[]" ]; then
     return 1
   fi
-  # Require valid JSON with an issue number to avoid treating plain text output
-  # as a runnable board issue.
-  if ! printf '%s' "${result}" | jq -e '.number and (.number | type == "number")' >/dev/null 2>&1; then
+
+  # Require valid JSON array
+  local count
+  count=$(printf '%s' "${all_issues}" | jq 'if type == "array" then length else 0 end' 2>/dev/null || echo 0)
+  if [ "${count}" -eq 0 ]; then
     return 1
   fi
-  printf '%s' "${result}"
-  return 0
+
+  local i=0
+  while [ "${i}" -lt "${count}" ]; do
+    local issue
+    issue=$(printf '%s' "${all_issues}" | jq ".[$i]" 2>/dev/null)
+
+    # Validate issue has a number
+    if ! printf '%s' "${issue}" | jq -e '.number and (.number | type == "number")' >/dev/null 2>&1; then
+      i=$((i + 1))
+      continue
+    fi
+
+    local number title prd_name
+    number=$(printf '%s' "${issue}" | jq -r '.number' 2>/dev/null)
+    title=$(printf '%s' "${issue}" | jq -r '.title // empty' 2>/dev/null)
+
+    # Derive PRD name (same slug format used by the cron script for history keys)
+    prd_name="${number}-$(printf '%s' "${title}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-\|-$//g')"
+
+    # Check cooldown — skip issues that failed recently
+    if [ -n "${project_dir}" ] && "${cli_bin}" history check "${project_dir}" "${prd_name}" --cooldown "${max_runtime}" 2>/dev/null; then
+      log "SKIP-BOARD: Issue #${number} — in cooldown after recent failure"
+      i=$((i + 1))
+      continue
+    fi
+
+    printf '%s' "${issue}"
+    return 0
+  done
+
+  return 1
 }
