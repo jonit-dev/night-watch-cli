@@ -10,11 +10,13 @@ import { BoardProviderType, IBoardProviderConfig } from './board/types.js';
 import {
   ClaudeModel,
   IAuditConfig,
+  IJobProviders,
   INightWatchConfig,
   INotificationConfig,
   IQaConfig,
   IRoadmapScannerConfig,
   IWebhookConfig,
+  JobType,
   MergeMethod,
   NotificationEvent,
   Provider,
@@ -34,6 +36,7 @@ import {
   DEFAULT_CRON_SCHEDULE_OFFSET,
   DEFAULT_DEFAULT_BRANCH,
   DEFAULT_FALLBACK_ON_RATE_LIMIT,
+  DEFAULT_JOB_PROVIDERS,
   DEFAULT_MAX_LOG_SIZE,
   DEFAULT_MAX_RETRIES,
   DEFAULT_MAX_RUNTIME,
@@ -50,6 +53,7 @@ import {
   DEFAULT_ROADMAP_SCANNER,
   DEFAULT_TEMPLATES_DIR,
   VALID_CLAUDE_MODELS,
+  VALID_JOB_TYPES,
   VALID_MERGE_METHODS,
   VALID_PROVIDERS,
 } from './constants.js';
@@ -108,6 +112,9 @@ export function getDefaultConfig(): INightWatchConfig {
 
     // Code audit
     audit: { ...DEFAULT_AUDIT },
+
+    // Job providers
+    jobProviders: { ...DEFAULT_JOB_PROVIDERS },
   };
 }
 
@@ -304,6 +311,22 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     normalized.audit = audit;
   }
 
+  // Job Providers Configuration
+  const rawJobProviders = readObject(rawConfig.jobProviders);
+  if (rawJobProviders) {
+    const jobProviders: IJobProviders = {};
+    for (const jobType of VALID_JOB_TYPES) {
+      const providerValue = readString(rawJobProviders[jobType]);
+      if (providerValue && VALID_PROVIDERS.includes(providerValue as Provider)) {
+        (jobProviders as Record<JobType, Provider | undefined>)[jobType as JobType] =
+          providerValue as Provider;
+      }
+    }
+    if (Object.keys(jobProviders).length > 0) {
+      normalized.jobProviders = jobProviders;
+    }
+  }
+
   return normalized;
 }
 
@@ -400,6 +423,7 @@ function mergeConfigs(
       merged.fallbackOnRateLimit = fileConfig.fallbackOnRateLimit;
     if (fileConfig.claudeModel !== undefined) merged.claudeModel = fileConfig.claudeModel;
     if (fileConfig.qa !== undefined) merged.qa = { ...merged.qa, ...fileConfig.qa };
+    if (fileConfig.jobProviders !== undefined) merged.jobProviders = { ...fileConfig.jobProviders };
   }
 
   // Merge env config (takes precedence)
@@ -435,6 +459,7 @@ function mergeConfigs(
     merged.fallbackOnRateLimit = envConfig.fallbackOnRateLimit;
   if (envConfig.claudeModel !== undefined) merged.claudeModel = envConfig.claudeModel;
   if (envConfig.qa !== undefined) merged.qa = { ...merged.qa, ...envConfig.qa };
+  if (envConfig.jobProviders !== undefined) merged.jobProviders = { ...envConfig.jobProviders };
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
 
@@ -717,8 +742,45 @@ export function loadConfig(projectDir: string): INightWatchConfig {
     }
   }
 
+  // Job Providers configuration from env vars (NW_JOB_PROVIDER_<JOB_TYPE>)
+  const jobProvidersEnv: IJobProviders = {};
+  for (const jobType of VALID_JOB_TYPES) {
+    const envKey = `NW_JOB_PROVIDER_${jobType.toUpperCase()}`;
+    const envValue = process.env[envKey];
+    if (envValue) {
+      const provider = validateProvider(envValue);
+      if (provider !== null) {
+        (jobProvidersEnv as Record<JobType, Provider | undefined>)[jobType as JobType] = provider;
+      }
+    }
+  }
+  if (Object.keys(jobProvidersEnv).length > 0) {
+    envConfig.jobProviders = jobProvidersEnv;
+  }
+
   // Merge all configs
   return mergeConfigs(defaults, fileConfig, envConfig);
+}
+
+/**
+ * Resolve the provider for a specific job type.
+ * Precedence: CLI override (--provider flag) > job-specific provider > global provider.
+ *
+ * @param config - The Night Watch configuration
+ * @param jobType - The job type to resolve the provider for
+ * @returns The provider to use for the specified job type
+ */
+export function resolveJobProvider(config: INightWatchConfig, jobType: JobType): Provider {
+  // CLI override takes highest precedence (set via --provider flag)
+  if (config._cliProviderOverride) {
+    return config._cliProviderOverride;
+  }
+  // Job-specific provider takes second precedence
+  if (config.jobProviders[jobType]) {
+    return config.jobProviders[jobType]!;
+  }
+  // Fall back to global provider
+  return config.provider;
 }
 
 /**

@@ -16,6 +16,7 @@ import {
   info,
   loadConfig,
   parseScriptResult,
+  resolveJobProvider,
   sendNotifications,
   error as uiError,
 } from '@night-watch/core';
@@ -68,8 +69,9 @@ export function buildEnvVars(
 ): Record<string, string> {
   const env: Record<string, string> = {};
 
-  // Provider command - the actual CLI binary to call
-  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[config.provider];
+  // Provider command - the actual CLI binary to call (use job-specific provider for qa)
+  const qaProvider = resolveJobProvider(config, 'qa');
+  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[qaProvider];
 
   // Default branch (empty = auto-detect in bash script)
   if (config.defaultBranch) {
@@ -122,7 +124,8 @@ export function applyCliOverrides(
   }
 
   if (options.provider) {
-    overridden.provider = options.provider as INightWatchConfig['provider'];
+    // Use _cliProviderOverride to ensure CLI flag takes precedence over jobProviders
+    overridden._cliProviderOverride = options.provider as INightWatchConfig['provider'];
   }
 
   return overridden;
@@ -157,11 +160,14 @@ export function qaCommand(program: Command): void {
       if (options.dryRun) {
         header('Dry Run: QA Process');
 
+        // Resolve QA-specific provider
+        const qaProvider = resolveJobProvider(config, 'qa');
+
         // Configuration section with table
         header('Configuration');
         const configTable = createTable({ head: ['Setting', 'Value'] });
-        configTable.push(['Provider', config.provider]);
-        configTable.push(['Provider CLI', PROVIDER_COMMANDS[config.provider]]);
+        configTable.push(['Provider', qaProvider]);
+        configTable.push(['Provider CLI', PROVIDER_COMMANDS[qaProvider]]);
         configTable.push([
           'Max Runtime',
           `${config.qa.maxRuntime}s (${Math.floor(config.qa.maxRuntime / 60)}min)`,

@@ -14,6 +14,7 @@ import {
   header,
   info,
   loadConfig,
+  resolveJobProvider,
   sendNotifications,
   sliceNextItem,
   error as uiError,
@@ -39,8 +40,9 @@ export function buildEnvVars(
 ): Record<string, string> {
   const env: Record<string, string> = {};
 
-  // Provider command - the actual CLI binary to call
-  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[config.provider];
+  // Provider command - the actual CLI binary to call (use job-specific provider for slicer)
+  const slicerProvider = resolveJobProvider(config, 'slicer');
+  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[slicerProvider];
 
   // Slicer runtime
   env.NW_SLICER_MAX_RUNTIME = String(config.roadmapScanner.slicerMaxRuntime);
@@ -87,7 +89,8 @@ export function applyCliOverrides(
   }
 
   if (options.provider) {
-    overridden.provider = options.provider as INightWatchConfig['provider'];
+    // Use _cliProviderOverride to ensure CLI flag takes precedence over jobProviders
+    overridden._cliProviderOverride = options.provider as INightWatchConfig['provider'];
   }
 
   return overridden;
@@ -119,11 +122,14 @@ export function sliceCommand(program: Command): void {
       if (options.dryRun) {
         header('Dry Run: Roadmap Slicer');
 
+        // Resolve slicer-specific provider
+        const slicerProvider = resolveJobProvider(config, 'slicer');
+
         // Configuration section with table
         header('Configuration');
         const configTable = createTable({ head: ['Setting', 'Value'] });
-        configTable.push(['Provider', config.provider]);
-        configTable.push(['Provider CLI', PROVIDER_COMMANDS[config.provider]]);
+        configTable.push(['Provider', slicerProvider]);
+        configTable.push(['Provider CLI', PROVIDER_COMMANDS[slicerProvider]]);
         configTable.push(['PRD Directory', config.prdDir]);
         configTable.push(['Roadmap Path', config.roadmapScanner.roadmapPath]);
         configTable.push([
@@ -170,8 +176,8 @@ export function sliceCommand(program: Command): void {
 
         // Provider invocation command
         header('Provider Invocation');
-        const providerCmd = PROVIDER_COMMANDS[config.provider];
-        const autoFlag = config.provider === 'claude' ? '--dangerously-skip-permissions' : '--yolo';
+        const providerCmd = PROVIDER_COMMANDS[slicerProvider];
+        const autoFlag = slicerProvider === 'claude' ? '--dangerously-skip-permissions' : '--yolo';
         dim(`  ${providerCmd} ${autoFlag} -p "/night-watch-slicer"`);
 
         // Environment variables

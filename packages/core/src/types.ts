@@ -10,6 +10,23 @@ import { IBoardProviderConfig } from './board/types.js';
 export type Provider = 'claude' | 'codex';
 
 /**
+ * Job types that can have per-job provider configuration
+ */
+export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer';
+
+/**
+ * Per-job provider configuration
+ * Allows assigning different AI providers to different job types
+ */
+export interface IJobProviders {
+  executor?: Provider;
+  reviewer?: Provider;
+  qa?: Provider;
+  audit?: Provider;
+  slicer?: Provider;
+}
+
+/**
  * Claude model to use for native (non-proxy) execution
  */
 export type ClaudeModel = 'sonnet' | 'opus';
@@ -111,6 +128,16 @@ export interface INightWatchConfig {
 
   /** Code audit configuration */
   audit: IAuditConfig;
+
+  /** Per-job provider configuration */
+  jobProviders: IJobProviders;
+
+  /**
+   * Internal: CLI override for provider (--provider flag).
+   * Takes precedence over all other provider settings.
+   * @internal
+   */
+  _cliProviderOverride?: Provider;
 }
 
 export type QaArtifacts = 'screenshot' | 'video' | 'both';

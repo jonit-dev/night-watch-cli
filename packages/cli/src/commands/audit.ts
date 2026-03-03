@@ -14,6 +14,7 @@ import {
   header,
   loadConfig,
   parseScriptResult,
+  resolveJobProvider,
 } from '@night-watch/core';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -33,7 +34,9 @@ export function buildEnvVars(
 ): Record<string, string> {
   const env: Record<string, string> = {};
 
-  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[config.provider];
+  // Provider command - the actual CLI binary to call (use job-specific provider for audit)
+  const auditProvider = resolveJobProvider(config, 'audit');
+  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[auditProvider];
   env.NW_AUDIT_MAX_RUNTIME = String(config.audit.maxRuntime);
 
   if (config.defaultBranch) {
@@ -75,7 +78,11 @@ export function auditCommand(program: Command): void {
       }
 
       if (options.provider) {
-        config = { ...config, provider: options.provider as INightWatchConfig['provider'] };
+        // Use _cliProviderOverride to ensure CLI flag takes precedence over jobProviders
+        config = {
+          ...config,
+          _cliProviderOverride: options.provider as INightWatchConfig['provider'],
+        };
       }
 
       const envVars = buildEnvVars(config, options);
@@ -84,17 +91,20 @@ export function auditCommand(program: Command): void {
       if (options.dryRun) {
         header('Dry Run: Code Auditor');
 
+        // Resolve audit-specific provider
+        const auditProvider = resolveJobProvider(config, 'audit');
+
         header('Configuration');
         const configTable = createTable({ head: ['Setting', 'Value'] });
-        configTable.push(['Provider', config.provider]);
-        configTable.push(['Provider CLI', PROVIDER_COMMANDS[config.provider]]);
+        configTable.push(['Provider', auditProvider]);
+        configTable.push(['Provider CLI', PROVIDER_COMMANDS[auditProvider]]);
         configTable.push(['Max Runtime', `${config.audit.maxRuntime}s`]);
         configTable.push(['Report File', path.join(projectDir, 'logs', 'audit-report.md')]);
         console.log(configTable.toString());
 
         header('Provider Invocation');
-        const providerCmd = PROVIDER_COMMANDS[config.provider];
-        if (config.provider === 'claude') {
+        const providerCmd = PROVIDER_COMMANDS[auditProvider];
+        if (auditProvider === 'claude') {
           dim(
             `  ${providerCmd} -p "<bundled night-watch-audit.md>" --dangerously-skip-permissions`,
           );
@@ -136,12 +146,19 @@ export function auditCommand(program: Command): void {
         } else {
           const statusSuffix = scriptResult?.status ? ` (${scriptResult.status})` : '';
           const providerExit = scriptResult?.data?.provider_exit;
-          const exitDetail = providerExit && providerExit !== String(exitCode) ? `, provider exit ${providerExit}` : '';
+          const exitDetail =
+            providerExit && providerExit !== String(exitCode)
+              ? `, provider exit ${providerExit}`
+              : '';
           spinner.fail(`Code audit exited with code ${exitCode}${statusSuffix}${exitDetail}`);
           // Print last audit log lines so the parent process captures the actual failure reason
           const logPath = path.join(projectDir, 'logs', 'audit.log');
           if (fs.existsSync(logPath)) {
-            const logLines = fs.readFileSync(logPath, 'utf-8').split('\n').filter((l) => l.trim()).slice(-8);
+            const logLines = fs
+              .readFileSync(logPath, 'utf-8')
+              .split('\n')
+              .filter((l) => l.trim())
+              .slice(-8);
             if (logLines.length > 0) {
               process.stderr.write(logLines.join('\n') + '\n');
             }
