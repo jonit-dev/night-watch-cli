@@ -26,6 +26,11 @@ export interface IJobProviders {
   slicer?: Provider;
 }
 
+// ==================== Provider Strategy ====================
+
+/** Claude model to use for native (non-proxy) execution */
+export type ClaudeModel = 'sonnet' | 'opus';
+
 // ==================== Notification / Webhook ====================
 
 export type WebhookType = 'slack' | 'discord' | 'telegram';
@@ -61,6 +66,38 @@ export interface IRoadmapScannerConfig {
   slicerMaxRuntime?: number;
 }
 
+// ==================== QA Config ====================
+
+export type QaArtifacts = 'screenshot' | 'video' | 'both';
+
+export interface IQaConfig {
+  /** Whether the QA process is enabled */
+  enabled: boolean;
+  /** Cron schedule for QA execution */
+  schedule: string;
+  /** Maximum runtime in seconds for QA */
+  maxRuntime: number;
+  /** Branch patterns to match for QA (defaults to top-level branchPatterns if empty) */
+  branchPatterns: string[];
+  /** What artifacts to capture for UI tests */
+  artifacts: QaArtifacts;
+  /** GitHub label to skip QA (PRs with this label are excluded) */
+  skipLabel: string;
+  /** Auto-install Playwright if missing during QA run */
+  autoInstallPlaywright: boolean;
+}
+
+// ==================== Audit Config ====================
+
+export interface IAuditConfig {
+  /** Whether the audit process is enabled */
+  enabled: boolean;
+  /** Cron schedule for audit execution */
+  schedule: string;
+  /** Maximum runtime in seconds for the audit */
+  maxRuntime: number;
+}
+
 // ==================== Night Watch Config ====================
 
 /**
@@ -91,6 +128,10 @@ export interface INightWatchConfig {
   jobProviders: IJobProviders;
   autoMerge?: boolean;
   autoMergeMethod?: MergeMethod;
+  fallbackOnRateLimit: boolean;
+  claudeModel: ClaudeModel;
+  qa: IQaConfig;
+  audit: IAuditConfig;
 }
 
 // ==================== Board Provider Config ====================

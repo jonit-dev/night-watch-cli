@@ -20,11 +20,16 @@ import {
   updateConfig,
   useApi,
   toggleRoadmapScanner,
+  ClaudeModel,
+  IQaConfig,
+  IAuditConfig,
+  QaArtifacts,
 } from '../api';
 
 type ConfigForm = {
   provider: INightWatchConfig['provider'];
   defaultBranch: string;
+  prdDir: string;
   branchPrefix: string;
   branchPatterns: string[];
   reviewerEnabled: boolean;
@@ -32,6 +37,8 @@ type ConfigForm = {
   maxRuntime: number;
   reviewerMaxRuntime: number;
   maxLogSize: number;
+  cronSchedule: string;
+  reviewerSchedule: string;
   cronScheduleOffset: number;
   maxRetries: number;
   providerEnv: Record<string, string>;
@@ -43,11 +50,16 @@ type ConfigForm = {
   jobProviders: IJobProviders;
   autoMerge: boolean;
   autoMergeMethod: MergeMethod;
+  fallbackOnRateLimit: boolean;
+  claudeModel: ClaudeModel;
+  qa: IQaConfig;
+  audit: IAuditConfig;
 };
 
 const toFormState = (config: INightWatchConfig): ConfigForm => ({
   provider: config.provider,
   defaultBranch: config.defaultBranch,
+  prdDir: config.prdDir || 'docs/PRDs/night-watch',
   branchPrefix: config.branchPrefix,
   branchPatterns: config.branchPatterns || [],
   reviewerEnabled: config.reviewerEnabled,
@@ -55,6 +67,8 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   maxRuntime: config.maxRuntime,
   reviewerMaxRuntime: config.reviewerMaxRuntime,
   maxLogSize: config.maxLogSize,
+  cronSchedule: config.cronSchedule || '0 0-21 * * *',
+  reviewerSchedule: config.reviewerSchedule || '0 0,3,6,9,12,15,18,21 * * *',
   cronScheduleOffset: config.cronScheduleOffset ?? 0,
   maxRetries: config.maxRetries ?? 3,
   providerEnv: config.providerEnv || {},
@@ -70,6 +84,22 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   jobProviders: config.jobProviders || {},
   autoMerge: config.autoMerge ?? false,
   autoMergeMethod: config.autoMergeMethod ?? 'squash',
+  fallbackOnRateLimit: config.fallbackOnRateLimit ?? false,
+  claudeModel: config.claudeModel ?? 'sonnet',
+  qa: config.qa || {
+    enabled: true,
+    schedule: '30 1,7,13,19 * * *',
+    maxRuntime: 3600,
+    branchPatterns: [],
+    artifacts: 'both',
+    skipLabel: 'skip-qa',
+    autoInstallPlaywright: true,
+  },
+  audit: config.audit || {
+    enabled: true,
+    schedule: '0 2,8,14,20 * * *',
+    maxRuntime: 1800,
+  },
 });
 
 // Helper to check if a value looks sensitive
@@ -598,6 +628,7 @@ const Settings: React.FC = () => {
       await updateConfig({
         provider: form.provider,
         defaultBranch: form.defaultBranch,
+        prdDir: form.prdDir,
         branchPrefix: form.branchPrefix,
         branchPatterns: form.branchPatterns,
         reviewerEnabled: form.reviewerEnabled,
@@ -605,6 +636,8 @@ const Settings: React.FC = () => {
         maxRuntime: form.maxRuntime,
         reviewerMaxRuntime: form.reviewerMaxRuntime,
         maxLogSize: form.maxLogSize,
+        cronSchedule: form.cronSchedule,
+        reviewerSchedule: form.reviewerSchedule,
         cronScheduleOffset: form.cronScheduleOffset,
         maxRetries: form.maxRetries,
         providerEnv: form.providerEnv,
@@ -616,6 +649,10 @@ const Settings: React.FC = () => {
         jobProviders: cleanedJobProviders,
         autoMerge: form.autoMerge,
         autoMergeMethod: form.autoMergeMethod,
+        fallbackOnRateLimit: form.fallbackOnRateLimit,
+        claudeModel: form.claudeModel,
+        qa: form.qa,
+        audit: form.audit,
       });
 
       addToast({
@@ -690,47 +727,86 @@ const Settings: React.FC = () => {
       id: 'general',
       label: 'General',
       content: (
-        <Card className="p-6 space-y-4">
-          <h3 className="text-lg font-medium text-slate-200">Project Configuration</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Input label="Project Name" value={projectName} disabled />
-            <Select
-              label="Provider"
-              value={form.provider}
-              onChange={(val) => updateField('provider', val as ConfigForm['provider'])}
-              options={[
-                { label: 'Anthropic (Claude)', value: 'claude' },
-                { label: 'OpenAI (Codex)', value: 'codex' },
-              ]}
-            />
-            <Input label="Default Branch" value={form.defaultBranch} onChange={(e) => updateField('defaultBranch', e.target.value)} />
-            <Input label="Branch Prefix" value={form.branchPrefix} onChange={(e) => updateField('branchPrefix', e.target.value)} />
-            <div className="md:col-span-2">
-              <Switch
-                label="Enable Automated Reviews"
-                checked={form.reviewerEnabled}
-                onChange={(checked) => updateField('reviewerEnabled', checked)}
-              />
-            </div>
-            <div className="md:col-span-2">
-              <Switch
-                label="Auto-merge approved PRs"
-                checked={form.autoMerge}
-                onChange={(checked) => updateField('autoMerge', checked)}
-              />
-            </div>
-            {form.autoMerge && (
+        <Card className="p-6 space-y-6">
+          <div>
+            <h3 className="text-lg font-medium text-slate-200">Project Configuration</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+              <Input label="Project Name" value={projectName} disabled />
               <Select
-                label="Merge Method"
-                value={form.autoMergeMethod}
-                onChange={(val) => updateField('autoMergeMethod', val as MergeMethod)}
+                label="Provider"
+                value={form.provider}
+                onChange={(val) => updateField('provider', val as ConfigForm['provider'])}
                 options={[
-                  { label: 'Squash', value: 'squash' },
-                  { label: 'Merge', value: 'merge' },
-                  { label: 'Rebase', value: 'rebase' },
+                  { label: 'Anthropic (Claude)', value: 'claude' },
+                  { label: 'OpenAI (Codex)', value: 'codex' },
                 ]}
               />
-            )}
+              <Input label="Default Branch" value={form.defaultBranch} onChange={(e) => updateField('defaultBranch', e.target.value)} />
+              <Input label="Branch Prefix" value={form.branchPrefix} onChange={(e) => updateField('branchPrefix', e.target.value)} />
+              <Input
+                label="PRD Directory"
+                value={form.prdDir}
+                onChange={(e) => updateField('prdDir', e.target.value)}
+                helperText="Directory containing PRD files (relative to project root)"
+              />
+              <div className="md:col-span-2">
+                <Switch
+                  label="Enable Automated Reviews"
+                  checked={form.reviewerEnabled}
+                  onChange={(checked) => updateField('reviewerEnabled', checked)}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Switch
+                  label="Auto-merge approved PRs"
+                  checked={form.autoMerge}
+                  onChange={(checked) => updateField('autoMerge', checked)}
+                />
+              </div>
+              {form.autoMerge && (
+                <Select
+                  label="Merge Method"
+                  value={form.autoMergeMethod}
+                  onChange={(val) => updateField('autoMergeMethod', val as MergeMethod)}
+                  options={[
+                    { label: 'Squash', value: 'squash' },
+                    { label: 'Merge', value: 'merge' },
+                    { label: 'Rebase', value: 'rebase' },
+                  ]}
+                />
+              )}
+            </div>
+          </div>
+
+          <div className="pt-6 border-t border-slate-800">
+            <h3 className="text-lg font-medium text-slate-200 mb-4">Provider Strategy</h3>
+            <p className="text-sm text-slate-400 mb-4">
+              Configure how the provider handles rate limits and model selection for Claude execution
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="md:col-span-2">
+                <div>
+                  <Switch
+                    label="Fallback on Rate Limit"
+                    checked={form.fallbackOnRateLimit}
+                    onChange={(checked) => updateField('fallbackOnRateLimit', checked)}
+                  />
+                  <p className="text-xs text-slate-500 mt-2">
+                    When enabled, automatically fall back to native Claude API after rate-limit on proxy provider
+                  </p>
+                </div>
+              </div>
+              <Select
+                label="Claude Model"
+                value={form.claudeModel}
+                onChange={(val) => updateField('claudeModel', val as ClaudeModel)}
+                options={[
+                  { label: 'Sonnet (claude-sonnet-4-6)', value: 'sonnet' },
+                  { label: 'Opus (claude-opus-4-6)', value: 'opus' },
+                ]}
+                helperText="Model used for native Claude execution (when no proxy is set or after fallback)"
+              />
+            </div>
           </div>
         </Card>
       ),
@@ -782,6 +858,57 @@ const Settings: React.FC = () => {
       ),
     },
     {
+      id: 'schedules',
+      label: 'Schedules',
+      content: (
+        <Card className="p-6 space-y-6">
+          <div>
+            <h3 className="text-lg font-medium text-slate-200 mb-2">Cron Schedules</h3>
+            <p className="text-sm text-slate-400 mb-4">
+              Configure when PRD execution and PR review tasks run automatically
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input
+              label="PRD Execution Schedule"
+              value={form.cronSchedule}
+              onChange={(e) => updateField('cronSchedule', e.target.value)}
+              helperText="Cron expression for when PRDs are executed (default: 0 0-21 * * *)"
+              placeholder="0 0-21 * * *"
+            />
+            <Input
+              label="PR Review Schedule"
+              value={form.reviewerSchedule}
+              onChange={(e) => updateField('reviewerSchedule', e.target.value)}
+              helperText="Cron expression for automated PR reviews (default: 0 0,3,6,9,12,15,18,21 * * *)"
+              placeholder="0 0,3,6,9,12,15,18,21 * * *"
+            />
+            <Input
+              label="Cron Schedule Offset"
+              type="number"
+              min="0"
+              max="59"
+              value={String(form.cronScheduleOffset)}
+              onChange={(e) => {
+                const val = Math.min(59, Math.max(0, Number(e.target.value || 0)));
+                updateField('cronScheduleOffset', val);
+              }}
+              helperText="Minutes offset (0-59) applied to all cron schedules during install. Helps stagger multiple projects."
+            />
+          </div>
+
+          <div className="pt-4 border-t border-slate-800">
+            <p className="text-xs text-slate-500">
+              <strong>Cron format:</strong> minute hour day month weekday
+              <br />
+              <strong>Examples:</strong> <code>0 * * * *</code> (hourly), <code>0 0 * * *</code> (daily at midnight), <code>0 0-21/3 * * *</code> (every 3 hours from 0-21)
+            </p>
+          </div>
+        </Card>
+      ),
+    },
+    {
       id: 'env',
       label: 'Provider Env',
       content: (
@@ -826,30 +953,68 @@ const Settings: React.FC = () => {
           </div>
 
           {form.roadmapScanner.enabled && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
-              <Input
-                label="Roadmap Path"
-                value={form.roadmapScanner.roadmapPath}
-                onChange={(e) =>
-                  updateField('roadmapScanner', {
-                    ...form.roadmapScanner,
-                    roadmapPath: e.target.value,
-                  })
-                }
-              />
-              <Input
-                label="Auto Scan Interval"
-                type="number"
-                value={String(form.roadmapScanner.autoScanInterval)}
-                onChange={(e) =>
-                  updateField('roadmapScanner', {
-                    ...form.roadmapScanner,
-                    autoScanInterval: Math.max(30, Number(e.target.value || 30)),
-                  })
-                }
-                rightIcon={<span className="text-xs">sec (min 30)</span>}
-              />
-            </div>
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
+                <Input
+                  label="Roadmap Path"
+                  value={form.roadmapScanner.roadmapPath}
+                  onChange={(e) =>
+                    updateField('roadmapScanner', {
+                      ...form.roadmapScanner,
+                      roadmapPath: e.target.value,
+                    })
+                  }
+                  helperText="Path to ROADMAP.md file (relative to project root)"
+                />
+                <Input
+                  label="Auto Scan Interval"
+                  type="number"
+                  value={String(form.roadmapScanner.autoScanInterval)}
+                  onChange={(e) =>
+                    updateField('roadmapScanner', {
+                      ...form.roadmapScanner,
+                      autoScanInterval: Math.max(30, Number(e.target.value || 30)),
+                    })
+                  }
+                  rightIcon={<span className="text-xs">sec (min 30)</span>}
+                  helperText="How often to check for new roadmap items"
+                />
+              </div>
+
+              <div className="pt-4 border-t border-slate-800">
+                <h4 className="text-md font-medium text-slate-200 mb-4">Slicer Configuration</h4>
+                <p className="text-sm text-slate-400 mb-4">
+                  The Slicer generates detailed PRDs from roadmap items using AI
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <Input
+                    label="Slicer Schedule"
+                    value={form.roadmapScanner.slicerSchedule || ''}
+                    onChange={(e) =>
+                      updateField('roadmapScanner', {
+                        ...form.roadmapScanner,
+                        slicerSchedule: e.target.value,
+                      })
+                    }
+                    helperText="Cron expression for slicer execution"
+                    placeholder="0 2,8,14,20 * * *"
+                  />
+                  <Input
+                    label="Slicer Max Runtime"
+                    type="number"
+                    value={String(form.roadmapScanner.slicerMaxRuntime || '')}
+                    onChange={(e) =>
+                      updateField('roadmapScanner', {
+                        ...form.roadmapScanner,
+                        slicerMaxRuntime: Number(e.target.value || 0),
+                      })
+                    }
+                    rightIcon={<span className="text-xs">sec</span>}
+                    helperText="Maximum runtime for slicer tasks"
+                  />
+                </div>
+              </div>
+            </>
           )}
         </Card>
       ),
@@ -859,57 +1024,76 @@ const Settings: React.FC = () => {
       label: 'Board',
       content: (
         <Card className="p-6 space-y-6">
-          <h3 className="text-lg font-medium text-slate-200">Board Provider</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Select
-              label="Board Provider"
-              value={form.boardProvider.provider}
-              onChange={(val) =>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium text-slate-200">Board Provider</h3>
+              <p className="text-sm text-slate-400">
+                Track PRDs and their status using GitHub Projects or local SQLite
+              </p>
+            </div>
+            <Switch
+              checked={form.boardProvider.enabled}
+              onChange={(checked) =>
                 updateField('boardProvider', {
                   ...form.boardProvider,
-                  provider: val as 'github' | 'local',
+                  enabled: checked,
                 })
               }
-              options={[
-                { label: 'GitHub Projects', value: 'github' },
-                { label: 'Local (SQLite)', value: 'local' },
-              ]}
             />
-            {form.boardProvider.provider === 'github' && (
-              <>
-                <Input
-                  label="Project Number"
-                  type="number"
-                  value={String(form.boardProvider.projectNumber || '')}
-                  onChange={(e) =>
-                    updateField('boardProvider', {
-                      ...form.boardProvider,
-                      projectNumber: e.target.value ? Number(e.target.value) : undefined,
-                    })
-                  }
-                  helperText="GitHub Projects V2 project number"
-                />
-                <Input
-                  label="Repository"
-                  value={form.boardProvider.repo || ''}
-                  onChange={(e) =>
-                    updateField('boardProvider', {
-                      ...form.boardProvider,
-                      repo: e.target.value || undefined,
-                    })
-                  }
-                  helperText="owner/repo (auto-detected if empty)"
-                />
-              </>
-            )}
-            {form.boardProvider.provider === 'local' && (
-              <div className="md:col-span-2">
-                <p className="text-sm text-slate-400">
-                  Local board uses SQLite for storage — no additional configuration needed.
-                </p>
-              </div>
-            )}
           </div>
+
+          {form.boardProvider.enabled && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
+              <Select
+                label="Board Provider"
+                value={form.boardProvider.provider}
+                onChange={(val) =>
+                  updateField('boardProvider', {
+                    ...form.boardProvider,
+                    provider: val as 'github' | 'local',
+                  })
+                }
+                options={[
+                  { label: 'GitHub Projects', value: 'github' },
+                  { label: 'Local (SQLite)', value: 'local' },
+                ]}
+              />
+              {form.boardProvider.provider === 'github' && (
+                <>
+                  <Input
+                    label="Project Number"
+                    type="number"
+                    value={String(form.boardProvider.projectNumber || '')}
+                    onChange={(e) =>
+                      updateField('boardProvider', {
+                        ...form.boardProvider,
+                        projectNumber: e.target.value ? Number(e.target.value) : undefined,
+                      })
+                    }
+                    helperText="GitHub Projects V2 project number"
+                  />
+                  <Input
+                    label="Repository"
+                    value={form.boardProvider.repo || ''}
+                    onChange={(e) =>
+                      updateField('boardProvider', {
+                        ...form.boardProvider,
+                        repo: e.target.value || undefined,
+                      })
+                    }
+                    helperText="owner/repo (auto-detected if empty)"
+                  />
+                </>
+              )}
+              {form.boardProvider.provider === 'local' && (
+                <div className="md:col-span-2">
+                  <p className="text-sm text-slate-400">
+                    Local board uses SQLite for storage — no additional configuration needed.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </Card>
       ),
     },
@@ -962,6 +1146,178 @@ const Settings: React.FC = () => {
       ),
     },
     {
+      id: 'qa',
+      label: 'QA',
+      content: (
+        <Card className="p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium text-slate-200">Quality Assurance</h3>
+              <p className="text-sm text-slate-400">
+                Automated UI testing using Playwright
+              </p>
+            </div>
+            <Switch
+              checked={form.qa.enabled}
+              onChange={(checked) =>
+                updateField('qa', {
+                  ...form.qa,
+                  enabled: checked,
+                })
+              }
+            />
+          </div>
+
+          {form.qa.enabled && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
+                <Input
+                  label="QA Schedule"
+                  value={form.qa.schedule}
+                  onChange={(e) =>
+                    updateField('qa', {
+                      ...form.qa,
+                      schedule: e.target.value,
+                    })
+                  }
+                  helperText="Cron expression for QA execution (default: 30 1,7,13,19 * * *)"
+                  placeholder="30 1,7,13,19 * * *"
+                />
+                <Input
+                  label="Max Runtime"
+                  type="number"
+                  value={String(form.qa.maxRuntime)}
+                  onChange={(e) =>
+                    updateField('qa', {
+                      ...form.qa,
+                      maxRuntime: Number(e.target.value || 0),
+                    })
+                  }
+                  rightIcon={<span className="text-xs">sec</span>}
+                  helperText="Maximum runtime for QA tasks (default: 3600 seconds)"
+                />
+                <Select
+                  label="Artifacts"
+                  value={form.qa.artifacts}
+                  onChange={(val) =>
+                    updateField('qa', {
+                      ...form.qa,
+                      artifacts: val as QaArtifacts,
+                    })
+                  }
+                  options={[
+                    { label: 'Screenshots', value: 'screenshot' },
+                    { label: 'Videos', value: 'video' },
+                    { label: 'Both', value: 'both' },
+                  ]}
+                  helperText="What artifacts to capture for UI tests"
+                />
+                <Input
+                  label="Skip Label"
+                  value={form.qa.skipLabel}
+                  onChange={(e) =>
+                    updateField('qa', {
+                      ...form.qa,
+                      skipLabel: e.target.value,
+                    })
+                  }
+                  helperText="GitHub label to skip QA (PRs with this label are excluded)"
+                />
+              </div>
+
+              <div className="pt-4 border-t border-slate-800 space-y-4">
+                <TagInput
+                  label="QA Branch Patterns"
+                  value={form.qa.branchPatterns}
+                  onChange={(patterns) =>
+                    updateField('qa', {
+                      ...form.qa,
+                      branchPatterns: patterns,
+                    })
+                  }
+                  placeholder="e.g., qa/, test/"
+                  helpText="Branch patterns to match for QA (defaults to top-level branchPatterns if empty)"
+                />
+
+                <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
+                  <div>
+                    <span className="text-sm font-medium text-slate-200">Auto-install Playwright</span>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Automatically install Playwright browsers if missing during QA run
+                    </p>
+                  </div>
+                  <Switch
+                    checked={form.qa.autoInstallPlaywright}
+                    onChange={(checked) =>
+                      updateField('qa', {
+                        ...form.qa,
+                        autoInstallPlaywright: checked,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </>
+          )}
+        </Card>
+      ),
+    },
+    {
+      id: 'audit',
+      label: 'Audit',
+      content: (
+        <Card className="p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium text-slate-200">Code Audit</h3>
+              <p className="text-sm text-slate-400">
+                Automated code quality and security audits
+              </p>
+            </div>
+            <Switch
+              checked={form.audit.enabled}
+              onChange={(checked) =>
+                updateField('audit', {
+                  ...form.audit,
+                  enabled: checked,
+                })
+              }
+            />
+          </div>
+
+          {form.audit.enabled && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
+              <Input
+                label="Audit Schedule"
+                value={form.audit.schedule}
+                onChange={(e) =>
+                  updateField('audit', {
+                    ...form.audit,
+                    schedule: e.target.value,
+                  })
+                }
+                helperText="Cron expression for audit execution (default: 0 2,8,14,20 * * *)"
+                placeholder="0 2,8,14,20 * * *"
+              />
+              <Input
+                label="Max Runtime"
+                type="number"
+                value={String(form.audit.maxRuntime)}
+                onChange={(e) =>
+                  updateField('audit', {
+                    ...form.audit,
+                    maxRuntime: Number(e.target.value || 0),
+                  })
+                }
+                rightIcon={<span className="text-xs">sec</span>}
+                helperText="Maximum runtime for audit tasks (default: 1800 seconds)"
+              />
+            </div>
+          )}
+        </Card>
+      ),
+    },
+    {
       id: 'advanced',
       label: 'Advanced',
       content: (
@@ -977,18 +1333,6 @@ const Settings: React.FC = () => {
               value={form.templatesDir}
               onChange={(e) => updateField('templatesDir', e.target.value)}
               helperText="Directory for custom template overrides"
-            />
-            <Input
-              label="Cron Schedule Offset"
-              type="number"
-              min="0"
-              max="59"
-              value={String(form.cronScheduleOffset)}
-              onChange={(e) => {
-                const val = Math.min(59, Math.max(0, Number(e.target.value || 0)));
-                updateField('cronScheduleOffset', val);
-              }}
-              helperText="Minutes offset (0-59) for cron schedules"
             />
             <Input
               label="Max Retries"

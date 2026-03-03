@@ -458,6 +458,206 @@ describe('server API', () => {
 
       expect(response.status).toBe(200);
     });
+
+    it('should validate prdDir is non-empty string', async () => {
+      const response = await request(app).put('/api/config').send({ prdDir: '' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('prdDir');
+    });
+
+    it('should accept valid prdDir', async () => {
+      const response = await request(app).put('/api/config').send({ prdDir: 'docs/prd' });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('prdDir', 'docs/prd');
+    });
+
+    it('should validate cronScheduleOffset is between 0 and 59', async () => {
+      const response = await request(app).put('/api/config').send({ cronScheduleOffset: 100 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('cronScheduleOffset');
+    });
+
+    it('should accept valid cronScheduleOffset', async () => {
+      const response = await request(app).put('/api/config').send({ cronScheduleOffset: 30 });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('cronScheduleOffset', 30);
+    });
+
+    it('should validate fallbackOnRateLimit is boolean', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ fallbackOnRateLimit: 'true' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('fallbackOnRateLimit');
+    });
+
+    it('should accept valid fallbackOnRateLimit', async () => {
+      const response = await request(app).put('/api/config').send({ fallbackOnRateLimit: true });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('fallbackOnRateLimit', true);
+    });
+
+    it('should validate claudeModel is valid model', async () => {
+      const response = await request(app).put('/api/config').send({ claudeModel: 'invalid' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('claudeModel');
+    });
+
+    it('should accept valid claudeModel values', async () => {
+      const response = await request(app).put('/api/config').send({ claudeModel: 'opus' });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('claudeModel', 'opus');
+    });
+
+    it('should validate qa.enabled is boolean', async () => {
+      const response = await request(app).put('/api/config').send({ qa: { enabled: 'true' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('qa.enabled');
+    });
+
+    it('should validate qa.schedule is non-empty string', async () => {
+      const response = await request(app).put('/api/config').send({ qa: { schedule: '' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('qa.schedule');
+    });
+
+    it('should validate qa.maxRuntime is number >= 60', async () => {
+      const response = await request(app).put('/api/config').send({ qa: { maxRuntime: 30 } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('qa.maxRuntime');
+    });
+
+    it('should validate qa.branchPatterns is array of strings', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ qa: { branchPatterns: 'not-an-array' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('qa.branchPatterns');
+    });
+
+    it('should validate qa.artifacts is valid value', async () => {
+      const response = await request(app).put('/api/config').send({ qa: { artifacts: 'invalid' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('qa.artifacts');
+    });
+
+    it('should accept valid qa config', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          qa: {
+            enabled: false,
+            schedule: '0 */4 * * *',
+            maxRuntime: 1800,
+            artifacts: 'screenshot',
+            skipLabel: 'no-qa',
+            autoInstallPlaywright: false,
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.qa.enabled).toBe(false);
+      expect(response.body.qa.artifacts).toBe('screenshot');
+    });
+
+    it('should validate audit.enabled is boolean', async () => {
+      const response = await request(app).put('/api/config').send({ audit: { enabled: 'true' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('audit.enabled');
+    });
+
+    it('should validate audit.schedule is non-empty string', async () => {
+      const response = await request(app).put('/api/config').send({ audit: { schedule: '' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('audit.schedule');
+    });
+
+    it('should validate audit.maxRuntime is number >= 60', async () => {
+      const response = await request(app).put('/api/config').send({ audit: { maxRuntime: 30 } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('audit.maxRuntime');
+    });
+
+    it('should accept valid audit config', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          audit: {
+            enabled: false,
+            schedule: '0 2 * * *',
+            maxRuntime: 900,
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.audit.enabled).toBe(false);
+      expect(response.body.audit.maxRuntime).toBe(900);
+    });
+
+    it('should validate roadmapScanner.slicerSchedule is non-empty string', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ roadmapScanner: { slicerSchedule: '' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('slicerSchedule');
+    });
+
+    it('should validate roadmapScanner.slicerMaxRuntime is number >= 60', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ roadmapScanner: { slicerMaxRuntime: 30 } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('slicerMaxRuntime');
+    });
+
+    it('should accept valid roadmapScanner slicer config', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          roadmapScanner: {
+            slicerSchedule: '0 */4 * * *',
+            slicerMaxRuntime: 900,
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.roadmapScanner.slicerSchedule).toBe('0 */4 * * *');
+      expect(response.body.roadmapScanner.slicerMaxRuntime).toBe(900);
+    });
+
+    it('should validate boardProvider.enabled is boolean', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ boardProvider: { enabled: 'true' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('boardProvider.enabled');
+    });
+
+    it('should accept valid boardProvider.enabled', async () => {
+      const response = await request(app).put('/api/config').send({ boardProvider: { enabled: false } });
+
+      expect(response.status).toBe(200);
+      expect(response.body.boardProvider.enabled).toBe(false);
+    });
   });
 
   describe('GET /api/doctor', () => {

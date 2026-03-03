@@ -27,6 +27,10 @@ import type {
   UpdateAgentPersonaInput,
   MergeMethod,
   IJobProviders,
+  ClaudeModel,
+  IQaConfig,
+  IAuditConfig,
+  QaArtifacts,
 } from '@shared/types';
 
 // Re-export shared types so consumers can import from either place
@@ -52,6 +56,10 @@ export type {
   UpdateAgentPersonaInput,
   MergeMethod,
   IJobProviders,
+  ClaudeModel,
+  IQaConfig,
+  IAuditConfig,
+  QaArtifacts,
 };
 
 export type PrdWithContent = IPrdInfo & { content: string };

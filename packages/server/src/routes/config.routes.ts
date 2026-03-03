@@ -6,6 +6,7 @@ import { Request, Response, Router } from 'express';
 
 import {
   INightWatchConfig,
+  VALID_CLAUDE_MODELS,
   VALID_JOB_TYPES,
   VALID_PROVIDERS,
   loadConfig,
@@ -159,6 +160,118 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
       ) {
         return `Invalid provider in jobProviders.${jobType}: ${provider}. Must be one of: ${VALID_PROVIDERS.join(', ')}`;
       }
+    }
+  }
+
+  // prdDir validation
+  if (changes.prdDir !== undefined && (typeof changes.prdDir !== 'string' || changes.prdDir.trim().length === 0)) {
+    return 'prdDir must be a non-empty string';
+  }
+
+  // cronScheduleOffset validation
+  if (
+    changes.cronScheduleOffset !== undefined &&
+    (typeof changes.cronScheduleOffset !== 'number' ||
+      changes.cronScheduleOffset < 0 ||
+      changes.cronScheduleOffset > 59)
+  ) {
+    return 'cronScheduleOffset must be a number between 0 and 59';
+  }
+
+  // fallbackOnRateLimit validation
+  if (changes.fallbackOnRateLimit !== undefined && typeof changes.fallbackOnRateLimit !== 'boolean') {
+    return 'fallbackOnRateLimit must be a boolean';
+  }
+
+  // claudeModel validation
+  if (changes.claudeModel !== undefined && !VALID_CLAUDE_MODELS.includes(changes.claudeModel)) {
+    return `Invalid claudeModel. Must be one of: ${VALID_CLAUDE_MODELS.join(', ')}`;
+  }
+
+  // QA configuration validation
+  if (changes.qa !== undefined) {
+    if (typeof changes.qa !== 'object' || changes.qa === null) {
+      return 'qa must be an object';
+    }
+
+    const qa = changes.qa;
+
+    if (qa.enabled !== undefined && typeof qa.enabled !== 'boolean') {
+      return 'qa.enabled must be a boolean';
+    }
+
+    if (qa.schedule !== undefined && (typeof qa.schedule !== 'string' || qa.schedule.trim().length === 0)) {
+      return 'qa.schedule must be a non-empty string';
+    }
+
+    if (qa.maxRuntime !== undefined && (typeof qa.maxRuntime !== 'number' || qa.maxRuntime < 60)) {
+      return 'qa.maxRuntime must be a number >= 60';
+    }
+
+    if (qa.branchPatterns !== undefined) {
+      if (!Array.isArray(qa.branchPatterns) || !qa.branchPatterns.every((p) => typeof p === 'string')) {
+        return 'qa.branchPatterns must be an array of strings';
+      }
+    }
+
+    if (qa.artifacts !== undefined) {
+      const validArtifacts = ['screenshot', 'video', 'both'];
+      if (!validArtifacts.includes(qa.artifacts)) {
+        return `Invalid qa.artifacts. Must be one of: ${validArtifacts.join(', ')}`;
+      }
+    }
+
+    if (qa.skipLabel !== undefined && typeof qa.skipLabel !== 'string') {
+      return 'qa.skipLabel must be a string';
+    }
+
+    if (qa.autoInstallPlaywright !== undefined && typeof qa.autoInstallPlaywright !== 'boolean') {
+      return 'qa.autoInstallPlaywright must be a boolean';
+    }
+  }
+
+  // Audit configuration validation
+  if (changes.audit !== undefined) {
+    if (typeof changes.audit !== 'object' || changes.audit === null) {
+      return 'audit must be an object';
+    }
+
+    const audit = changes.audit;
+
+    if (audit.enabled !== undefined && typeof audit.enabled !== 'boolean') {
+      return 'audit.enabled must be a boolean';
+    }
+
+    if (audit.schedule !== undefined && (typeof audit.schedule !== 'string' || audit.schedule.trim().length === 0)) {
+      return 'audit.schedule must be a non-empty string';
+    }
+
+    if (audit.maxRuntime !== undefined && (typeof audit.maxRuntime !== 'number' || audit.maxRuntime < 60)) {
+      return 'audit.maxRuntime must be a number >= 60';
+    }
+  }
+
+  // roadmapScanner slicer fields validation
+  if (changes.roadmapScanner !== undefined) {
+    const rs = changes.roadmapScanner;
+
+    if (rs.slicerSchedule !== undefined && (typeof rs.slicerSchedule !== 'string' || rs.slicerSchedule.trim().length === 0)) {
+      return 'roadmapScanner.slicerSchedule must be a non-empty string';
+    }
+
+    if (rs.slicerMaxRuntime !== undefined && (typeof rs.slicerMaxRuntime !== 'number' || rs.slicerMaxRuntime < 60)) {
+      return 'roadmapScanner.slicerMaxRuntime must be a number >= 60';
+    }
+  }
+
+  // boardProvider.enabled validation
+  if (changes.boardProvider !== undefined) {
+    if (typeof changes.boardProvider !== 'object' || changes.boardProvider === null) {
+      return 'boardProvider must be an object';
+    }
+
+    if (changes.boardProvider.enabled !== undefined && typeof changes.boardProvider.enabled !== 'boolean') {
+      return 'boardProvider.enabled must be a boolean';
     }
   }
 

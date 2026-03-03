@@ -29,7 +29,12 @@ export default defineConfig({
     include: ['src/__tests__/**/*.test.ts'],
     exclude: ['node_modules', 'dist'],
     pool: 'forks',
-    minWorkers: 1,
     maxWorkers: 4,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      include: ['src/**/*.ts'],
+      exclude: ['src/**/__tests__/**', 'src/**/*.test.ts', 'src/**/*.d.ts'],
+    },
   },
 });
