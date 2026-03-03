@@ -11,6 +11,7 @@ export * from './board/roadmap-mapping.js';
 export * from './storage/repositories/interfaces.js';
 export * from './storage/repositories/index.js';
 export { SqliteAgentPersonaRepository } from './storage/repositories/sqlite/agent-persona.repository.js';
+export { SqliteArticleRepository } from './storage/repositories/sqlite/article.repository.js';
 export { SqliteKanbanIssueRepository } from './storage/repositories/sqlite/kanban-issue.repository.js';
 export * from './storage/sqlite/client.js';
 export * from './storage/sqlite/migrations.js';
@@ -51,4 +52,27 @@ export type {
   CreateAgentPersonaInput,
   UpdateAgentPersonaInput,
   IRoadmapContextOptions,
+  // Article & Campaign types
+  ArticleStyle,
+  ImageStyle,
+  IArticleStylePreferences,
+  IInternalLink,
+  IGenerateArticleInput,
+  ICampaignOutrankFields,
+  CampaignOutrankFields,
+  IProjectContentPreferences,
+  IProject,
+  // Validation types
+  ICreateCampaignInput,
+  IUpdateCampaignInput,
+} from './shared/types.js';
+
+// Re-export validation functions
+export {
+  VALID_ARTICLE_STYLES,
+  VALID_IMAGE_STYLES,
+  isValidArticleStyle,
+  isValidImageStyle,
+  validateCreateCampaignInput,
+  validateUpdateCampaignInput,
 } from './shared/types.js';

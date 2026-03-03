@@ -89,6 +89,21 @@ export function runMigrations(db: Database.Database): void {
       body        TEXT    NOT NULL,
       created_at  INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS articles (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id    TEXT    NOT NULL,
+      campaign_id   TEXT    NOT NULL,
+      keyword       TEXT    NOT NULL,
+      status        TEXT    NOT NULL DEFAULT 'draft',
+      title         TEXT,
+      content       TEXT,
+      published_url TEXT,
+      created_at    INTEGER NOT NULL,
+      updated_at    INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_articles_project_status
+      ON articles(project_id, status);
   `);
 
   // Phase 2 cleanup: drop slack_discussions table (multi-agent deliberation removed)
