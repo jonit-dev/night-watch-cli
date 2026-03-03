@@ -210,9 +210,12 @@ if [ "${NEEDS_WORK}" -eq 0 ]; then
       [ -z "${pr_number}" ] || [ -z "${pr_branch}" ] && continue
       printf '%s\n' "${pr_branch}" | grep -Eq "${BRANCH_REGEX}" || continue
 
-      # Check CI status
-      FAILED_CHECKS=$(gh pr checks "${pr_number}" 2>/dev/null | grep -ci 'fail' || true)
-      [ "${FAILED_CHECKS}" -gt 0 ] && continue
+      # Check CI status - must have ALL checks passing (not just "no failures")
+      # gh pr checks exits 0 if all pass, 8 if pending, non-zero otherwise
+      if ! gh pr checks "${pr_number}" --required >/dev/null 2>&1; then
+        log "AUTO-MERGE: PR #${pr_number} has pending or failed CI checks"
+        continue
+      fi
 
       # Check review score
       PR_COMMENTS=$(
@@ -474,9 +477,10 @@ if [ "${AUTO_MERGE}" = "1" ] && [ ${EXIT_CODE} -eq 0 ]; then
       continue
     fi
 
-    # Check CI status - must have no failures
-    FAILED_CHECKS=$(gh pr checks "${pr_number}" 2>/dev/null | grep -ci 'fail' || true)
-    if [ "${FAILED_CHECKS}" -gt 0 ]; then
+    # Check CI status - must have ALL checks passing (not just "no failures")
+    # gh pr checks exits 0 if all pass, 8 if pending, non-zero otherwise
+    if ! gh pr checks "${pr_number}" --required >/dev/null 2>&1; then
+      log "AUTO-MERGE: PR #${pr_number} has pending or failed CI checks"
       continue
     fi
 
