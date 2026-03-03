@@ -10,13 +10,17 @@ import {
   IBoardInfo,
   IBoardIssue,
   IBoardProvider,
+  IBoardProviderConfig,
   ICreateIssueInput,
 } from '@/board/types.js';
-import { DEFAULT_LOCAL_BOARD_INFO } from '@/constants.js';
+import { DEFAULT_BOARD_ISSUE_COLUMN, DEFAULT_LOCAL_BOARD_INFO } from '@/constants.js';
 import { IKanbanIssue, IKanbanIssueRepository } from '@/storage/repositories/interfaces.js';
 
 export class LocalKanbanProvider implements IBoardProvider {
-  constructor(private readonly repo: IKanbanIssueRepository) {}
+  constructor(
+    private readonly repo: IKanbanIssueRepository,
+    private readonly config: IBoardProviderConfig,
+  ) {}
 
   async setupBoard(title: string): Promise<IBoardInfo> {
     return { ...DEFAULT_LOCAL_BOARD_INFO, title };
@@ -34,7 +38,7 @@ export class LocalKanbanProvider implements IBoardProvider {
     const row = this.repo.create({
       title: input.title,
       body: input.body,
-      columnName: input.column ?? 'Draft',
+      columnName: input.column ?? this.config.defaultIssueColumn ?? DEFAULT_BOARD_ISSUE_COLUMN,
       labels: input.labels,
     });
     return toIBoardIssue(row);

@@ -10,6 +10,7 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { LocalKanbanProvider } from '../board/providers/local-kanban.js';
+import { IBoardProviderConfig } from '../board/types.js';
 import { SqliteKanbanIssueRepository } from '../storage/repositories/sqlite/kanban-issue.repository.js';
 import { runMigrations } from '../storage/sqlite/migrations.js';
 
@@ -25,7 +26,8 @@ describe('LocalKanbanProvider', () => {
     db.pragma('journal_mode = WAL');
     runMigrations(db);
     const repo = new SqliteKanbanIssueRepository(db);
-    provider = new LocalKanbanProvider(repo);
+    const config: IBoardProviderConfig = { enabled: true, provider: 'local' };
+    provider = new LocalKanbanProvider(repo, config);
   });
 
   afterEach(() => {
@@ -46,7 +48,7 @@ describe('LocalKanbanProvider', () => {
 
     expect(created.title).toBe('My first issue');
     expect(created.body).toBe('Some description');
-    expect(created.column).toBe('Draft');
+    expect(created.column).toBe('Ready');
     expect(created.url).toBe(`local://kanban/${created.number}`);
 
     const fetched = await provider.getIssue(created.number);
@@ -89,5 +91,23 @@ describe('LocalKanbanProvider', () => {
     await expect(
       provider.commentOnIssue(created.number, 'A helpful comment'),
     ).resolves.toBeUndefined();
+  });
+
+  it('should use custom defaultIssueColumn from config', async () => {
+    // Create a new provider with a custom default column
+    const customConfig: IBoardProviderConfig = {
+      enabled: true,
+      provider: 'local',
+      defaultIssueColumn: 'In Progress',
+    };
+    const repo = new SqliteKanbanIssueRepository(db);
+    const customProvider = new LocalKanbanProvider(repo, customConfig);
+
+    const created = await customProvider.createIssue({
+      title: 'Custom column issue',
+      body: 'Should be in In Progress',
+    });
+
+    expect(created.column).toBe('In Progress');
   });
 });
