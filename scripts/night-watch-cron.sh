@@ -286,8 +286,9 @@ MERGED_PR_COUNT=$(count_prs_for_branch merged "${BRANCH_NAME}")
 if [ "${MERGED_PR_COUNT}" -gt 0 ]; then
   log "INFO: Found merged PR for ${BRANCH_NAME}; skipping provider run"
   if [ -n "${ISSUE_NUMBER}" ]; then
-    # Board mode: move issue to Done
-    "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Done" 2>>"${LOG_FILE}" || true
+    # Board mode: close issue and move to Done
+    "${NW_CLI}" board close-issue "${ISSUE_NUMBER}" 2>>"${LOG_FILE}" || \
+      "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Done" 2>>"${LOG_FILE}" || true
     emit_result "success_already_merged" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
     exit 0
   elif finalize_prd_done "already merged on ${BRANCH_NAME}"; then
@@ -420,13 +421,14 @@ if [ ${EXIT_CODE} -eq 0 ]; then
   OPEN_PR_COUNT=$(count_prs_for_branch open "${BRANCH_NAME}")
   if [ "${OPEN_PR_COUNT}" -gt 0 ]; then
     if [ -n "${ISSUE_NUMBER}" ]; then
-      # Board mode: move to Review and comment with PR URL
+      # Board mode: comment with PR URL, then close issue and move to Done
       PR_URL=$(gh pr list --state open --json headRefName,url \
         --jq ".[] | select(.headRefName == \"${BRANCH_NAME}\") | .url" 2>/dev/null || true)
-      "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Review" 2>>"${LOG_FILE}" || true
       if [ -n "${PR_URL}" ]; then
         "${NW_CLI}" board comment "${ISSUE_NUMBER}" --body "PR opened: ${PR_URL}" 2>>"${LOG_FILE}" || true
       fi
+      "${NW_CLI}" board close-issue "${ISSUE_NUMBER}" 2>>"${LOG_FILE}" || \
+        "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Done" 2>>"${LOG_FILE}" || true
       emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
     elif finalize_prd_done "implemented, PR opened on ${BRANCH_NAME}"; then
       emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
@@ -439,7 +441,8 @@ if [ ${EXIT_CODE} -eq 0 ]; then
     MERGED_PR_COUNT=$(count_prs_for_branch merged "${BRANCH_NAME}")
     if [ "${MERGED_PR_COUNT}" -gt 0 ]; then
       if [ -n "${ISSUE_NUMBER}" ]; then
-        "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Done" 2>>"${LOG_FILE}" || true
+        "${NW_CLI}" board close-issue "${ISSUE_NUMBER}" 2>>"${LOG_FILE}" || \
+          "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Done" 2>>"${LOG_FILE}" || true
         emit_result "success_already_merged" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
       elif finalize_prd_done "already merged on ${BRANCH_NAME}"; then
         emit_result "success_already_merged" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"

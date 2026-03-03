@@ -196,7 +196,7 @@ export function formatTelegramPayload(ctx: INotificationContext): {
   parse_mode: string;
 } {
   const emoji = getEventEmoji(ctx.event);
-  const title = getEventTitle(ctx.event);
+  const title = ctx.event === 'run_succeeded' ? 'PR Opened' : getEventTitle(ctx.event);
 
   // If PR details are present, use the rich structured template
   if (ctx.prUrl && ctx.prTitle) {

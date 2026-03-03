@@ -25,6 +25,8 @@ import {
   resolveJobProvider,
   sendNotifications,
   error as uiError,
+  validateRegistry,
+  warn,
 } from '@night-watch/core';
 import type { IPrDetails } from '@night-watch/core';
 import * as fs from 'fs';
@@ -37,6 +39,7 @@ export interface IRunOptions {
   dryRun: boolean;
   timeout?: string;
   provider?: string;
+  crossProjectFallback?: boolean;
 }
 
 /**
@@ -57,6 +60,170 @@ export function resolveRunNotificationEvent(
     return 'run_succeeded';
   }
   return null;
+}
+
+/**
+ * Determine if cross-project fallback should run for this executor result.
+ */
+export function shouldAttemptCrossProjectFallback(
+  options: IRunOptions,
+  scriptStatus?: string,
+): boolean {
+  if (options.dryRun) {
+    return false;
+  }
+  if (options.crossProjectFallback === false) {
+    return false;
+  }
+  if (process.env.NW_CROSS_PROJECT_FALLBACK_ACTIVE === '1') {
+    return false;
+  }
+  return scriptStatus === 'skip_no_eligible_prd';
+}
+
+/**
+ * Resolve valid registered projects excluding the current project.
+ */
+export function getCrossProjectFallbackCandidates(currentProjectDir: string): Array<{
+  name: string;
+  path: string;
+}> {
+  const current = path.resolve(currentProjectDir);
+  const { valid, invalid } = validateRegistry();
+  for (const entry of invalid) {
+    warn(`Skipping invalid registry entry: ${entry.path}`);
+  }
+  return valid.filter((entry) => path.resolve(entry.path) !== current);
+}
+
+/**
+ * Run completion notifications for an executor invocation (local or fallback).
+ */
+async function sendRunCompletionNotifications(
+  config: INightWatchConfig,
+  projectDir: string,
+  options: IRunOptions,
+  exitCode: number,
+  scriptResult: ReturnType<typeof parseScriptResult>,
+): Promise<void> {
+  // Rate-limit fallback notifications are sent immediately to Telegram in bash.
+  // Send this event only to non-Telegram webhooks to avoid duplicate alerts.
+  if (isRateLimitFallbackTriggered(scriptResult?.data)) {
+    const nonTelegramWebhooks = (config.notifications?.webhooks ?? []).filter(
+      (wh) => wh.type !== 'telegram',
+    );
+    if (nonTelegramWebhooks.length > 0) {
+      const _rateLimitCtx = {
+        event: 'rate_limit_fallback' as const,
+        projectName: path.basename(projectDir),
+        exitCode,
+        provider: config.provider,
+      };
+      await sendNotifications(
+        {
+          ...config,
+          notifications: { ...config.notifications, webhooks: nonTelegramWebhooks },
+        },
+        _rateLimitCtx,
+      );
+    }
+  }
+
+  // Backward-compatible fallback: if no marker is present, preserve previous behavior.
+  const event = resolveRunNotificationEvent(exitCode, scriptResult?.status);
+
+  // Enrich with PR details on success (graceful — null if gh fails)
+  let prDetails: IPrDetails | null = null;
+  if (event === 'run_succeeded') {
+    const branch = scriptResult?.data.branch;
+    if (branch) {
+      prDetails = fetchPrDetailsForBranch(branch, projectDir);
+    }
+    if (!prDetails) {
+      prDetails = fetchPrDetails(config.branchPrefix, projectDir);
+    }
+  }
+
+  if (event) {
+    const _ctx = {
+      event,
+      projectName: path.basename(projectDir),
+      exitCode,
+      provider: config.provider,
+      prUrl: prDetails?.url,
+      prTitle: prDetails?.title,
+      prBody: prDetails?.body,
+      prNumber: prDetails?.number,
+      filesChanged: prDetails?.changedFiles,
+      additions: prDetails?.additions,
+      deletions: prDetails?.deletions,
+    };
+    await sendNotifications(config, _ctx);
+  } else if (!options.dryRun) {
+    info('Skipping completion notification (no actionable run result)');
+  }
+}
+
+/**
+ * If current project has no eligible work, try other registered projects.
+ * Returns true when any fallback project executed actionable work.
+ */
+async function runCrossProjectFallback(
+  currentProjectDir: string,
+  options: IRunOptions,
+): Promise<boolean> {
+  const candidates = getCrossProjectFallbackCandidates(currentProjectDir);
+  if (candidates.length === 0) {
+    return false;
+  }
+
+  const scriptPath = getScriptPath('night-watch-cron.sh');
+  for (const candidate of candidates) {
+    info(`Cross-project fallback: checking ${candidate.name}`);
+    let candidateConfig = loadConfig(candidate.path);
+    candidateConfig = applyCliOverrides(candidateConfig, options);
+    const envVars = buildEnvVars(candidateConfig, options);
+    envVars.NW_CROSS_PROJECT_FALLBACK_ACTIVE = '1';
+
+    try {
+      const { exitCode, stdout, stderr } = await executeScriptWithOutput(
+        scriptPath,
+        [candidate.path],
+        envVars,
+      );
+      const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
+
+      if (!options.dryRun) {
+        await sendRunCompletionNotifications(
+          candidateConfig,
+          candidate.path,
+          options,
+          exitCode,
+          scriptResult,
+        );
+      }
+
+      if (exitCode !== 0) {
+        warn(
+          `Cross-project fallback: ${candidate.name} exited with code ${exitCode}; checking next project.`,
+        );
+        continue;
+      }
+
+      if (scriptResult?.status?.startsWith('skip_') || scriptResult?.status === 'success_already_merged') {
+        continue;
+      }
+
+      info(`Cross-project fallback: executed work in ${candidate.name}`);
+      return true;
+    } catch (err) {
+      warn(
+        `Cross-project fallback failed for ${candidate.name}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -263,6 +430,10 @@ export function runCommand(program: Command): void {
     .option('--dry-run', 'Show what would be executed without running')
     .option('--timeout <seconds>', 'Override max runtime in seconds')
     .option('--provider <string>', 'AI provider to use (claude or codex)')
+    .option(
+      '--no-cross-project-fallback',
+      'Do not check other registered projects when this project has no eligible work',
+    )
     .action(async (options: IRunOptions) => {
       // Get the project directory (current working directory)
       const projectDir = process.cwd();
@@ -408,61 +579,15 @@ export function runCommand(program: Command): void {
 
         // Send notifications (fire-and-forget, failures do not affect exit code)
         if (!options.dryRun) {
-          // Rate-limit fallback notifications are sent immediately to Telegram in bash.
-          // Send this event only to non-Telegram webhooks to avoid duplicate alerts.
-          if (isRateLimitFallbackTriggered(scriptResult?.data)) {
-            const nonTelegramWebhooks = (config.notifications?.webhooks ?? []).filter(
-              (wh) => wh.type !== 'telegram',
-            );
-            if (nonTelegramWebhooks.length > 0) {
-              const _rateLimitCtx = {
-                event: 'rate_limit_fallback' as const,
-                projectName: path.basename(projectDir),
-                exitCode,
-                provider: config.provider,
-              };
-              await sendNotifications(
-                {
-                  ...config,
-                  notifications: { ...config.notifications, webhooks: nonTelegramWebhooks },
-                },
-                _rateLimitCtx,
-              );
-            }
-          }
+          await sendRunCompletionNotifications(config, projectDir, options, exitCode, scriptResult);
+        }
 
-          // Backward-compatible fallback: if no marker is present, preserve previous behavior.
-          const event = resolveRunNotificationEvent(exitCode, scriptResult?.status);
-
-          // Enrich with PR details on success (graceful — null if gh fails)
-          let prDetails: IPrDetails | null = null;
-          if (event === 'run_succeeded') {
-            const branch = scriptResult?.data.branch;
-            if (branch) {
-              prDetails = fetchPrDetailsForBranch(branch, projectDir);
-            }
-            if (!prDetails) {
-              prDetails = fetchPrDetails(config.branchPrefix, projectDir);
-            }
-          }
-
-          if (event) {
-            const _ctx = {
-              event,
-              projectName: path.basename(projectDir),
-              exitCode,
-              provider: config.provider,
-              prUrl: prDetails?.url,
-              prTitle: prDetails?.title,
-              prBody: prDetails?.body,
-              prNumber: prDetails?.number,
-              filesChanged: prDetails?.changedFiles,
-              additions: prDetails?.additions,
-              deletions: prDetails?.deletions,
-            };
-            await sendNotifications(config, _ctx);
-          } else {
-            info('Skipping completion notification (no actionable run result)');
+        // Opportunistic cross-project balancing:
+        // if this project has no eligible work, try other registered projects.
+        if (shouldAttemptCrossProjectFallback(options, scriptResult?.status)) {
+          const executedFallback = await runCrossProjectFallback(projectDir, options);
+          if (!executedFallback) {
+            info('Cross-project fallback: no eligible work found in other registered projects');
           }
         }
 

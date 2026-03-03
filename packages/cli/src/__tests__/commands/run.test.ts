@@ -32,6 +32,7 @@ import {
   getRateLimitFallbackTelegramWebhooks,
   isRateLimitFallbackTriggered,
   resolveRunNotificationEvent,
+  shouldAttemptCrossProjectFallback,
 } from '@/cli/commands/run.js';
 import { applyScheduleOffset, buildCronPathPrefix } from '@/cli/commands/install.js';
 import { INightWatchConfig } from '@night-watch/core/types.js';
@@ -380,6 +381,32 @@ describe('run command', () => {
     it('should suppress notifications for skip/no-op statuses', () => {
       expect(resolveRunNotificationEvent(0, 'skip_no_eligible_prd')).toBeNull();
       expect(resolveRunNotificationEvent(0, 'success_already_merged')).toBeNull();
+    });
+  });
+
+  describe('shouldAttemptCrossProjectFallback', () => {
+    it('returns true only for skip_no_eligible_prd by default', () => {
+      const options: IRunOptions = { dryRun: false };
+      expect(shouldAttemptCrossProjectFallback(options, 'skip_no_eligible_prd')).toBe(true);
+      expect(shouldAttemptCrossProjectFallback(options, 'skip_locked')).toBe(false);
+      expect(shouldAttemptCrossProjectFallback(options, 'success_open_pr')).toBe(false);
+    });
+
+    it('returns false in dry-run mode', () => {
+      const options: IRunOptions = { dryRun: true };
+      expect(shouldAttemptCrossProjectFallback(options, 'skip_no_eligible_prd')).toBe(false);
+    });
+
+    it('returns false when cross-project fallback is explicitly disabled', () => {
+      const options: IRunOptions = { dryRun: false, crossProjectFallback: false };
+      expect(shouldAttemptCrossProjectFallback(options, 'skip_no_eligible_prd')).toBe(false);
+    });
+
+    it('returns false when already inside a fallback invocation', () => {
+      process.env.NW_CROSS_PROJECT_FALLBACK_ACTIVE = '1';
+      const options: IRunOptions = { dryRun: false };
+      expect(shouldAttemptCrossProjectFallback(options, 'skip_no_eligible_prd')).toBe(false);
+      delete process.env.NW_CROSS_PROJECT_FALLBACK_ACTIVE;
     });
   });
 
