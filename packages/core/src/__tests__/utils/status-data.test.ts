@@ -448,10 +448,72 @@ describe("status-data utilities", () => {
       const result = countOpenPRs(tempDir, ["feat/", "night-watch/"]);
       expect(result).toBe(2);
     });
+
+    it("should return 0 when no PRs match branch patterns", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            { headRefName: "fix/bugfix", number: 1 },
+            { headRefName: "chore/cleanup", number: 2 },
+          ]);
+        }
+        return "";
+      });
+
+      const result = countOpenPRs(tempDir, ["feat/", "night-watch/"]);
+      expect(result).toBe(0);
+    });
+
+    it("should return 0 when gh pr list returns empty array", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return "[]";
+        }
+        return "";
+      });
+
+      const result = countOpenPRs(tempDir, ["feat/", "night-watch/"]);
+      expect(result).toBe(0);
+    });
   });
 
   describe("collectPrInfo", () => {
     it("should return empty array when not in a git repo", () => {
+      const result = collectPrInfo(tempDir, ["feat/", "night-watch/"]);
+      expect(result).toEqual([]);
+    });
+
+    it("should return empty array when gh returns empty list", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return "[]";
+        }
+        return "";
+      });
+
+      const result = collectPrInfo(tempDir, ["feat/", "night-watch/"]);
+      expect(result).toEqual([]);
+    });
+
+    it("should return empty array when no PRs match branch patterns", () => {
+      vi.mocked(execSync).mockImplementation((cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            { headRefName: "fix/bugfix", number: 1, title: "Bugfix", url: "https://github.com/test/repo/pull/1" },
+            { headRefName: "chore/cleanup", number: 2, title: "Cleanup", url: "https://github.com/test/repo/pull/2" },
+          ]);
+        }
+        return "";
+      });
+
       const result = collectPrInfo(tempDir, ["feat/", "night-watch/"]);
       expect(result).toEqual([]);
     });
