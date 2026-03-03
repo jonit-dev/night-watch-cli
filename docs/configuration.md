@@ -21,7 +21,7 @@ Create `night-watch.config.json` in your project root:
   "defaultBranch": "main",
   "provider": "claude",
   "reviewerEnabled": true,
-  "prdDir": "docs/PRDs/night-watch",
+  "prdDir": "docs/prds",
   "maxRuntime": 7200,
   "reviewerMaxRuntime": 3600,
   "branchPrefix": "night-watch",
@@ -45,7 +45,7 @@ Create `night-watch.config.json` in your project root:
 | `defaultBranch`       | string   | `""` (auto-detect)              | Default branch name (e.g. `main`)                          |
 | `provider`            | string   | `"claude"`                      | AI provider (`claude` or `codex`)                          |
 | `reviewerEnabled`     | boolean  | `true`                          | Enable the PR reviewer                                     |
-| `prdDir`              | string   | `"docs/PRDs/night-watch"`       | Directory containing PRD files                             |
+| `prdDir`              | string   | `"docs/prds"`                   | Directory containing PRD files                             |
 | `maxRuntime`          | number   | `7200`                          | Max runtime in seconds for PRD execution                   |
 | `reviewerMaxRuntime`  | number   | `3600`                          | Max runtime in seconds for PR reviewer                     |
 | `branchPrefix`        | string   | `"night-watch"`                 | Prefix for created branches                                |

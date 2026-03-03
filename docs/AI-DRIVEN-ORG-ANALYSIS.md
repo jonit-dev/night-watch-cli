@@ -202,8 +202,7 @@ efficient than real-time copiloting. The two models are complementary, not compe
 
 ### 8. Self-Bootstrapping: Night Watch Builds Itself
 
-The `docs/PRDs/night-watch/` directory contains 20+ completed PRDs — features of Night
-Watch itself, implemented by Night Watch. The tool is literally building itself:
+Night Watch has implemented dozens of features autonomously — the tool is literally building itself:
 
 - `01-terminal-ui-polish.md` → `done`
 - `08-prd-claim-mechanism.md` → `done`

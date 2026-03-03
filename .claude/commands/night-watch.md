@@ -33,9 +33,9 @@ If `NW_BOARD_ENABLED` is set to `true` in the environment, use board mode instea
 
 ## Instructions
 
-1. **Scan for PRDs**: List files in `docs/PRDs/night-watch/` (exclude `NIGHT-WATCH-SUMMARY.md` and the `done/` directory). Each `.md` file is a ticket.
+1. **Scan for PRDs**: List files in the configured `prdDir` (exclude `NIGHT-WATCH-SUMMARY.md` and the `done/` subdirectory). Each `.md` file is a ticket.
 
-2. **Check dependencies**: Read each PRD. If it says "Depends on:" another PRD, check if that dependency is already in `docs/PRDs/night-watch/done/`. Skip PRDs with unmet dependencies.
+2. **Check dependencies**: Read each PRD. If it says "Depends on:" another PRD, check if that dependency is already in `prdDir/done/`. Skip PRDs with unmet dependencies.
 
 3. **Clean up stale worktrees** from previous interrupted runs before doing anything else:
 
@@ -92,32 +92,16 @@ If `NW_BOARD_ENABLED` is set to `true` in the environment, use board mode instea
    Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
    ```
 
-   i. **Move PRD to done** (back in main repo on main):
+   i. **Mark PRD as done**: Use `night-watch prd done <filename>` to move the PRD to the done directory and commit the change.
+
+   j. **Push and open PR**:
 
    ```
-   cd /home/joao/projects/night-watch-cli
-   git checkout main
-   mkdir -p docs/PRDs/night-watch/done
-   mv docs/PRDs/night-watch/<file>.md docs/PRDs/night-watch/done/
-   ```
-
-   j. **Commit and push** the PRD move to main:
-
-   ```
-   git add docs/PRDs/night-watch/
-   git commit -m "chore: mark <file>.md as done"
-   git push origin main
-   ```
-
-   k. **Push and open PR** (switch back to the feature branch worktree):
-
-   ```
-   cd ../night-watch-cli-nw-<prd-name>
    git push -u origin night-watch/<prd-name>
    gh pr create --title "feat: <short title>" --body "<summary with PRD reference>"
    ```
 
-   l. **Update summary**: Back in main repo, append to `docs/PRDs/night-watch/NIGHT-WATCH-SUMMARY.md`:
+   k. **Clean up worktree**:
 
    ```
    ## <Title>
@@ -142,9 +126,9 @@ If `NW_BOARD_ENABLED` is set to `true` in the environment, use board mode instea
    git worktree prune
    ```
 
-   o. **STOP after this PRD**. Do NOT continue to the next PRD. One PRD per run prevents timeouts and reduces risk. The next cron trigger will pick up the next PRD.
+   l. **STOP after this PRD**. Do NOT continue to the next PRD. One PRD per run prevents timeouts and reduces risk. The next cron trigger will pick up the next PRD.
 
-6. **On failure**: Do NOT move the PRD to done. Log the failure in NIGHT-WATCH-SUMMARY.md with status "Failed" and the reason. Always clean up the worktree before stopping:
+6. **On failure**: Do NOT mark the PRD as done. Log the failure. Always clean up the worktree before stopping:
    ```bash
    git worktree remove --force ../night-watch-cli-nw-<prd-name>
    git worktree prune

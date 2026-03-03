@@ -6,6 +6,7 @@ import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Tabs from '../components/ui/Tabs';
 import Switch from '../components/ui/Switch';
+import CronScheduleInput from '../components/ui/CronScheduleInput';
 import { useStore } from '../store/useStore';
 import {
   fetchConfig,
@@ -585,6 +586,8 @@ const Settings: React.FC = () => {
   const { addToast, projectName, selectedProjectId, globalModeLoading } = useStore();
   const [saving, setSaving] = React.useState(false);
   const [form, setForm] = React.useState<ConfigForm | null>(null);
+  // Prevents refetchConfig from overwriting the form after a save (form was already set from PUT response)
+  const skipNextFormResetRef = React.useRef(false);
 
   const {
     data: config,
@@ -597,7 +600,11 @@ const Settings: React.FC = () => {
 
   React.useEffect(() => {
     if (config) {
-      setForm(toFormState(config));
+      if (skipNextFormResetRef.current) {
+        skipNextFormResetRef.current = false;
+      } else {
+        setForm(toFormState(config));
+      }
     }
   }, [config]);
 
@@ -625,7 +632,7 @@ const Settings: React.FC = () => {
 
     setSaving(true);
     try {
-      await updateConfig({
+      const savedConfig = await updateConfig({
         provider: form.provider,
         defaultBranch: form.defaultBranch,
         prdDir: form.prdDir,
@@ -655,12 +662,17 @@ const Settings: React.FC = () => {
         audit: form.audit,
       });
 
+      // Update form directly from server response to ensure it reflects persisted values
+      setForm(toFormState(savedConfig));
+
       addToast({
         title: 'Settings Saved',
         message: 'Configuration updated successfully.',
         type: 'success',
       });
 
+      // Sync useApi's internal config state but skip the form reset (already done above)
+      skipNextFormResetRef.current = true;
       refetchConfig();
       refetchDoctor();
     } catch (saveError) {
@@ -732,23 +744,8 @@ const Settings: React.FC = () => {
             <h3 className="text-lg font-medium text-slate-200">Project Configuration</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
               <Input label="Project Name" value={projectName} disabled />
-              <Select
-                label="Provider"
-                value={form.provider}
-                onChange={(val) => updateField('provider', val as ConfigForm['provider'])}
-                options={[
-                  { label: 'Anthropic (Claude)', value: 'claude' },
-                  { label: 'OpenAI (Codex)', value: 'codex' },
-                ]}
-              />
               <Input label="Default Branch" value={form.defaultBranch} onChange={(e) => updateField('defaultBranch', e.target.value)} />
               <Input label="Branch Prefix" value={form.branchPrefix} onChange={(e) => updateField('branchPrefix', e.target.value)} />
-              <Input
-                label="PRD Directory"
-                value={form.prdDir}
-                onChange={(e) => updateField('prdDir', e.target.value)}
-                helperText="Directory containing PRD files (relative to project root)"
-              />
               <div className="md:col-span-2">
                 <Switch
                   label="Enable Automated Reviews"
@@ -777,25 +774,29 @@ const Settings: React.FC = () => {
               )}
             </div>
           </div>
-
-          <div className="pt-6 border-t border-slate-800">
-            <h3 className="text-lg font-medium text-slate-200 mb-4">Provider Strategy</h3>
-            <p className="text-sm text-slate-400 mb-4">
-              Configure how the provider handles rate limits and model selection for Claude execution
-            </p>
+        </Card>
+      ),
+    },
+    {
+      id: 'providers',
+      label: 'Providers',
+      content: (
+        <div className="space-y-6">
+          <Card className="p-6 space-y-6">
+            <div>
+              <h3 className="text-lg font-medium text-slate-200">Global Provider</h3>
+              <p className="text-sm text-slate-400 mt-1">Default AI provider used for all jobs unless overridden below</p>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="md:col-span-2">
-                <div>
-                  <Switch
-                    label="Fallback on Rate Limit"
-                    checked={form.fallbackOnRateLimit}
-                    onChange={(checked) => updateField('fallbackOnRateLimit', checked)}
-                  />
-                  <p className="text-xs text-slate-500 mt-2">
-                    When enabled, automatically fall back to native Claude API after rate-limit on proxy provider
-                  </p>
-                </div>
-              </div>
+              <Select
+                label="Provider"
+                value={form.provider}
+                onChange={(val) => updateField('provider', val as ConfigForm['provider'])}
+                options={[
+                  { label: 'Anthropic (Claude)', value: 'claude' },
+                  { label: 'OpenAI (Codex)', value: 'codex' },
+                ]}
+              />
               <Select
                 label="Claude Model"
                 value={form.claudeModel}
@@ -806,9 +807,69 @@ const Settings: React.FC = () => {
                 ]}
                 helperText="Model used for native Claude execution (when no proxy is set or after fallback)"
               />
+              <div className="md:col-span-2">
+                <Switch
+                  label="Fallback on Rate Limit"
+                  checked={form.fallbackOnRateLimit}
+                  onChange={(checked) => updateField('fallbackOnRateLimit', checked)}
+                />
+                <p className="text-xs text-slate-500 mt-2">
+                  When enabled, automatically fall back to native Claude API after rate-limit on proxy provider
+                </p>
+              </div>
             </div>
-          </div>
-        </Card>
+          </Card>
+
+          <Card className="p-6 space-y-6">
+            <div>
+              <h3 className="text-lg font-medium text-slate-200">Per-Job Provider Overrides</h3>
+              <p className="text-sm text-slate-400 mt-1">
+                Override the AI provider for specific job types. Leave as &quot;Use Global&quot; to use the default provider.
+              </p>
+            </div>
+            <div className="space-y-4">
+              {([
+                { key: 'executor', label: 'Executor' },
+                { key: 'reviewer', label: 'Reviewer' },
+                { key: 'qa', label: 'QA' },
+                { key: 'audit', label: 'Audit' },
+                { key: 'slicer', label: 'Slicer' },
+              ] as const).map(({ key, label }) => (
+                <div
+                  key={key}
+                  className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40"
+                >
+                  <span className="text-sm font-medium text-slate-200">{label}</span>
+                  <Select
+                    value={form.jobProviders[key] ?? ''}
+                    onChange={(val) => {
+                      const newJobProviders = { ...form.jobProviders };
+                      if (val === '') {
+                        delete newJobProviders[key];
+                      } else {
+                        newJobProviders[key] = val as 'claude' | 'codex';
+                      }
+                      updateField('jobProviders', newJobProviders);
+                    }}
+                    options={[
+                      { label: 'Use Global (default)', value: '' },
+                      { label: 'Anthropic (Claude)', value: 'claude' },
+                      { label: 'OpenAI (Codex)', value: 'codex' },
+                    ]}
+                  />
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-lg font-medium text-slate-200 mb-2">Provider Environment Variables</h3>
+            <ProviderEnvEditor
+              envVars={form.providerEnv}
+              onChange={(envVars) => updateField('providerEnv', envVars)}
+            />
+          </Card>
+        </div>
       ),
     },
     {
@@ -863,27 +924,55 @@ const Settings: React.FC = () => {
       content: (
         <Card className="p-6 space-y-6">
           <div>
-            <h3 className="text-lg font-medium text-slate-200 mb-2">Cron Schedules</h3>
+            <h3 className="text-lg font-medium text-slate-200 mb-2">Job Schedules</h3>
             <p className="text-sm text-slate-400 mb-4">
-              Configure when PRD execution and PR review tasks run automatically
+              Configure when automated jobs run using cron expressions or presets
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Input
+            <CronScheduleInput
               label="PRD Execution Schedule"
               value={form.cronSchedule}
-              onChange={(e) => updateField('cronSchedule', e.target.value)}
-              helperText="Cron expression for when PRDs are executed (default: 0 0-21 * * *)"
-              placeholder="0 0-21 * * *"
+              onChange={(val) => updateField('cronSchedule', val)}
             />
-            <Input
+            <CronScheduleInput
               label="PR Review Schedule"
               value={form.reviewerSchedule}
-              onChange={(e) => updateField('reviewerSchedule', e.target.value)}
-              helperText="Cron expression for automated PR reviews (default: 0 0,3,6,9,12,15,18,21 * * *)"
-              placeholder="0 0,3,6,9,12,15,18,21 * * *"
+              onChange={(val) => updateField('reviewerSchedule', val)}
             />
+            <CronScheduleInput
+              label="QA Schedule"
+              value={form.qa.schedule}
+              onChange={(val) =>
+                updateField('qa', {
+                  ...form.qa,
+                  schedule: val,
+                })
+              }
+            />
+            <CronScheduleInput
+              label="Audit Schedule"
+              value={form.audit.schedule}
+              onChange={(val) =>
+                updateField('audit', {
+                  ...form.audit,
+                  schedule: val,
+                })
+              }
+            />
+            {form.roadmapScanner.enabled && (
+              <CronScheduleInput
+                label="Slicer Schedule"
+                value={form.roadmapScanner.slicerSchedule || '0 */6 * * *'}
+                onChange={(val) =>
+                  updateField('roadmapScanner', {
+                    ...form.roadmapScanner,
+                    slicerSchedule: val,
+                  })
+                }
+              />
+            )}
             <Input
               label="Cron Schedule Offset"
               type="number"
@@ -897,27 +986,6 @@ const Settings: React.FC = () => {
               helperText="Minutes offset (0-59) applied to all cron schedules during install. Helps stagger multiple projects."
             />
           </div>
-
-          <div className="pt-4 border-t border-slate-800">
-            <p className="text-xs text-slate-500">
-              <strong>Cron format:</strong> minute hour day month weekday
-              <br />
-              <strong>Examples:</strong> <code>0 * * * *</code> (hourly), <code>0 0 * * *</code> (daily at midnight), <code>0 0-21/3 * * *</code> (every 3 hours from 0-21)
-            </p>
-          </div>
-        </Card>
-      ),
-    },
-    {
-      id: 'env',
-      label: 'Provider Env',
-      content: (
-        <Card className="p-6">
-          <h3 className="text-lg font-medium text-slate-200 mb-2">Provider Environment Variables</h3>
-          <ProviderEnvEditor
-            envVars={form.providerEnv}
-            onChange={(envVars) => updateField('providerEnv', envVars)}
-          />
         </Card>
       ),
     },
@@ -987,18 +1055,6 @@ const Settings: React.FC = () => {
                   The Slicer generates detailed PRDs from roadmap items using AI
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Input
-                    label="Slicer Schedule"
-                    value={form.roadmapScanner.slicerSchedule || ''}
-                    onChange={(e) =>
-                      updateField('roadmapScanner', {
-                        ...form.roadmapScanner,
-                        slicerSchedule: e.target.value,
-                      })
-                    }
-                    helperText="Cron expression for slicer execution"
-                    placeholder="0 2,8,14,20 * * *"
-                  />
                   <Input
                     label="Slicer Max Runtime"
                     type="number"
@@ -1098,54 +1154,6 @@ const Settings: React.FC = () => {
       ),
     },
     {
-      id: 'job-providers',
-      label: 'Job Providers',
-      content: (
-        <Card className="p-6 space-y-6">
-          <div>
-            <h3 className="text-lg font-medium text-slate-200">Job Providers</h3>
-            <p className="text-sm text-slate-400 mt-1">
-              Override the AI provider for specific job types. Leave as &quot;Use Global&quot; to use the default provider.
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            {([
-              { key: 'executor', label: 'Executor' },
-              { key: 'reviewer', label: 'Reviewer' },
-              { key: 'qa', label: 'QA' },
-              { key: 'audit', label: 'Audit' },
-              { key: 'slicer', label: 'Slicer' },
-            ] as const).map(({ key, label }) => (
-              <div
-                key={key}
-                className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40"
-              >
-                <span className="text-sm font-medium text-slate-200">{label}</span>
-                <Select
-                  value={form.jobProviders[key] ?? ''}
-                  onChange={(val) => {
-                    const newJobProviders = { ...form.jobProviders };
-                    if (val === '') {
-                      delete newJobProviders[key];
-                    } else {
-                      newJobProviders[key] = val as 'claude' | 'codex';
-                    }
-                    updateField('jobProviders', newJobProviders);
-                  }}
-                  options={[
-                    { label: 'Use Global (default)', value: '' },
-                    { label: 'Anthropic (Claude)', value: 'claude' },
-                    { label: 'OpenAI (Codex)', value: 'codex' },
-                  ]}
-                />
-              </div>
-            ))}
-          </div>
-        </Card>
-      ),
-    },
-    {
       id: 'qa',
       label: 'QA',
       content: (
@@ -1171,18 +1179,6 @@ const Settings: React.FC = () => {
           {form.qa.enabled && (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
-                <Input
-                  label="QA Schedule"
-                  value={form.qa.schedule}
-                  onChange={(e) =>
-                    updateField('qa', {
-                      ...form.qa,
-                      schedule: e.target.value,
-                    })
-                  }
-                  helperText="Cron expression for QA execution (default: 30 1,7,13,19 * * *)"
-                  placeholder="30 1,7,13,19 * * *"
-                />
                 <Input
                   label="Max Runtime"
                   type="number"
@@ -1287,18 +1283,6 @@ const Settings: React.FC = () => {
 
           {form.audit.enabled && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
-              <Input
-                label="Audit Schedule"
-                value={form.audit.schedule}
-                onChange={(e) =>
-                  updateField('audit', {
-                    ...form.audit,
-                    schedule: e.target.value,
-                  })
-                }
-                helperText="Cron expression for audit execution (default: 0 2,8,14,20 * * *)"
-                placeholder="0 2,8,14,20 * * *"
-              />
               <Input
                 label="Max Runtime"
                 type="number"

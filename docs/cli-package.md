@@ -152,7 +152,7 @@ sequenceDiagram
 
 Creates everything needed for Night Watch:
 
-- `docs/PRDs/night-watch/done/` directory
+- PRD directory (configurable via `--prd-dir`)
 - `night-watch.config.json` with detected defaults
 - `.claude/commands/night-watch.md` slash command
 - `.claude/commands/night-watch-pr-reviewer.md` slash command

@@ -15,8 +15,7 @@ night-watch init --provider codex     # Use codex provider
 
 **What it creates:**
 
-- `docs/PRDs/night-watch/done/` — Directory for completed PRDs
-- `docs/PRDs/night-watch/NIGHT-WATCH-SUMMARY.md` — Progress tracking file
+- PRD directory (configurable via `--prd-dir`) — Directory for PRD files
 - `logs/` — Log files directory (added to .gitignore)
 - `.claude/commands/night-watch.md` — Claude slash command for PRD execution
 - `.claude/commands/night-watch-pr-reviewer.md` — Claude slash command for PR review

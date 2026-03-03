@@ -37,7 +37,7 @@ graph TB
 
     subgraph Storage["Persistence"]
         DB[("~/.night-watch/state.db<br/>(SQLite)")]
-        PRDs["docs/PRDs/night-watch/<br/>(pending PRDs)"]
+        PRDs["prdDir/<br/>(pending PRDs)"]
         Lock["/tmp/night-watch-*.lock"]
     end
 
@@ -199,7 +199,7 @@ graph TD
 
     subgraph "Config Properties"
         Final --> P1["provider: claude | codex"]
-        Final --> P2["prdDir: docs/PRDs/night-watch"]
+        Final --> P2["prdDir: docs/prds"]
         Final --> P3["maxRuntime: 7200s"]
         Final --> P4["cronSchedule: 0 0-15 * * *"]
         Final --> P5["branchPatterns: feat/, night-watch/"]

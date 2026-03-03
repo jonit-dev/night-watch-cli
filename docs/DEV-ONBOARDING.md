@@ -108,7 +108,7 @@ stateDiagram-v2
     Blocked --> Pending: Dependency resolved
 ```
 
-PRDs live in `docs/PRDs/night-watch/`. Completed PRDs move to `docs/PRDs/night-watch/done/`.
+PRDs live in the configured `prdDir`. Completed PRDs move to a `done/` subdirectory.
 
 ### 2. Configuration Cascade
 

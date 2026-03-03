@@ -51,7 +51,7 @@ describe('config', () => {
       const config = getDefaultConfig();
 
       expect(config.defaultBranch).toBe('');
-      expect(config.prdDir).toBe('docs/PRDs/night-watch');
+      expect(config.prdDir).toBe('docs/prds');
       expect(config.maxRuntime).toBe(7200);
       expect(config.reviewerMaxRuntime).toBe(3600);
       expect(config.branchPrefix).toBe('night-watch');

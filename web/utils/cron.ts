@@ -2,16 +2,63 @@
  * Cron utility functions for schedule management
  */
 
-export const CRON_PRESETS = [
-  { label: 'Every 30 minutes', value: '*/30 * * * *' },
-  { label: 'Every hour', value: '0 * * * *' },
-  { label: 'Every 3 hours', value: '0 */3 * * *' },
-  { label: 'Every 6 hours', value: '0 */6 * * *' },
-  { label: 'Every 12 hours', value: '0 */12 * * *' },
-  { label: 'Daily at midnight', value: '0 0 * * *' },
-  { label: 'Daily at 9 AM', value: '0 9 * * *' },
-  { label: 'Weekdays at 9 AM', value: '0 9 * * 1-5' },
-  { label: 'Custom', value: '__custom__' },
+export type CronPreset = {
+  label: string;
+  value: string;
+  description: string;
+};
+
+export const CRON_PRESETS: CronPreset[] = [
+  {
+    label: 'Night Watch (default)',
+    value: '0 0-21 * * *',
+    description: 'Every hour from midnight to 9pm UTC',
+  },
+  {
+    label: 'Every 3 hours',
+    value: '0 0,3,6,9,12,15,18,21 * * *',
+    description: 'At minute 0 past every 3rd hour',
+  },
+  {
+    label: 'Business hours',
+    value: '0 0,1,2,3,4,5,6,7,8,11,14,17,20 * * *',
+    description: 'During typical US business hours',
+  },
+  {
+    label: 'Workday (9-5)',
+    value: '0 9,10,11,12,13,14,15,16,17 * * 1-5',
+    description: 'Hourly, Monday to Friday, 9am-5pm UTC',
+  },
+  {
+    label: 'Twice daily',
+    value: '0 0,12 * * *',
+    description: 'At midnight and noon UTC',
+  },
+  {
+    label: 'Hourly',
+    value: '0 * * * *',
+    description: 'At minute 0 of every hour',
+  },
+  {
+    label: 'Every 30 minutes',
+    value: '*/30 * * * *',
+    description: 'Twice per hour',
+  },
+  {
+    label: 'Daily at midnight',
+    value: '0 0 * * *',
+    description: 'Once per day at 00:00 UTC',
+  },
+  {
+    label: 'Weekdays at 9 AM',
+    value: '0 9 * * 1-5',
+    description: 'Monday to Friday at 9am UTC',
+  },
+  {
+    label: 'Custom',
+    value: '__custom__',
+    description: 'Enter your own cron expression',
+  },
 ];
 
 /**
@@ -53,6 +100,21 @@ export function cronToHuman(expr: string): string {
     return `Weekdays at ${formatHour(hour)}`;
   }
 
+  // Handle hour range (e.g., 0-21)
+  if (minute === '0' && hour.includes('-')) {
+    const [start, end] = hour.split('-');
+    return `Every hour from ${formatHour(start)} to ${formatHour(end)}`;
+  }
+
+  // Handle comma-separated hours
+  if (minute === '0' && hour.includes(',')) {
+    const hours = hour.split(',').map(formatHour);
+    if (hours.length <= 3) {
+      return `At ${hours.join(' and ')}`;
+    }
+    return `At ${hours.slice(0, -1).join(', ')}, and ${hours[hours.length - 1]}`;
+  }
+
   // Default: return the expression itself
   return expr;
 }
@@ -74,6 +136,13 @@ function formatHour(hour: string): string {
 export function getPresetValue(cronExpr: string): string {
   const preset = CRON_PRESETS.find(p => p.value === cronExpr);
   return preset?.value ?? '__custom__';
+}
+
+/**
+ * Get preset by value
+ */
+export function getPresetByValue(value: string): CronPreset | undefined {
+  return CRON_PRESETS.find(p => p.value === value);
 }
 
 /**
@@ -114,6 +183,30 @@ export function getNextRunTime(cronExpr: string): Date | null {
       next.setHours(targetHour % 24, 0, 0);
       if (targetHour >= 24) {
         next.setDate(next.getDate() + 1);
+      }
+    } else if (hour.includes('-')) {
+      // Handle hour range (e.g., 0-21)
+      const [start, end] = hour.split('-').map(Number);
+      const currentHour = next.getHours();
+      if (currentHour > end) {
+        // Past the range, move to next day at start
+        next.setDate(next.getDate() + 1);
+        next.setHours(start, 0, 0);
+      } else if (currentHour < start) {
+        // Before the range, set to start
+        next.setHours(start, 0, 0);
+      }
+      // Otherwise we're in the range, keep the hour
+    } else if (hour !== '*' && !minute.startsWith('*/')) {
+      const hours = hour.split(',').map(Number);
+      const currentHour = next.getHours();
+      const nextHour = hours.find(h => h > currentHour);
+      if (nextHour !== undefined) {
+        next.setHours(nextHour, 0, 0);
+      } else {
+        // No more hours today, move to first hour tomorrow
+        next.setDate(next.getDate() + 1);
+        next.setHours(hours[0], 0, 0);
       }
     } else if (hour !== '*' && !minute.startsWith('*/')) {
       const targetHour = parseInt(hour, 10);
