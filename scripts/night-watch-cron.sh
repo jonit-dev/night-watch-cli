@@ -74,6 +74,13 @@ if ! acquire_lock "${LOCK_FILE}"; then
   exit 0
 fi
 
+# Ensure all repo-scoped gh/night-watch commands run against this project.
+if ! cd "${PROJECT_DIR}"; then
+  log "ERROR: Cannot access project directory ${PROJECT_DIR}"
+  emit_result "failure" "reason=invalid_project_dir"
+  exit 1
+fi
+
 cleanup_worktrees "${PROJECT_DIR}"
 
 ISSUE_NUMBER=""    # board mode: GitHub issue number
