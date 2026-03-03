@@ -4,8 +4,11 @@
  */
 
 import { createHash } from 'crypto';
-import { execSync } from 'child_process';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import * as fs from 'fs';
+
+const execAsync = promisify(exec);
 import * as path from 'path';
 import { CLAIM_FILE_EXTENSION, LOCK_FILE_PREFIX, LOG_DIR, QA_LOG_NAME } from '../constants.js';
 import { getPrdStatesForProject } from './prd-states.js';
@@ -372,24 +375,22 @@ export function collectPrdInfo(projectDir: string, prdDir: string, maxRuntime: n
 /**
  * Count open PRs on night-watch/ or feat/ branches using gh CLI
  */
-export function countOpenPRs(projectDir: string, branchPatterns: string[]): number {
+export async function countOpenPRs(projectDir: string, branchPatterns: string[]): Promise<number> {
   try {
-    execSync('git rev-parse --git-dir', {
+    await execAsync('git rev-parse --git-dir', {
       cwd: projectDir,
       encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     try {
-      execSync('which gh', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+      await execAsync('which gh', { encoding: 'utf-8' });
     } catch {
       return 0;
     }
 
-    const output = execSync('gh pr list --state open --json headRefName,number', {
+    const { stdout: output } = await execAsync('gh pr list --state open --json headRefName,number', {
       cwd: projectDir,
       encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     const prs = JSON.parse(output);
@@ -519,26 +520,24 @@ function deriveReviewScore(reviewDecision?: string | null): number | null {
 /**
  * Collect open PR info using gh CLI
  */
-export function collectPrInfo(projectDir: string, branchPatterns: string[]): IPrInfo[] {
+export async function collectPrInfo(projectDir: string, branchPatterns: string[]): Promise<IPrInfo[]> {
   try {
-    execSync('git rev-parse --git-dir', {
+    await execAsync('git rev-parse --git-dir', {
       cwd: projectDir,
       encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
     });
 
     try {
-      execSync('which gh', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+      await execAsync('which gh', { encoding: 'utf-8' });
     } catch {
       return [];
     }
 
-    const output = execSync(
+    const { stdout: output } = await execAsync(
       'gh pr list --state open --json headRefName,number,title,url,statusCheckRollup,reviewDecision',
       {
         cwd: projectDir,
         encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
       },
     );
 
@@ -664,10 +663,10 @@ export function getCrontabInfo(
 /**
  * Fetch a complete status snapshot for the given project
  */
-export function fetchStatusSnapshot(
+export async function fetchStatusSnapshot(
   projectDir: string,
   config: INightWatchConfig,
-): IStatusSnapshot {
+): Promise<IStatusSnapshot> {
   const projectName = getProjectName(projectDir);
 
   const executorLock = checkLockFile(executorLockPath(projectDir));
@@ -679,7 +678,7 @@ export function fetchStatusSnapshot(
   ];
 
   const prds = collectPrdInfo(projectDir, config.prdDir, config.maxRuntime);
-  const prs = collectPrInfo(projectDir, config.branchPatterns);
+  const prs = await collectPrInfo(projectDir, config.branchPatterns);
   const logs = collectLogInfo(projectDir);
   const crontab = getCrontabInfo(projectName, projectDir);
 

@@ -13,8 +13,23 @@ import { INightWatchConfig } from '@night-watch/core/types.js';
 // Mock process.cwd to return our temp directory
 let mockProjectDir: string;
 
+// exec is used by status-data.ts (via promisify); execSync is used by doctor.routes.ts
+let mockExecServerImpl: ((cmd: string) => string) = () => "";
 vi.mock('child_process', () => ({
-  execSync: vi.fn(),
+  exec: vi.fn((_cmd: string, _opts: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+    const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
+    try {
+      const result = mockExecServerImpl(_cmd);
+      callback?.(null, { stdout: result, stderr: '' });
+    } catch (err) {
+      callback?.(err instanceof Error ? err : new Error(String(err)), { stdout: '', stderr: '' });
+    }
+  }),
+  execSync: vi.fn((_cmd: string) => {
+    const result = mockExecServerImpl(_cmd);
+    return result;
+  }),
+  execFile: vi.fn(),
   spawn: vi.fn(),
 }));
 
@@ -41,7 +56,7 @@ vi.mock('@night-watch/core/utils/crontab.js', () => ({
   generateMarker: vi.fn((name: string) => `# night-watch-cli: ${name}`),
 }));
 
-import { execSync, spawn } from 'child_process';
+import { exec, execSync, spawn } from 'child_process';
 import { getEntries, getProjectEntries } from '@night-watch/core/utils/crontab.js';
 
 // Mock process.cwd before importing server module
@@ -113,15 +128,23 @@ describe('server API', () => {
     vi.mocked(getEntries).mockReturnValue([]);
     vi.mocked(getProjectEntries).mockReturnValue([]);
 
-    // Mock execSync
-    vi.mocked(execSync).mockImplementation((cmd: string) => {
-      if (cmd.includes('git rev-parse')) {
-        return 'true';
-      }
-      if (cmd.includes('which claude')) {
-        return '/usr/bin/claude';
-      }
+    // Set default exec mock behavior
+    mockExecServerImpl = (cmd: string) => {
+      if (cmd.includes('git rev-parse')) return 'true';
+      if (cmd.includes('which claude')) return '/usr/bin/claude';
       return '';
+    };
+    vi.mocked(exec).mockImplementation((_cmd: string, _opts: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+      const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
+      try {
+        const result = mockExecServerImpl(_cmd);
+        callback?.(null, { stdout: result, stderr: '' });
+      } catch (err) {
+        callback?.(err instanceof Error ? err : new Error(String(err)), { stdout: '', stderr: '' });
+      }
+    });
+    vi.mocked(execSync).mockImplementation((_cmd: string) => {
+      return mockExecServerImpl(_cmd);
     });
 
     // Mock spawn
@@ -194,17 +217,20 @@ describe('server API', () => {
   describe('GET /api/prs', () => {
     it('should return PR list', async () => {
       // Mock gh CLI to return empty PR list
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
-        if (cmd.includes('gh pr list')) {
-          return '[]';
-        }
-        if (cmd.includes('git rev-parse')) {
-          return 'true';
-        }
-        if (cmd.includes('which gh')) {
-          return '/usr/bin/gh';
-        }
+      mockExecServerImpl = (cmd: string) => {
+        if (cmd.includes('gh pr list')) return '[]';
+        if (cmd.includes('git rev-parse')) return 'true';
+        if (cmd.includes('which gh')) return '/usr/bin/gh';
         return '';
+      };
+      vi.mocked(exec).mockImplementation((_cmd: string, _opts: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+        const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
+        try {
+          const result = mockExecServerImpl(_cmd);
+          callback?.(null, { stdout: result, stderr: '' });
+        } catch (err) {
+          callback?.(err instanceof Error ? err : new Error(String(err)), { stdout: '', stderr: '' });
+        }
       });
 
       const response = await request(app).get('/api/prs');

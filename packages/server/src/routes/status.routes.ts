@@ -6,7 +6,7 @@ import { Request, Response, Router } from 'express';
 
 import { CronExpressionParser } from 'cron-parser';
 
-import { INightWatchConfig, fetchStatusSnapshot } from '@night-watch/core';
+import { INightWatchConfig, fetchStatusSnapshot, loadConfig } from '@night-watch/core';
 import { SseClientSet, broadcastSSE, startSseStatusWatcher } from '../middleware/sse.middleware.js';
 
 export interface IStatusRoutesDeps {
@@ -29,21 +29,22 @@ export function createStatusRoutes(deps: IStatusRoutesDeps): Router {
     sseClients.add(res);
 
     // Send current snapshot immediately on connect
-    try {
-      const snapshot = fetchStatusSnapshot(projectDir, getConfig());
-      res.write(`event: status_changed\ndata: ${JSON.stringify(snapshot)}\n\n`);
-    } catch {
-      // Ignore errors during initial snapshot
-    }
+    fetchStatusSnapshot(projectDir, getConfig())
+      .then((snapshot) => {
+        res.write(`event: status_changed\ndata: ${JSON.stringify(snapshot)}\n\n`);
+      })
+      .catch(() => {
+        // Ignore errors during initial snapshot
+      });
 
     req.on('close', () => {
       sseClients.delete(res);
     });
   });
 
-  router.get('/', (_req: Request, res: Response): void => {
+  router.get('/', async (_req: Request, res: Response): Promise<void> => {
     try {
-      const snapshot = fetchStatusSnapshot(projectDir, getConfig());
+      const snapshot = await fetchStatusSnapshot(projectDir, getConfig());
       res.json(snapshot);
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
@@ -71,10 +72,10 @@ export function createScheduleInfoRoutes(deps: IScheduleInfoRoutesDeps): Router 
   const { projectDir, getConfig } = deps;
   const router = Router();
 
-  router.get('/', (_req: Request, res: Response): void => {
+  router.get('/', async (_req: Request, res: Response): Promise<void> => {
     try {
       const config = getConfig();
-      const snapshot = fetchStatusSnapshot(projectDir, config);
+      const snapshot = await fetchStatusSnapshot(projectDir, config);
       const installed = snapshot.crontab.installed;
       const entries = snapshot.crontab.entries;
 
@@ -109,6 +110,12 @@ export function createScheduleInfoRoutes(deps: IScheduleInfoRoutesDeps): Router 
 /**
  * Create a project-scoped SSE router for the global/multi-project mode.
  * Each project gets its own SSE client set and watcher.
+ *
+ * Bug fixes applied:
+ * - Stale config: watcher re-reads config from disk on each tick via loadConfig()
+ *   rather than closing over the initial request's req.projectConfig reference.
+ * - Interval leak: watcher interval is cleared when the last client for a project
+ *   disconnects, preventing unbounded accumulation of idle intervals.
  */
 export function createProjectSseRoutes(deps: {
   projectSseClients: Map<string, SseClientSet>;
@@ -119,7 +126,6 @@ export function createProjectSseRoutes(deps: {
 
   router.get('/status/events', (req: Request, res: Response): void => {
     const projectDir = req.projectDir!;
-    const config = req.projectConfig!;
 
     // Initialize client set for this project if not exists
     if (!projectSseClients.has(projectDir)) {
@@ -127,9 +133,12 @@ export function createProjectSseRoutes(deps: {
     }
     const clients = projectSseClients.get(projectDir)!;
 
-    // Start watcher for this project if not already running
+    // Start watcher for this project if not already running.
+    // Bug fix: pass loadConfig(projectDir) as the getConfig function so the
+    // watcher re-reads config from disk on every tick instead of closing over
+    // the stale req.projectConfig reference from a single HTTP request.
     if (!projectSseWatchers.has(projectDir)) {
-      const watcher = startSseStatusWatcher(clients, projectDir, () => req.projectConfig!);
+      const watcher = startSseStatusWatcher(clients, projectDir, () => loadConfig(projectDir));
       projectSseWatchers.set(projectDir, watcher);
     }
 
@@ -140,34 +149,46 @@ export function createProjectSseRoutes(deps: {
 
     clients.add(res);
 
-    // Send current snapshot immediately on connect
-    try {
-      const snapshot = fetchStatusSnapshot(projectDir, config);
-      res.write(`event: status_changed\ndata: ${JSON.stringify(snapshot)}\n\n`);
-    } catch {
-      // Ignore errors during initial snapshot
-    }
+    // Send current snapshot immediately on connect using the current config
+    // (re-read from disk so we always have a fresh value).
+    fetchStatusSnapshot(projectDir, loadConfig(projectDir))
+      .then((snapshot) => {
+        res.write(`event: status_changed\ndata: ${JSON.stringify(snapshot)}\n\n`);
+      })
+      .catch(() => {
+        // Ignore errors during initial snapshot
+      });
 
     req.on('close', () => {
       clients.delete(res);
+
+      // Bug fix: stop the watcher interval when the last client disconnects to
+      // prevent unbounded accumulation of idle intervals.
+      if (clients.size === 0) {
+        const watcher = projectSseWatchers.get(projectDir);
+        if (watcher !== undefined) {
+          clearInterval(watcher);
+          projectSseWatchers.delete(projectDir);
+        }
+      }
     });
   });
 
   // /status (non-event) for project-scoped global mode
-  router.get('/status', (req: Request, res: Response): void => {
+  router.get('/status', async (req: Request, res: Response): Promise<void> => {
     try {
-      const snapshot = fetchStatusSnapshot(req.projectDir!, req.projectConfig!);
+      const snapshot = await fetchStatusSnapshot(req.projectDir!, req.projectConfig!);
       res.json(snapshot);
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
 
-  router.get('/schedule-info', (req: Request, res: Response): void => {
+  router.get('/schedule-info', async (req: Request, res: Response): Promise<void> => {
     try {
       const config = req.projectConfig!;
       const projectDir = req.projectDir!;
-      const snapshot = fetchStatusSnapshot(projectDir, config);
+      const snapshot = await fetchStatusSnapshot(projectDir, config);
       const installed = snapshot.crontab.installed;
       const entries = snapshot.crontab.entries;
 

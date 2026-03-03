@@ -139,10 +139,14 @@ export function createSchedulesTab(): ITab {
       ctx.showMessage(`Saved but cron install failed: ${installResult.error}`, 'error');
     }
     ctx.config = newConfig;
-    const snap = ctx.refreshSnapshot();
-    ctx.snapshot = snap;
-    renderCrontab(ctx);
-    renderScheduleSettings(ctx);
+    ctx.refreshSnapshot().then((snap) => {
+      ctx.snapshot = snap;
+      renderCrontab(ctx);
+      renderScheduleSettings(ctx);
+    }).catch(() => {
+      renderCrontab(ctx);
+      renderScheduleSettings(ctx);
+    });
   }
 
   function showCustomCronInput(
@@ -264,10 +268,11 @@ export function createSchedulesTab(): ITab {
           } else {
             ctx.showMessage(`Install failed: ${result.error}`, 'error');
           }
-          const snap = ctx.refreshSnapshot();
-          ctx.snapshot = snap;
-          renderCrontab(ctx);
-          ctx.screen.render();
+          ctx.refreshSnapshot().then((snap) => {
+            ctx.snapshot = snap;
+            renderCrontab(ctx);
+            ctx.screen.render();
+          }).catch(() => { ctx.screen.render(); });
         },
       ],
       [
@@ -279,10 +284,11 @@ export function createSchedulesTab(): ITab {
           } else {
             ctx.showMessage(`Uninstall failed: ${result.error}`, 'error');
           }
-          const snap = ctx.refreshSnapshot();
-          ctx.snapshot = snap;
-          renderCrontab(ctx);
-          ctx.screen.render();
+          ctx.refreshSnapshot().then((snap) => {
+            ctx.snapshot = snap;
+            renderCrontab(ctx);
+            ctx.screen.render();
+          }).catch(() => { ctx.screen.render(); });
         },
       ],
       [
@@ -295,10 +301,11 @@ export function createSchedulesTab(): ITab {
           } else {
             ctx.showMessage(`Reinstall failed: ${result.error}`, 'error');
           }
-          const snap = ctx.refreshSnapshot();
-          ctx.snapshot = snap;
-          renderCrontab(ctx);
-          ctx.screen.render();
+          ctx.refreshSnapshot().then((snap) => {
+            ctx.snapshot = snap;
+            renderCrontab(ctx);
+            ctx.screen.render();
+          }).catch(() => { ctx.screen.render(); });
         },
       ],
     ];

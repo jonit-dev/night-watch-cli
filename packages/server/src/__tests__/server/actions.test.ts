@@ -14,7 +14,11 @@ import { INightWatchConfig } from "@night-watch/core/types.js";
 let mockProjectDir: string;
 
 vi.mock("child_process", () => ({
-  execSync: vi.fn(),
+  exec: vi.fn((_cmd: string, _opts: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+    const callback = typeof _opts === "function" ? (_opts as typeof cb) : cb;
+    callback?.(null, { stdout: "", stderr: "" });
+  }),
+  execFile: vi.fn(),
   spawn: vi.fn(),
 }));
 
@@ -24,7 +28,7 @@ vi.mock("@night-watch/core/utils/crontab.js", () => ({
   generateMarker: vi.fn((name: string) => `# night-watch-cli: ${name}`),
 }));
 
-import { execSync, spawn } from "child_process";
+import { spawn } from "child_process";
 import { getEntries, getProjectEntries } from "@night-watch/core/utils/crontab.js";
 
 // Mock process.cwd before importing server module
@@ -90,17 +94,6 @@ describe("server actions API", () => {
     // Mock getEntries
     vi.mocked(getEntries).mockReturnValue([]);
     vi.mocked(getProjectEntries).mockReturnValue([]);
-
-    // Mock execSync
-    vi.mocked(execSync).mockImplementation((cmd: string) => {
-      if (cmd.includes("git rev-parse")) {
-        return "true";
-      }
-      if (cmd.includes("which claude")) {
-        return "/usr/bin/claude";
-      }
-      return "";
-    });
 
     // Mock spawn
     vi.mocked(spawn).mockReturnValue({

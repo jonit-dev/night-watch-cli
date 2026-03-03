@@ -1,166 +1,172 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { execFileSync } from "child_process";
+import { execFile } from "child_process";
 
-vi.mock("child_process");
+let mockExecFileImpl: ((args: string[]) => string) = () => "";
+
+vi.mock("child_process", () => ({
+  execFile: vi.fn((_cmd: string, _args: string[], _opts: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+    const callback = typeof _opts === "function" ? (_opts as typeof cb) : cb;
+    try {
+      const result = mockExecFileImpl(_args as string[]);
+      callback?.(null, { stdout: result, stderr: "" });
+    } catch (err) {
+      callback?.(err instanceof Error ? err : new Error(String(err)), { stdout: "", stderr: "" });
+    }
+  }),
+  exec: vi.fn(),
+  execSync: vi.fn(),
+  spawn: vi.fn(),
+}));
 
 import { graphql, getRepoNwo, getViewerLogin } from "@night-watch/core/board/providers/github-graphql.js";
 
-const mockExecFileSync = vi.mocked(execFileSync);
+const mockExecFile = vi.mocked(execFile);
 
 describe("github-graphql helpers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockExecFileImpl = () => "";
   });
 
   describe("graphql", () => {
-    it("executes gh api graphql with query", () => {
-      mockExecFileSync.mockReturnValueOnce(
-        JSON.stringify({ data: { viewer: { login: "octocat" } } }) as unknown as Buffer
-      );
+    it("executes gh api graphql with query", async () => {
+      mockExecFileImpl = () =>
+        JSON.stringify({ data: { viewer: { login: "octocat" } } });
 
-      const result = graphql<{ viewer: { login: string } }>(
+      const result = await graphql<{ viewer: { login: string } }>(
         "query { viewer { login } }",
         {},
         "/tmp/test"
       );
 
       expect(result.viewer.login).toBe("octocat");
-      expect(mockExecFileSync).toHaveBeenCalledWith(
+      expect(mockExecFile).toHaveBeenCalledWith(
         "gh",
         expect.arrayContaining(["api", "graphql", "-f", expect.stringContaining("query=")]),
-        expect.objectContaining({ cwd: "/tmp/test" })
+        expect.objectContaining({ cwd: "/tmp/test" }),
+        expect.any(Function)
       );
     });
 
-    it("passes string variables with -f flag", () => {
-      mockExecFileSync.mockReturnValueOnce(
-        JSON.stringify({ data: { user: { id: "U_123" } } }) as unknown as Buffer
-      );
+    it("passes string variables with -f flag", async () => {
+      mockExecFileImpl = () =>
+        JSON.stringify({ data: { user: { id: "U_123" } } });
 
-      graphql<{ user: { id: string } }>(
+      await graphql<{ user: { id: string } }>(
         "query GetUser($login: String!) { user(login: $login) { id } }",
         { login: "octocat" },
         "/tmp/test"
       );
 
-      const call = mockExecFileSync.mock.calls[0];
+      const call = mockExecFile.mock.calls[0];
       const args = call[1] as string[];
       expect(args).toContain("-f");
       expect(args).toContain("login=octocat");
     });
 
-    it("passes numeric variables with -F flag (capital F)", () => {
-      mockExecFileSync.mockReturnValueOnce(
-        JSON.stringify({ data: { project: { id: "P_123" } } }) as unknown as Buffer
-      );
+    it("passes numeric variables with -F flag (capital F)", async () => {
+      mockExecFileImpl = () =>
+        JSON.stringify({ data: { project: { id: "P_123" } } });
 
-      graphql<{ project: { id: string } }>(
+      await graphql<{ project: { id: string } }>(
         "query GetProject($number: Int!) { project(number: $number) { id } }",
         { number: 42 },
         "/tmp/test"
       );
 
-      const call = mockExecFileSync.mock.calls[0];
+      const call = mockExecFile.mock.calls[0];
       const args = call[1] as string[];
       // -F is used for numeric values
       expect(args).toContain("-F");
       expect(args).toContain("number=42");
     });
 
-    it("throws on GraphQL errors", () => {
-      mockExecFileSync.mockReturnValueOnce(
+    it("throws on GraphQL errors", async () => {
+      mockExecFileImpl = () =>
         JSON.stringify({
           errors: [{ message: "Field 'invalid' doesn't exist" }],
-        }) as unknown as Buffer
-      );
+        });
 
-      expect(() =>
+      await expect(
         graphql<{ data: unknown }>("query { invalid }", {}, "/tmp/test")
-      ).toThrow("GraphQL error: Field 'invalid' doesn't exist");
+      ).rejects.toThrow("GraphQL error: Field 'invalid' doesn't exist");
     });
 
-    it("throws on first error when multiple errors exist", () => {
-      mockExecFileSync.mockReturnValueOnce(
+    it("throws on first error when multiple errors exist", async () => {
+      mockExecFileImpl = () =>
         JSON.stringify({
           errors: [
             { message: "First error" },
             { message: "Second error" },
           ],
-        }) as unknown as Buffer
-      );
+        });
 
-      expect(() =>
+      await expect(
         graphql<{ data: unknown }>("query { test }", {}, "/tmp/test")
-      ).toThrow("GraphQL error: First error");
+      ).rejects.toThrow("GraphQL error: First error");
     });
 
-    it("handles empty data response", () => {
-      mockExecFileSync.mockReturnValueOnce(
-        JSON.stringify({ data: {} }) as unknown as Buffer
-      );
+    it("handles empty data response", async () => {
+      mockExecFileImpl = () => JSON.stringify({ data: {} });
 
-      const result = graphql<{}>("query { __typename }", {}, "/tmp/test");
+      const result = await graphql<{}>("query { __typename }", {}, "/tmp/test");
       expect(result).toEqual({});
     });
 
-    it("uses correct stdio settings for child process", () => {
-      mockExecFileSync.mockReturnValueOnce(
-        JSON.stringify({ data: {} }) as unknown as Buffer
-      );
+    it("uses correct options for child process", async () => {
+      mockExecFileImpl = () => JSON.stringify({ data: {} });
 
-      graphql<{}>("query { __typename }", {}, "/tmp/project");
+      await graphql<{}>("query { __typename }", {}, "/tmp/project");
 
-      const call = mockExecFileSync.mock.calls[0];
+      const call = mockExecFile.mock.calls[0];
       expect(call[2]).toMatchObject({
         cwd: "/tmp/project",
         encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
       });
     });
   });
 
   describe("getRepoNwo", () => {
-    it("returns owner/repo string", () => {
-      mockExecFileSync.mockReturnValueOnce("owner/repo\n" as unknown as Buffer);
+    it("returns owner/repo string", async () => {
+      mockExecFileImpl = () => "owner/repo\n";
 
-      const result = getRepoNwo("/tmp/test");
+      const result = await getRepoNwo("/tmp/test");
 
       expect(result).toBe("owner/repo");
-      expect(mockExecFileSync).toHaveBeenCalledWith(
+      expect(mockExecFile).toHaveBeenCalledWith(
         "gh",
         ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
-        expect.objectContaining({ cwd: "/tmp/test" })
+        expect.objectContaining({ cwd: "/tmp/test" }),
+        expect.any(Function)
       );
     });
 
-    it("trims whitespace from output", () => {
-      mockExecFileSync.mockReturnValueOnce("  owner/repo  \n" as unknown as Buffer);
+    it("trims whitespace from output", async () => {
+      mockExecFileImpl = () => "  owner/repo  \n";
 
-      const result = getRepoNwo("/tmp/test");
+      const result = await getRepoNwo("/tmp/test");
 
       expect(result).toBe("owner/repo");
     });
   });
 
   describe("getViewerLogin", () => {
-    it("returns the authenticated user login", () => {
-      mockExecFileSync.mockReturnValueOnce(
-        JSON.stringify({ data: { viewer: { login: "testuser" } } }) as unknown as Buffer
-      );
+    it("returns the authenticated user login", async () => {
+      mockExecFileImpl = () =>
+        JSON.stringify({ data: { viewer: { login: "testuser" } } });
 
-      const result = getViewerLogin("/tmp/test");
+      const result = await getViewerLogin("/tmp/test");
 
       expect(result).toBe("testuser");
     });
 
-    it("uses graphql helper internally", () => {
-      mockExecFileSync.mockReturnValueOnce(
-        JSON.stringify({ data: { viewer: { login: "octocat" } } }) as unknown as Buffer
-      );
+    it("uses graphql helper internally", async () => {
+      mockExecFileImpl = () =>
+        JSON.stringify({ data: { viewer: { login: "octocat" } } });
 
-      getViewerLogin("/tmp/test");
+      await getViewerLogin("/tmp/test");
 
-      const call = mockExecFileSync.mock.calls[0];
+      const call = mockExecFile.mock.calls[0];
       const args = call[1] as string[];
       expect(args).toContain("api");
       expect(args).toContain("graphql");

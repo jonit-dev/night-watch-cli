@@ -105,21 +105,29 @@ A PR needs attention if **any** of the following: merge conflicts present, revie
       - Push the clean branch: `git push --force-with-lease origin <branch-name>`
       - **Do NOT leave any conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) in any file.**
 
-   d. **Address CI failures** (if any):
+   d. **Address review feedback** (if score < 80):
+      - Read the review comments carefully. Extract areas for improvement, bugs found, issues found, and specific file/line suggestions.
+      - For each review suggestion:
+        - If you agree, implement the change.
+        - If you do not agree, do not implement it blindly. Capture a short technical reason and include that reason in the PR comment.
+      - Fix bugs identified.
+      - Improve error handling if flagged.
+      - Add missing tests if coverage was noted.
+      - Refactor code if structure was criticized.
+      - Follow all project conventions from AI assistant documentation files (e.g., CLAUDE.md, AGENTS.md, or similar).
+
+   e. **Address CI failures** (if any):
+      - Check CI status and identify non-passing checks:
+        ```
+        gh pr checks <number> --json name,state,conclusion
+        ```
       - Read the failed job logs carefully to understand the root cause.
       - **typecheck failures**: Fix TypeScript type errors.
       - **lint failures**: Fix ESLint violations.
       - **test failures**: Fix broken tests or update tests to match code changes.
       - **build failures**: Fix compilation/bundling errors.
       - **verify failures**: This runs after all others -- usually means one of the above needs fixing.
-
-   e. **Address review feedback** (if score < 80):
-      - Read the review comments carefully. Extract areas for improvement, bugs found, issues found, and specific file/line suggestions.
-      - Fix bugs identified.
-      - Improve error handling if flagged.
-      - Add missing tests if coverage was noted.
-      - Refactor code if structure was criticized.
-      - Follow all project conventions from AI assistant documentation files (e.g., CLAUDE.md, AGENTS.md, or similar).
+      - Re-run local equivalents of the failing jobs before pushing to confirm the CI issues are fixed.
 
    f. **Run verification**: Run the project's test/lint commands (e.g., `npm test`, `npm run lint`, `npm run verify` or equivalent). Fix until it passes.
 
@@ -156,6 +164,9 @@ A PR needs attention if **any** of the following: merge conflicts present, revie
       ### Changes made:
       - <fix 1>
       - <fix 2>
+
+      <If any review suggestions were not applied>### Review Feedback Not Applied:
+      - <suggestion>: <short technical reason><end>
 
       <If CI was fixed>### CI Failures Fixed:
       - <job>: <what was wrong and how it was fixed><end>

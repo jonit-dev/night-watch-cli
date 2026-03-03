@@ -8,6 +8,11 @@ import * as os from "os";
 import * as path from "path";
 
 vi.mock("child_process", () => ({
+  exec: vi.fn((_cmd: string, _opts: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+    const callback = typeof _opts === "function" ? (_opts as typeof cb) : cb;
+    callback?.(null, { stdout: "", stderr: "" });
+  }),
+  execFile: vi.fn(),
   execSync: vi.fn(),
 }));
 

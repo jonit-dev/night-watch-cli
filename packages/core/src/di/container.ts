@@ -2,13 +2,9 @@
  * DI composition root for Night Watch CLI.
  * Bootstraps the Tsyringe container with the SQLite database and all repository singletons.
  *
- * Phase 2: Repositories decorated with @injectable() + @inject('Database') are resolved
+ * Repositories decorated with @injectable() + @inject('Database') are resolved
  * via registerSingleton. The Database instance is registered via registerInstance so
  * tsyringe can auto-inject it by the DATABASE_TOKEN string token.
- *
- * Phase 5: Service classes (NotificationService, StatusService, RoadmapService) are
- * registered by the server package via extendContainerWithServices() after the core
- * container is initialized.
  */
 
 import 'reflect-metadata';

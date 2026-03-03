@@ -10,7 +10,18 @@ import * as os from "os";
 // Mock process.cwd to return our temp directory
 let mockProjectDir: string;
 
+let mockExecImpl: ((cmd: string) => string) = () => "";
 vi.mock("child_process", () => ({
+  exec: vi.fn((_cmd: string, _opts: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+    const callback = typeof _opts === "function" ? (_opts as typeof cb) : cb;
+    try {
+      const result = mockExecImpl(_cmd);
+      callback?.(null, { stdout: result, stderr: "" });
+    } catch (err) {
+      callback?.(err instanceof Error ? err : new Error(String(err)), { stdout: "", stderr: "" });
+    }
+  }),
+  execFile: vi.fn(),
   execSync: vi.fn(),
   spawn: vi.fn(),
 }));
@@ -21,7 +32,7 @@ vi.mock("@night-watch/core/utils/crontab.js", () => ({
   generateMarker: vi.fn((name: string) => `# night-watch-cli: ${name}`),
 }));
 
-import { execSync } from "child_process";
+import { exec } from "child_process";
 
 // Mock process.cwd before importing prs module
 const originalCwd = process.cwd;
@@ -70,8 +81,8 @@ describe("prs command", () => {
       }, null, 2)
     );
 
-    // Mock execSync for most operations
-    vi.mocked(execSync).mockImplementation((cmd: string) => {
+    // Mock exec for most operations (collectPrInfo uses promisified exec)
+    mockExecImpl = (cmd: string) => {
       if (cmd.includes("git rev-parse")) {
         return ".git";
       }
@@ -82,6 +93,15 @@ describe("prs command", () => {
         return JSON.stringify([]);
       }
       return "";
+    };
+    vi.mocked(exec).mockImplementation((_cmd: string, _opts: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+      const callback = typeof _opts === "function" ? (_opts as typeof cb) : cb;
+      try {
+        const result = mockExecImpl(_cmd);
+        callback?.(null, { stdout: result, stderr: "" });
+      } catch (err) {
+        callback?.(err instanceof Error ? err : new Error(String(err)), { stdout: "", stderr: "" });
+      }
     });
   });
 
@@ -154,7 +174,7 @@ describe("prs command", () => {
   describe("JSON output", () => {
     it("should output JSON with --json flag", async () => {
       // Mock PR data
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           return ".git";
         }
@@ -176,7 +196,7 @@ describe("prs command", () => {
           ]);
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);
@@ -222,7 +242,7 @@ describe("prs command", () => {
 
   describe("PR filtering", () => {
     it("should only include PRs matching branch patterns", async () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           return ".git";
         }
@@ -258,7 +278,7 @@ describe("prs command", () => {
           ]);
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);
@@ -279,7 +299,7 @@ describe("prs command", () => {
 
   describe("CI status formatting", () => {
     it("should report pass when all checks pass", async () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           return ".git";
         }
@@ -301,7 +321,7 @@ describe("prs command", () => {
           ]);
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);
@@ -317,7 +337,7 @@ describe("prs command", () => {
     });
 
     it("should report fail when any check fails", async () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           return ".git";
         }
@@ -339,7 +359,7 @@ describe("prs command", () => {
           ]);
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);
@@ -355,7 +375,7 @@ describe("prs command", () => {
     });
 
     it("should report pending when checks are in progress", async () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           return ".git";
         }
@@ -377,7 +397,7 @@ describe("prs command", () => {
           ]);
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);
@@ -395,7 +415,7 @@ describe("prs command", () => {
 
   describe("review score formatting", () => {
     it("should return 100 for APPROVED review decision", async () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           return ".git";
         }
@@ -415,7 +435,7 @@ describe("prs command", () => {
           ]);
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);
@@ -431,7 +451,7 @@ describe("prs command", () => {
     });
 
     it("should return 0 for CHANGES_REQUESTED review decision", async () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           return ".git";
         }
@@ -451,7 +471,7 @@ describe("prs command", () => {
           ]);
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);
@@ -467,7 +487,7 @@ describe("prs command", () => {
     });
 
     it("should return null when no review decision", async () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           return ".git";
         }
@@ -487,7 +507,7 @@ describe("prs command", () => {
           ]);
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);
@@ -503,7 +523,7 @@ describe("prs command", () => {
     });
 
     it("should return null for REVIEW_REQUIRED review decision", async () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           return ".git";
         }
@@ -523,7 +543,7 @@ describe("prs command", () => {
           ]);
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);
@@ -541,7 +561,7 @@ describe("prs command", () => {
 
   describe("CI status edge cases", () => {
     it("should report unknown when statusCheckRollup is null", async () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           return ".git";
         }
@@ -561,7 +581,7 @@ describe("prs command", () => {
           ]);
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);
@@ -577,7 +597,7 @@ describe("prs command", () => {
     });
 
     it("should report pass for NEUTRAL conclusion", async () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           return ".git";
         }
@@ -597,7 +617,7 @@ describe("prs command", () => {
           ]);
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);
@@ -613,7 +633,7 @@ describe("prs command", () => {
     });
 
     it("should handle nested contexts array structure", async () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           return ".git";
         }
@@ -639,7 +659,7 @@ describe("prs command", () => {
           ]);
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);
@@ -655,7 +675,7 @@ describe("prs command", () => {
     });
 
     it("should handle StatusContext state field", async () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           return ".git";
         }
@@ -675,7 +695,7 @@ describe("prs command", () => {
           ]);
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);
@@ -691,7 +711,7 @@ describe("prs command", () => {
     });
 
     it("should report fail for ERROR conclusion", async () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           return ".git";
         }
@@ -711,7 +731,7 @@ describe("prs command", () => {
           ]);
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);
@@ -727,7 +747,7 @@ describe("prs command", () => {
     });
 
     it("should report fail for TIMED_OUT conclusion", async () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           return ".git";
         }
@@ -747,7 +767,7 @@ describe("prs command", () => {
           ]);
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);
@@ -765,12 +785,12 @@ describe("prs command", () => {
 
   describe("error handling", () => {
     it("should handle not being in a git repo", async () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           throw new Error("not a git repo");
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);
@@ -787,7 +807,7 @@ describe("prs command", () => {
     });
 
     it("should handle gh CLI not being available", async () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) {
           return ".git";
         }
@@ -795,7 +815,7 @@ describe("prs command", () => {
           throw new Error("gh not found");
         }
         return "";
-      });
+      };
 
       const program = new Command();
       prsCommand(program);

@@ -7,8 +7,22 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 
+// exec is callback-based; promisify wraps it to call the last arg as a callback.
+// We mock it so tests can control its behavior by setting mockExecImpl.
+let mockExecImpl: ((cmd: string) => string) = () => "";
 vi.mock("child_process", () => ({
-  execSync: vi.fn(),
+  exec: vi.fn((cmd: string, _optsOrCb: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+    // Handle both exec(cmd, cb) and exec(cmd, opts, cb) signatures
+    const callback = typeof _optsOrCb === "function"
+      ? (_optsOrCb as (err: Error | null, result: { stdout: string; stderr: string }) => void)
+      : cb!;
+    try {
+      const result = mockExecImpl(cmd);
+      callback(null, { stdout: result, stderr: "" });
+    } catch (err) {
+      callback(err instanceof Error ? err : new Error(String(err)), { stdout: "", stderr: "" });
+    }
+  }),
   spawn: vi.fn(),
 }));
 
@@ -18,7 +32,7 @@ vi.mock("../../utils/crontab.js", () => ({
   generateMarker: vi.fn((name: string) => `# night-watch-cli: ${name}`),
 }));
 
-import { execSync } from "child_process";
+import { exec } from "child_process";
 import { getEntries, getProjectEntries } from "../../utils/crontab.js";
 import {
   checkLockFile,
@@ -67,12 +81,25 @@ describe("status-data utilities", () => {
     vi.resetAllMocks();
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "night-watch-status-data-test-"));
 
-    // Mock execSync to fail by default for git/gh commands
-    vi.mocked(execSync).mockImplementation((cmd: string) => {
+    // Default: exec fails for git/gh commands (simulates non-git-repo)
+    mockExecImpl = (cmd: string) => {
       if (cmd.includes("git rev-parse")) {
         throw new Error("not a git repo");
       }
       return "";
+    };
+
+    // Re-wire the vi.fn() to use the current mockExecImpl
+    vi.mocked(exec).mockImplementation((cmd: string, _optsOrCb: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+      const callback = typeof _optsOrCb === "function"
+        ? (_optsOrCb as (err: Error | null, result: { stdout: string; stderr: string }) => void)
+        : cb!;
+      try {
+        const result = mockExecImpl(cmd);
+        callback(null, { stdout: result, stderr: "" });
+      } catch (err) {
+        callback(err instanceof Error ? err : new Error(String(err)), { stdout: "", stderr: "" });
+      }
     });
 
     vi.mocked(getEntries).mockReturnValue([]);
@@ -85,7 +112,7 @@ describe("status-data utilities", () => {
   });
 
   describe("getProjectName", () => {
-    it("should return name from package.json", () => {
+    it("should return name from package.json", async () => {
       fs.writeFileSync(
         path.join(tempDir, "package.json"),
         JSON.stringify({ name: "my-project" })
@@ -93,11 +120,11 @@ describe("status-data utilities", () => {
       expect(getProjectName(tempDir)).toBe("my-project");
     });
 
-    it("should fall back to directory name if no package.json", () => {
+    it("should fall back to directory name if no package.json", async () => {
       expect(getProjectName(tempDir)).toBe(path.basename(tempDir));
     });
 
-    it("should fall back to directory name if package.json has no name", () => {
+    it("should fall back to directory name if package.json has no name", async () => {
       fs.writeFileSync(
         path.join(tempDir, "package.json"),
         JSON.stringify({ version: "1.0.0" })
@@ -105,14 +132,14 @@ describe("status-data utilities", () => {
       expect(getProjectName(tempDir)).toBe(path.basename(tempDir));
     });
 
-    it("should fall back to directory name if package.json is invalid", () => {
+    it("should fall back to directory name if package.json is invalid", async () => {
       fs.writeFileSync(path.join(tempDir, "package.json"), "not json");
       expect(getProjectName(tempDir)).toBe(path.basename(tempDir));
     });
   });
 
   describe("isProcessRunning", () => {
-    it("should return true when process exists", () => {
+    it("should return true when process exists", async () => {
       const originalKill = process.kill;
       (process as any).kill = vi.fn().mockReturnValue(true);
       try {
@@ -122,7 +149,7 @@ describe("status-data utilities", () => {
       }
     });
 
-    it("should return false when process does not exist", () => {
+    it("should return false when process does not exist", async () => {
       const originalKill = process.kill;
       (process as any).kill = vi.fn().mockImplementation(() => {
         throw new Error("ESRCH");
@@ -136,12 +163,12 @@ describe("status-data utilities", () => {
   });
 
   describe("checkLockFile", () => {
-    it("should return not running when lock file does not exist", () => {
+    it("should return not running when lock file does not exist", async () => {
       const result = checkLockFile("/tmp/nonexistent-lock-file.lock");
       expect(result).toEqual({ running: false, pid: null });
     });
 
-    it("should detect a running process from lock file", () => {
+    it("should detect a running process from lock file", async () => {
       const lockPath = path.join(tempDir, "test.lock");
       fs.writeFileSync(lockPath, "12345");
 
@@ -156,7 +183,7 @@ describe("status-data utilities", () => {
       }
     });
 
-    it("should detect a stopped process from lock file", () => {
+    it("should detect a stopped process from lock file", async () => {
       const lockPath = path.join(tempDir, "test.lock");
       fs.writeFileSync(lockPath, "99999");
 
@@ -173,7 +200,7 @@ describe("status-data utilities", () => {
       }
     });
 
-    it("should handle invalid PID in lock file", () => {
+    it("should handle invalid PID in lock file", async () => {
       const lockPath = path.join(tempDir, "test.lock");
       fs.writeFileSync(lockPath, "not-a-number");
 
@@ -183,12 +210,12 @@ describe("status-data utilities", () => {
   });
 
   describe("projectRuntimeKey", () => {
-    it("should return basename-hash format", () => {
+    it("should return basename-hash format", async () => {
       const key = projectRuntimeKey("/home/user/projects/my-project");
       expect(key).toMatch(/^my-project-[a-f0-9]{12}$/);
     });
 
-    it("should produce different keys for different paths with same basename", () => {
+    it("should produce different keys for different paths with same basename", async () => {
       const key1 = projectRuntimeKey("/home/user1/my-project");
       const key2 = projectRuntimeKey("/home/user2/my-project");
       expect(key1).not.toBe(key2);
@@ -196,7 +223,7 @@ describe("status-data utilities", () => {
       expect(key2.startsWith("my-project-")).toBe(true);
     });
 
-    it("should produce stable keys for the same path", () => {
+    it("should produce stable keys for the same path", async () => {
       const key1 = projectRuntimeKey("/home/user/projects/my-project");
       const key2 = projectRuntimeKey("/home/user/projects/my-project");
       expect(key1).toBe(key2);
@@ -204,24 +231,24 @@ describe("status-data utilities", () => {
   });
 
   describe("executorLockPath / reviewerLockPath", () => {
-    it("should use runtime key in executor lock path", () => {
+    it("should use runtime key in executor lock path", async () => {
       const lockPath = executorLockPath("/home/user/my-project");
       expect(lockPath).toMatch(/^\/tmp\/night-watch-my-project-[a-f0-9]{12}\.lock$/);
     });
 
-    it("should use runtime key in reviewer lock path", () => {
+    it("should use runtime key in reviewer lock path", async () => {
       const lockPath = reviewerLockPath("/home/user/my-project");
       expect(lockPath).toMatch(/^\/tmp\/night-watch-pr-reviewer-my-project-[a-f0-9]{12}\.lock$/);
     });
   });
 
   describe("countPRDs", () => {
-    it("should return zeros when PRD directory does not exist", () => {
+    it("should return zeros when PRD directory does not exist", async () => {
       const result = countPRDs(tempDir, "docs/PRDs/night-watch", 7200);
       expect(result).toEqual({ pending: 0, claimed: 0, done: 0 });
     });
 
-    it("should count pending and done PRDs", () => {
+    it("should count pending and done PRDs", async () => {
       const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
       fs.mkdirSync(prdDir, { recursive: true });
       fs.mkdirSync(path.join(prdDir, "done"), { recursive: true });
@@ -236,7 +263,7 @@ describe("status-data utilities", () => {
       expect(result.done).toBe(1);
     });
 
-    it("should count claimed PRDs separately", () => {
+    it("should count claimed PRDs separately", async () => {
       const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
       fs.mkdirSync(prdDir, { recursive: true });
 
@@ -254,7 +281,7 @@ describe("status-data utilities", () => {
       expect(result.claimed).toBe(1);
     });
 
-    it("should treat expired claims as pending", () => {
+    it("should treat expired claims as pending", async () => {
       const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
       fs.mkdirSync(prdDir, { recursive: true });
 
@@ -272,12 +299,12 @@ describe("status-data utilities", () => {
   });
 
   describe("collectPrdInfo", () => {
-    it("should return empty array when PRD directory does not exist", () => {
+    it("should return empty array when PRD directory does not exist", async () => {
       const result = collectPrdInfo(tempDir, "docs/PRDs/night-watch", 7200);
       expect(result).toEqual([]);
     });
 
-    it("should collect PRD info with correct statuses", () => {
+    it("should collect PRD info with correct statuses", async () => {
       const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
       fs.mkdirSync(prdDir, { recursive: true });
       fs.mkdirSync(path.join(prdDir, "done"), { recursive: true });
@@ -322,7 +349,7 @@ describe("status-data utilities", () => {
       }
     });
 
-    it("marks PRD ready when claim exists but lock is gone", () => {
+    it("marks PRD ready when claim exists but lock is gone", async () => {
       const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
       fs.mkdirSync(prdDir, { recursive: true });
 
@@ -350,7 +377,7 @@ describe("status-data utilities", () => {
       }
     });
 
-    it("marks PRD in-progress when claim AND lock both exist", () => {
+    it("marks PRD in-progress when claim AND lock both exist", async () => {
       const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
       fs.mkdirSync(prdDir, { recursive: true });
 
@@ -382,7 +409,7 @@ describe("status-data utilities", () => {
       }
     });
 
-    it("deletes orphaned claim file when lock is gone", () => {
+    it("deletes orphaned claim file when lock is gone", async () => {
       const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
       fs.mkdirSync(prdDir, { recursive: true });
 
@@ -415,24 +442,24 @@ describe("status-data utilities", () => {
   });
 
   describe("countOpenPRs", () => {
-    it("should return 0 when not in a git repo", () => {
-      const result = countOpenPRs(tempDir, ["feat/", "night-watch/"]);
+    it("should return 0 when not in a git repo", async () => {
+      const result = await countOpenPRs(tempDir, ["feat/", "night-watch/"]);
       expect(result).toBe(0);
     });
 
-    it("should return 0 when gh is not available", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should return 0 when gh is not available", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) throw new Error("not found");
         return "";
-      });
+      };
 
-      const result = countOpenPRs(tempDir, ["feat/", "night-watch/"]);
+      const result = await countOpenPRs(tempDir, ["feat/", "night-watch/"]);
       expect(result).toBe(0);
     });
 
-    it("should count matching PRs", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should count matching PRs", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -443,21 +470,21 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = countOpenPRs(tempDir, ["feat/", "night-watch/"]);
+      const result = await countOpenPRs(tempDir, ["feat/", "night-watch/"]);
       expect(result).toBe(2);
     });
   });
 
   describe("collectPrInfo", () => {
-    it("should return empty array when not in a git repo", () => {
-      const result = collectPrInfo(tempDir, ["feat/", "night-watch/"]);
+    it("should return empty array when not in a git repo", async () => {
+      const result = await collectPrInfo(tempDir, ["feat/", "night-watch/"]);
       expect(result).toEqual([]);
     });
 
-    it("should collect matching PR info with no CI data", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should collect matching PR info with no CI data", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -468,9 +495,9 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/", "night-watch/"]);
+      const result = await collectPrInfo(tempDir, ["feat/", "night-watch/"]);
       expect(result).toHaveLength(2);
       expect(result[0]).toEqual({
         number: 1,
@@ -490,8 +517,8 @@ describe("status-data utilities", () => {
       });
     });
 
-    it("should derive CI status and review score from gh data", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should derive CI status and review score from gh data", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -525,9 +552,9 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(3);
 
       expect(result[0].ciStatus).toBe("pass");
@@ -542,8 +569,8 @@ describe("status-data utilities", () => {
   });
 
   describe("CI status edge cases", () => {
-    it("should return 'unknown' for null statusCheckRollup", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should return 'unknown' for null statusCheckRollup", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -559,15 +586,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("unknown");
     });
 
-    it("should return 'unknown' for empty statusCheckRollup array", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should return 'unknown' for empty statusCheckRollup array", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -583,15 +610,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("unknown");
     });
 
-    it("should return 'fail' for ERROR conclusion", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should return 'fail' for ERROR conclusion", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -607,15 +634,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("fail");
     });
 
-    it("should return 'fail' for CANCELLED conclusion", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should return 'fail' for CANCELLED conclusion", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -631,15 +658,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("fail");
     });
 
-    it("should return 'fail' for TIMED_OUT conclusion", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should return 'fail' for TIMED_OUT conclusion", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -655,15 +682,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("fail");
     });
 
-    it("should return 'pending' for IN_PROGRESS status", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should return 'pending' for IN_PROGRESS status", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -679,15 +706,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("pending");
     });
 
-    it("should return 'pending' for QUEUED status", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should return 'pending' for QUEUED status", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -703,15 +730,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("pending");
     });
 
-    it("should return 'pass' for NEUTRAL conclusion", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should return 'pass' for NEUTRAL conclusion", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -727,15 +754,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("pass");
     });
 
-    it("should return 'pass' for SKIPPED conclusion (treated as complete)", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should return 'pass' for SKIPPED conclusion (treated as complete)", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -751,15 +778,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("pass");
     });
 
-    it("should handle StatusContext format with state field (SUCCESS)", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should handle StatusContext format with state field (SUCCESS)", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -776,15 +803,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("pass");
     });
 
-    it("should handle StatusContext format with state field (FAILURE)", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should handle StatusContext format with state field (FAILURE)", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -800,15 +827,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("fail");
     });
 
-    it("should handle StatusContext format with state field (PENDING)", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should handle StatusContext format with state field (PENDING)", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -824,15 +851,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("pending");
     });
 
-    it("should handle mixed CheckRun and StatusContext formats", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should handle mixed CheckRun and StatusContext formats", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -853,15 +880,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("pass");
     });
 
-    it("should handle nested contexts array structure", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should handle nested contexts array structure", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -885,15 +912,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("pass");
     });
 
-    it("should handle nested contexts with failure", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should handle nested contexts with failure", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -916,15 +943,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("fail");
     });
 
-    it("should handle case-insensitive conclusion values", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should handle case-insensitive conclusion values", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -940,17 +967,17 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].ciStatus).toBe("pass");
     });
   });
 
   describe("review score edge cases", () => {
-    it("should return null for undefined reviewDecision", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should return null for undefined reviewDecision", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -966,15 +993,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].reviewScore).toBeNull();
     });
 
-    it("should return null for empty string reviewDecision", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should return null for empty string reviewDecision", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -990,15 +1017,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].reviewScore).toBeNull();
     });
 
-    it("should return null for REVIEW_REQUIRED", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should return null for REVIEW_REQUIRED", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -1014,15 +1041,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].reviewScore).toBeNull();
     });
 
-    it("should handle lowercase reviewDecision values", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should handle lowercase reviewDecision values", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -1038,15 +1065,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].reviewScore).toBe(100);
     });
 
-    it("should handle mixed case reviewDecision values", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should handle mixed case reviewDecision values", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -1062,15 +1089,15 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].reviewScore).toBe(0);
     });
 
-    it("should return null for unknown reviewDecision values", () => {
-      vi.mocked(execSync).mockImplementation((cmd: string) => {
+    it("should return null for unknown reviewDecision values", async () => {
+      mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
         if (cmd.includes("which gh")) return "/usr/bin/gh";
         if (cmd.includes("gh pr list")) {
@@ -1086,21 +1113,21 @@ describe("status-data utilities", () => {
           ]);
         }
         return "";
-      });
+      };
 
-      const result = collectPrInfo(tempDir, ["feat/"]);
+      const result = await collectPrInfo(tempDir, ["feat/"]);
       expect(result).toHaveLength(1);
       expect(result[0].reviewScore).toBeNull();
     });
   });
 
   describe("getLastLogLines", () => {
-    it("should return empty array when file does not exist", () => {
+    it("should return empty array when file does not exist", async () => {
       const result = getLastLogLines("/tmp/nonexistent-log.log", 5);
       expect(result).toEqual([]);
     });
 
-    it("should return last N lines", () => {
+    it("should return last N lines", async () => {
       const logPath = path.join(tempDir, "test.log");
       fs.writeFileSync(logPath, "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6");
 
@@ -1108,7 +1135,7 @@ describe("status-data utilities", () => {
       expect(result).toEqual(["Line 4", "Line 5", "Line 6"]);
     });
 
-    it("should return all lines when file has fewer than N lines", () => {
+    it("should return all lines when file has fewer than N lines", async () => {
       const logPath = path.join(tempDir, "test.log");
       fs.writeFileSync(logPath, "Line 1\nLine 2");
 
@@ -1118,7 +1145,7 @@ describe("status-data utilities", () => {
   });
 
   describe("getLogInfo", () => {
-    it("should return info for existing log file", () => {
+    it("should return info for existing log file", async () => {
       const logPath = path.join(tempDir, "test.log");
       fs.writeFileSync(logPath, "Line 1\nLine 2\nLine 3");
 
@@ -1129,7 +1156,7 @@ describe("status-data utilities", () => {
       expect(result.path).toBe(logPath);
     });
 
-    it("should return info for non-existing log file", () => {
+    it("should return info for non-existing log file", async () => {
       const result = getLogInfo("/tmp/nonexistent-log-file.log");
       expect(result.exists).toBe(false);
       expect(result.size).toBe(0);
@@ -1138,7 +1165,7 @@ describe("status-data utilities", () => {
   });
 
   describe("collectLogInfo", () => {
-    it("should collect info for both executor and reviewer logs", () => {
+    it("should collect info for both executor and reviewer logs", async () => {
       const logDir = path.join(tempDir, "logs");
       fs.mkdirSync(logDir, { recursive: true });
       fs.writeFileSync(path.join(logDir, "executor.log"), "Executor line 1");
@@ -1160,7 +1187,7 @@ describe("status-data utilities", () => {
       expect(qaLog!.exists).toBe(false);
     });
 
-    it("should use correct file names (executor.log, reviewer.log, night-watch-qa.log)", () => {
+    it("should use correct file names (executor.log, reviewer.log, night-watch-qa.log)", async () => {
       const logDir = path.join(tempDir, "logs");
       fs.mkdirSync(logDir, { recursive: true });
       fs.writeFileSync(path.join(logDir, "executor.log"), "Executor line 1");
@@ -1188,7 +1215,7 @@ describe("status-data utilities", () => {
   });
 
   describe("getCrontabInfo", () => {
-    it("should return not installed when no entries", () => {
+    it("should return not installed when no entries", async () => {
       vi.mocked(getEntries).mockReturnValue([]);
       vi.mocked(getProjectEntries).mockReturnValue([]);
 
@@ -1197,7 +1224,7 @@ describe("status-data utilities", () => {
       expect(result.entries).toEqual([]);
     });
 
-    it("should return installed with entries", () => {
+    it("should return installed with entries", async () => {
       vi.mocked(getEntries).mockReturnValue([
         "0 * * * * night-watch run  # night-watch-cli: test-project",
       ]);
@@ -1208,7 +1235,7 @@ describe("status-data utilities", () => {
       expect(result.entries).toHaveLength(1);
     });
 
-    it("should deduplicate entries from both sources", () => {
+    it("should deduplicate entries from both sources", async () => {
       const entry = "0 * * * * night-watch run  # night-watch-cli: test-project";
       vi.mocked(getEntries).mockReturnValue([entry]);
       vi.mocked(getProjectEntries).mockReturnValue([entry]);
@@ -1219,7 +1246,7 @@ describe("status-data utilities", () => {
   });
 
   describe("parsePrdDependencies", () => {
-    it("should parse 'depends on' line", () => {
+    it("should parse 'depends on' line", async () => {
       const prdPath = path.join(tempDir, "phase2.md");
       fs.writeFileSync(
         prdPath,
@@ -1230,7 +1257,7 @@ describe("status-data utilities", () => {
       expect(result).toEqual(["phase0", "phase1"]);
     });
 
-    it("should handle no dependencies", () => {
+    it("should handle no dependencies", async () => {
       const prdPath = path.join(tempDir, "phase1.md");
       fs.writeFileSync(prdPath, "# Phase 1\n\nNo dependency info here.");
 
@@ -1238,12 +1265,12 @@ describe("status-data utilities", () => {
       expect(result).toEqual([]);
     });
 
-    it("should handle missing file", () => {
+    it("should handle missing file", async () => {
       const result = parsePrdDependencies("/tmp/nonexistent-prd-file.md");
       expect(result).toEqual([]);
     });
 
-    it("should handle depends on without backticks", () => {
+    it("should handle depends on without backticks", async () => {
       const prdPath = path.join(tempDir, "phase3.md");
       fs.writeFileSync(
         prdPath,
@@ -1254,7 +1281,7 @@ describe("status-data utilities", () => {
       expect(result).toEqual(["phase1", "phase2"]);
     });
 
-    it("should handle bold markdown depends on format", () => {
+    it("should handle bold markdown depends on format", async () => {
       const prdPath = path.join(tempDir, "phase4.md");
       fs.writeFileSync(
         prdPath,
@@ -1265,7 +1292,7 @@ describe("status-data utilities", () => {
       expect(result).toEqual(["phase1", "phase2"]);
     });
 
-    it("should return empty array for bold depends on with no deps", () => {
+    it("should return empty array for bold depends on with no deps", async () => {
       const prdPath = path.join(tempDir, "phase5.md");
       fs.writeFileSync(
         prdPath,
@@ -1278,7 +1305,7 @@ describe("status-data utilities", () => {
   });
 
   describe("collectPrdInfo with dependencies", () => {
-    it("should mark PRDs with unmet dependencies as blocked", () => {
+    it("should mark PRDs with unmet dependencies as blocked", async () => {
       const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
       fs.mkdirSync(prdDir, { recursive: true });
       fs.mkdirSync(path.join(prdDir, "done"), { recursive: true });
@@ -1311,7 +1338,7 @@ describe("status-data utilities", () => {
       expect(phase2!.unmetDependencies).toEqual(["phase1"]);
     });
 
-    it("should resolve deps with .md extension against done PRDs", () => {
+    it("should resolve deps with .md extension against done PRDs", async () => {
       const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
       fs.mkdirSync(prdDir, { recursive: true });
       fs.mkdirSync(path.join(prdDir, "done"), { recursive: true });
@@ -1334,14 +1361,14 @@ describe("status-data utilities", () => {
   });
 
   describe("fetchStatusSnapshot", () => {
-    it("should return all expected fields", () => {
+    it("should return all expected fields", async () => {
       fs.writeFileSync(
         path.join(tempDir, "package.json"),
         JSON.stringify({ name: "test-project" })
       );
 
       const config = makeConfig();
-      const snapshot = fetchStatusSnapshot(tempDir, config);
+      const snapshot = await fetchStatusSnapshot(tempDir, config);
 
       expect(snapshot.projectName).toBe("test-project");
       expect(snapshot.projectDir).toBe(tempDir);
@@ -1360,7 +1387,7 @@ describe("status-data utilities", () => {
       expect(snapshot.timestamp).toBeInstanceOf(Date);
     });
 
-    it("should detect PRDs in the snapshot", () => {
+    it("should detect PRDs in the snapshot", async () => {
       fs.writeFileSync(
         path.join(tempDir, "package.json"),
         JSON.stringify({ name: "test-project" })
@@ -1374,14 +1401,14 @@ describe("status-data utilities", () => {
       fs.writeFileSync(path.join(prdDir, "done", "phase0.md"), "# Phase 0");
 
       const config = makeConfig();
-      const snapshot = fetchStatusSnapshot(tempDir, config);
+      const snapshot = await fetchStatusSnapshot(tempDir, config);
 
       expect(snapshot.prds).toHaveLength(2);
       expect(snapshot.prds.find((p) => p.name === "phase1")?.status).toBe("ready");
       expect(snapshot.prds.find((p) => p.name === "phase0")?.status).toBe("done");
     });
 
-    it("should detect log files in the snapshot", () => {
+    it("should detect log files in the snapshot", async () => {
       fs.writeFileSync(
         path.join(tempDir, "package.json"),
         JSON.stringify({ name: "test-project" })
@@ -1392,7 +1419,7 @@ describe("status-data utilities", () => {
       fs.writeFileSync(path.join(logDir, "executor.log"), "Log line 1\nLog line 2");
 
       const config = makeConfig();
-      const snapshot = fetchStatusSnapshot(tempDir, config);
+      const snapshot = await fetchStatusSnapshot(tempDir, config);
 
       const executorLog = snapshot.logs.find((l) => l.name === "executor");
       expect(executorLog).toBeDefined();
@@ -1404,7 +1431,7 @@ describe("status-data utilities", () => {
       expect(reviewerLog!.exists).toBe(false);
     });
 
-    it("should include crontab info in the snapshot", () => {
+    it("should include crontab info in the snapshot", async () => {
       fs.writeFileSync(
         path.join(tempDir, "package.json"),
         JSON.stringify({ name: "test-project" })
@@ -1415,13 +1442,13 @@ describe("status-data utilities", () => {
       ]);
 
       const config = makeConfig();
-      const snapshot = fetchStatusSnapshot(tempDir, config);
+      const snapshot = await fetchStatusSnapshot(tempDir, config);
 
       expect(snapshot.crontab.installed).toBe(true);
       expect(snapshot.crontab.entries).toHaveLength(1);
     });
 
-    it("activePrd is set when executor running with claimed PRD", () => {
+    it("activePrd is set when executor running with claimed PRD", async () => {
       fs.writeFileSync(
         path.join(tempDir, "package.json"),
         JSON.stringify({ name: "test-project" })
@@ -1448,7 +1475,7 @@ describe("status-data utilities", () => {
 
       try {
         const config = makeConfig();
-        const snapshot = fetchStatusSnapshot(tempDir, config);
+        const snapshot = await fetchStatusSnapshot(tempDir, config);
 
         expect(snapshot.activePrd).toBe("my-prd");
       } finally {
@@ -1458,7 +1485,7 @@ describe("status-data utilities", () => {
       }
     });
 
-    it("activePrd is null when executor not running", () => {
+    it("activePrd is null when executor not running", async () => {
       fs.writeFileSync(
         path.join(tempDir, "package.json"),
         JSON.stringify({ name: "test-project" })
@@ -1483,7 +1510,7 @@ describe("status-data utilities", () => {
 
       try {
         const config = makeConfig();
-        const snapshot = fetchStatusSnapshot(tempDir, config);
+        const snapshot = await fetchStatusSnapshot(tempDir, config);
 
         expect(snapshot.activePrd).toBeNull();
       } finally {
