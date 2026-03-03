@@ -6,7 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { BoardProviderType, IBoardProviderConfig } from './board/types.js';
+import { BoardColumnName, BoardProviderType, IBoardProviderConfig } from './board/types.js';
 import {
   ClaudeModel,
   IAuditConfig,
@@ -260,6 +260,9 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     }
     if (typeof rawBoardProvider.repo === 'string') {
       bp.repo = rawBoardProvider.repo;
+    }
+    if (typeof rawBoardProvider.defaultIssueColumn === 'string') {
+      bp.defaultIssueColumn = rawBoardProvider.defaultIssueColumn as BoardColumnName;
     }
     normalized.boardProvider = bp;
   }

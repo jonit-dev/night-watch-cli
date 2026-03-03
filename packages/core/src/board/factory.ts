@@ -11,7 +11,7 @@ export function createBoardProvider(config: IBoardProviderConfig, cwd: string): 
       return new GitHubProjectsProvider(config, cwd);
     case 'local': {
       const repo = container.resolve(SqliteKanbanIssueRepository);
-      return new LocalKanbanProvider(repo);
+      return new LocalKanbanProvider(repo, config);
     }
     default:
       throw new Error(`Unsupported board provider: ${config.provider}. Supported: github, local`);

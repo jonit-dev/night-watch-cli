@@ -87,8 +87,10 @@ export const DEFAULT_TEMPLATES_DIR = '.night-watch/templates';
 // Board Provider Configuration
 export const DEFAULT_BOARD_PROVIDER: IBoardProviderConfig = {
   enabled: true,
-  provider: 'github' as const,
+  provider: 'local' as const,
 };
+
+export const DEFAULT_BOARD_ISSUE_COLUMN = 'Ready';
 
 export const DEFAULT_LOCAL_BOARD_INFO = { id: 'local', number: 0, title: 'Local Kanban', url: '' };
 

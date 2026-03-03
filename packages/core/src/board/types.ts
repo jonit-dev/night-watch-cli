@@ -73,4 +73,6 @@ export interface IBoardProviderConfig {
   projectNumber?: number;
   /** Repository owner/name (auto-detected from git remote) */
   repo?: string;
+  /** Default column for new issues (defaults to 'Ready') */
+  defaultIssueColumn?: BoardColumnName;
 }
