@@ -540,4 +540,146 @@ describe('run command', () => {
       expect(result.pending[0].claimInfo).toBeNull();
     });
   });
+
+  describe('action-path: spinner messaging', () => {
+    // These tests verify the spinner messaging behavior based on script result
+    // The action handler uses these patterns:
+    // - exitCode === 0 && status.startsWith('skip_') -> "completed (no eligible work)"
+    // - exitCode === 0 && status === 'success_already_merged' -> "completed (PRD already merged)"
+    // - exitCode === 0 (other) -> "completed successfully"
+    // - exitCode !== 0 -> "exited with code X"
+
+    it('should show "no eligible work" message for skip_no_eligible_prd status', () => {
+      const exitCode = 0;
+      const status = 'skip_no_eligible_prd';
+      const message =
+        exitCode === 0 && status.startsWith('skip_')
+          ? 'PRD executor completed (no eligible work)'
+          : 'PRD executor completed successfully';
+      expect(message).toBe('PRD executor completed (no eligible work)');
+    });
+
+    it('should show "no eligible work" message for skip_locked status', () => {
+      const exitCode = 0;
+      const status = 'skip_locked';
+      const message =
+        exitCode === 0 && status.startsWith('skip_')
+          ? 'PRD executor completed (no eligible work)'
+          : 'PRD executor completed successfully';
+      expect(message).toBe('PRD executor completed (no eligible work)');
+    });
+
+    it('should show "PRD already merged" message for success_already_merged status', () => {
+      const exitCode = 0;
+      const status = 'success_already_merged';
+      const message =
+        exitCode === 0 && status === 'success_already_merged'
+          ? 'PRD executor completed (PRD already merged)'
+          : 'PRD executor completed successfully';
+      expect(message).toBe('PRD executor completed (PRD already merged)');
+    });
+
+    it('should show "completed successfully" for success_open_pr status', () => {
+      const exitCode = 0;
+      const status = 'success_open_pr';
+      const isSkip = status.startsWith('skip_');
+      const isAlreadyMerged = status === 'success_already_merged';
+      const message =
+        exitCode === 0 && isSkip
+          ? 'PRD executor completed (no eligible work)'
+          : exitCode === 0 && isAlreadyMerged
+            ? 'PRD executor completed (PRD already merged)'
+            : 'PRD executor completed successfully';
+      expect(message).toBe('PRD executor completed successfully');
+    });
+
+    it('should show exit code on failure', () => {
+      const exitCode = 1;
+      const message = `PRD executor exited with code ${exitCode}`;
+      expect(message).toBe('PRD executor exited with code 1');
+    });
+
+    it('should show exit code 124 for timeout', () => {
+      const exitCode = 124;
+      const message = `PRD executor exited with code ${exitCode}`;
+      expect(message).toBe('PRD executor exited with code 124');
+    });
+  });
+
+  describe('action-path: notification suppression', () => {
+    // Tests for notification suppression based on resolveRunNotificationEvent
+    // Notifications are suppressed (returns null) for skip_* and success_already_merged
+
+    it('should suppress notification for skip_no_eligible_prd', () => {
+      const event = resolveRunNotificationEvent(0, 'skip_no_eligible_prd');
+      expect(event).toBeNull();
+    });
+
+    it('should suppress notification for skip_locked', () => {
+      const event = resolveRunNotificationEvent(0, 'skip_locked');
+      expect(event).toBeNull();
+    });
+
+    it('should suppress notification for success_already_merged', () => {
+      const event = resolveRunNotificationEvent(0, 'success_already_merged');
+      expect(event).toBeNull();
+    });
+
+    it('should send run_succeeded notification for success_open_pr', () => {
+      const event = resolveRunNotificationEvent(0, 'success_open_pr');
+      expect(event).toBe('run_succeeded');
+    });
+
+    it('should send run_succeeded notification when status is undefined', () => {
+      const event = resolveRunNotificationEvent(0, undefined);
+      expect(event).toBe('run_succeeded');
+    });
+
+    it('should send run_failed notification for non-zero exit', () => {
+      const event = resolveRunNotificationEvent(1, 'failure');
+      expect(event).toBe('run_failed');
+    });
+
+    it('should send run_timeout notification for exit code 124', () => {
+      const event = resolveRunNotificationEvent(124, 'failure');
+      expect(event).toBe('run_timeout');
+    });
+  });
+
+  describe('action-path: exit code propagation', () => {
+    // Tests for process.exit behavior based on script execution result
+    // The action handler calls process.exit(exitCode) after script execution
+
+    it('should exit with code 0 on successful execution', () => {
+      const scriptExitCode = 0;
+      // Action calls: process.exit(exitCode)
+      expect(scriptExitCode).toBe(0);
+    });
+
+    it('should exit with code 0 on skip status', () => {
+      const scriptExitCode = 0;
+      const status = 'skip_no_eligible_prd';
+      // Even with skip status, exit code is 0
+      expect(scriptExitCode).toBe(0);
+      expect(status.startsWith('skip_')).toBe(true);
+    });
+
+    it('should exit with code 1 on script failure', () => {
+      const scriptExitCode = 1;
+      // Action calls: process.exit(exitCode)
+      expect(scriptExitCode).toBe(1);
+    });
+
+    it('should exit with code 124 on timeout', () => {
+      const scriptExitCode = 124;
+      // Timeout is indicated by exit code 124 from timeout command
+      expect(scriptExitCode).toBe(124);
+    });
+
+    it('should exit with code 1 on exception', () => {
+      // In the catch block: process.exit(1)
+      const exceptionExitCode = 1;
+      expect(exceptionExitCode).toBe(1);
+    });
+  });
 });

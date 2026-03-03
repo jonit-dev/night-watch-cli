@@ -458,6 +458,34 @@ describe("status-data utilities", () => {
       expect(result).toBe(0);
     });
 
+    it("should return 0 when gh pr list returns empty array", async () => {
+      mockExecImpl = (cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return "[]";
+        }
+        return "";
+      };
+
+      const result = await countOpenPRs(tempDir, ["feat/", "night-watch/"]);
+      expect(result).toBe(0);
+    });
+
+    it("should return 0 when gh pr list returns whitespace-only output", async () => {
+      mockExecImpl = (cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return "   \n  ";
+        }
+        return "";
+      };
+
+      const result = await countOpenPRs(tempDir, ["feat/", "night-watch/"]);
+      expect(result).toBe(0);
+    });
+
     it("should count matching PRs", async () => {
       mockExecImpl = (cmd: string) => {
         if (cmd.includes("git rev-parse")) return ".git";
@@ -481,6 +509,54 @@ describe("status-data utilities", () => {
     it("should return empty array when not in a git repo", async () => {
       const result = await collectPrInfo(tempDir, ["feat/", "night-watch/"]);
       expect(result).toEqual([]);
+    });
+
+    it("should return empty array when gh pr list returns empty array", async () => {
+      mockExecImpl = (cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return "[]";
+        }
+        return "";
+      };
+
+      const result = await collectPrInfo(tempDir, ["feat/", "night-watch/"]);
+      expect(result).toEqual([]);
+    });
+
+    it("should return empty array when gh pr list returns whitespace-only output", async () => {
+      mockExecImpl = (cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return "   \n  ";
+        }
+        return "";
+      };
+
+      const result = await collectPrInfo(tempDir, ["feat/", "night-watch/"]);
+      expect(result).toEqual([]);
+    });
+
+    it("should filter out PRs whose branches don't match patterns", async () => {
+      mockExecImpl = (cmd: string) => {
+        if (cmd.includes("git rev-parse")) return ".git";
+        if (cmd.includes("which gh")) return "/usr/bin/gh";
+        if (cmd.includes("gh pr list")) {
+          return JSON.stringify([
+            { headRefName: "feat/new-feature", number: 1, title: "New Feature", url: "https://github.com/test/repo/pull/1" },
+            { headRefName: "dependabot/npm/foo", number: 2, title: "Dependabot update", url: "https://github.com/test/repo/pull/2" },
+            { headRefName: "fix/bugfix", number: 3, title: "Bugfix", url: "https://github.com/test/repo/pull/3" },
+            { headRefName: "night-watch/issue-4", number: 4, title: "Night Watch", url: "https://github.com/test/repo/pull/4" },
+          ]);
+        }
+        return "";
+      };
+
+      const result = await collectPrInfo(tempDir, ["feat/", "night-watch/"]);
+      expect(result).toHaveLength(2);
+      expect(result.map(p => p.number)).toEqual([1, 4]);
     });
 
     it("should collect matching PR info with no CI data", async () => {

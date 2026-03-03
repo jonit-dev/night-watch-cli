@@ -393,7 +393,13 @@ export async function countOpenPRs(projectDir: string, branchPatterns: string[])
       encoding: 'utf-8',
     });
 
-    const prs = JSON.parse(output);
+    // Guard: return 0 if output is empty or whitespace-only
+    const trimmed = output.trim();
+    if (!trimmed || trimmed === '[]') {
+      return 0;
+    }
+
+    const prs = JSON.parse(trimmed);
     const matchingPRs = prs.filter((pr: { headRefName: string }) =>
       branchPatterns.some((pattern) => pr.headRefName.startsWith(pattern)),
     );
@@ -546,6 +552,13 @@ export async function collectPrInfo(projectDir: string, branchPatterns: string[]
       console.error('[DEBUG] Raw gh pr list output:', output);
     }
 
+    // Guard: return empty array if output is empty or whitespace-only
+    // This prevents JSON.parse from throwing on empty/invalid output
+    const trimmed = output.trim();
+    if (!trimmed || trimmed === '[]') {
+      return [];
+    }
+
     interface IGhPr {
       number: number;
       title: string;
@@ -560,7 +573,7 @@ export async function collectPrInfo(projectDir: string, branchPatterns: string[]
       reviewDecision?: string | null;
     }
 
-    const prs: IGhPr[] = JSON.parse(output);
+    const prs: IGhPr[] = JSON.parse(trimmed);
     return prs
       .filter((pr) => branchPatterns.some((pattern) => pr.headRefName.startsWith(pattern)))
       .map((pr) => {

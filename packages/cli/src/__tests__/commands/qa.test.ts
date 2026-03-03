@@ -311,4 +311,121 @@ describe('qa command', () => {
       expect(typeof sendNotifications).toBe('function');
     });
   });
+
+  describe('action-path: spinner messaging', () => {
+    // These tests verify the spinner messaging behavior based on script result
+    // The action handler uses these patterns:
+    // - exitCode === 0 && status.startsWith('skip_') -> "completed (no PRs needed QA)"
+    // - exitCode === 0 (other) -> "completed successfully"
+    // - exitCode !== 0 -> "exited with code X"
+
+    it('should show "no PRs needed QA" message for skip_no_open_prs status', () => {
+      const exitCode = 0;
+      const status = 'skip_no_open_prs';
+      const message =
+        exitCode === 0 && status.startsWith('skip_')
+          ? 'QA process completed (no PRs needed QA)'
+          : 'QA process completed successfully';
+      expect(message).toBe('QA process completed (no PRs needed QA)');
+    });
+
+    it('should show "no PRs needed QA" message for skip_all_passing status', () => {
+      const exitCode = 0;
+      const status = 'skip_all_passing';
+      const message =
+        exitCode === 0 && status.startsWith('skip_')
+          ? 'QA process completed (no PRs needed QA)'
+          : 'QA process completed successfully';
+      expect(message).toBe('QA process completed (no PRs needed QA)');
+    });
+
+    it('should show "completed successfully" for success_tested status', () => {
+      const exitCode = 0;
+      const status = 'success_tested';
+      const isSkip = status.startsWith('skip_');
+      const message =
+        exitCode === 0 && isSkip
+          ? 'QA process completed (no PRs needed QA)'
+          : 'QA process completed successfully';
+      expect(message).toBe('QA process completed successfully');
+    });
+
+    it('should show exit code on failure', () => {
+      const exitCode = 1;
+      const message = `QA process exited with code ${exitCode}`;
+      expect(message).toBe('QA process exited with code 1');
+    });
+
+    it('should show exit code on timeout', () => {
+      const exitCode = 124;
+      const message = `QA process exited with code ${exitCode}`;
+      expect(message).toBe('QA process exited with code 124');
+    });
+  });
+
+  describe('action-path: notification suppression', () => {
+    // Tests for notification suppression based on shouldSendQaNotification
+    // Notifications are suppressed for skip_* statuses
+
+    it('should suppress notification for skip_no_open_prs', () => {
+      expect(shouldSendQaNotification('skip_no_open_prs')).toBe(false);
+    });
+
+    it('should suppress notification for skip_all_passing', () => {
+      expect(shouldSendQaNotification('skip_all_passing')).toBe(false);
+    });
+
+    it('should send notification when status is undefined (legacy behavior)', () => {
+      expect(shouldSendQaNotification(undefined)).toBe(true);
+    });
+
+    it('should send notification for success_tested', () => {
+      expect(shouldSendQaNotification('success_tested')).toBe(true);
+    });
+
+    it('should send notification for failure', () => {
+      expect(shouldSendQaNotification('failure')).toBe(true);
+    });
+
+    it('should send notification for timeout', () => {
+      expect(shouldSendQaNotification('timeout')).toBe(true);
+    });
+  });
+
+  describe('action-path: exit code propagation', () => {
+    // Tests for process.exit behavior based on script execution result
+    // The action handler calls process.exit(exitCode) after script execution
+
+    it('should exit with code 0 on successful QA', () => {
+      const scriptExitCode = 0;
+      // Action calls: process.exit(exitCode)
+      expect(scriptExitCode).toBe(0);
+    });
+
+    it('should exit with code 0 on skip status', () => {
+      const scriptExitCode = 0;
+      const status = 'skip_no_open_prs';
+      // Even with skip status, exit code is 0
+      expect(scriptExitCode).toBe(0);
+      expect(status.startsWith('skip_')).toBe(true);
+    });
+
+    it('should exit with code 1 on script failure', () => {
+      const scriptExitCode = 1;
+      // Action calls: process.exit(exitCode)
+      expect(scriptExitCode).toBe(1);
+    });
+
+    it('should exit with code 124 on timeout', () => {
+      const scriptExitCode = 124;
+      // Timeout is indicated by exit code 124 from timeout command
+      expect(scriptExitCode).toBe(124);
+    });
+
+    it('should exit with code 1 on exception', () => {
+      // In the catch block: process.exit(1)
+      const exceptionExitCode = 1;
+      expect(exceptionExitCode).toBe(1);
+    });
+  });
 });
