@@ -12,24 +12,29 @@ import {
   Terminal,
   Users,
 } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
+import { useApi, fetchPrs } from '../api';
 import { useStore } from '../store/useStore';
 
 const Sidebar: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
-  const { projectName, isGlobalMode, projects, selectedProjectId, selectProject } = useStore();
+  const { projectName, isGlobalMode, projects, selectedProjectId, selectProject, globalModeLoading } = useStore();
 
-  const navItems = [
+  // Fetch PR count for the badge
+  const { data: prs } = useApi(fetchPrs, [selectedProjectId], { enabled: !globalModeLoading });
+  const openPrCount = prs?.length ?? 0;
+
+  const navItems = useMemo(() => [
     { icon: Home, label: 'Dashboard', path: '/' },
     { icon: Kanban, label: 'Board', path: '/board' },
-    { icon: GitPullRequest, label: 'Pull Requests', path: '/prs', badge: 1 },
+    { icon: GitPullRequest, label: 'Pull Requests', path: '/prs', badge: openPrCount },
     { icon: Map, label: 'Roadmap', path: '/roadmap' },
     { icon: Calendar, label: 'Scheduling', path: '/scheduling' },
     { icon: Terminal, label: 'Logs', path: '/logs' },
     { icon: Users, label: 'Agents', path: '/agents' },
     { icon: Settings, label: 'Settings', path: '/settings' },
-  ];
+  ], [openPrCount]);
 
   return (
     <aside
