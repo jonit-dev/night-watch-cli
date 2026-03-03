@@ -113,6 +113,7 @@ describe('notification utilities', () => {
 
       const payload = formatTelegramPayload(enrichedCtx);
       expect(payload.parse_mode).toBe('MarkdownV2');
+      expect(payload.text).toContain('PR Opened');
       // Should contain PR title, URL, summary, and stats
       expect(payload.text).toContain('feat: add auth');
       expect(payload.text).toContain('github\\.com');
@@ -124,6 +125,7 @@ describe('notification utilities', () => {
 
     it('should fall back to basic format when no PR details', () => {
       const payload = formatTelegramPayload(baseCtx);
+      expect(payload.text).toContain('PR Opened');
       // Should contain basic info but not structured PR sections
       expect(payload.text).toContain('my\\-project');
       expect(payload.text).not.toContain('Stats');
