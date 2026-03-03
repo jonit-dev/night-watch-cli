@@ -124,9 +124,9 @@ export function createApp(projectDir: string): Express {
   app.use('/api/logs', createLogRoutes({ projectDir }));
   app.use('/api/doctor', createDoctorRoutes({ projectDir, getConfig: () => config }));
 
-  app.get('/api/prs', (_req: Request, res: Response): void => {
+  app.get('/api/prs', async (_req: Request, res: Response): Promise<void> => {
     try {
-      res.json(collectPrInfo(projectDir, config.branchPatterns));
+      res.json(await collectPrInfo(projectDir, config.branchPatterns));
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
@@ -175,9 +175,9 @@ function createProjectRouter() {
   router.use(createProjectActionRoutes({ projectSseClients }));
   router.use(createProjectRoadmapRoutes());
 
-  router.get('/prs', (req: Request, res: Response): void => {
+  router.get('/prs', async (req: Request, res: Response): Promise<void> => {
     try {
-      res.json(collectPrInfo(req.projectDir!, req.projectConfig!.branchPatterns));
+      res.json(await collectPrInfo(req.projectDir!, req.projectConfig!.branchPatterns));
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }

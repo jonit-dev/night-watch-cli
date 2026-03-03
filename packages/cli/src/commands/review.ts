@@ -97,12 +97,6 @@ export function buildEnvVars(
     env.NW_DRY_RUN = '1';
   }
 
-  // Auto-merge configuration
-  if (config.autoMerge) {
-    env.NW_AUTO_MERGE = '1';
-  }
-  env.NW_AUTO_MERGE_METHOD = config.autoMergeMethod;
-
   // Sandbox flag — prevents the agent from modifying crontab during execution
   env.NW_EXECUTION_CONTEXT = 'agent';
 

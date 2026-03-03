@@ -123,257 +123,181 @@ function spawnAction(
   }
 }
 
+// ==================== Context interface ====================
+
+interface IActionRouteContext {
+  getConfig: (req: Request) => INightWatchConfig;
+  getProjectDir: (req: Request) => string;
+  getSseClients: (req: Request) => SseClientSet;
+  pathPrefix: string; // '' for single-project, 'actions/' for global
+}
+
+// ==================== Shared handler factory ====================
+
+function createActionRouteHandlers(ctx: IActionRouteContext): Router {
+  const router = Router({ mergeParams: true });
+  const p = ctx.pathPrefix;
+
+  router.post(`/${p}run`, (req: Request, res: Response): void => {
+    const projectDir = ctx.getProjectDir(req);
+    spawnAction(projectDir, ['run'], req, res, (pid) => {
+      broadcastSSE(ctx.getSseClients(req), 'executor_started', { pid });
+    });
+  });
+
+  router.post(`/${p}review`, (req: Request, res: Response): void => {
+    spawnAction(ctx.getProjectDir(req), ['review'], req, res);
+  });
+
+  router.post(`/${p}install-cron`, (req: Request, res: Response): void => {
+    spawnAction(ctx.getProjectDir(req), ['install'], req, res);
+  });
+
+  router.post(`/${p}uninstall-cron`, (req: Request, res: Response): void => {
+    spawnAction(ctx.getProjectDir(req), ['uninstall'], req, res);
+  });
+
+  router.post(`/${p}cancel`, async (req: Request, res: Response): Promise<void> => {
+    try {
+      const projectDir = ctx.getProjectDir(req);
+      const { type = 'all' } = req.body as { type?: string };
+      const validTypes = ['run', 'review', 'all'];
+      if (!validTypes.includes(type)) {
+        res.status(400).json({
+          error: `Invalid type. Must be one of: ${validTypes.join(', ')}`,
+        });
+        return;
+      }
+
+      const results = await performCancel(projectDir, {
+        type: type as 'run' | 'review' | 'all',
+        force: true,
+      });
+      const hasFailure = results.some((r) => !r.success);
+      res.status(hasFailure ? 500 : 200).json({ results });
+    } catch (error) {
+      res.status(500).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  router.post(`/${p}retry`, (req: Request, res: Response): void => {
+    try {
+      const projectDir = ctx.getProjectDir(req);
+      const config = ctx.getConfig(req);
+      const { prdName } = req.body as { prdName?: string };
+
+      if (!prdName || typeof prdName !== 'string') {
+        res.status(400).json({ error: 'prdName is required' });
+        return;
+      }
+
+      if (!validatePrdName(prdName)) {
+        res.status(400).json({ error: 'Invalid PRD name' });
+        return;
+      }
+
+      const prdDir = path.join(projectDir, config.prdDir);
+      const normalized = prdName.endsWith('.md') ? prdName : `${prdName}.md`;
+      const pendingPath = path.join(prdDir, normalized);
+      const donePath = path.join(prdDir, 'done', normalized);
+
+      if (fs.existsSync(pendingPath)) {
+        res.json({ message: `"${normalized}" is already pending` });
+        return;
+      }
+
+      if (!fs.existsSync(donePath)) {
+        res.status(404).json({ error: `PRD "${normalized}" not found in done/` });
+        return;
+      }
+
+      fs.renameSync(donePath, pendingPath);
+      res.json({ message: `Moved "${normalized}" back to pending` });
+    } catch (error) {
+      res.status(500).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  router.post(`/${p}clear-lock`, async (req: Request, res: Response): Promise<void> => {
+    try {
+      const projectDir = ctx.getProjectDir(req);
+      const config = ctx.getConfig(req);
+      const lockPath = executorLockPath(projectDir);
+      const lock = checkLockFile(lockPath);
+
+      if (lock.running) {
+        res.status(409).json({ error: 'Executor is actively running — use Stop instead' });
+        return;
+      }
+
+      if (fs.existsSync(lockPath)) {
+        fs.unlinkSync(lockPath);
+      }
+
+      const prdDir = path.join(projectDir, config.prdDir);
+      if (fs.existsSync(prdDir)) {
+        cleanOrphanedClaims(prdDir);
+      }
+
+      broadcastSSE(
+        ctx.getSseClients(req),
+        'status_changed',
+        await fetchStatusSnapshot(projectDir, config),
+      );
+
+      res.json({ cleared: true });
+    } catch (error) {
+      res.status(500).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
+
+  return router;
+}
+
+// ==================== Public exports ====================
+
 export interface IActionRoutesDeps {
   projectDir: string;
   getConfig: () => INightWatchConfig;
   sseClients: SseClientSet;
 }
 
+/**
+ * Single-project action routes (mounted at /api/actions).
+ */
 export function createActionRoutes(deps: IActionRoutesDeps): Router {
-  const { projectDir, getConfig, sseClients } = deps;
-  const router = Router();
-
-  router.post('/run', (req: Request, res: Response): void => {
-    spawnAction(projectDir, ['run'], req, res, (pid) => {
-      broadcastSSE(sseClients, 'executor_started', { pid });
-    });
+  return createActionRouteHandlers({
+    getConfig: () => deps.getConfig(),
+    getProjectDir: () => deps.projectDir,
+    getSseClients: () => deps.sseClients,
+    pathPrefix: '',
   });
-
-  router.post('/review', (req: Request, res: Response): void => {
-    spawnAction(projectDir, ['review'], req, res);
-  });
-
-  router.post('/install-cron', (req: Request, res: Response): void => {
-    spawnAction(projectDir, ['install'], req, res);
-  });
-
-  router.post('/uninstall-cron', (req: Request, res: Response): void => {
-    spawnAction(projectDir, ['uninstall'], req, res);
-  });
-
-  router.post('/cancel', async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { type = 'all' } = req.body as { type?: string };
-      const validTypes = ['run', 'review', 'all'];
-      if (!validTypes.includes(type)) {
-        res.status(400).json({
-          error: `Invalid type. Must be one of: ${validTypes.join(', ')}`,
-        });
-        return;
-      }
-
-      const results = await performCancel(projectDir, {
-        type: type as 'run' | 'review' | 'all',
-        force: true,
-      });
-      const hasFailure = results.some((r) => !r.success);
-      res.status(hasFailure ? 500 : 200).json({ results });
-    } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  });
-
-  router.post('/retry', (req: Request, res: Response): void => {
-    try {
-      const config = getConfig();
-      const { prdName } = req.body as { prdName?: string };
-
-      if (!prdName || typeof prdName !== 'string') {
-        res.status(400).json({ error: 'prdName is required' });
-        return;
-      }
-
-      if (!validatePrdName(prdName)) {
-        res.status(400).json({ error: 'Invalid PRD name' });
-        return;
-      }
-
-      const prdDir = path.join(projectDir, config.prdDir);
-      const normalized = prdName.endsWith('.md') ? prdName : `${prdName}.md`;
-      const pendingPath = path.join(prdDir, normalized);
-      const donePath = path.join(prdDir, 'done', normalized);
-
-      if (fs.existsSync(pendingPath)) {
-        res.json({ message: `"${normalized}" is already pending` });
-        return;
-      }
-
-      if (!fs.existsSync(donePath)) {
-        res.status(404).json({ error: `PRD "${normalized}" not found in done/` });
-        return;
-      }
-
-      fs.renameSync(donePath, pendingPath);
-      res.json({ message: `Moved "${normalized}" back to pending` });
-    } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  });
-
-  router.post('/clear-lock', (req: Request, res: Response): void => {
-    try {
-      const config = getConfig();
-      const lockPath = executorLockPath(projectDir);
-      const lock = checkLockFile(lockPath);
-
-      if (lock.running) {
-        res.status(409).json({ error: 'Executor is actively running — use Stop instead' });
-        return;
-      }
-
-      if (fs.existsSync(lockPath)) {
-        fs.unlinkSync(lockPath);
-      }
-
-      const prdDir = path.join(projectDir, config.prdDir);
-      if (fs.existsSync(prdDir)) {
-        cleanOrphanedClaims(prdDir);
-      }
-
-      broadcastSSE(sseClients, 'status_changed', fetchStatusSnapshot(projectDir, config));
-
-      res.json({ cleared: true });
-    } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  });
-
-  return router;
 }
 
 /**
- * Project-scoped action routes for global mode.
+ * Project-scoped action routes for global mode (mounted at /api/projects/:id).
+ * Reads projectDir/config from req set by project-resolver middleware.
  */
 export function createProjectActionRoutes(deps: {
   projectSseClients: Map<string, SseClientSet>;
 }): Router {
   const { projectSseClients } = deps;
-  const router = Router({ mergeParams: true });
-
-  router.post('/actions/run', (req: Request, res: Response): void => {
-    const projectDir = req.projectDir!;
-    spawnAction(projectDir, ['run'], req, res, (pid) => {
-      const clients = projectSseClients.get(projectDir);
-      if (clients) {
-        broadcastSSE(clients, 'executor_started', { pid });
-      }
-    });
-  });
-
-  router.post('/actions/review', (req: Request, res: Response): void => {
-    spawnAction(req.projectDir!, ['review'], req, res);
-  });
-
-  router.post('/actions/install-cron', (req: Request, res: Response): void => {
-    spawnAction(req.projectDir!, ['install'], req, res);
-  });
-
-  router.post('/actions/uninstall-cron', (req: Request, res: Response): void => {
-    spawnAction(req.projectDir!, ['uninstall'], req, res);
-  });
-
-  router.post('/actions/cancel', async (req: Request, res: Response): Promise<void> => {
-    try {
+  return createActionRouteHandlers({
+    getConfig: (req) => req.projectConfig!,
+    getProjectDir: (req) => req.projectDir!,
+    getSseClients: (req) => {
       const projectDir = req.projectDir!;
-      const { type = 'all' } = req.body as { type?: string };
-      const validTypes = ['run', 'review', 'all'];
-      if (!validTypes.includes(type)) {
-        res.status(400).json({
-          error: `Invalid type. Must be one of: ${validTypes.join(', ')}`,
-        });
-        return;
+      if (!projectSseClients.has(projectDir)) {
+        projectSseClients.set(projectDir, new Set());
       }
-
-      const results = await performCancel(projectDir, {
-        type: type as 'run' | 'review' | 'all',
-        force: true,
-      });
-      const hasFailure = results.some((r) => !r.success);
-      res.status(hasFailure ? 500 : 200).json({ results });
-    } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+      return projectSseClients.get(projectDir)!;
+    },
+    pathPrefix: 'actions/',
   });
-
-  router.post('/actions/retry', (req: Request, res: Response): void => {
-    try {
-      const projectDir = req.projectDir!;
-      const config = req.projectConfig!;
-      const { prdName } = req.body as { prdName?: string };
-
-      if (!prdName || typeof prdName !== 'string') {
-        res.status(400).json({ error: 'prdName is required' });
-        return;
-      }
-
-      if (!validatePrdName(prdName)) {
-        res.status(400).json({ error: 'Invalid PRD name' });
-        return;
-      }
-
-      const prdDir = path.join(projectDir, config.prdDir);
-      const normalized = prdName.endsWith('.md') ? prdName : `${prdName}.md`;
-      const pendingPath = path.join(prdDir, normalized);
-      const donePath = path.join(prdDir, 'done', normalized);
-
-      if (fs.existsSync(pendingPath)) {
-        res.json({ message: `"${normalized}" is already pending` });
-        return;
-      }
-
-      if (!fs.existsSync(donePath)) {
-        res.status(404).json({ error: `PRD "${normalized}" not found in done/` });
-        return;
-      }
-
-      fs.renameSync(donePath, pendingPath);
-      res.json({ message: `Moved "${normalized}" back to pending` });
-    } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  });
-
-  router.post('/actions/clear-lock', (req: Request, res: Response): void => {
-    try {
-      const projectDir = req.projectDir!;
-      const config = req.projectConfig!;
-      const lockPath = executorLockPath(projectDir);
-      const lock = checkLockFile(lockPath);
-
-      if (lock.running) {
-        res.status(409).json({ error: 'Executor is actively running — use Stop instead' });
-        return;
-      }
-
-      if (fs.existsSync(lockPath)) {
-        fs.unlinkSync(lockPath);
-      }
-
-      const prdDir = path.join(projectDir, config.prdDir);
-      if (fs.existsSync(prdDir)) {
-        cleanOrphanedClaims(prdDir);
-      }
-
-      const clients = projectSseClients.get(projectDir) ?? new Set();
-      broadcastSSE(clients, 'status_changed', fetchStatusSnapshot(projectDir, config));
-
-      res.json({ cleared: true });
-    } catch (error) {
-      res.status(500).json({
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  });
-
-  return router;
 }

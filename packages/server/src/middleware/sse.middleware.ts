@@ -36,18 +36,19 @@ export function startSseStatusWatcher(
   let lastSnapshotHash = '';
   return setInterval(() => {
     if (clients.size === 0) return;
-    try {
-      const snapshot = fetchStatusSnapshot(projectDir, getConfig());
-      const hash = JSON.stringify({
-        processes: snapshot.processes,
-        prds: snapshot.prds.map((p) => ({ n: p.name, s: p.status })),
+    fetchStatusSnapshot(projectDir, getConfig())
+      .then((snapshot) => {
+        const hash = JSON.stringify({
+          processes: snapshot.processes,
+          prds: snapshot.prds.map((p) => ({ n: p.name, s: p.status })),
+        });
+        if (hash !== lastSnapshotHash) {
+          lastSnapshotHash = hash;
+          broadcastSSE(clients, 'status_changed', snapshot);
+        }
+      })
+      .catch(() => {
+        // Silently ignore errors during status polling
       });
-      if (hash !== lastSnapshotHash) {
-        lastSnapshotHash = hash;
-        broadcastSSE(clients, 'status_changed', snapshot);
-      }
-    } catch {
-      // Silently ignore errors during status polling
-    }
   }, 2000);
 }

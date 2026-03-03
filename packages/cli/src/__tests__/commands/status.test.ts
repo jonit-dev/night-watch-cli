@@ -10,7 +10,18 @@ import * as os from "os";
 // Mock process.cwd to return our temp directory
 let mockProjectDir: string;
 
+let mockExecImpl: ((cmd: string) => string) = () => "";
 vi.mock("child_process", () => ({
+  exec: vi.fn((_cmd: string, _opts: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+    const callback = typeof _opts === "function" ? (_opts as typeof cb) : cb;
+    try {
+      const result = mockExecImpl(_cmd);
+      callback?.(null, { stdout: result, stderr: "" });
+    } catch (err) {
+      callback?.(err instanceof Error ? err : new Error(String(err)), { stdout: "", stderr: "" });
+    }
+  }),
+  execFile: vi.fn(),
   execSync: vi.fn(),
   spawn: vi.fn(),
 }));
@@ -21,7 +32,7 @@ vi.mock("@night-watch/core/utils/crontab.js", () => ({
   generateMarker: vi.fn((name: string) => `# night-watch-cli: ${name}`),
 }));
 
-import { execSync } from "child_process";
+import { exec } from "child_process";
 import { getEntries, getProjectEntries } from "@night-watch/core/utils/crontab.js";
 
 // Mock process.cwd before importing status module
@@ -75,12 +86,21 @@ describe("status command", () => {
     vi.mocked(getEntries).mockReturnValue([]);
     vi.mocked(getProjectEntries).mockReturnValue([]);
 
-    // Mock execSync for most operations
-    vi.mocked(execSync).mockImplementation((cmd: string) => {
+    // Mock exec for most operations (fetchStatusSnapshot uses promisified exec)
+    mockExecImpl = (cmd: string) => {
       if (cmd.includes("git rev-parse")) {
         throw new Error("not a git repo");
       }
       return "";
+    };
+    vi.mocked(exec).mockImplementation((_cmd: string, _opts: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+      const callback = typeof _opts === "function" ? (_opts as typeof cb) : cb;
+      try {
+        const result = mockExecImpl(_cmd);
+        callback?.(null, { stdout: result, stderr: "" });
+      } catch (err) {
+        callback?.(err instanceof Error ? err : new Error(String(err)), { stdout: "", stderr: "" });
+      }
     });
   });
 

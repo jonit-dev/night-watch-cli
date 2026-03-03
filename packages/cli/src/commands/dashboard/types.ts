@@ -16,7 +16,7 @@ export interface ITabContext {
   /** Reload config from disk after a save */
   reloadConfig: () => INightWatchConfig;
   /** Re-fetch status snapshot with current config */
-  refreshSnapshot: () => IStatusSnapshot;
+  refreshSnapshot: () => Promise<IStatusSnapshot>;
   /** Update the footer text with tab-specific shortcuts */
   setFooter: (text: string) => void;
   /** Show a temporary flash message (success/error/info) */

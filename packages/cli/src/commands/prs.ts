@@ -78,7 +78,7 @@ export function prsCommand(program: Command): void {
 
         const projectDir = process.cwd();
         const config = loadConfig(projectDir);
-        const prs = collectPrInfo(projectDir, config.branchPatterns);
+        const prs = await collectPrInfo(projectDir, config.branchPatterns);
 
         // Output as JSON if requested
         if (options.json) {

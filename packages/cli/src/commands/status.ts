@@ -87,7 +87,7 @@ export function statusCommand(program: Command): void {
       try {
         const projectDir = process.cwd();
         const config = loadConfig(projectDir);
-        const snapshot = fetchStatusSnapshot(projectDir, config);
+        const snapshot = await fetchStatusSnapshot(projectDir, config);
 
         // Derive legacy status shape from snapshot for backward-compatible JSON output
         const executorProc = snapshot.processes.find((p) => p.name === 'executor');

@@ -133,7 +133,7 @@ export function dashboardCommand(program: Command): void {
       // --- State ---
       let activeTabIndex = 0;
       let isEditing = false;
-      let snapshot = fetchStatusSnapshot(projectDir, config);
+      let snapshot = await fetchStatusSnapshot(projectDir, config);
 
       // --- Tab context ---
       const ctx: ITabContext = {
@@ -146,8 +146,8 @@ export function dashboardCommand(program: Command): void {
           ctx.config = config;
           return config;
         },
-        refreshSnapshot: () => {
-          snapshot = fetchStatusSnapshot(projectDir, config);
+        refreshSnapshot: async () => {
+          snapshot = await fetchStatusSnapshot(projectDir, config);
           ctx.snapshot = snapshot;
           return snapshot;
         },
@@ -203,10 +203,10 @@ export function dashboardCommand(program: Command): void {
       }
 
       // --- Refresh ---
-      function refreshData() {
+      async function refreshData() {
         config = loadConfig(projectDir);
         ctx.config = config;
-        snapshot = fetchStatusSnapshot(projectDir, config);
+        snapshot = await fetchStatusSnapshot(projectDir, config);
         ctx.snapshot = snapshot;
         countdown = intervalSeconds;
         updateHeader();
@@ -220,7 +220,9 @@ export function dashboardCommand(program: Command): void {
         updateHeader();
         screen.render();
         if (countdown <= 0) {
-          refreshData();
+          refreshData().catch(() => {
+            // Silently ignore errors during refresh
+          });
         }
       }, 1000);
 
@@ -237,7 +239,9 @@ export function dashboardCommand(program: Command): void {
 
       screen.key(['r'], () => {
         if (isEditing) return;
-        refreshData();
+        refreshData().catch(() => {
+          // Silently ignore errors during refresh
+        });
       });
 
       // Tab switching via number keys

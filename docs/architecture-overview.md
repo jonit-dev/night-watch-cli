@@ -12,7 +12,7 @@ Night Watch CLI is an autonomous PRD executor that uses AI provider CLIs (Claude
 graph TB
     subgraph User["User Interface"]
         CLI["packages/cli<br/>(Commander.js)"]
-        WebUI["packages/web<br/>(React + Vite)"]
+        WebUI["web/<br/>(React + Vite)"]
     end
 
     subgraph Core["packages/core"]

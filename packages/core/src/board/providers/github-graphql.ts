@@ -1,4 +1,7 @@
-import { execFileSync } from "child_process";
+import { execFile } from "child_process";
+import { promisify } from "util";
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Execute a GraphQL query/mutation against the GitHub API using the `gh` CLI.
@@ -6,11 +9,11 @@ import { execFileSync } from "child_process";
  * Variables with numeric values are passed using `-F` (capital F) so the GitHub
  * API receives them as numbers rather than strings.  All other values use `-f`.
  */
-export function graphql<T>(
+export async function graphql<T>(
   query: string,
   variables: Record<string, unknown>,
   cwd: string
-): T {
+): Promise<T> {
   const args = ["api", "graphql", "-f", `query=${query}`];
 
   for (const [key, value] of Object.entries(variables)) {
@@ -21,10 +24,9 @@ export function graphql<T>(
     }
   }
 
-  const output = execFileSync("gh", args, {
+  const { stdout: output } = await execFileAsync("gh", args, {
     cwd,
     encoding: "utf-8",
-    stdio: ["pipe", "pipe", "pipe"],
   });
 
   const parsed = JSON.parse(output) as {
@@ -42,11 +44,11 @@ export function graphql<T>(
 /**
  * Return the "owner/repo" name for the current working directory using `gh repo view`.
  */
-export function getRepoNwo(cwd: string): string {
-  const output = execFileSync(
+export async function getRepoNwo(cwd: string): Promise<string> {
+  const { stdout: output } = await execFileAsync(
     "gh",
     ["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
-    { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
+    { cwd, encoding: "utf-8" }
   );
   return output.trim();
 }
@@ -54,8 +56,8 @@ export function getRepoNwo(cwd: string): string {
 /**
  * Return the authenticated GitHub user's login.
  */
-export function getViewerLogin(cwd: string): string {
-  const result = graphql<{ viewer: { login: string } }>(
+export async function getViewerLogin(cwd: string): Promise<string> {
+  const result = await graphql<{ viewer: { login: string } }>(
     `query { viewer { login } }`,
     {},
     cwd

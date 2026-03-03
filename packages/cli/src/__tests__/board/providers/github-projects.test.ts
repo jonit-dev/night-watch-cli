@@ -1,7 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { execFileSync } from "child_process";
+import { execFile } from "child_process";
 
-vi.mock("child_process");
+// Queue of responses to return from execFile mock, simulating mockReturnValueOnce
+const mockResponseQueue: Array<{ value?: string; error?: Error }> = [];
+
+vi.mock("child_process", () => ({
+  execFile: vi.fn((_cmd: string, _args: string[], _opts: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
+    const callback = typeof _opts === "function" ? (_opts as typeof cb) : cb;
+    const next = mockResponseQueue.shift();
+    if (next?.error) {
+      callback?.(next.error, { stdout: "", stderr: "" });
+    } else {
+      callback?.(null, { stdout: next?.value ?? "", stderr: "" });
+    }
+  }),
+  exec: vi.fn(),
+  execSync: vi.fn(),
+  spawn: vi.fn(),
+}));
 
 // Import the provider at the top level — the mock is already set up
 import { GitHubProjectsProvider } from "@night-watch/core/board/providers/github-projects.js";
@@ -10,7 +26,21 @@ import { GitHubProjectsProvider } from "@night-watch/core/board/providers/github
 // Helpers
 // ---------------------------------------------------------------------------
 
-const mockExecFileSync = vi.mocked(execFileSync);
+const mockExecFileSync = {
+  mock: vi.mocked(execFile).mock,
+  mockReturnValueOnce(value: string) {
+    mockResponseQueue.push({ value });
+    return this;
+  },
+  mockImplementationOnce(fn: () => never) {
+    try {
+      fn();
+    } catch (err) {
+      mockResponseQueue.push({ error: err instanceof Error ? err : new Error(String(err)) });
+    }
+    return this;
+  },
+};
 
 /** Wrap a data object in the GitHub GraphQL response envelope. */
 function gqlResponse<T>(data: T): string {
@@ -141,6 +171,7 @@ const CWD = "/tmp/test-project";
 describe("GitHubProjectsProvider", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockResponseQueue.length = 0;
   });
 
   // -------------------------------------------------------------------------
@@ -279,7 +310,7 @@ describe("GitHubProjectsProvider", () => {
       );
       const board = await provider.getBoard();
       expect(board).toBeNull();
-      expect(mockExecFileSync).not.toHaveBeenCalled();
+      expect(vi.mocked(execFile)).not.toHaveBeenCalled();
     });
 
     it("returns null when the GitHub query throws", async () => {

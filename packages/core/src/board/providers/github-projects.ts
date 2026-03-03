@@ -1,4 +1,5 @@
-import { execFileSync } from "child_process";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import {
   BOARD_COLUMNS,
   BoardColumnName,
@@ -10,6 +11,8 @@ import {
   ICreateIssueInput,
 } from "@/board/types.js";
 import { getRepoNwo, getViewerLogin, graphql } from "./github-graphql.js";
+
+const execFileAsync = promisify(execFile);
 
 // ---------------------------------------------------------------------------
 // Internal GraphQL response shapes
@@ -97,27 +100,35 @@ interface ICreateFieldData {
   };
 }
 
+interface IProjectItemsPageInfo {
+  hasNextPage: boolean;
+  endCursor: string | null;
+}
+
+interface IProjectItemNode {
+  id: string;
+  content: {
+    number?: number;
+    title?: string;
+    body?: string;
+    url?: string;
+    id?: string;
+    labels?: { nodes: Array<{ name: string }> };
+    assignees?: { nodes: Array<{ login: string }> };
+  } | null;
+  fieldValues: {
+    nodes: Array<{
+      name?: string;
+      field?: { name?: string };
+    }>;
+  };
+}
+
 interface IProjectItemsData {
   node: {
     items: {
-      nodes: Array<{
-        id: string;
-        content: {
-          number?: number;
-          title?: string;
-          body?: string;
-          url?: string;
-          id?: string;
-          labels?: { nodes: Array<{ name: string }> };
-          assignees?: { nodes: Array<{ login: string }> };
-        } | null;
-        fieldValues: {
-          nodes: Array<{
-            name?: string;
-            field?: { name?: string };
-          }>;
-        };
-      }>;
+      pageInfo: IProjectItemsPageInfo;
+      nodes: IProjectItemNode[];
     };
   };
 }
@@ -167,12 +178,12 @@ export class GitHubProjectsProvider implements IBoardProvider {
   // Helpers
   // -------------------------------------------------------------------------
 
-  private getRepo(): string {
+  private async getRepo(): Promise<string> {
     return this.config.repo ?? getRepoNwo(this.cwd);
   }
 
-  private getRepoParts(): { owner: string; name: string } {
-    const repo = this.getRepo();
+  private async getRepoParts(): Promise<{ owner: string; name: string }> {
+    const repo = await this.getRepo();
     const [owner, name] = repo.split("/");
     if (!owner || !name) {
       throw new Error(`Invalid repository slug: "${repo}". Expected "owner/repo".`);
@@ -180,17 +191,17 @@ export class GitHubProjectsProvider implements IBoardProvider {
     return { owner, name };
   }
 
-  private getRepoOwnerLogin(): string {
-    return this.getRepoParts().owner;
+  private async getRepoOwnerLogin(): Promise<string> {
+    return (await this.getRepoParts()).owner;
   }
 
-  private getRepoOwner(): IRepoOwnerInfo {
+  private async getRepoOwner(): Promise<IRepoOwnerInfo> {
     if (this.cachedOwner && this.cachedRepositoryId) {
       return this.cachedOwner;
     }
 
-    const { owner, name } = this.getRepoParts();
-    const data = graphql<IRepositoryOwnerData>(
+    const { owner, name } = await this.getRepoParts();
+    const data = await graphql<IRepositoryOwnerData>(
       `query ResolveRepoOwner($owner: String!, $name: String!) {
         repository(owner: $owner, name: $name) {
           id
@@ -226,21 +237,21 @@ export class GitHubProjectsProvider implements IBoardProvider {
     return this.cachedOwner;
   }
 
-  private getRepositoryNodeId(): string {
+  private async getRepositoryNodeId(): Promise<string> {
     if (this.cachedRepositoryId) {
       return this.cachedRepositoryId;
     }
-    this.getRepoOwner();
+    await this.getRepoOwner();
     if (!this.cachedRepositoryId) {
-      throw new Error(`Failed to resolve repository ID for ${this.getRepo()}.`);
+      throw new Error(`Failed to resolve repository ID for ${await this.getRepo()}.`);
     }
     return this.cachedRepositoryId;
   }
 
-  private linkProjectToRepository(projectId: string): void {
-    const repositoryId = this.getRepositoryNodeId();
+  private async linkProjectToRepository(projectId: string): Promise<void> {
+    const repositoryId = await this.getRepositoryNodeId();
     try {
-      graphql<{ linkProjectV2ToRepository: { repository: { id: string } } }>(
+      await graphql<{ linkProjectV2ToRepository: { repository: { id: string } } }>(
         `mutation LinkProjectToRepository($projectId: ID!, $repositoryId: ID!) {
           linkProjectV2ToRepository(input: { projectId: $projectId, repositoryId: $repositoryId }) {
             repository {
@@ -261,11 +272,11 @@ export class GitHubProjectsProvider implements IBoardProvider {
     }
   }
 
-  private fetchStatusField(projectId: string): {
+  private async fetchStatusField(projectId: string): Promise<{
     fieldId: string;
     optionIds: Map<string, string>;
-  } {
-    const fieldData = graphql<IStatusFieldData>(
+  }> {
+    const fieldData = await graphql<IStatusFieldData>(
       `query GetStatusField($projectId: ID!) {
         node(id: $projectId) {
           ... on ProjectV2 {
@@ -321,7 +332,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
     }
 
     if (this.cachedProjectId !== null) {
-      const statusField = this.fetchStatusField(this.cachedProjectId);
+      const statusField = await this.fetchStatusField(this.cachedProjectId);
       this.cachedFieldId = statusField.fieldId;
       this.cachedOptionIds = statusField.optionIds;
       return {
@@ -338,16 +349,16 @@ export class GitHubProjectsProvider implements IBoardProvider {
       );
     }
 
-    const ownerLogins = new Set<string>([this.getRepoOwnerLogin()]);
+    const ownerLogins = new Set<string>([await this.getRepoOwnerLogin()]);
     try {
-      ownerLogins.add(getViewerLogin(this.cwd));
+      ownerLogins.add(await getViewerLogin(this.cwd));
     } catch {
       // ignore fallback if viewer lookup fails
     }
 
     let projectNode: IProjectV2Node | null = null;
     for (const login of ownerLogins) {
-      projectNode = this.fetchProjectNode(login, projectNumber);
+      projectNode = await this.fetchProjectNode(login, projectNumber);
       if (projectNode) {
         break;
       }
@@ -355,12 +366,12 @@ export class GitHubProjectsProvider implements IBoardProvider {
 
     if (!projectNode) {
       throw new Error(
-        `GitHub Project #${projectNumber} not found for repository owner "${this.getRepoOwnerLogin()}".`
+        `GitHub Project #${projectNumber} not found for repository owner "${await this.getRepoOwnerLogin()}".`
       );
     }
 
     this.cachedProjectId = projectNode.id;
-    const statusField = this.fetchStatusField(projectNode.id);
+    const statusField = await this.fetchStatusField(projectNode.id);
     this.cachedFieldId = statusField.fieldId;
     this.cachedOptionIds = statusField.optionIds;
 
@@ -372,12 +383,12 @@ export class GitHubProjectsProvider implements IBoardProvider {
   }
 
   /** Try user query first, fall back to org query. */
-  private fetchProjectNode(
+  private async fetchProjectNode(
     login: string,
     projectNumber: number
-  ): IProjectV2Node | null {
+  ): Promise<IProjectV2Node | null> {
     try {
-      const userData = graphql<IGetUserProjectData>(
+      const userData = await graphql<IGetUserProjectData>(
         `query GetProject($login: String!, $number: Int!) {
           user(login: $login) {
             projectV2(number: $number) {
@@ -400,7 +411,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
     }
 
     try {
-      const orgData = graphql<IGetOrgProjectData>(
+      const orgData = await graphql<IGetOrgProjectData>(
         `query GetOrgProject($login: String!, $number: Int!) {
           organization(login: $login) {
             projectV2(number: $number) {
@@ -429,9 +440,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
    * Parse a raw project item node into IBoardIssue, returning null for items
    * that are not issues.
    */
-  private parseItem(
-    item: IProjectItemsData["node"]["items"]["nodes"][number]
-  ): IBoardIssue | null {
+  private parseItem(item: IProjectItemNode): IBoardIssue | null {
     const content = item.content;
     if (!content || content.number === undefined) {
       return null;
@@ -460,6 +469,125 @@ export class GitHubProjectsProvider implements IBoardProvider {
     };
   }
 
+  /**
+   * Fetch ALL items from a GitHub ProjectV2 using cursor-based pagination.
+   *
+   * The API caps each page at 100 items.  We loop until `hasNextPage` is false,
+   * accumulating every item node so callers never see a truncated board.
+   */
+  private async fetchAllProjectItems(projectId: string): Promise<IProjectItemNode[]> {
+    const allNodes: IProjectItemNode[] = [];
+    let cursor: string | null = null;
+
+    const query = `query GetProjectItems($projectId: ID!, $cursor: String) {
+      node(id: $projectId) {
+        ... on ProjectV2 {
+          items(first: 100, after: $cursor) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              id
+              content {
+                ... on Issue {
+                  number
+                  title
+                  body
+                  url
+                  id
+                  labels(first: 10) { nodes { name } }
+                  assignees(first: 10) { nodes { login } }
+                }
+              }
+              fieldValues(first: 10) {
+                nodes {
+                  ... on ProjectV2ItemFieldSingleSelectValue {
+                    name
+                    field {
+                      ... on ProjectV2SingleSelectField {
+                        name
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }`;
+
+    do {
+      const variables: Record<string, unknown> = { projectId };
+      if (cursor !== null) {
+        variables.cursor = cursor;
+      }
+      const data = await graphql<IProjectItemsData>(query, variables, this.cwd);
+      const page = data.node.items;
+      allNodes.push(...page.nodes);
+      cursor = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
+    } while (cursor !== null);
+
+    return allNodes;
+  }
+
+  /**
+   * Fetch project items for moveIssue — only needs id, content.number, and
+   * fieldValues.  Uses the same paginated approach to ensure items beyond
+   * position 100 are reachable.
+   */
+  private async fetchAllProjectItemsForMove(projectId: string): Promise<IProjectItemNode[]> {
+    const allNodes: IProjectItemNode[] = [];
+    let cursor: string | null = null;
+
+    const query = `query GetProjectItemsForMove($projectId: ID!, $cursor: String) {
+      node(id: $projectId) {
+        ... on ProjectV2 {
+          items(first: 100, after: $cursor) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              id
+              content {
+                ... on Issue {
+                  number
+                }
+              }
+              fieldValues(first: 10) {
+                nodes {
+                  ... on ProjectV2ItemFieldSingleSelectValue {
+                    name
+                    field {
+                      ... on ProjectV2SingleSelectField {
+                        name
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }`;
+
+    do {
+      const variables: Record<string, unknown> = { projectId };
+      if (cursor !== null) {
+        variables.cursor = cursor;
+      }
+      const data = await graphql<IProjectItemsData>(query, variables, this.cwd);
+      const page = data.node.items;
+      allNodes.push(...page.nodes);
+      cursor = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
+    } while (cursor !== null);
+
+    return allNodes;
+  }
+
   // -------------------------------------------------------------------------
   // IBoardProvider implementation
   // -------------------------------------------------------------------------
@@ -468,10 +596,10 @@ export class GitHubProjectsProvider implements IBoardProvider {
    * Find an existing project by title among the repository owner's first 50 projects.
    * Returns null if not found.
    */
-  private findExistingProject(owner: IRepoOwnerInfo, title: string): IProjectV2Node | null {
+  private async findExistingProject(owner: IRepoOwnerInfo, title: string): Promise<IProjectV2Node | null> {
     try {
       if (owner.type === "User") {
-        const data = graphql<IListUserProjectsData>(
+        const data = await graphql<IListUserProjectsData>(
           `query ListUserProjects($login: String!) {
             user(login: $login) {
               projectsV2(first: 50) {
@@ -485,7 +613,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
         return data.user?.projectsV2.nodes.find((p) => p.title === title) ?? null;
       }
 
-      const data = graphql<IListOrgProjectsData>(
+      const data = await graphql<IListOrgProjectsData>(
         `query ListOrgProjects($login: String!) {
           organization(login: $login) {
             projectsV2(first: 50) {
@@ -506,8 +634,8 @@ export class GitHubProjectsProvider implements IBoardProvider {
    * Ensure the Status field on an existing project has all five Night Watch
    * lifecycle columns, updating it via GraphQL if any are missing.
    */
-  private ensureStatusColumns(projectId: string): void {
-    const fieldData = graphql<IStatusFieldData>(
+  private async ensureStatusColumns(projectId: string): Promise<void> {
+    const fieldData = await graphql<IStatusFieldData>(
       `query GetStatusField($projectId: ID!) {
         node(id: $projectId) {
           ... on ProjectV2 {
@@ -550,7 +678,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
       color: colorMap[name],
       description: "",
     }));
-    graphql<IUpdateFieldData>(
+    await graphql<IUpdateFieldData>(
       `mutation UpdateField($fieldId: ID!) {
         updateProjectV2Field(input: {
           fieldId: $fieldId,
@@ -576,19 +704,19 @@ export class GitHubProjectsProvider implements IBoardProvider {
   }
 
   async setupBoard(title: string): Promise<IBoardInfo> {
-    const owner = this.getRepoOwner();
+    const owner = await this.getRepoOwner();
 
     // Find or create — avoid duplicating boards on re-runs
-    const existing = this.findExistingProject(owner, title);
+    const existing = await this.findExistingProject(owner, title);
     if (existing) {
       this.cachedProjectId = existing.id;
-      this.linkProjectToRepository(existing.id);
-      this.ensureStatusColumns(existing.id);
+      await this.linkProjectToRepository(existing.id);
+      await this.ensureStatusColumns(existing.id);
       return { id: existing.id, number: existing.number, title: existing.title, url: existing.url };
     }
 
     // Create the project
-    const createData = graphql<ICreateProjectData>(
+    const createData = await graphql<ICreateProjectData>(
       `mutation CreateProject($ownerId: ID!, $title: String!) {
         createProjectV2(input: { ownerId: $ownerId, title: $title }) {
           projectV2 {
@@ -605,15 +733,15 @@ export class GitHubProjectsProvider implements IBoardProvider {
 
     const project = createData.createProjectV2.projectV2;
     this.cachedProjectId = project.id;
-    this.linkProjectToRepository(project.id);
+    await this.linkProjectToRepository(project.id);
 
     // New projects may already have a default Status field. Reuse/update it.
     try {
-      const statusField = this.fetchStatusField(project.id);
+      const statusField = await this.fetchStatusField(project.id);
       this.cachedFieldId = statusField.fieldId;
       this.cachedOptionIds = statusField.optionIds;
-      this.ensureStatusColumns(project.id);
-      const refreshed = this.fetchStatusField(project.id);
+      await this.ensureStatusColumns(project.id);
+      const refreshed = await this.fetchStatusField(project.id);
       this.cachedFieldId = refreshed.fieldId;
       this.cachedOptionIds = refreshed.optionIds;
     } catch (err) {
@@ -622,7 +750,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
         throw err;
       }
 
-      const createFieldData = graphql<ICreateFieldData>(
+      const createFieldData = await graphql<ICreateFieldData>(
         `mutation CreateStatusField($projectId: ID!) {
           createProjectV2Field(input: {
             projectId: $projectId,
@@ -663,16 +791,16 @@ export class GitHubProjectsProvider implements IBoardProvider {
     }
 
     try {
-      const ownerLogins = new Set<string>([this.getRepoOwnerLogin()]);
+      const ownerLogins = new Set<string>([await this.getRepoOwnerLogin()]);
       try {
-        ownerLogins.add(getViewerLogin(this.cwd));
+        ownerLogins.add(await getViewerLogin(this.cwd));
       } catch {
         // ignore fallback if viewer lookup fails
       }
 
       let node: IProjectV2Node | null = null;
       for (const login of ownerLogins) {
-        node = this.fetchProjectNode(login, projectNumber);
+        node = await this.fetchProjectNode(login, projectNumber);
         if (node) {
           break;
         }
@@ -695,7 +823,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
   }
 
   async createIssue(input: ICreateIssueInput): Promise<IBoardIssue> {
-    const repo = this.getRepo();
+    const repo = await this.getRepo();
     const { projectId, fieldId, optionIds } = await this.ensureProjectCache();
 
     // Create the issue via gh CLI (outputs URL, e.g. https://github.com/owner/repo/issues/123)
@@ -714,11 +842,11 @@ export class GitHubProjectsProvider implements IBoardProvider {
       issueArgs.push("--label", input.labels.join(","));
     }
 
-    const issueUrl = execFileSync("gh", issueArgs, {
+    const { stdout: issueUrlRaw } = await execFileAsync("gh", issueArgs, {
       cwd: this.cwd,
       encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
+    });
+    const issueUrl = issueUrlRaw.trim();
 
     const issueNumber = parseInt(issueUrl.split("/").pop() ?? "", 10);
     if (!issueNumber) {
@@ -727,16 +855,17 @@ export class GitHubProjectsProvider implements IBoardProvider {
 
     // Fetch the node ID needed for the GraphQL project mutation
     const [owner, repoName] = repo.split("/");
-    const nodeIdOutput = execFileSync(
+    const { stdout: nodeIdRaw } = await execFileAsync(
       "gh",
       ["api", `repos/${owner}/${repoName}/issues/${issueNumber}`, "--jq", ".node_id"],
-      { cwd: this.cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
-    ).trim();
+      { cwd: this.cwd, encoding: "utf-8" }
+    );
+    const nodeIdOutput = nodeIdRaw.trim();
 
     const issueJson = { number: issueNumber, id: nodeIdOutput, url: issueUrl };
 
     // Add the issue to the project board
-    const addData = graphql<IAddItemData>(
+    const addData = await graphql<IAddItemData>(
       `mutation AddProjectItem($projectId: ID!, $contentId: ID!) {
         addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
           item {
@@ -753,7 +882,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
     const optionId = optionIds.get(targetColumn);
 
     if (optionId) {
-      graphql<IUpdateItemFieldData>(
+      await graphql<IUpdateItemFieldData>(
         `mutation UpdateItemField(
           $projectId: ID!,
           $itemId: ID!,
@@ -795,11 +924,11 @@ export class GitHubProjectsProvider implements IBoardProvider {
   }
 
   async getIssue(issueNumber: number): Promise<IBoardIssue | null> {
-    const repo = this.getRepo();
+    const repo = await this.getRepo();
 
     let rawIssue: IRawIssue;
     try {
-      const output = execFileSync(
+      const { stdout: output } = await execFileAsync(
         "gh",
         [
           "issue",
@@ -810,7 +939,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
           "--json",
           "number,title,body,url,id,labels,assignees",
         ],
-        { cwd: this.cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
+        { cwd: this.cwd, encoding: "utf-8" }
       );
       rawIssue = JSON.parse(output) as IRawIssue;
     } catch {
@@ -848,48 +977,10 @@ export class GitHubProjectsProvider implements IBoardProvider {
 
   async getAllIssues(): Promise<IBoardIssue[]> {
     const { projectId } = await this.ensureProjectCache();
-
-    const data = graphql<IProjectItemsData>(
-      `query GetProjectItems($projectId: ID!) {
-        node(id: $projectId) {
-          ... on ProjectV2 {
-            items(first: 100) {
-              nodes {
-                id
-                content {
-                  ... on Issue {
-                    number
-                    title
-                    body
-                    url
-                    id
-                    labels(first: 10) { nodes { name } }
-                    assignees(first: 10) { nodes { login } }
-                  }
-                }
-                fieldValues(first: 10) {
-                  nodes {
-                    ... on ProjectV2ItemFieldSingleSelectValue {
-                      name
-                      field {
-                        ... on ProjectV2SingleSelectField {
-                          name
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }`,
-      { projectId },
-      this.cwd
-    );
+    const allNodes = await this.fetchAllProjectItems(projectId);
 
     const results: IBoardIssue[] = [];
-    for (const item of data.node.items.nodes) {
+    for (const item of allNodes) {
       const parsed = this.parseItem(item);
       if (parsed) {
         results.push(parsed);
@@ -904,44 +995,11 @@ export class GitHubProjectsProvider implements IBoardProvider {
   ): Promise<void> {
     const { projectId, fieldId, optionIds } = await this.ensureProjectCache();
 
-    // Fetch project items to find the item node ID for the target issue
-    const data = graphql<IProjectItemsData>(
-      `query GetProjectItems($projectId: ID!) {
-        node(id: $projectId) {
-          ... on ProjectV2 {
-            items(first: 100) {
-              nodes {
-                id
-                content {
-                  ... on Issue {
-                    number
-                  }
-                }
-                fieldValues(first: 10) {
-                  nodes {
-                    ... on ProjectV2ItemFieldSingleSelectValue {
-                      name
-                      field {
-                        ... on ProjectV2SingleSelectField {
-                          name
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }`,
-      { projectId },
-      this.cwd
-    );
+    // Fetch all project items (paginated) to find the item node ID for the target issue
+    const allNodes = await this.fetchAllProjectItemsForMove(projectId);
 
     // Find the project item for this issue number
-    const itemNode = data.node.items.nodes.find(
-      (n) => n.content?.number === issueNumber
-    );
+    const itemNode = allNodes.find((n) => n.content?.number === issueNumber);
     if (!itemNode) {
       throw new Error(`Issue #${issueNumber} not found on the project board.`);
     }
@@ -951,7 +1009,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
       throw new Error(`Column "${targetColumn}" not found on the project board.`);
     }
 
-    graphql<IUpdateItemFieldData>(
+    await graphql<IUpdateItemFieldData>(
       `mutation UpdateItemField(
         $projectId: ID!,
         $itemId: ID!,
@@ -975,20 +1033,20 @@ export class GitHubProjectsProvider implements IBoardProvider {
   }
 
   async closeIssue(issueNumber: number): Promise<void> {
-    const repo = this.getRepo();
-    execFileSync(
+    const repo = await this.getRepo();
+    await execFileAsync(
       "gh",
       ["issue", "close", String(issueNumber), "--repo", repo],
-      { cwd: this.cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
+      { cwd: this.cwd, encoding: "utf-8" }
     );
   }
 
   async commentOnIssue(issueNumber: number, body: string): Promise<void> {
-    const repo = this.getRepo();
-    execFileSync(
+    const repo = await this.getRepo();
+    await execFileAsync(
       "gh",
       ["issue", "comment", String(issueNumber), "--repo", repo, "--body", body],
-      { cwd: this.cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
+      { cwd: this.cwd, encoding: "utf-8" }
     );
   }
 }

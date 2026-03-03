@@ -114,9 +114,10 @@ function buildActions(): IAction[] {
           outputBox.setContent(`{red-fg}Install failed: ${result.error}{/red-fg}`);
           ctx.showMessage("Install failed", "error");
         }
-        const snap = ctx.refreshSnapshot();
-        ctx.snapshot = snap;
-        ctx.screen.render();
+        ctx.refreshSnapshot().then((snap) => {
+          ctx.snapshot = snap;
+          ctx.screen.render();
+        }).catch(() => { ctx.screen.render(); });
       },
     },
     {
@@ -134,9 +135,10 @@ function buildActions(): IAction[] {
           outputBox.setContent(`{red-fg}Uninstall failed: ${result.error}{/red-fg}`);
           ctx.showMessage("Uninstall failed", "error");
         }
-        const snap = ctx.refreshSnapshot();
-        ctx.snapshot = snap;
-        ctx.screen.render();
+        ctx.refreshSnapshot().then((snap) => {
+          ctx.snapshot = snap;
+          ctx.screen.render();
+        }).catch(() => { ctx.screen.render(); });
       },
     },
     {
