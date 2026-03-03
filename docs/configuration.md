@@ -38,6 +38,8 @@ Create `night-watch.config.json` in your project root:
 
 ### Config Fields
 
+> **Note:** All configuration fields can be customized from the Settings page in the Web UI. You no longer need to edit `night-watch.config.json` directly.
+
 | Field                 | Type     | Default                         | Description                                                |
 | --------------------- | -------- | ------------------------------- | ---------------------------------------------------------- |
 | `defaultBranch`       | string   | `""` (auto-detect)              | Default branch name (e.g. `main`)                          |
@@ -52,9 +54,21 @@ Create `night-watch.config.json` in your project root:
 | `maxLogSize`          | number   | `524288`                        | Max log file size in bytes (512 KB)                        |
 | `cronSchedule`        | string   | `"0 0-21 * * *"`                | Cron schedule for executor                                 |
 | `reviewerSchedule`    | string   | `"0 0,3,6,9,12,15,18,21 * * *"` | Cron schedule for reviewer                                 |
+| `cronScheduleOffset`  | number   | `0`                             | Minute offset (0-59) applied to cron schedules during install |
+| `maxRetries`          | number   | `3`                             | Retry attempts for rate-limited API calls                  |
 | `providerEnv`         | object   | `{}`                            | Custom env vars passed to the provider CLI                 |
 | `fallbackOnRateLimit` | boolean  | `false`                         | Fall back to native Claude when proxy returns 429          |
 | `claudeModel`         | string   | `"sonnet"`                      | Claude model for native execution (`"sonnet"` or `"opus"`) |
+| `notifications`       | object   | `{ webhooks: [] }`              | Notification webhook configuration (see below)             |
+| `prdPriority`         | string[] | `[]`                            | PRDs matching these names are executed first               |
+| `roadmapScanner`      | object   | (see below)                     | Roadmap scanner configuration                              |
+| `templatesDir`        | string   | `".night-watch/templates"`      | Directory for custom template overrides                     |
+| `boardProvider`       | object   | (see below)                     | Board provider configuration for PRD tracking              |
+| `jobProviders`        | object   | `{}`                            | Per-job provider configuration                             |
+| `autoMerge`           | boolean  | `false`                         | Enable automatic merging of PRs that pass CI and review    |
+| `autoMergeMethod`     | string   | `"squash"`                      | Git merge method for auto-merge (`squash`, `merge`, `rebase`) |
+| `qa`                  | object   | (see below)                     | QA process configuration                                   |
+| `audit`               | object   | (see below)                     | Code audit configuration                                   |
 
 ---
 
@@ -194,6 +208,7 @@ Night Watch can send notifications to Slack, Discord, or Telegram when runs comp
 | `review_completed`    | PR review cycle completed                                   |
 | `rate_limit_fallback` | Proxy returned 429 and execution fell back to native Claude |
 | `pr_auto_merged`      | PR was automatically merged after passing CI and review     |
+| `qa_completed`        | QA process completed (passed or failed)                     |
 
 ### Telegram Setup
 
@@ -229,3 +244,177 @@ Run `night-watch doctor` to validate your webhook configuration. It checks:
 - Discord URLs start with `https://discord.com/api/webhooks/`
 - Telegram webhooks have both `botToken` and `chatId`
 - All events are valid event names
+
+---
+
+## QA Process (`qa`)
+
+The QA process runs automated UI tests using Playwright on PRs that match configured branch patterns.
+
+```json
+{
+  "qa": {
+    "enabled": true,
+    "schedule": "30 1,7,13,19 * * *",
+    "maxRuntime": 3600,
+    "branchPatterns": [],
+    "artifacts": "both",
+    "skipLabel": "skip-qa",
+    "autoInstallPlaywright": true
+  }
+}
+```
+
+### QA Fields
+
+| Field                | Type    | Default                   | Description                                               |
+| -------------------- | ------- | ------------------------- | --------------------------------------------------------- |
+| `enabled`            | boolean | `true`                    | Enable the QA process                                      |
+| `schedule`           | string  | `"30 1,7,13,19 * * *"`    | Cron expression for QA execution                           |
+| `maxRuntime`         | number  | `3600`                    | Maximum runtime in seconds for QA tasks                    |
+| `branchPatterns`     | string[]| `[]`                      | Branch patterns to match (uses top-level `branchPatterns` if empty) |
+| `artifacts`          | string  | `"both"`                   | Artifacts to capture: `screenshot`, `video`, or `both`    |
+| `skipLabel`          | string  | `"skip-qa"`               | GitHub label to skip QA for specific PRs                   |
+| `autoInstallPlaywright` | boolean | `true`                | Auto-install Playwright browsers if missing                |
+
+---
+
+## Code Audit (`audit`)
+
+The audit process runs automated code quality and security audits.
+
+```json
+{
+  "audit": {
+    "enabled": true,
+    "schedule": "0 2,8,14,20 * * *",
+    "maxRuntime": 1800
+  }
+}
+```
+
+### Audit Fields
+
+| Field       | Type    | Default                | Description                           |
+| ----------- | ------- | ---------------------- | ------------------------------------- |
+| `enabled`   | boolean | `true`                 | Enable the audit process              |
+| `schedule`  | string  | `"0 2,8,14,20 * * *"`  | Cron expression for audit execution   |
+| `maxRuntime`| number  | `1800`                 | Maximum runtime in seconds for audit  |
+
+---
+
+## Roadmap Scanner (`roadmapScanner`)
+
+The roadmap scanner automatically scans `ROADMAP.md` and generates PRDs for unchecked items. The Slicer uses AI to generate detailed PRDs from roadmap items.
+
+```json
+{
+  "roadmapScanner": {
+    "enabled": false,
+    "roadmapPath": "ROADMAP.md",
+    "autoScanInterval": 300,
+    "slicerSchedule": "0 2,8,14,20 * * *",
+    "slicerMaxRuntime": 600
+  }
+}
+```
+
+### Roadmap Scanner Fields
+
+| Field              | Type    | Default                | Description                                          |
+| ------------------ | ------- | ---------------------- | ---------------------------------------------------- |
+| `enabled`          | boolean | `false`                | Enable the roadmap scanner                           |
+| `roadmapPath`      | string  | `"ROADMAP.md"`         | Path to ROADMAP.md file (relative to project root)   |
+| `autoScanInterval` | number  | `300`                  | Interval in seconds between automatic scans (min 30)  |
+| `slicerSchedule`   | string  | `"0 2,8,14,20 * * *"`  | Cron schedule for the slicer                         |
+| `slicerMaxRuntime` | number  | `600`                  | Maximum runtime in seconds for the slicer            |
+
+---
+
+## Board Provider (`boardProvider`)
+
+Track PRDs and their status using GitHub Projects or local SQLite.
+
+```json
+{
+  "boardProvider": {
+    "enabled": true,
+    "provider": "github",
+    "projectNumber": 123,
+    "repo": "owner/repo"
+  }
+}
+```
+
+### Board Provider Fields
+
+| Field           | Type    | Default      | Description                                      |
+| --------------- | ------- | ------------ | ------------------------------------------------ |
+| `enabled`       | boolean | `true`       | Enable the board provider                        |
+| `provider`      | string  | `"github"`   | Board provider: `github` or `local`              |
+| `projectNumber` | number  | (required for GitHub) | GitHub Projects V2 project number           |
+| `repo`          | string  | (auto-detected) | `owner/repo` format (auto-detected if empty)  |
+
+---
+
+## Job Providers (`jobProviders`)
+
+Override the AI provider for specific job types.
+
+```json
+{
+  "jobProviders": {
+    "executor": "claude",
+    "reviewer": "codex",
+    "qa": "claude",
+    "audit": "claude",
+    "slicer": "claude"
+  }
+}
+```
+
+### Job Provider Fields
+
+| Field     | Type   | Default | Description                                    |
+| --------- | ------ | ------- | ---------------------------------------------- |
+| `executor`| string | (uses global) | Provider for PRD execution           |
+| `reviewer`| string | (uses global) | Provider for PR reviews            |
+| `qa`      | string | (uses global) | Provider for QA tasks                 |
+| `audit`   | string | (uses global) | Provider for audit tasks              |
+| `slicer`  | string | (uses global) | Provider for slicer tasks             |
+
+Set to empty string or omit to use the global `provider` setting.
+
+---
+
+## Auto-Merge
+
+Automatically merge PRs that pass CI and meet the review score threshold.
+
+```json
+{
+  "autoMerge": true,
+  "autoMergeMethod": "squash"
+}
+```
+
+### Auto-Merge Fields
+
+| Field            | Type    | Default    | Description                                            |
+| ---------------- | ------- | ---------- | ------------------------------------------------------ |
+| `autoMerge`      | boolean | `false`    | Enable automatic merging of passing PRs                |
+| `autoMergeMethod`| string  | `"squash"`  | Git merge method: `squash`, `merge`, or `rebase`        |
+
+---
+
+## PRD Priority (`prdPriority`)
+
+Control which PRDs are executed first when multiple are pending.
+
+```json
+{
+  "prdPriority": ["feature-x", "bugfix-y"]
+}
+```
+
+PRDs whose filename (without `.md` extension) matches an entry in the `prdPriority` array are executed before others. This is useful for prioritizing critical features or urgent fixes.

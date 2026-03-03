@@ -423,6 +423,7 @@ function mergeConfigs(
       merged.fallbackOnRateLimit = fileConfig.fallbackOnRateLimit;
     if (fileConfig.claudeModel !== undefined) merged.claudeModel = fileConfig.claudeModel;
     if (fileConfig.qa !== undefined) merged.qa = { ...merged.qa, ...fileConfig.qa };
+    if (fileConfig.audit !== undefined) merged.audit = { ...merged.audit, ...fileConfig.audit };
     if (fileConfig.jobProviders !== undefined) merged.jobProviders = { ...fileConfig.jobProviders };
   }
 
@@ -459,6 +460,7 @@ function mergeConfigs(
     merged.fallbackOnRateLimit = envConfig.fallbackOnRateLimit;
   if (envConfig.claudeModel !== undefined) merged.claudeModel = envConfig.claudeModel;
   if (envConfig.qa !== undefined) merged.qa = { ...merged.qa, ...envConfig.qa };
+  if (envConfig.audit !== undefined) merged.audit = { ...merged.audit, ...envConfig.audit };
   if (envConfig.jobProviders !== undefined) merged.jobProviders = { ...envConfig.jobProviders };
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);

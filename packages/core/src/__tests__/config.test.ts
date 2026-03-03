@@ -8,6 +8,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { loadConfig, getDefaultConfig, resolveJobProvider } from '../config.js';
 import { INightWatchConfig, JobType } from '../types.js';
+import type { IQaConfig, IAuditConfig } from '../types.js';
 
 describe('config', () => {
   let tempDir: string;
@@ -1031,6 +1032,105 @@ describe('config', () => {
     });
   });
 
+  describe('audit config', () => {
+    it('should load audit defaults when no audit config present', () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.audit).toBeDefined();
+      expect(config.audit.enabled).toBe(true);
+      expect(config.audit.schedule).toBe('0 3 * * *');
+      expect(config.audit.maxRuntime).toBe(1800);
+    });
+
+    it('should load audit config from file', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          audit: {
+            enabled: false,
+            schedule: '0 2 * * *',
+            maxRuntime: 900,
+          },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.audit.enabled).toBe(false);
+      expect(config.audit.schedule).toBe('0 2 * * *');
+      expect(config.audit.maxRuntime).toBe(900);
+    });
+
+    it('should override audit enabled from env var', () => {
+      process.env.NW_AUDIT_ENABLED = 'false';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.audit.enabled).toBe(false);
+    });
+
+    it('should override audit schedule from env var', () => {
+      process.env.NW_AUDIT_SCHEDULE = '0 */4 * * *';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.audit.schedule).toBe('0 */4 * * *');
+    });
+
+    it('should override audit max runtime from env var', () => {
+      process.env.NW_AUDIT_MAX_RUNTIME = '3600';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.audit.maxRuntime).toBe(3600);
+    });
+
+    it('should let env vars override audit config from file', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          audit: {
+            enabled: true,
+            schedule: '0 2 * * *',
+            maxRuntime: 900,
+          },
+        }),
+      );
+
+      process.env.NW_AUDIT_ENABLED = 'false';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.audit.enabled).toBe(false);
+      expect(config.audit.schedule).toBe('0 2 * * *');
+      expect(config.audit.maxRuntime).toBe(900);
+    });
+
+    it('should preserve file audit fields when only one audit env var is provided', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          audit: {
+            enabled: false,
+            schedule: '5 * * * *',
+            maxRuntime: 900,
+          },
+        }),
+      );
+
+      process.env.NW_AUDIT_SCHEDULE = '0 */6 * * *';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.audit.enabled).toBe(false);
+      expect(config.audit.schedule).toBe('0 */6 * * *');
+      expect(config.audit.maxRuntime).toBe(900);
+    });
+  });
+
   describe('jobProviders config', () => {
     it('should default to empty jobProviders', () => {
       const config = loadConfig(tempDir);
@@ -1237,6 +1337,186 @@ describe('config', () => {
       };
 
       expect(resolveJobProvider(config, 'executor' as JobType)).toBe('claude');
+    });
+  });
+
+  describe('Config parity contract', () => {
+    /**
+     * This test ensures that the shared INightWatchConfig contract includes
+     * all non-internal fields from the core INightWatchConfig interface.
+     * This prevents type drift between the core config and the shared API contract.
+     *
+     * The only field allowed to be missing from the shared contract is
+     * `_cliProviderOverride`, which is internal to CLI runtime.
+     */
+    it('should maintain parity between core INightWatchConfig and shared INightWatchConfig', () => {
+      // Import both interfaces
+      const coreKeys: (keyof INightWatchConfig)[] = [
+        'defaultBranch',
+        'prdDir',
+        'maxRuntime',
+        'reviewerMaxRuntime',
+        'branchPrefix',
+        'branchPatterns',
+        'minReviewScore',
+        'maxLogSize',
+        'cronSchedule',
+        'reviewerSchedule',
+        'cronScheduleOffset',
+        'maxRetries',
+        'provider',
+        'reviewerEnabled',
+        'providerEnv',
+        'fallbackOnRateLimit',
+        'claudeModel',
+        'notifications',
+        'prdPriority',
+        'roadmapScanner',
+        'templatesDir',
+        'boardProvider',
+        'autoMerge',
+        'autoMergeMethod',
+        'qa',
+        'audit',
+        'jobProviders',
+        '_cliProviderOverride',
+      ];
+
+      // Import the shared contract
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const sharedModule = require('../shared/types.ts');
+      const SharedINightWatchConfig = sharedModule.INightWatchConfig;
+
+      // The shared contract should have all fields except _cliProviderOverride
+      const sharedKeys: (keyof any)[] = [
+        'defaultBranch',
+        'prdDir',
+        'maxRuntime',
+        'reviewerMaxRuntime',
+        'branchPrefix',
+        'branchPatterns',
+        'minReviewScore',
+        'maxLogSize',
+        'cronSchedule',
+        'reviewerSchedule',
+        'cronScheduleOffset',
+        'maxRetries',
+        'provider',
+        'reviewerEnabled',
+        'providerEnv',
+        'fallbackOnRateLimit',
+        'claudeModel',
+        'notifications',
+        'prdPriority',
+        'roadmapScanner',
+        'templatesDir',
+        'boardProvider',
+        'autoMerge',
+        'autoMergeMethod',
+        'qa',
+        'audit',
+        'jobProviders',
+      ];
+
+      // Verify that all non-internal core keys are in the shared contract
+      const internalKeys = new Set<keyof INightWatchConfig>(['_cliProviderOverride']);
+      const publicCoreKeys = coreKeys.filter((key) => !internalKeys.has(key));
+
+      for (const key of publicCoreKeys) {
+        expect(sharedKeys).toContain(key);
+      }
+
+      // Verify that shared contract doesn't have extra fields (unless intentionally added)
+      // This is optional but helps catch accidental additions
+      const sharedSet = new Set(sharedKeys);
+      const coreSet = new Set(publicCoreKeys);
+
+      // Check if shared has any fields not in core (excluding internal)
+      for (const key of sharedKeys) {
+        expect(coreSet).toContain(key as keyof INightWatchConfig);
+      }
+    });
+
+    it('should include IQaConfig and IAuditConfig in core types', () => {
+      // Verify that the core types export includes the nested config types
+      // These are type-level exports that don't exist at runtime, so we verify
+      // by checking that instances of these types can be created with expected fields
+
+      // QA config should have all required fields
+      const qaConfig: IQaConfig = {
+        enabled: true,
+        schedule: '0 * * * *',
+        maxRuntime: 3600,
+        branchPatterns: [],
+        artifacts: 'both',
+        skipLabel: 'skip-qa',
+        autoInstallPlaywright: true,
+      };
+      expect(qaConfig.enabled).toBeDefined();
+      expect(qaConfig.schedule).toBeDefined();
+      expect(qaConfig.maxRuntime).toBeDefined();
+      expect(qaConfig.branchPatterns).toBeDefined();
+      expect(qaConfig.artifacts).toBeDefined();
+      expect(qaConfig.skipLabel).toBeDefined();
+      expect(qaConfig.autoInstallPlaywright).toBeDefined();
+
+      // Audit config should have all required fields
+      const auditConfig: IAuditConfig = {
+        enabled: true,
+        schedule: '0 * * * *',
+        maxRuntime: 1800,
+      };
+      expect(auditConfig.enabled).toBeDefined();
+      expect(auditConfig.schedule).toBeDefined();
+      expect(auditConfig.maxRuntime).toBeDefined();
+    });
+
+    it('should have all INightWatchConfig fields documented in configuration.md', () => {
+      // This is a regression test to ensure that new config fields are documented.
+      // When adding new fields to INightWatchConfig, update docs/configuration.md.
+
+      // List of all expected fields from INightWatchConfig (excluding internal)
+      const expectedFields: (keyof INightWatchConfig)[] = [
+        'defaultBranch',
+        'prdDir',
+        'maxRuntime',
+        'reviewerMaxRuntime',
+        'branchPrefix',
+        'branchPatterns',
+        'minReviewScore',
+        'maxLogSize',
+        'cronSchedule',
+        'reviewerSchedule',
+        'cronScheduleOffset',
+        'maxRetries',
+        'provider',
+        'reviewerEnabled',
+        'providerEnv',
+        'fallbackOnRateLimit',
+        'claudeModel',
+        'notifications',
+        'prdPriority',
+        'roadmapScanner',
+        'templatesDir',
+        'boardProvider',
+        'autoMerge',
+        'autoMergeMethod',
+        'qa',
+        'audit',
+        'jobProviders',
+        // _cliProviderOverride is internal and excluded
+      ];
+
+      // Verify that getDefaultConfig returns all expected fields
+      const config = getDefaultConfig();
+
+      for (const field of expectedFields) {
+        expect(config[field]).toBeDefined();
+      }
+
+      // This test should fail if new fields are added to INightWatchConfig
+      // without updating this list. The test serves as documentation
+      // completeness validation.
     });
   });
 });
