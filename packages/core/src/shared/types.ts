@@ -262,3 +262,29 @@ export interface IRoadmapContextOptions {
   /** Character cap for the compiled output. Defaults: full=3000, summary=800 */
   maxChars?: number;
 }
+
+// ==================== Article & Campaign Types ====================
+
+// Re-export types from the types subdirectory
+export type {
+  ArticleStyle,
+  ImageStyle,
+  IArticleStylePreferences,
+  IInternalLink,
+  IGenerateArticleInput,
+} from './types/article.types.js';
+
+export type { ICampaignOutrankFields, CampaignOutrankFields } from './types/campaign.types.js';
+
+export type { IProjectContentPreferences, IProject } from './types/project.types.js';
+
+// Re-export validation types and functions
+export type { ICreateCampaignInput, IUpdateCampaignInput } from './validation/campaign.schema.js';
+export {
+  VALID_ARTICLE_STYLES,
+  VALID_IMAGE_STYLES,
+  isValidArticleStyle,
+  isValidImageStyle,
+  validateCreateCampaignInput,
+  validateUpdateCampaignInput,
+} from './validation/campaign.schema.js';

@@ -78,3 +78,41 @@ export interface IKanbanIssueRepository {
   close(number: number): void;
   addComment(number: number, body: string): void;
 }
+
+// ==================== Article Repository ====================
+
+/**
+ * Article status values
+ */
+export type ArticleStatus = 'draft' | 'generating' | 'review' | 'published';
+
+/**
+ * Article record stored in the database
+ */
+export interface IArticle {
+  id: number;
+  projectId: string;
+  campaignId: string;
+  keyword: string;
+  status: ArticleStatus;
+  title: string | null;
+  content: string | null;
+  publishedUrl: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * Internal link reference for article generation
+ */
+export interface IInternalLinkRef {
+  title: string;
+  url: string;
+}
+
+export interface IArticleRepository {
+  /**
+   * Get published articles for a project, returning title and URL for internal linking
+   */
+  getPublishedLinks(projectId: string, limit: number): IInternalLinkRef[];
+}
