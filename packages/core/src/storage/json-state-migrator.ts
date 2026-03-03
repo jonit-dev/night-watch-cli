@@ -63,7 +63,7 @@ function backupFile(src: string, backupDir: string): void {
 
 /**
  * Collect all PRD directories from the registered projects by reading each
- * project's night-watch.config.json. Falls back to the default "docs/PRDs/night-watch"
+ * project's night-watch.config.json. Falls back to the default "docs/prds"
  * directory when the config cannot be read.
  */
 function collectPrdDirs(projectPaths: string[]): string[] {
@@ -71,7 +71,7 @@ function collectPrdDirs(projectPaths: string[]): string[] {
 
   for (const projectPath of projectPaths) {
     const configPath = path.join(projectPath, CONFIG_FILE_NAME);
-    let prdDir = "docs/PRDs/night-watch";
+    let prdDir = "docs/prds";
 
     if (fs.existsSync(configPath)) {
       try {

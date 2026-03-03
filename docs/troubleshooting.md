@@ -76,7 +76,7 @@ chmod 755 logs
 
 Check:
 
-1. PRD is in the correct directory (`docs/PRDs/night-watch/`)
-2. Dependencies are satisfied (check `done/` directory)
+1. PRD is in the configured directory (see `prdDir` in config)
+2. Dependencies are satisfied
 3. No open PR already exists for this PRD
 4. Run `night-watch run --dry-run` to see what would be processed

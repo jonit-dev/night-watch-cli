@@ -750,7 +750,7 @@ export function initCommand(program: Command): void {
 
       // Next steps
       header('Next Steps');
-      info('1. Add your PRD files to docs/PRDs/night-watch/');
+      info(`1. Add your PRD files to ${prdDir}/`);
       info('2. Run `night-watch install` to set up cron jobs');
       info('3. Or run `night-watch run` to execute PRDs manually');
       console.log();

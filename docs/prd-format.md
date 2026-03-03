@@ -2,7 +2,7 @@
 
 > Related: [Architecture Overview](architecture-overview.md) | [Commands Reference](commands.md) | [Configuration](configuration.md) | [CLI Package](cli-package.md)
 
-Night Watch looks for PRD files in `docs/PRDs/night-watch/` (configurable via `prdDir`). PRDs are markdown files with optional dependency declarations.
+Night Watch looks for PRD files in the configured `prdDir` (default: `docs/prds`). PRDs are markdown files with optional dependency declarations.
 
 ---
 
@@ -55,10 +55,10 @@ When a PRD specifies `Depends on:`, Night Watch will only process it after the d
 
 ## PRD Lifecycle
 
-1. **Create** — Add a `.md` file to `docs/PRDs/night-watch/`
+1. **Create** — Add a `.md` file to the configured `prdDir`
 2. **Execute** — Night Watch picks it up, creates a branch, and launches the provider CLI
 3. **PR opened** — The provider CLI implements the PRD and opens a pull request
-4. **Done** — The PRD file is moved to `docs/PRDs/night-watch/done/`
+4. **Done** — The PRD file is moved to `prdDir/done/`
 
 PRDs are skipped if:
 

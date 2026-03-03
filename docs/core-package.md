@@ -182,7 +182,7 @@ Key fields:
 | Field            | Type                  | Default                   | Purpose                      |
 | ---------------- | --------------------- | ------------------------- | ---------------------------- |
 | `provider`       | `'claude' \| 'codex'` | `'claude'`                | AI provider                  |
-| `prdDir`         | string                | `'docs/PRDs/night-watch'` | PRD file directory           |
+| `prdDir`         | string                | `'docs/prds'` | PRD file directory           |
 | `maxRuntime`     | number                | `7200`                    | Max execution time (seconds) |
 | `branchPrefix`   | string                | `'night-watch'`           | Git branch prefix            |
 | `minReviewScore` | number                | `80`                      | Minimum PR review score      |
@@ -203,7 +203,7 @@ See [configuration.md](configuration.md) for the full reference.
 Notable constants:
 
 ```
-DEFAULT_PRD_DIR          = 'docs/PRDs/night-watch'
+DEFAULT_PRD_DIR          = 'docs/prds'
 DEFAULT_MAX_RUNTIME      = 7200 (2 hours)
 DEFAULT_CRON_SCHEDULE    = '0 0-21 * * *'
 DEFAULT_BRANCH_PREFIX    = 'night-watch'
