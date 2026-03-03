@@ -15,6 +15,8 @@ import {
   INotificationConfig,
   IWebhookConfig,
   IRoadmapScannerConfig,
+  IJobProviders,
+  MergeMethod,
   updateConfig,
   useApi,
   toggleRoadmapScanner,
@@ -38,6 +40,9 @@ type ConfigForm = {
   roadmapScanner: IRoadmapScannerConfig;
   templatesDir: string;
   boardProvider: IBoardProviderConfig;
+  jobProviders: IJobProviders;
+  autoMerge: boolean;
+  autoMergeMethod: MergeMethod;
 };
 
 const toFormState = (config: INightWatchConfig): ConfigForm => ({
@@ -62,6 +67,9 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   },
   templatesDir: config.templatesDir || '.night-watch/templates',
   boardProvider: config.boardProvider || { enabled: true, provider: 'github' },
+  jobProviders: config.jobProviders || {},
+  autoMerge: config.autoMerge ?? false,
+  autoMergeMethod: config.autoMergeMethod ?? 'squash',
 });
 
 // Helper to check if a value looks sensitive
@@ -577,6 +585,14 @@ const Settings: React.FC = () => {
       return;
     }
 
+    // Filter out empty/undefined job provider values
+    const cleanedJobProviders: IJobProviders = {};
+    for (const [jobType, provider] of Object.entries(form.jobProviders)) {
+      if (provider !== undefined && provider !== null && provider !== '') {
+        cleanedJobProviders[jobType as keyof IJobProviders] = provider as 'claude' | 'codex';
+      }
+    }
+
     setSaving(true);
     try {
       await updateConfig({
@@ -597,6 +613,9 @@ const Settings: React.FC = () => {
         roadmapScanner: form.roadmapScanner,
         templatesDir: form.templatesDir,
         boardProvider: form.boardProvider,
+        jobProviders: cleanedJobProviders,
+        autoMerge: form.autoMerge,
+        autoMergeMethod: form.autoMergeMethod,
       });
 
       addToast({
@@ -693,6 +712,25 @@ const Settings: React.FC = () => {
                 onChange={(checked) => updateField('reviewerEnabled', checked)}
               />
             </div>
+            <div className="md:col-span-2">
+              <Switch
+                label="Auto-merge approved PRs"
+                checked={form.autoMerge}
+                onChange={(checked) => updateField('autoMerge', checked)}
+              />
+            </div>
+            {form.autoMerge && (
+              <Select
+                label="Merge Method"
+                value={form.autoMergeMethod}
+                onChange={(val) => updateField('autoMergeMethod', val as MergeMethod)}
+                options={[
+                  { label: 'Squash', value: 'squash' },
+                  { label: 'Merge', value: 'merge' },
+                  { label: 'Rebase', value: 'rebase' },
+                ]}
+              />
+            )}
           </div>
         </Card>
       ),
@@ -871,6 +909,54 @@ const Settings: React.FC = () => {
                 </p>
               </div>
             )}
+          </div>
+        </Card>
+      ),
+    },
+    {
+      id: 'job-providers',
+      label: 'Job Providers',
+      content: (
+        <Card className="p-6 space-y-6">
+          <div>
+            <h3 className="text-lg font-medium text-slate-200">Job Providers</h3>
+            <p className="text-sm text-slate-400 mt-1">
+              Override the AI provider for specific job types. Leave as &quot;Use Global&quot; to use the default provider.
+            </p>
+          </div>
+
+          <div className="space-y-4">
+            {([
+              { key: 'executor', label: 'Executor' },
+              { key: 'reviewer', label: 'Reviewer' },
+              { key: 'qa', label: 'QA' },
+              { key: 'audit', label: 'Audit' },
+              { key: 'slicer', label: 'Slicer' },
+            ] as const).map(({ key, label }) => (
+              <div
+                key={key}
+                className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40"
+              >
+                <span className="text-sm font-medium text-slate-200">{label}</span>
+                <Select
+                  value={form.jobProviders[key] ?? ''}
+                  onChange={(val) => {
+                    const newJobProviders = { ...form.jobProviders };
+                    if (val === '') {
+                      delete newJobProviders[key];
+                    } else {
+                      newJobProviders[key] = val as 'claude' | 'codex';
+                    }
+                    updateField('jobProviders', newJobProviders);
+                  }}
+                  options={[
+                    { label: 'Use Global (default)', value: '' },
+                    { label: 'Anthropic (Claude)', value: 'claude' },
+                    { label: 'OpenAI (Codex)', value: 'codex' },
+                  ]}
+                />
+              </div>
+            ))}
           </div>
         </Card>
       ),

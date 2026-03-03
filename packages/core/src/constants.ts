@@ -6,9 +6,11 @@ import { IBoardProviderConfig } from './board/types.js';
 import {
   ClaudeModel,
   IAuditConfig,
+  IJobProviders,
   INotificationConfig,
   IQaConfig,
   IRoadmapScannerConfig,
+  JobType,
   MergeMethod,
   Provider,
   QaArtifacts,
@@ -130,6 +132,12 @@ export const AUDIT_LOG_NAME = 'audit';
 
 // Valid providers
 export const VALID_PROVIDERS: Provider[] = ['claude', 'codex'];
+
+// Valid job types for per-job provider configuration
+export const VALID_JOB_TYPES: JobType[] = ['executor', 'reviewer', 'qa', 'audit', 'slicer'];
+
+// Default per-job provider configuration (empty = use global provider)
+export const DEFAULT_JOB_PROVIDERS: IJobProviders = {};
 
 // Provider commands configuration
 export const PROVIDER_COMMANDS: Record<Provider, string> = {
