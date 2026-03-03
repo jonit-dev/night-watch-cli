@@ -385,15 +385,20 @@ describe('run command', () => {
   });
 
   describe('shouldAttemptCrossProjectFallback', () => {
-    it('returns true only for skip_no_eligible_prd by default', () => {
+    it('returns false by default (fallback is opt-in)', () => {
       const options: IRunOptions = { dryRun: false };
+      expect(shouldAttemptCrossProjectFallback(options, 'skip_no_eligible_prd')).toBe(false);
+    });
+
+    it('returns true only for skip_no_eligible_prd when explicitly enabled', () => {
+      const options: IRunOptions = { dryRun: false, crossProjectFallback: true };
       expect(shouldAttemptCrossProjectFallback(options, 'skip_no_eligible_prd')).toBe(true);
       expect(shouldAttemptCrossProjectFallback(options, 'skip_locked')).toBe(false);
       expect(shouldAttemptCrossProjectFallback(options, 'success_open_pr')).toBe(false);
     });
 
     it('returns false in dry-run mode', () => {
-      const options: IRunOptions = { dryRun: true };
+      const options: IRunOptions = { dryRun: true, crossProjectFallback: true };
       expect(shouldAttemptCrossProjectFallback(options, 'skip_no_eligible_prd')).toBe(false);
     });
 
@@ -404,7 +409,7 @@ describe('run command', () => {
 
     it('returns false when already inside a fallback invocation', () => {
       process.env.NW_CROSS_PROJECT_FALLBACK_ACTIVE = '1';
-      const options: IRunOptions = { dryRun: false };
+      const options: IRunOptions = { dryRun: false, crossProjectFallback: true };
       expect(shouldAttemptCrossProjectFallback(options, 'skip_no_eligible_prd')).toBe(false);
       delete process.env.NW_CROSS_PROJECT_FALLBACK_ACTIVE;
     });

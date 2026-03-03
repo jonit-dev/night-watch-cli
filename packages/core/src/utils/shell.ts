@@ -10,20 +10,26 @@ export interface IExecuteScriptResult {
   stderr: string;
 }
 
+export interface IExecuteScriptOptions {
+  cwd?: string;
+}
+
 /**
  * Execute a bash script with arguments and environment variables
  *
  * @param scriptPath - Absolute path to the bash script to execute
  * @param args - Arguments to pass to the script
  * @param env - Environment variables to set for the child process
+ * @param options - Additional process options (e.g. cwd)
  * @returns Promise that resolves with the exit code (0 for success)
  */
 export async function executeScript(
   scriptPath: string,
   args: string[] = [],
-  env: Record<string, string> = {}
+  env: Record<string, string> = {},
+  options: IExecuteScriptOptions = {}
 ): Promise<number> {
-  const result = await executeScriptWithOutput(scriptPath, args, env);
+  const result = await executeScriptWithOutput(scriptPath, args, env, options);
   return result.exitCode;
 }
 
@@ -33,12 +39,14 @@ export async function executeScript(
  * @param scriptPath - Absolute path to the bash script to execute
  * @param args - Arguments to pass to the script
  * @param env - Environment variables to set for the child process
+ * @param options - Additional process options (e.g. cwd)
  * @returns Promise that resolves with exit code plus collected output
  */
 export async function executeScriptWithOutput(
   scriptPath: string,
   args: string[] = [],
-  env: Record<string, string> = {}
+  env: Record<string, string> = {},
+  options: IExecuteScriptOptions = {}
 ): Promise<IExecuteScriptResult> {
   return new Promise((resolve, reject) => {
     // Merge provided env with process.env, with provided env taking precedence
@@ -52,6 +60,7 @@ export async function executeScriptWithOutput(
 
     const child = spawn("bash", [scriptPath, ...args], {
       env: childEnv,
+      cwd: options.cwd,
       stdio: ["inherit", "pipe", "pipe"],
     });
 

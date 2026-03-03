@@ -69,10 +69,10 @@ export function shouldAttemptCrossProjectFallback(
   options: IRunOptions,
   scriptStatus?: string,
 ): boolean {
-  if (options.dryRun) {
+  if (options.crossProjectFallback !== true) {
     return false;
   }
-  if (options.crossProjectFallback === false) {
+  if (options.dryRun) {
     return false;
   }
   if (process.env.NW_CROSS_PROJECT_FALLBACK_ACTIVE === '1') {
@@ -190,6 +190,7 @@ async function runCrossProjectFallback(
         scriptPath,
         [candidate.path],
         envVars,
+        { cwd: candidate.path },
       );
       const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
 
@@ -431,8 +432,12 @@ export function runCommand(program: Command): void {
     .option('--timeout <seconds>', 'Override max runtime in seconds')
     .option('--provider <string>', 'AI provider to use (claude or codex)')
     .option(
+      '--cross-project-fallback',
+      'Check other registered projects when this project has no eligible work',
+    )
+    .option(
       '--no-cross-project-fallback',
-      'Do not check other registered projects when this project has no eligible work',
+      'Deprecated alias; cross-project fallback is disabled by default',
     )
     .action(async (options: IRunOptions) => {
       // Get the project directory (current working directory)
@@ -562,6 +567,7 @@ export function runCommand(program: Command): void {
           scriptPath,
           [projectDir],
           envVars,
+          { cwd: projectDir },
         );
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
 
