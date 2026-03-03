@@ -374,6 +374,64 @@ describe('server API', () => {
 
       expect(response.status).toBe(200);
     });
+
+    it('should accept valid autoMerge boolean', async () => {
+      const response = await request(app).put('/api/config').send({ autoMerge: true });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('autoMerge', true);
+    });
+
+    it('should reject invalid autoMergeMethod', async () => {
+      const response = await request(app).put('/api/config').send({ autoMergeMethod: 'invalid' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('autoMergeMethod');
+    });
+
+    it('should accept valid autoMergeMethod', async () => {
+      const response = await request(app).put('/api/config').send({ autoMergeMethod: 'squash' });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('autoMergeMethod', 'squash');
+    });
+
+    it('should accept valid jobProviders', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ jobProviders: { reviewer: 'codex' } });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('jobProviders');
+      expect(response.body.jobProviders.reviewer).toBe('codex');
+    });
+
+    it('should reject invalid provider in jobProviders', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ jobProviders: { reviewer: 'invalid' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('jobProviders');
+      expect(response.body.error).toContain('reviewer');
+    });
+
+    it('should reject invalid job type in jobProviders', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ jobProviders: { invalid: 'claude' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('Invalid job type');
+    });
+
+    it('should accept null provider in jobProviders (clears override)', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ jobProviders: { reviewer: null } });
+
+      expect(response.status).toBe(200);
+    });
   });
 
   describe('GET /api/doctor', () => {

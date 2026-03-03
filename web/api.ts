@@ -25,6 +25,8 @@ import type {
   IAgentModelConfig,
   CreateAgentPersonaInput,
   UpdateAgentPersonaInput,
+  MergeMethod,
+  IJobProviders,
 } from '@shared/types';
 
 // Re-export shared types so consumers can import from either place
@@ -48,6 +50,8 @@ export type {
   IAgentModelConfig,
   CreateAgentPersonaInput,
   UpdateAgentPersonaInput,
+  MergeMethod,
+  IJobProviders,
 };
 
 export type PrdWithContent = IPrdInfo & { content: string };

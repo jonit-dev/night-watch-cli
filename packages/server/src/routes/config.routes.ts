@@ -4,7 +4,15 @@
 
 import { Request, Response, Router } from 'express';
 
-import { INightWatchConfig, loadConfig, saveConfig, validateWebhook } from '@night-watch/core';
+import {
+  INightWatchConfig,
+  VALID_JOB_TYPES,
+  VALID_PROVIDERS,
+  loadConfig,
+  saveConfig,
+  validateWebhook,
+} from '@night-watch/core';
+import { JobType, Provider } from '@night-watch/core/types.js';
 
 /**
  * Validates config changes and returns an error string if invalid, null if valid.
@@ -120,6 +128,37 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
       (typeof rs.autoScanInterval !== 'number' || rs.autoScanInterval < 30)
     ) {
       return 'roadmapScanner.autoScanInterval must be a number >= 30';
+    }
+  }
+
+  if (changes.autoMerge !== undefined && typeof changes.autoMerge !== 'boolean') {
+    return 'autoMerge must be a boolean';
+  }
+
+  if (changes.autoMergeMethod !== undefined) {
+    const validMethods = ['squash', 'merge', 'rebase'];
+    if (!validMethods.includes(changes.autoMergeMethod)) {
+      return `Invalid autoMergeMethod. Must be one of: ${validMethods.join(', ')}`;
+    }
+  }
+
+  if (changes.jobProviders !== undefined) {
+    if (typeof changes.jobProviders !== 'object' || changes.jobProviders === null) {
+      return 'jobProviders must be an object';
+    }
+
+    for (const [jobType, provider] of Object.entries(changes.jobProviders)) {
+      if (!VALID_JOB_TYPES.includes(jobType as JobType)) {
+        return `Invalid job type in jobProviders: ${jobType}. Must be one of: ${VALID_JOB_TYPES.join(', ')}`;
+      }
+
+      if (
+        provider !== null &&
+        provider !== undefined &&
+        !VALID_PROVIDERS.includes(provider as Provider)
+      ) {
+        return `Invalid provider in jobProviders.${jobType}: ${provider}. Must be one of: ${VALID_PROVIDERS.join(', ')}`;
+      }
     }
   }
 

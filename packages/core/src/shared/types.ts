@@ -9,6 +9,23 @@
 /** Supported AI providers */
 export type Provider = 'claude' | 'codex';
 
+// ==================== Merge Method ====================
+
+/** Git merge methods for auto-merge */
+export type MergeMethod = 'squash' | 'merge' | 'rebase';
+
+/** Job types that can have per-job provider configuration */
+export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer';
+
+/** Per-job provider configuration */
+export interface IJobProviders {
+  executor?: Provider;
+  reviewer?: Provider;
+  qa?: Provider;
+  audit?: Provider;
+  slicer?: Provider;
+}
+
 // ==================== Notification / Webhook ====================
 
 export type WebhookType = 'slack' | 'discord' | 'telegram';
@@ -71,6 +88,9 @@ export interface INightWatchConfig {
   roadmapScanner: IRoadmapScannerConfig;
   templatesDir: string;
   boardProvider: IBoardProviderConfig;
+  jobProviders: IJobProviders;
+  autoMerge?: boolean;
+  autoMergeMethod?: MergeMethod;
 }
 
 // ==================== Board Provider Config ====================
