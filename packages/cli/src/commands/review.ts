@@ -17,6 +17,7 @@ import {
   info,
   loadConfig,
   parseScriptResult,
+  resolveJobProvider,
   sendNotifications,
   error as uiError,
 } from '@night-watch/core';
@@ -66,8 +67,9 @@ export function buildEnvVars(
 ): Record<string, string> {
   const env: Record<string, string> = {};
 
-  // Provider command - the actual CLI binary to call
-  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[config.provider];
+  // Provider command - the actual CLI binary to call (use job-specific provider for reviewer)
+  const reviewerProvider = resolveJobProvider(config, 'reviewer');
+  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[reviewerProvider];
 
   // Default branch (empty = auto-detect in bash script)
   if (config.defaultBranch) {
@@ -124,7 +126,8 @@ export function applyCliOverrides(
   }
 
   if (options.provider) {
-    overridden.provider = options.provider as INightWatchConfig['provider'];
+    // Use _cliProviderOverride to ensure CLI flag takes precedence over jobProviders
+    overridden._cliProviderOverride = options.provider as INightWatchConfig['provider'];
   }
 
   if (options.autoMerge !== undefined) {
@@ -195,11 +198,14 @@ export function reviewCommand(program: Command): void {
       if (options.dryRun) {
         header('Dry Run: PR Reviewer');
 
+        // Resolve reviewer-specific provider
+        const reviewerProvider = resolveJobProvider(config, 'reviewer');
+
         // Configuration section with table
         header('Configuration');
         const configTable = createTable({ head: ['Setting', 'Value'] });
-        configTable.push(['Provider', config.provider]);
-        configTable.push(['Provider CLI', PROVIDER_COMMANDS[config.provider]]);
+        configTable.push(['Provider', reviewerProvider]);
+        configTable.push(['Provider CLI', PROVIDER_COMMANDS[reviewerProvider]]);
         configTable.push([
           'Max Runtime',
           `${config.reviewerMaxRuntime}s (${Math.floor(config.reviewerMaxRuntime / 60)}min)`,
@@ -227,8 +233,9 @@ export function reviewCommand(program: Command): void {
 
         // Provider invocation command
         header('Provider Invocation');
-        const providerCmd = PROVIDER_COMMANDS[config.provider];
-        const autoFlag = config.provider === 'claude' ? '--dangerously-skip-permissions' : '--yolo';
+        const providerCmd = PROVIDER_COMMANDS[reviewerProvider];
+        const autoFlag =
+          reviewerProvider === 'claude' ? '--dangerously-skip-permissions' : '--yolo';
         dim(`  ${providerCmd} ${autoFlag} -p "/night-watch-pr-reviewer"`);
 
         // Environment variables

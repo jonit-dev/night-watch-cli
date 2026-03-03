@@ -22,6 +22,7 @@ import {
   info,
   loadConfig,
   parseScriptResult,
+  resolveJobProvider,
   sendNotifications,
   error as uiError,
 } from '@night-watch/core';
@@ -93,8 +94,9 @@ export function buildEnvVars(
 ): Record<string, string> {
   const env: Record<string, string> = {};
 
-  // Provider command - the actual CLI binary to call
-  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[config.provider];
+  // Provider command - the actual CLI binary to call (use job-specific provider for executor)
+  const executorProvider = resolveJobProvider(config, 'executor');
+  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[executorProvider];
 
   // Default branch (empty = auto-detect in bash script)
   if (config.defaultBranch) {
@@ -180,7 +182,8 @@ export function applyCliOverrides(
   }
 
   if (options.provider) {
-    overridden.provider = options.provider as INightWatchConfig['provider'];
+    // Use _cliProviderOverride to ensure CLI flag takes precedence over jobProviders
+    overridden._cliProviderOverride = options.provider as INightWatchConfig['provider'];
   }
 
   return overridden;
@@ -279,11 +282,14 @@ export function runCommand(program: Command): void {
       if (options.dryRun) {
         header('Dry Run: PRD Executor');
 
+        // Resolve executor-specific provider
+        const executorProvider = resolveJobProvider(config, 'executor');
+
         // Configuration section with table
         header('Configuration');
         const configTable = createTable({ head: ['Setting', 'Value'] });
-        configTable.push(['Provider', config.provider]);
-        configTable.push(['Provider CLI', PROVIDER_COMMANDS[config.provider]]);
+        configTable.push(['Provider', executorProvider]);
+        configTable.push(['Provider CLI', PROVIDER_COMMANDS[executorProvider]]);
         configTable.push(['Default Branch', config.defaultBranch || '(auto-detect)']);
         configTable.push(['PRD Directory', config.prdDir]);
         configTable.push([
@@ -357,8 +363,9 @@ export function runCommand(program: Command): void {
 
         // Provider invocation command
         header('Provider Invocation');
-        const providerCmd = PROVIDER_COMMANDS[config.provider];
-        const autoFlag = config.provider === 'claude' ? '--dangerously-skip-permissions' : '--yolo';
+        const providerCmd = PROVIDER_COMMANDS[executorProvider];
+        const autoFlag =
+          executorProvider === 'claude' ? '--dangerously-skip-permissions' : '--yolo';
         dim(`  ${providerCmd} ${autoFlag} -p "/night-watch"`);
 
         // Environment variables
