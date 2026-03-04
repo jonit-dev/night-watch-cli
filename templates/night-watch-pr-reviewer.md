@@ -12,6 +12,12 @@ Treat `gh pr checks <number> --json name,state,conclusion` as the source of trut
 
 A PR needs attention if **any** of the following: merge conflicts present, review score below 80, or any CI job failed.
 
+## PRD Context
+
+The cron wrapper may append a `## PRD Context` section with linked issue bodies and/or PRD file excerpts.
+Read that context before making changes and align fixes with the intended product behavior.
+If current PR code or review feedback conflicts with the PRD context, call out the conflict explicitly in your PR comment.
+
 ## Important: Early Exit
 
 - If there are **no open PRs** on `night-watch/` or `feat/` branches, **stop immediately** and report "No PRs to review."

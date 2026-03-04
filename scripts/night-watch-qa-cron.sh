@@ -53,6 +53,90 @@ emit_result() {
   fi
 }
 
+decode_base64_value() {
+  local value="${1:-}"
+  if [ -z "${value}" ]; then
+    return 0
+  fi
+  if printf '%s' "${value}" | base64 --decode >/dev/null 2>&1; then
+    printf '%s' "${value}" | base64 --decode
+  else
+    printf '%s' "${value}" | base64 -d 2>/dev/null || true
+  fi
+}
+
+get_pr_comment_bodies_base64() {
+  local pr_number="${1:?PR number required}"
+  gh pr view "${pr_number}" --json comments --jq '.comments[]?.body | @base64' 2>/dev/null || true
+  if [ -n "${REPO:-}" ]; then
+    gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body | @base64' 2>/dev/null || true
+  fi
+}
+
+get_latest_qa_comment_body() {
+  local pr_number="${1:?PR number required}"
+  local latest=""
+  local encoded=""
+  local decoded=""
+
+  while IFS= read -r encoded; do
+    [ -z "${encoded}" ] && continue
+    decoded=$(decode_base64_value "${encoded}")
+    if printf '%s' "${decoded}" | grep -q '<!-- night-watch-qa-marker -->'; then
+      latest="${decoded}"
+    fi
+  done < <(get_pr_comment_bodies_base64 "${pr_number}")
+
+  printf "%s" "${latest}"
+}
+
+pr_has_qa_generated_files() {
+  local pr_number="${1:?PR number required}"
+  gh pr view "${pr_number}" --json files --jq '.files[]?.path' 2>/dev/null \
+    | grep -Eq '^(qa-artifacts/|tests/.*/qa/)'
+}
+
+provider_output_looks_invalid() {
+  local from_line="${1:-0}"
+  if [ ! -f "${LOG_FILE}" ]; then
+    return 1
+  fi
+
+  tail -n "+$((from_line + 1))" "${LOG_FILE}" 2>/dev/null \
+    | grep -Eqi 'Unknown skill:|session is in a broken state|working directory .* no longer exists|Please restart this session'
+}
+
+validate_qa_evidence() {
+  local pr_number="${1:?PR number required}"
+  local qa_comment=""
+
+  qa_comment=$(get_latest_qa_comment_body "${pr_number}")
+  if [ -z "${qa_comment}" ]; then
+    log "FAIL-QA-EVIDENCE: PR #${pr_number} has no QA marker comment (<!-- night-watch-qa-marker -->)"
+    return 1
+  fi
+
+  if printf '%s' "${qa_comment}" | grep -Eqi 'QA: No tests needed for this PR|No tests needed'; then
+    return 0
+  fi
+
+  if ! pr_has_qa_generated_files "${pr_number}"; then
+    log "FAIL-QA-EVIDENCE: PR #${pr_number} has QA marker comment but no qa-artifacts/ or tests/*/qa/ files"
+    return 1
+  fi
+
+  if [ "${QA_ARTIFACTS}" = "screenshot" ] || [ "${QA_ARTIFACTS}" = "both" ]; then
+    if printf '%s' "${qa_comment}" | grep -q '#### UI Tests (Playwright)'; then
+      if ! printf '%s' "${qa_comment}" | grep -Eq '!\[[^]]*\]\([^)]*qa-artifacts/[^)]*\)'; then
+        log "FAIL-QA-EVIDENCE: PR #${pr_number} reports UI tests but comment lacks screenshot links to qa-artifacts/"
+        return 1
+      fi
+    fi
+  fi
+
+  return 0
+}
+
 # Validate provider
 if ! validate_provider "${PROVIDER_CMD}"; then
   echo "ERROR: Unknown provider: ${PROVIDER_CMD}" >&2
@@ -217,16 +301,23 @@ Artifacts: ${QA_ARTIFACTS}"
     continue
   fi
 
-  QA_PROMPT_PATH=$(resolve_instruction_path "${QA_WORKTREE_DIR}" "night-watch-qa.md" || true)
+  QA_PROMPT_PATH=$(resolve_instruction_path_with_fallback "${QA_WORKTREE_DIR}" "qa.md" "night-watch-qa.md" || true)
   if [ -z "${QA_PROMPT_PATH}" ]; then
-    log "FAIL: Missing QA prompt file for PR #${pr_num}. Checked instructions/, .claude/commands/, and bundled templates/"
+    log "FAIL: Missing QA prompt file for PR #${pr_num}. Checked qa.md/night-watch-qa.md in instructions/, .claude/commands/, and bundled templates/"
     EXIT_CODE=1
     break
   fi
+  QA_PROMPT_BUNDLED_NAME="qa.md"
+  if [[ "${QA_PROMPT_PATH}" == */night-watch-qa.md ]]; then
+    QA_PROMPT_BUNDLED_NAME="night-watch-qa.md"
+  fi
+  QA_PROMPT_PATH=$(prefer_bundled_prompt_if_legacy_command "${QA_WORKTREE_DIR}" "${QA_PROMPT_PATH}" "${QA_PROMPT_BUNDLED_NAME}")
   QA_PROMPT=$(cat "${QA_PROMPT_PATH}")
   QA_PROMPT_REF=$(instruction_ref_for_prompt "${QA_WORKTREE_DIR}" "${QA_PROMPT_PATH}")
   log "QA: PR #${pr_num} — using prompt from ${QA_PROMPT_REF}"
 
+  LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
+  PROVIDER_OK=0
   case "${PROVIDER_CMD}" in
     claude)
       if (
@@ -235,7 +326,7 @@ Artifacts: ${QA_ARTIFACTS}"
             --dangerously-skip-permissions \
             >> "${LOG_FILE}" 2>&1
       ); then
-        log "QA: PR #${pr_num} — provider completed successfully"
+        PROVIDER_OK=1
       else
         local_exit=$?
         log "QA: PR #${pr_num} — provider exited with code ${local_exit}"
@@ -254,7 +345,7 @@ Artifacts: ${QA_ARTIFACTS}"
             --prompt "${QA_PROMPT}" \
             >> "${LOG_FILE}" 2>&1
       ); then
-        log "QA: PR #${pr_num} — provider completed successfully"
+        PROVIDER_OK=1
       else
         local_exit=$?
         log "QA: PR #${pr_num} — provider exited with code ${local_exit}"
@@ -270,6 +361,17 @@ Artifacts: ${QA_ARTIFACTS}"
       exit 1
       ;;
   esac
+
+  if [ "${PROVIDER_OK}" -eq 1 ]; then
+    if provider_output_looks_invalid "${LOG_LINE_BEFORE}"; then
+      log "FAIL-QA-EVIDENCE: PR #${pr_num} provider output indicates an invalid automation run"
+      EXIT_CODE=1
+    elif ! validate_qa_evidence "${pr_num}"; then
+      EXIT_CODE=1
+    else
+      log "QA: PR #${pr_num} — provider completed with verifiable QA evidence"
+    fi
+  fi
 
   cleanup_worktrees "${PROJECT_DIR}"
 done

@@ -108,6 +108,7 @@ describe('review command', () => {
       expect(env.NW_REVIEWER_MAX_RUNTIME).toBe('3600');
       expect(env.NW_MIN_REVIEW_SCORE).toBe('80');
       expect(env.NW_BRANCH_PATTERNS).toBe('feat/,night-watch/');
+      expect(env.NW_PRD_DIR).toBe('docs/PRDs/night-watch');
 
       // Should NOT set NW_MAX_RUNTIME
       expect(env.NW_MAX_RUNTIME).toBeUndefined();

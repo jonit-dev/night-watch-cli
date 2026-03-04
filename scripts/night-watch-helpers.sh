@@ -76,6 +76,24 @@ resolve_instruction_path() {
   return 1
 }
 
+resolve_instruction_path_with_fallback() {
+  local project_dir="${1:?project_dir required}"
+  shift || true
+  local instruction_file=""
+  local resolved_path=""
+
+  for instruction_file in "$@"; do
+    [ -z "${instruction_file}" ] && continue
+    resolved_path=$(resolve_instruction_path "${project_dir}" "${instruction_file}" || true)
+    if [ -n "${resolved_path}" ]; then
+      printf "%s" "${resolved_path}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 instruction_ref_for_prompt() {
   local root_dir="${1:?root_dir required}"
   local instruction_path="${2:?instruction_path required}"
@@ -85,6 +103,36 @@ instruction_ref_for_prompt() {
   else
     printf "%s" "${instruction_path}"
   fi
+}
+
+prefer_bundled_prompt_if_legacy_command() {
+  local project_root="${1:?project_root required}"
+  local resolved_prompt_path="${2:?resolved_prompt_path required}"
+  local bundled_prompt_name="${3:?bundled_prompt_name required}"
+  local script_dir=""
+  local bundled_prompt_path=""
+  local rel_path=""
+
+  if [ -n "${SCRIPT_DIR:-}" ]; then
+    script_dir="${SCRIPT_DIR}"
+  else
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  fi
+
+  bundled_prompt_path="${script_dir}/../templates/${bundled_prompt_name}"
+
+  # Legacy .claude command prompt files often contain slash-command wrappers
+  # rather than the full automation prompt. Prefer bundled templates in that case.
+  if [[ "${resolved_prompt_path}" == "${project_root}/.claude/commands/"* ]] && [ -f "${bundled_prompt_path}" ]; then
+    rel_path="${resolved_prompt_path#${project_root}/}"
+    if grep -Eqi '^[[:space:]]*/[a-z0-9._/-]+' "${resolved_prompt_path}" 2>/dev/null; then
+      log "WARN: Prompt ${rel_path} looks like a slash-command wrapper; using bundled template ${bundled_prompt_name}"
+      printf "%s" "${bundled_prompt_path}"
+      return 0
+    fi
+  fi
+
+  printf "%s" "${resolved_prompt_path}"
 }
 
 night_watch_history() {

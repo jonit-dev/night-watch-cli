@@ -105,6 +105,7 @@ describe('review command', () => {
 
       expect(envVars.NW_REVIEWER_MAX_RETRIES).toBe('2');
       expect(envVars.NW_REVIEWER_RETRY_DELAY).toBe('30');
+      expect(envVars.NW_PRD_DIR).toBe(config.prdDir);
     });
 
     it('should include custom retry values when configured', () => {
