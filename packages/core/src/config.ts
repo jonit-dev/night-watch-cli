@@ -413,6 +413,32 @@ function sanitizeReviewerRetryDelay(value: number, fallback: number): number {
 }
 
 /**
+ * Apply a partial config layer onto a base, skipping undefined values.
+ * Nested objects are shallow-merged; arrays are spread (not concatenated).
+ */
+function mergeConfigLayer(base: INightWatchConfig, layer: Partial<INightWatchConfig>): void {
+  for (const _key of Object.keys(layer) as Array<keyof INightWatchConfig>) {
+    const value = layer[_key];
+    if (value === undefined) continue;
+
+    // Keys needing special (shallow) merge semantics with base
+    if (_key === 'providerEnv' || _key === 'boardProvider' || _key === 'qa' || _key === 'audit') {
+      (base as unknown as Record<string, unknown>)[_key] = {
+        ...(base[_key] as object),
+        ...(value as object),
+      };
+    } else if (_key === 'roadmapScanner' || _key === 'jobProviders') {
+      // These replace entirely (no base merge)
+      (base as unknown as Record<string, unknown>)[_key] = { ...(value as object) };
+    } else if (_key === 'branchPatterns' || _key === 'prdPriority') {
+      (base as unknown as Record<string, unknown>)[_key] = [...(value as string[])];
+    } else {
+      (base as unknown as Record<string, unknown>)[_key] = value;
+    }
+  }
+}
+
+/**
  * Deep merge configuration objects
  * Environment values take precedence over file values
  */
@@ -422,94 +448,8 @@ function mergeConfigs(
   envConfig: Partial<INightWatchConfig>,
 ): INightWatchConfig {
   const merged: INightWatchConfig = { ...base };
-
-  // Merge file config
-  if (fileConfig) {
-    if (fileConfig.defaultBranch !== undefined) merged.defaultBranch = fileConfig.defaultBranch;
-    if (fileConfig.prdDir !== undefined) merged.prdDir = fileConfig.prdDir;
-    if (fileConfig.maxRuntime !== undefined) merged.maxRuntime = fileConfig.maxRuntime;
-    if (fileConfig.reviewerMaxRuntime !== undefined)
-      merged.reviewerMaxRuntime = fileConfig.reviewerMaxRuntime;
-    if (fileConfig.branchPrefix !== undefined) merged.branchPrefix = fileConfig.branchPrefix;
-    if (fileConfig.branchPatterns !== undefined)
-      merged.branchPatterns = [...fileConfig.branchPatterns];
-    if (fileConfig.minReviewScore !== undefined) merged.minReviewScore = fileConfig.minReviewScore;
-    if (fileConfig.maxLogSize !== undefined) merged.maxLogSize = fileConfig.maxLogSize;
-    if (fileConfig.cronSchedule !== undefined) merged.cronSchedule = fileConfig.cronSchedule;
-    if (fileConfig.reviewerSchedule !== undefined)
-      merged.reviewerSchedule = fileConfig.reviewerSchedule;
-    if (fileConfig.cronScheduleOffset !== undefined)
-      merged.cronScheduleOffset = fileConfig.cronScheduleOffset;
-    if (fileConfig.maxRetries !== undefined) merged.maxRetries = fileConfig.maxRetries;
-    if (fileConfig.reviewerMaxRetries !== undefined)
-      merged.reviewerMaxRetries = fileConfig.reviewerMaxRetries;
-    if (fileConfig.reviewerRetryDelay !== undefined)
-      merged.reviewerRetryDelay = fileConfig.reviewerRetryDelay;
-    if (fileConfig.provider !== undefined) merged.provider = fileConfig.provider;
-    if (fileConfig.executorEnabled !== undefined)
-      merged.executorEnabled = fileConfig.executorEnabled;
-    if (fileConfig.reviewerEnabled !== undefined)
-      merged.reviewerEnabled = fileConfig.reviewerEnabled;
-    if (fileConfig.providerEnv !== undefined)
-      merged.providerEnv = { ...merged.providerEnv, ...fileConfig.providerEnv };
-    if (fileConfig.notifications !== undefined) merged.notifications = fileConfig.notifications;
-    if (fileConfig.prdPriority !== undefined) merged.prdPriority = [...fileConfig.prdPriority];
-    if (fileConfig.roadmapScanner !== undefined)
-      merged.roadmapScanner = { ...fileConfig.roadmapScanner };
-    if (fileConfig.templatesDir !== undefined) merged.templatesDir = fileConfig.templatesDir;
-    if (fileConfig.boardProvider !== undefined)
-      merged.boardProvider = { ...merged.boardProvider, ...fileConfig.boardProvider };
-    if (fileConfig.autoMerge !== undefined) merged.autoMerge = fileConfig.autoMerge;
-    if (fileConfig.autoMergeMethod !== undefined)
-      merged.autoMergeMethod = fileConfig.autoMergeMethod;
-    if (fileConfig.fallbackOnRateLimit !== undefined)
-      merged.fallbackOnRateLimit = fileConfig.fallbackOnRateLimit;
-    if (fileConfig.claudeModel !== undefined) merged.claudeModel = fileConfig.claudeModel;
-    if (fileConfig.qa !== undefined) merged.qa = { ...merged.qa, ...fileConfig.qa };
-    if (fileConfig.audit !== undefined) merged.audit = { ...merged.audit, ...fileConfig.audit };
-    if (fileConfig.jobProviders !== undefined) merged.jobProviders = { ...fileConfig.jobProviders };
-  }
-
-  // Merge env config (takes precedence)
-  if (envConfig.defaultBranch !== undefined) merged.defaultBranch = envConfig.defaultBranch;
-  if (envConfig.prdDir !== undefined) merged.prdDir = envConfig.prdDir;
-  if (envConfig.maxRuntime !== undefined) merged.maxRuntime = envConfig.maxRuntime;
-  if (envConfig.reviewerMaxRuntime !== undefined)
-    merged.reviewerMaxRuntime = envConfig.reviewerMaxRuntime;
-  if (envConfig.branchPrefix !== undefined) merged.branchPrefix = envConfig.branchPrefix;
-  if (envConfig.branchPatterns !== undefined) merged.branchPatterns = [...envConfig.branchPatterns];
-  if (envConfig.minReviewScore !== undefined) merged.minReviewScore = envConfig.minReviewScore;
-  if (envConfig.maxLogSize !== undefined) merged.maxLogSize = envConfig.maxLogSize;
-  if (envConfig.cronSchedule !== undefined) merged.cronSchedule = envConfig.cronSchedule;
-  if (envConfig.reviewerSchedule !== undefined)
-    merged.reviewerSchedule = envConfig.reviewerSchedule;
-  if (envConfig.cronScheduleOffset !== undefined)
-    merged.cronScheduleOffset = envConfig.cronScheduleOffset;
-  if (envConfig.maxRetries !== undefined) merged.maxRetries = envConfig.maxRetries;
-  if (envConfig.reviewerMaxRetries !== undefined)
-    merged.reviewerMaxRetries = envConfig.reviewerMaxRetries;
-  if (envConfig.reviewerRetryDelay !== undefined)
-    merged.reviewerRetryDelay = envConfig.reviewerRetryDelay;
-  if (envConfig.provider !== undefined) merged.provider = envConfig.provider;
-  if (envConfig.executorEnabled !== undefined) merged.executorEnabled = envConfig.executorEnabled;
-  if (envConfig.reviewerEnabled !== undefined) merged.reviewerEnabled = envConfig.reviewerEnabled;
-  if (envConfig.providerEnv !== undefined)
-    merged.providerEnv = { ...merged.providerEnv, ...envConfig.providerEnv };
-  if (envConfig.notifications !== undefined) merged.notifications = envConfig.notifications;
-  if (envConfig.prdPriority !== undefined) merged.prdPriority = [...envConfig.prdPriority];
-  if (envConfig.roadmapScanner !== undefined)
-    merged.roadmapScanner = { ...envConfig.roadmapScanner };
-  if (envConfig.templatesDir !== undefined) merged.templatesDir = envConfig.templatesDir;
-  if (envConfig.boardProvider !== undefined)
-    merged.boardProvider = { ...merged.boardProvider, ...envConfig.boardProvider };
-  if (envConfig.autoMerge !== undefined) merged.autoMerge = envConfig.autoMerge;
-  if (envConfig.autoMergeMethod !== undefined) merged.autoMergeMethod = envConfig.autoMergeMethod;
-  if (envConfig.fallbackOnRateLimit !== undefined)
-    merged.fallbackOnRateLimit = envConfig.fallbackOnRateLimit;
-  if (envConfig.claudeModel !== undefined) merged.claudeModel = envConfig.claudeModel;
-  if (envConfig.qa !== undefined) merged.qa = { ...merged.qa, ...envConfig.qa };
-  if (envConfig.audit !== undefined) merged.audit = { ...merged.audit, ...envConfig.audit };
-  if (envConfig.jobProviders !== undefined) merged.jobProviders = { ...envConfig.jobProviders };
+  if (fileConfig) mergeConfigLayer(merged, fileConfig);
+  mergeConfigLayer(merged, envConfig);
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
   merged.reviewerMaxRetries = sanitizeReviewerMaxRetries(

@@ -5,7 +5,6 @@
 import { Command } from 'commander';
 import {
   INightWatchConfig,
-  IWebhookConfig,
   PROVIDER_COMMANDS,
   createSpinner,
   createTable,
@@ -21,6 +20,7 @@ import {
   sendNotifications,
   error as uiError,
 } from '@night-watch/core';
+import { buildBaseEnvVars, getTelegramStatusWebhooks } from './shared/env-builder.js';
 import * as path from 'path';
 
 /**
@@ -61,21 +61,6 @@ export function parseQaPrNumbers(prsRaw?: string): number[] {
   return numbers;
 }
 
-function getTelegramStatusWebhooks(
-  config: INightWatchConfig,
-): Array<{ botToken: string; chatId: string }> {
-  return (config.notifications?.webhooks ?? [])
-    .filter(
-      (wh): wh is IWebhookConfig & { botToken: string; chatId: string } =>
-        wh.type === 'telegram' &&
-        typeof wh.botToken === 'string' &&
-        wh.botToken.trim().length > 0 &&
-        typeof wh.chatId === 'string' &&
-        wh.chatId.trim().length > 0,
-    )
-    .map((wh) => ({ botToken: wh.botToken, chatId: wh.chatId }));
-}
-
 /**
  * Build environment variables map from config and CLI options for QA
  */
@@ -83,16 +68,8 @@ export function buildEnvVars(
   config: INightWatchConfig,
   options: IQaOptions,
 ): Record<string, string> {
-  const env: Record<string, string> = {};
-
-  // Provider command - the actual CLI binary to call (use job-specific provider for qa)
-  const qaProvider = resolveJobProvider(config, 'qa');
-  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[qaProvider];
-
-  // Default branch (empty = auto-detect in bash script)
-  if (config.defaultBranch) {
-    env.NW_DEFAULT_BRANCH = config.defaultBranch;
-  }
+  // Start with base env vars shared by all job types
+  const env = buildBaseEnvVars(config, 'qa', options.dryRun);
 
   // Runtime for QA (uses NW_QA_* variables)
   env.NW_QA_MAX_RUNTIME = String(config.qa.maxRuntime);
@@ -107,11 +84,6 @@ export function buildEnvVars(
   env.NW_QA_ARTIFACTS = config.qa.artifacts;
   env.NW_QA_AUTO_INSTALL_PLAYWRIGHT = config.qa.autoInstallPlaywright ? '1' : '0';
 
-  // Provider environment variables (API keys, base URLs, etc.)
-  if (config.providerEnv) {
-    Object.assign(env, config.providerEnv);
-  }
-
   // Telegram status messages from bash scripts (start/progress/final status)
   const telegramWebhooks = getTelegramStatusWebhooks(config);
   if (telegramWebhooks.length > 0) {
@@ -119,14 +91,6 @@ export function buildEnvVars(
     env.NW_TELEGRAM_BOT_TOKEN = telegramWebhooks[0].botToken;
     env.NW_TELEGRAM_CHAT_ID = telegramWebhooks[0].chatId;
   }
-
-  // Dry run flag
-  if (options.dryRun) {
-    env.NW_DRY_RUN = '1';
-  }
-
-  // Sandbox flag -- prevents the agent from modifying crontab during execution
-  env.NW_EXECUTION_CONTEXT = 'agent';
 
   return env;
 }
