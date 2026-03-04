@@ -629,6 +629,16 @@ if ! prepare_detached_worktree "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}" "${DEFA
   exit 1
 fi
 
+REVIEWER_PROMPT_PATH=$(resolve_instruction_path "${REVIEW_WORKTREE_DIR}" "night-watch-pr-reviewer.md" || true)
+if [ -z "${REVIEWER_PROMPT_PATH}" ]; then
+  log "FAIL: Missing reviewer prompt file. Checked instructions/, .claude/commands/, and bundled templates/"
+  emit_result "failure" "reason=missing_reviewer_prompt"
+  exit 1
+fi
+REVIEWER_PROMPT_BASE=$(cat "${REVIEWER_PROMPT_PATH}")
+REVIEWER_PROMPT_REF=$(instruction_ref_for_prompt "${REVIEW_WORKTREE_DIR}" "${REVIEWER_PROMPT_PATH}")
+log "INFO: Using reviewer prompt from ${REVIEWER_PROMPT_REF}"
+
 EXIT_CODE=0
 ATTEMPTS_MADE=1
 FINAL_SCORE=""
@@ -685,13 +695,13 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
 
   log "RETRY: Starting attempt ${ATTEMPT}/${TOTAL_ATTEMPTS} (timeout: ${ATTEMPT_TIMEOUT}s)"
   LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
+  REVIEWER_PROMPT="${REVIEWER_PROMPT_BASE}${TARGET_SCOPE_PROMPT}"
 
   case "${PROVIDER_CMD}" in
     claude)
-      CLAUDE_PROMPT="/night-watch-pr-reviewer${TARGET_SCOPE_PROMPT}"
       if (
         cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" \
-          claude -p "${CLAUDE_PROMPT}" \
+          claude -p "${REVIEWER_PROMPT}" \
             --dangerously-skip-permissions \
             >> "${LOG_FILE}" 2>&1
       ); then
@@ -701,12 +711,11 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
       fi
       ;;
     codex)
-      CODEX_PROMPT="$(cat "${REVIEW_WORKTREE_DIR}/instructions/night-watch-pr-reviewer.md")${TARGET_SCOPE_PROMPT}"
       if (
         cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" \
           codex --quiet \
             --yolo \
-            --prompt "${CODEX_PROMPT}" \
+            --prompt "${REVIEWER_PROMPT}" \
             >> "${LOG_FILE}" 2>&1
       ); then
         EXIT_CODE=0
