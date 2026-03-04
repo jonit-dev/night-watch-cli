@@ -534,7 +534,7 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
       fi
       ;;
     codex)
-      CODEX_PROMPT="$(cat "${REVIEW_WORKTREE_DIR}/.claude/commands/night-watch-pr-reviewer.md")${TARGET_SCOPE_PROMPT}"
+      CODEX_PROMPT="$(cat "${REVIEW_WORKTREE_DIR}/instructions/night-watch-pr-reviewer.md")${TARGET_SCOPE_PROMPT}"
       if (
         cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" \
           codex --quiet \

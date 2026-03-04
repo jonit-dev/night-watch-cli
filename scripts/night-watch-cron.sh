@@ -317,7 +317,7 @@ ${ISSUE_BODY}
 - Install dependencies if needed and implement in the current worktree only
 
 ## Implementation — PRD Executor Workflow
-Read .claude/skills/prd-executor/SKILL.md (preferred) or .claude/commands/prd-executor.md (fallback), and follow the FULL execution pipeline:
+Read instructions/prd-executor.md and follow the FULL execution pipeline:
 1. Parse the PRD into phases and extract dependencies
 2. Build a dependency graph to identify parallelism
 3. Create a task list with one task per phase
@@ -345,7 +345,7 @@ else
 - Install dependencies if needed and implement in the current worktree only
 
 ## Implementation — PRD Executor Workflow
-Read .claude/skills/prd-executor/SKILL.md (preferred) or .claude/commands/prd-executor.md (fallback), and follow the FULL execution pipeline:
+Read instructions/prd-executor.md and follow the FULL execution pipeline:
 1. Parse the PRD into phases and extract dependencies
 2. Build a dependency graph to identify parallelism
 3. Create a task list with one task per phase
