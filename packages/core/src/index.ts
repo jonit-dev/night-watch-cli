@@ -21,11 +21,20 @@ export * from './utils/avatar-generator.js';
 export * from './utils/logger.js';
 export * from './utils/cancel.js';
 export * from './utils/checks.js';
+export * from './utils/claim-manager.js';
 export * from './utils/config-writer.js';
 export * from './utils/crontab.js';
 export * from './utils/execution-history.js';
+export * from './utils/git-utils.js';
 export * from './utils/github.js';
+export * from './utils/log-utils.js';
 export * from './utils/notify.js';
+export {
+  findEligiblePrd,
+  findEligibleBoardIssue,
+  sortPrdsByPriority,
+} from './utils/prd-discovery.js';
+export type { IFindEligiblePrdOptions, IEligibleBoardIssue } from './utils/prd-discovery.js';
 export * from './utils/prd-states.js';
 export * from './utils/prd-utils.js';
 export * from './utils/registry.js';
@@ -38,6 +47,7 @@ export * from './utils/shell.js';
 export * from './utils/status-data.js';
 export * from './utils/ui.js';
 export * from './utils/webhook-validator.js';
+export * from './utils/worktree-manager.js';
 export * from './templates/prd-template.js';
 export * from './templates/slicer-prompt.js';
 // Note: shared/types are re-exported selectively through types.ts to avoid duplicates.

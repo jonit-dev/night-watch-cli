@@ -42,6 +42,7 @@ vi.mock('../../utils/crontab.js', () => ({
 import { exec } from 'child_process';
 import { getEntries, getProjectEntries } from '../../utils/crontab.js';
 import {
+  acquireLock,
   auditLockPath,
   checkLockFile,
   collectLogInfo,
@@ -60,6 +61,7 @@ import {
   plannerLockPath,
   projectRuntimeKey,
   qaLockPath,
+  releaseLock,
   reviewerLockPath,
 } from '../../utils/status-data.js';
 import { INightWatchConfig } from '../../types.js';
@@ -1671,6 +1673,62 @@ describe('status-data utilities', () => {
       } finally {
         (process as any).kill = originalKill;
       }
+    });
+  });
+
+  describe('acquireLock', () => {
+    it('should acquire lock when no lock file exists', async () => {
+      const lockPath = path.join(tempDir, 'test.lock');
+      const result = acquireLock(lockPath);
+
+      expect(result).toBe(true);
+      expect(fs.existsSync(lockPath)).toBe(true);
+      expect(fs.readFileSync(lockPath, 'utf-8').trim()).toBe(String(process.pid));
+    });
+
+    it('should acquire lock with custom PID', async () => {
+      const lockPath = path.join(tempDir, 'test-custom.lock');
+      const result = acquireLock(lockPath, 99999);
+
+      expect(result).toBe(true);
+      expect(fs.readFileSync(lockPath, 'utf-8').trim()).toBe('99999');
+    });
+
+    it('should fail to acquire lock when held by running process', async () => {
+      const lockPath = path.join(tempDir, 'test-held.lock');
+
+      // Create lock file with current PID (which is running)
+      fs.writeFileSync(lockPath, String(process.pid));
+
+      const result = acquireLock(lockPath);
+      expect(result).toBe(false);
+    });
+
+    it('should remove stale lock and acquire when process is not running', async () => {
+      const lockPath = path.join(tempDir, 'test-stale.lock');
+
+      // Create lock file with a PID that's definitely not running
+      fs.writeFileSync(lockPath, '99999999');
+
+      const result = acquireLock(lockPath);
+      expect(result).toBe(true);
+      expect(fs.readFileSync(lockPath, 'utf-8').trim()).toBe(String(process.pid));
+    });
+  });
+
+  describe('releaseLock', () => {
+    it('should remove lock file', async () => {
+      const lockPath = path.join(tempDir, 'test-release.lock');
+      fs.writeFileSync(lockPath, String(process.pid));
+
+      releaseLock(lockPath);
+      expect(fs.existsSync(lockPath)).toBe(false);
+    });
+
+    it('should be silent when lock file does not exist', async () => {
+      const lockPath = path.join(tempDir, 'nonexistent.lock');
+      // Should not throw
+      expect(() => releaseLock(lockPath)).not.toThrow();
     });
   });
 });
