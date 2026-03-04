@@ -1022,6 +1022,78 @@ describe("core flow smoke tests (bash scripts)", () => {
     expect(result.stdout).toContain("NIGHT_WATCH_RESULT:skip_all_passing");
   });
 
+  it("reviewer should treat failed executor/qa/audit checks as needing work", () => {
+    const projectDir = mkTempDir("nw-smoke-reviewer-nonstandard-ci-fail-");
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, "logs"), { recursive: true });
+
+    const fakeBin = mkTempDir("nw-smoke-reviewer-nonstandard-ci-fail-bin-");
+
+    fs.writeFileSync(
+      path.join(fakeBin, "gh"),
+      "#!/usr/bin/env bash\n" +
+      "args=\"$*\"\n" +
+      "if [[ \"$1\" == \"repo\" && \"$2\" == \"view\" ]]; then\n" +
+      "  echo 'owner/repo'\n" +
+      "  exit 0\n" +
+      "fi\n" +
+      "if [[ \"$1\" == \"pr\" && \"$2\" == \"view\" ]]; then\n" +
+      "  # No merge conflicts for this PR\n" +
+      "  if [[ \"$args\" == *\"mergeStateStatus\"* ]]; then\n" +
+      "    echo 'CLEAN'\n" +
+      "  else\n" +
+      "    echo '{\"number\":1}'\n" +
+      "  fi\n" +
+      "  exit 0\n" +
+      "fi\n" +
+      "if [[ \"$1\" == \"pr\" && \"$2\" == \"list\" ]]; then\n" +
+      "  if [[ \"$args\" == *\"number,headRefName\"* ]]; then\n" +
+      "    printf '1\\tnight-watch/nonstandard-check-failure\\n'\n" +
+      "  else\n" +
+      "    echo 'night-watch/nonstandard-check-failure'\n" +
+      "  fi\n" +
+      "  exit 0\n" +
+      "fi\n" +
+      "if [[ \"$1\" == \"pr\" && \"$2\" == \"checks\" ]]; then\n" +
+      "  if [[ \"$args\" == *\"--json bucket,state,conclusion\"* ]]; then\n" +
+      "    # Simulate three failed non-standard checks (executor/qa/audit)\n" +
+      "    echo '3'\n" +
+      "    exit 0\n" +
+      "  fi\n" +
+      "  if [[ \"$args\" == *\"--json name,bucket,state,conclusion\"* ]]; then\n" +
+      "    echo 'executor [state=completed, conclusion=failure]; qa [state=completed, conclusion=failure]; audit [state=completed, conclusion=failure]'\n" +
+      "    exit 0\n" +
+      "  fi\n" +
+      "  # Legacy plain-text output intentionally avoids the word \"fail\" to\n" +
+      "  # ensure JSON-based detection is the deciding path.\n" +
+      "  echo 'executor/qa/audit checks red'\n" +
+      "  exit 1\n" +
+      "fi\n" +
+      "if [[ \"$1\" == \"api\" ]]; then\n" +
+      "  echo '[]'\n" +
+      "  exit 0\n" +
+      "fi\n" +
+      "exit 0\n",
+      { encoding: "utf-8", mode: 0o755 }
+    );
+
+    const result = runScript(reviewerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: "claude",
+      NW_DEFAULT_BRANCH: "main",
+      NW_BRANCH_PATTERNS: "night-watch/",
+      NW_MIN_REVIEW_SCORE: "80",
+      NW_AUTO_MERGE: "0",
+      NW_DRY_RUN: "1",
+      NW_REVIEWER_PARALLEL: "0",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("=== Dry Run: PR Reviewer ===");
+    expect(result.stdout).toContain("Open PRs needing work:#1");
+    expect(result.stdout).not.toContain("NIGHT_WATCH_RESULT:skip_all_passing");
+  });
+
   it("reviewer should emit failure when provider exits with non-zero code", () => {
     const projectDir = mkTempDir("nw-smoke-reviewer-failure-");
     initGitRepo(projectDir);
