@@ -145,11 +145,15 @@ async function sendRunCompletionNotifications(
   }
 
   if (event) {
+    const timeoutDuration = event === 'run_timeout' ? config.maxRuntime : undefined;
     const _ctx = {
       event,
       projectName: path.basename(projectDir),
       exitCode,
       provider: config.provider,
+      prdName: scriptResult?.data.prd,
+      branchName: scriptResult?.data.branch,
+      duration: timeoutDuration,
       prUrl: prDetails?.url,
       prTitle: prDetails?.title,
       prBody: prDetails?.body,
