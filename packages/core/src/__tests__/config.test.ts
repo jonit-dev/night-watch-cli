@@ -1155,6 +1155,56 @@ describe('config', () => {
     });
   });
 
+  describe('boardProvider config', () => {
+    it('defaults boardProvider.provider to local when not configured', () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.boardProvider.provider).toBe('local');
+    });
+
+    it('parses boardProvider.defaultIssueColumn from config file', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          boardProvider: { enabled: true, provider: 'local', defaultIssueColumn: 'In Progress' },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.boardProvider.defaultIssueColumn).toBe('In Progress');
+    });
+
+    it('ignores non-string defaultIssueColumn', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          boardProvider: { defaultIssueColumn: 42 },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.boardProvider.defaultIssueColumn).toBeUndefined();
+    });
+
+    it('boardProvider.defaultIssueColumn is undefined when not set', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          boardProvider: { enabled: true },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.boardProvider.defaultIssueColumn).toBeUndefined();
+    });
+  });
+
   describe('resolveJobProvider', () => {
     it('should return job-specific provider when set', () => {
       const config: INightWatchConfig = {
