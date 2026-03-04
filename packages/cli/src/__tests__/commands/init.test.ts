@@ -111,7 +111,7 @@ describe('init command', () => {
   });
 
   describeIfExternalTools('should copy slash command templates', () => {
-    it('should create .claude/commands/night-watch.md', () => {
+    it('should create instructions/night-watch.md', () => {
       // Initialize git repo
       execSync('git init', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
@@ -124,12 +124,12 @@ describe('init command', () => {
         timeout: 15000,
       });
 
-      const commandsDir = path.join(tempDir, '.claude', 'commands');
-      const nightWatchMd = path.join(commandsDir, 'night-watch.md');
-      const prdExecutorMd = path.join(commandsDir, 'prd-executor.md');
-      const prReviewerMd = path.join(commandsDir, 'night-watch-pr-reviewer.md');
-      const qaMd = path.join(commandsDir, 'night-watch-qa.md');
-      const auditMd = path.join(commandsDir, 'night-watch-audit.md');
+      const instructionsDir = path.join(tempDir, 'instructions');
+      const nightWatchMd = path.join(instructionsDir, 'night-watch.md');
+      const prdExecutorMd = path.join(instructionsDir, 'prd-executor.md');
+      const prReviewerMd = path.join(instructionsDir, 'night-watch-pr-reviewer.md');
+      const qaMd = path.join(instructionsDir, 'night-watch-qa.md');
+      const auditMd = path.join(instructionsDir, 'night-watch-audit.md');
 
       expect(fs.existsSync(nightWatchMd)).toBe(true);
       expect(fs.existsSync(prdExecutorMd)).toBe(true);
@@ -267,6 +267,55 @@ describe('init command', () => {
       // Verify no budget fields in config
       expect(config.maxBudget).toBeUndefined();
       expect(config.reviewerMaxBudget).toBeUndefined();
+    });
+  });
+
+  describeIfExternalTools('should NOT create .claude/commands/ directory', () => {
+    it('should not create .claude/commands/ after nw init', () => {
+      // Initialize git repo
+      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
+
+      execSync(`${TSX_CMD} init --provider claude`, {
+        encoding: 'utf-8',
+        cwd: tempDir,
+        stdio: 'pipe',
+        timeout: 15000,
+      });
+
+      // Guard against accidentally leaving .claude/commands/ creation code behind
+      const claudeCommandsDir = path.join(tempDir, '.claude', 'commands');
+      expect(fs.existsSync(claudeCommandsDir)).toBe(false);
+    });
+  });
+
+  describeIfExternalTools('should overwrite instructions files with --force', () => {
+    it('should overwrite existing instructions/night-watch.md with --force flag', () => {
+      // Initialize git repo
+      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
+
+      // Pre-create instructions/night-watch.md with stale content
+      const instructionsDir = path.join(tempDir, 'instructions');
+      fs.mkdirSync(instructionsDir, { recursive: true });
+      const nightWatchMd = path.join(instructionsDir, 'night-watch.md');
+      const staleContent = '# STALE CONTENT - should be overwritten';
+      fs.writeFileSync(nightWatchMd, staleContent);
+
+      // Run with --force
+      execSync(`${TSX_CMD} init --force --provider claude`, {
+        encoding: 'utf-8',
+        cwd: tempDir,
+        stdio: 'pipe',
+        timeout: 15000,
+      });
+
+      // File content should have changed (no longer stale)
+      const newContent = fs.readFileSync(nightWatchMd, 'utf-8');
+      expect(newContent).not.toBe(staleContent);
+      expect(newContent).not.toContain('STALE CONTENT');
     });
   });
 
@@ -409,7 +458,7 @@ describe('init command', () => {
         timeout: 15000,
       });
 
-      const nightWatchMd = path.join(tempDir, '.claude', 'commands', 'night-watch.md');
+      const nightWatchMd = path.join(tempDir, 'instructions', 'night-watch.md');
       const content = fs.readFileSync(nightWatchMd, 'utf-8');
 
       // Should contain our custom content

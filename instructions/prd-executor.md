@@ -56,6 +56,7 @@ flowchart TD
 ```
 
 **Dependency rules:**
+
 - If Phase B modifies files created in Phase A → B depends on A
 - If Phase B imports types/interfaces from Phase A → B depends on A
 - If Phase B tests endpoints built in Phase A → B depends on A
@@ -77,11 +78,13 @@ Before launching any agent wave, check for and apply pending migrations:
 Use `TaskCreate` to create one task per phase. Set up dependencies with `addBlockedBy`/`addBlocks`.
 
 For each phase, create a task with:
+
 - **subject**: `Phase N: [phase name]`
 - **description**: Full phase details from PRD (files, implementation steps, tests)
 - **activeForm**: `Executing Phase N: [name]`
 
 Then link dependencies:
+
 - Independent phases: no blockers
 - Dependent phases: `addBlockedBy` pointing to their prerequisite phase task IDs
 
@@ -93,15 +96,15 @@ Launch all unblocked phases simultaneously using the `Task` tool with **multiple
 
 #### Agent Selection per Phase Type
 
-| Phase Content | Agent Type | Why |
-|---|---|---|
-| Database schemas, migrations | `code-writer` | Schema changes need careful ordering |
-| New API endpoints | `api-endpoint-builder` | Specialized for endpoint patterns |
-| Business logic / services | `code-writer` | General implementation |
-| Frontend components / pages | `code-writer` | UI implementation |
-| Test coverage | `test-generator` | Specialized for test creation |
-| Bug fixes in existing code | `code-writer` | Targeted fixes |
-| Refactoring | `code-refactorer` | Specialized for restructuring |
+| Phase Content                | Agent Type             | Why                                  |
+| ---------------------------- | ---------------------- | ------------------------------------ |
+| Database schemas, migrations | `code-writer`          | Schema changes need careful ordering |
+| New API endpoints            | `api-endpoint-builder` | Specialized for endpoint patterns    |
+| Business logic / services    | `code-writer`          | General implementation               |
+| Frontend components / pages  | `code-writer`          | UI implementation                    |
+| Test coverage                | `test-generator`       | Specialized for test creation        |
+| Bug fixes in existing code   | `code-writer`          | Targeted fixes                       |
+| Refactoring                  | `code-refactorer`      | Specialized for restructuring        |
 
 #### Prompt Template for Each Agent
 
@@ -173,6 +176,7 @@ Wave N: Continue until all phases complete
 ```
 
 **Between each wave:**
+
 1. Update task statuses (mark completed phases)
 2. Check which blocked tasks are now unblocked
 3. Run `yarn verify` to catch integration issues early
@@ -183,11 +187,13 @@ Wave N: Continue until all phases complete
 After ALL phases complete:
 
 1. **Run full verification:**
+
    ```bash
    yarn verify
    ```
 
 2. **Spawn prd-work-reviewer agent:**
+
    ```
    Task(prd-work-reviewer, "Review FULL implementation against PRD at [path].
    Check all phases, all acceptance criteria, all tests.")
@@ -212,20 +218,23 @@ After completion, report:
 **Parallelism achieved:** [max concurrent agents in any wave]
 
 ### Phase Results
-| Phase | Status | Agent | Duration |
-|-------|--------|-------|----------|
-| 1: Foundation | PASS | code-writer | - |
-| 2: Backend | PASS | api-endpoint-builder | - |
-| 3: Frontend | PASS | code-writer | - |
-| 4: Integration | PASS | code-writer | - |
+
+| Phase          | Status | Agent                | Duration |
+| -------------- | ------ | -------------------- | -------- |
+| 1: Foundation  | PASS   | code-writer          | -        |
+| 2: Backend     | PASS   | api-endpoint-builder | -        |
+| 3: Frontend    | PASS   | code-writer          | -        |
+| 4: Integration | PASS   | code-writer          | -        |
 
 ### Verification
+
 - yarn verify: PASS/FAIL
 - PRD reviewer: PASS/FAIL
 - Issues found: [count]
 - Issues fixed: [count]
 
 ### Files Changed
+
 [list of files modified/created]
 ```
 
@@ -234,19 +243,25 @@ After completion, report:
 ## Error Handling
 
 ### Agent Failure
+
 If an agent fails or returns incomplete work:
+
 1. Read the agent's output to understand what failed
 2. Fix the issue directly or re-launch the agent with more context
 3. Do NOT proceed to dependent phases until the failure is resolved
 
 ### Verify Failure Between Waves
+
 If `yarn verify` fails between waves:
+
 1. Identify which phase's changes caused the failure
 2. Fix the issue before launching the next wave
 3. Re-run verify to confirm
 
 ### Conflicting File Changes
+
 If two parallel agents modify the same file:
+
 1. This means the dependency analysis was wrong
 2. Merge the changes manually
 3. Add a note for future PRDs about the hidden dependency
