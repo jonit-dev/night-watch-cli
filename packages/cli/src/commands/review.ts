@@ -59,6 +59,29 @@ export function parseAutoMergedPrNumbers(raw?: string): number[] {
 }
 
 /**
+ * Parse comma-separated PR numbers like "#12,#34" into numeric IDs.
+ * Deduplicates while preserving order.
+ */
+export function parseReviewedPrNumbers(raw?: string): number[] {
+  if (!raw || raw.trim().length === 0) {
+    return [];
+  }
+
+  const seen = new Set<number>();
+  return raw
+    .split(',')
+    .map((token) => parseInt(token.trim().replace(/^#/, ''), 10))
+    .filter((value) => !Number.isNaN(value))
+    .filter((value) => {
+      if (seen.has(value)) {
+        return false;
+      }
+      seen.add(value);
+      return true;
+    });
+}
+
+/**
  * Parse retry attempts from script result data.
  * Returns the number of attempts (defaults to 1 if not present or invalid).
  */
@@ -158,6 +181,84 @@ export function applyCliOverrides(
   }
 
   return overridden;
+}
+
+interface ICheckStatus {
+  name?: string;
+  bucket?: string;
+  state?: string;
+  conclusion?: string;
+}
+
+/**
+ * Whether a GitHub check entry should be treated as failing/action-required.
+ */
+export function isFailingCheck(check: ICheckStatus): boolean {
+  const bucket = (check.bucket ?? '').toLowerCase();
+  const state = (check.state ?? '').toLowerCase();
+  const conclusion = (check.conclusion ?? '').toLowerCase();
+
+  return (
+    bucket === 'fail' ||
+    bucket === 'cancel' ||
+    state === 'failure' ||
+    state === 'error' ||
+    state === 'cancelled' ||
+    conclusion === 'failure' ||
+    conclusion === 'error' ||
+    conclusion === 'cancelled' ||
+    conclusion === 'timed_out' ||
+    conclusion === 'action_required' ||
+    conclusion === 'startup_failure' ||
+    conclusion === 'stale'
+  );
+}
+
+/**
+ * Get a human-readable list of failing checks for a PR.
+ */
+export function getPrFailingChecks(prNumber: number): string[] {
+  try {
+    const result = execFileSync(
+      'gh',
+      ['pr', 'checks', String(prNumber), '--json', 'name,bucket,state,conclusion'],
+      {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      },
+    );
+
+    const checks = JSON.parse(result.trim() || '[]') as ICheckStatus[];
+    const failing = checks
+      .filter((check) => isFailingCheck(check))
+      .map(
+        (check) =>
+          `${check.name ?? 'unknown'} [state=${check.state ?? 'unknown'}, conclusion=${check.conclusion ?? 'unknown'}]`,
+      );
+
+    if (failing.length > 0) {
+      return failing;
+    }
+  } catch {
+    // Fall through to text-mode fallback.
+  }
+
+  try {
+    const result = execFileSync('gh', ['pr', 'checks', String(prNumber)], {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    return result
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .filter((line) =>
+        /fail|error|cancel|timed[_ -]?out|action_required|startup_failure|stale/i.test(line),
+      );
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -280,6 +381,26 @@ export function reviewCommand(program: Command): void {
         console.log();
 
         process.exit(0);
+      }
+
+      // Preflight visibility: show currently failing checks before the fixer runs.
+      const preflightOpenPrs = getOpenPrsNeedingWork(config.branchPatterns);
+      const preflightFailures = preflightOpenPrs
+        .map((pr) => ({
+          prNumber: pr.number,
+          title: pr.title,
+          failingChecks: getPrFailingChecks(pr.number),
+        }))
+        .filter((entry) => entry.failingChecks.length > 0);
+
+      if (preflightFailures.length > 0) {
+        header('Preflight Failing Checks');
+        for (const entry of preflightFailures) {
+          info(`#${entry.prNumber}: ${entry.title}`);
+          for (const check of entry.failingChecks) {
+            dim(`  ${check}`);
+          }
+        }
       }
 
       // Execute the script with spinner
