@@ -197,7 +197,7 @@ export function getNextRunTime(cronExpr: string): Date | null {
         next.setHours(start, 0, 0);
       }
       // Otherwise we're in the range, keep the hour
-    } else if (hour !== '*' && !minute.startsWith('*/')) {
+    } else if (hour !== '*' && !minute.startsWith('*/') && hour.includes(',')) {
       const hours = hour.split(',').map(Number);
       const currentHour = next.getHours();
       const nextHour = hours.find(h => h > currentHour);
