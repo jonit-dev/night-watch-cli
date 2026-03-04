@@ -45,8 +45,8 @@ describe.skipIf(!isGitAvailable())('worktree-manager', () => {
     projectDir = path.join(tmpDir, 'project');
     remoteDir = path.join(tmpDir, 'remote');
 
-    // Create bare remote repo
-    git(['init', '--bare', remoteDir]);
+    // Create bare remote repo (use tmpDir as cwd — projectDir doesn't exist yet)
+    git(['init', '--bare', remoteDir], tmpDir);
 
     // Create local repo with remote
     fs.mkdirSync(projectDir);
@@ -222,7 +222,7 @@ describe.skipIf(!isGitAvailable())('worktree-manager', () => {
 
     it('should only remove worktrees matching scope', () => {
       const wt1 = path.join(tmpDir, 'project-nw-scope1');
-      const wt2 = path.join(tmpDir, 'project-nw-scope2');
+      const wt2 = path.join(tmpDir, 'project-nw-feature1');
       const wt3 = path.join(tmpDir, 'project-other');
 
       prepareBranchWorktree({
@@ -234,7 +234,7 @@ describe.skipIf(!isGitAvailable())('worktree-manager', () => {
       prepareBranchWorktree({
         projectDir,
         worktreeDir: wt2,
-        branchName: 'nw-scope2',
+        branchName: 'nw-feature1',
         defaultBranch: 'main',
       });
       prepareBranchWorktree({
