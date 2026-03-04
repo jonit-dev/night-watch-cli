@@ -241,7 +241,7 @@ Artifacts: ${QA_ARTIFACTS}"
         cd "${QA_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
           codex --quiet \
             --yolo \
-            --prompt "$(cat "${QA_WORKTREE_DIR}/.claude/commands/night-watch-qa.md")" \
+            --prompt "$(cat "${QA_WORKTREE_DIR}/instructions/night-watch-qa.md")" \
             >> "${LOG_FILE}" 2>&1
       ); then
         log "QA: PR #${pr_num} — provider completed successfully"

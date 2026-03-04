@@ -111,7 +111,7 @@ describe('init command', () => {
   });
 
   describeIfExternalTools('should copy slash command templates', () => {
-    it('should create .claude/commands/night-watch.md', () => {
+    it('should create instructions/night-watch.md', () => {
       // Initialize git repo
       execSync('git init', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
@@ -124,12 +124,12 @@ describe('init command', () => {
         timeout: 15000,
       });
 
-      const commandsDir = path.join(tempDir, '.claude', 'commands');
-      const nightWatchMd = path.join(commandsDir, 'night-watch.md');
-      const prdExecutorMd = path.join(commandsDir, 'prd-executor.md');
-      const prReviewerMd = path.join(commandsDir, 'night-watch-pr-reviewer.md');
-      const qaMd = path.join(commandsDir, 'night-watch-qa.md');
-      const auditMd = path.join(commandsDir, 'night-watch-audit.md');
+      const instructionsDir = path.join(tempDir, 'instructions');
+      const nightWatchMd = path.join(instructionsDir, 'night-watch.md');
+      const prdExecutorMd = path.join(instructionsDir, 'prd-executor.md');
+      const prReviewerMd = path.join(instructionsDir, 'night-watch-pr-reviewer.md');
+      const qaMd = path.join(instructionsDir, 'night-watch-qa.md');
+      const auditMd = path.join(instructionsDir, 'night-watch-audit.md');
 
       expect(fs.existsSync(nightWatchMd)).toBe(true);
       expect(fs.existsSync(prdExecutorMd)).toBe(true);
@@ -409,7 +409,7 @@ describe('init command', () => {
         timeout: 15000,
       });
 
-      const nightWatchMd = path.join(tempDir, '.claude', 'commands', 'night-watch.md');
+      const nightWatchMd = path.join(tempDir, 'instructions', 'night-watch.md');
       const content = fs.readFileSync(nightWatchMd, 'utf-8');
 
       // Should contain our custom content

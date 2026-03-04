@@ -22,15 +22,6 @@ A PR needs attention if **any** of the following: merge conflicts present, revie
 
 ## Instructions
 
-0. **Clean up stale review worktrees** from previous interrupted runs before doing anything:
-
-   ```bash
-   git worktree list --porcelain | grep '^worktree ' | awk '{print $2}' | grep -- '-nw-review-' | while read -r wt; do
-     git worktree remove --force "$wt" 2>/dev/null || true
-   done
-   git worktree prune
-   ```
-
 1. **Find open PRs** created by Night Watch:
 
    ```
@@ -98,22 +89,22 @@ Parse the review score from the comment body. Look for patterns like:
 
 4. **Fix the PR**:
 
-   a. **Check out the PR branch**:
+   a. **Create an isolated review worktree**:
 
    ```
    git fetch origin
+   git worktree add --detach ../${PROJECT_NAME}-nw-review-<branch-name> origin/${DEFAULT_BRANCH}
+   ```
+
+   b. **Check out the PR branch inside that worktree**:
+
+   ```
+   cd ../${PROJECT_NAME}-nw-review-<branch-name>
    git checkout <branch-name>
    git pull origin <branch-name>
    ```
 
-   b. **Create a worktree** for the fixes. Branch names may contain `/` (e.g. `night-watch/feature`), so sanitize by replacing `/` with `-` for the directory path:
-
-   ```bash
-   SAFE_NAME="$(echo '<branch-name>' | tr '/' '-')"
-   git worktree add "../night-watch-cli-nw-review-${SAFE_NAME}" <branch-name>
-   ```
-
-   `cd` into worktree, run package install (npm install, yarn install, or pnpm install as appropriate).
+   Run package install (npm install, yarn install, or pnpm install as appropriate).
 
    c. **Resolve merge conflicts** (if `mergeStateStatus` was `DIRTY` or `CONFLICTING`):
    - Get the base branch: `gh pr view <number> --json baseRefName --jq '.baseRefName'`
@@ -140,7 +131,7 @@ Parse the review score from the comment body. Look for patterns like:
    - Improve error handling if flagged.
    - Add missing tests if coverage was noted.
    - Refactor code if structure was criticized.
-   - Follow all project conventions from CLAUDE.md or similar documentation files.
+   - Follow all project conventions from AI assistant documentation files (e.g., CLAUDE.md, AGENTS.md, or similar).
 
    e. **Address CI failures** (if any):
    - Check CI status and identify non-passing checks:
@@ -205,19 +196,11 @@ Parse the review score from the comment body. Look for patterns like:
    Night Watch PR Reviewer"
    ```
 
-   i. **Clean up worktree**:
-
-   ```bash
-   SAFE_NAME="$(echo '<branch-name>' | tr '/' '-')"
-   git worktree remove --force "../night-watch-cli-nw-review-${SAFE_NAME}"
-   git worktree prune
-   ```
-
-   If the worktree was never created (e.g. skipped PR), this is a no-op — continue without error.
+   i. **Clean up worktree**: `git worktree remove ../${PROJECT_NAME}-nw-review-<branch-name>`
 
 5. **Repeat** for all open PRs that need work.
 
-6. When done, return to main: `git checkout main`
+6. When done, return to ${DEFAULT_BRANCH}: `git checkout ${DEFAULT_BRANCH}`
 
 Start now. Check for open PRs that need merge conflicts resolved, review feedback addressed, or CI failures fixed.
 
