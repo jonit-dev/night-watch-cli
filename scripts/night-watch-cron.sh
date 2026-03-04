@@ -184,6 +184,95 @@ count_prs_for_branch() {
   echo "${count:-0}"
 }
 
+checkpoint_timeout_progress() {
+  local worktree_dir="${1:?worktree_dir required}"
+  local branch_name="${2:?branch_name required}"
+  local prd_file="${3:?prd_file required}"
+
+  if [ ! -d "${worktree_dir}" ]; then
+    return 0
+  fi
+
+  if ! git -C "${worktree_dir}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [ -z "$(git -C "${worktree_dir}" status --porcelain 2>/dev/null)" ]; then
+    log "TIMEOUT: No local changes to checkpoint for ${prd_file}"
+    return 0
+  fi
+
+  log "TIMEOUT: Checkpointing local progress for ${prd_file} on ${branch_name}"
+  if git -C "${worktree_dir}" add -A >/dev/null 2>&1; then
+    if ! git -C "${worktree_dir}" diff --cached --quiet >/dev/null 2>&1; then
+      git -C "${worktree_dir}" commit --no-verify \
+        -m "chore: checkpoint timed-out progress for ${prd_file}" \
+        >> "${LOG_FILE}" 2>&1 || true
+    fi
+  fi
+}
+
+extract_timeout_phase_titles() {
+  local issue_body="${1:-}"
+  if [ -z "${issue_body}" ]; then
+    return 0
+  fi
+
+  printf '%s\n' "${issue_body}" \
+    | tr -d '\r' \
+    | awk '
+        BEGIN { count = 0 }
+        /^[[:space:]]*#{2,4}[[:space:]]*Phase[[:space:]]+[0-9]+[[:space:]]*:/ {
+          line = $0
+          sub(/^[[:space:]]*#{2,4}[[:space:]]*/, "", line)
+          gsub(/[[:space:]]+$/, "", line)
+          if (count < 3) {
+            count++
+            print line
+          }
+        }
+      '
+}
+
+build_timeout_followup_comment() {
+  local max_runtime="${1:?max_runtime required}"
+  local prd_label="${2:?prd_label required}"
+  local branch_name="${3:?branch_name required}"
+  local issue_body="${4:-}"
+  local phase_titles=""
+  local comment=""
+
+  phase_titles=$(extract_timeout_phase_titles "${issue_body}" || true)
+
+  comment="Timeout follow-up:
+
+Execution hit the ${max_runtime}s runtime limit while processing ${prd_label}.
+Progress was checkpointed on branch ${branch_name}, so the next run will resume from the latest checkpoint.
+
+Suggested slices for the next runs:"
+
+  if [ -n "${phase_titles}" ]; then
+    local idx=1
+    while IFS= read -r phase_title; do
+      [ -z "${phase_title}" ] && continue
+      comment="${comment}
+${idx}. ${phase_title}"
+      idx=$((idx + 1))
+    done <<< "${phase_titles}"
+  else
+    comment="${comment}
+1. Phase 1: Setup and interfaces
+2. Phase 2: Core implementation and tests
+3. Phase 3: Integration and verification"
+  fi
+
+  comment="${comment}
+
+Recommendation: avoid huge PRDs. Slice large work into smaller PRDs/phases so each run can finish within the runtime window."
+
+  printf '%s' "${comment}"
+}
+
 finalize_prd_done() {
   local reason="${1:?reason required}"
 
@@ -472,10 +561,17 @@ if [ ${EXIT_CODE} -eq 0 ]; then
   fi
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: Night watch killed after ${MAX_RUNTIME}s while processing ${ELIGIBLE_PRD}"
+  checkpoint_timeout_progress "${WORKTREE_DIR}" "${BRANCH_NAME}" "${ELIGIBLE_PRD}"
   if [ -n "${ISSUE_NUMBER}" ]; then
     "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
     "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
       --body "Execution timed out after ${MAX_RUNTIME}s. Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
+    TIMEOUT_FOLLOWUP_COMMENT=$(build_timeout_followup_comment \
+      "${MAX_RUNTIME}" \
+      "${ELIGIBLE_PRD}" \
+      "${BRANCH_NAME}" \
+      "${ISSUE_BODY}")
+    "${NW_CLI}" board comment "${ISSUE_NUMBER}" --body "${TIMEOUT_FOLLOWUP_COMMENT}" 2>>"${LOG_FILE}" || true
   fi
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" timeout --exit-code 124 2>/dev/null || true
   emit_result "timeout" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
