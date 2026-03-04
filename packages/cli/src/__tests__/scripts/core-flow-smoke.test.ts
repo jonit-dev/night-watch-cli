@@ -1412,6 +1412,89 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(moveLog).toContain('Ready');
   });
 
+  it('executor board mode timeout should post a follow-up comment with resume + slice suggestions', () => {
+    const projectDir = mkTempDir('nw-smoke-executor-board-timeout-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-bin-board-timeout-');
+    const issueNumber = '789';
+    const commentLog = path.join(projectDir, '.smoke-timeout-comments');
+
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nsleep 2\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "issue" && "$2" == "view" ]]; then\n' +
+        '  echo \'{"number":789,"title":"Large Migration","body":"## Phases\\n\\n### Phase 1: Git Utilities\\n\\n### Phase 2: Worktree Management\\n\\n### Phase 3: Lock and Claim Management"}\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const nwCli = path.join(fakeBin, 'night-watch');
+    fs.writeFileSync(
+      nwCli,
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "board" && "$2" == "move-issue" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "board" && "$2" == "comment" ]]; then\n' +
+        "  body=''\n" +
+        '  for ((i=1; i<=$#; i++)); do\n' +
+        '    if [[ "${!i}" == "--body" ]]; then\n' +
+        '      j=$((i+1))\n' +
+        '      body="${!j}"\n' +
+        '      break\n' +
+        '    fi\n' +
+        '  done\n' +
+        '  {\n' +
+        "    echo '---'\n" +
+        '    printf \'%s\\n\' "$body"\n' +
+        '  } >> "$NW_SMOKE_COMMENT_LOG"\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "board" && "$2" == "close-issue" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(executorScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BOARD_ENABLED: 'true',
+      NW_TARGET_ISSUE: issueNumber,
+      NW_CLI_BIN: nwCli,
+      NW_MAX_RUNTIME: '1',
+      NW_SMOKE_COMMENT_LOG: commentLog,
+    });
+
+    expect(result.status).toBe(124);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:timeout');
+    expect(fs.existsSync(commentLog)).toBe(true);
+
+    const comments = fs.readFileSync(commentLog, 'utf-8');
+    expect(comments).toContain('Timeout follow-up:');
+    expect(comments).toContain('will resume from the latest checkpoint');
+    expect(comments).toContain('Suggested slices for the next runs:');
+    expect(comments).toContain('Phase 1: Git Utilities');
+    expect(comments).toContain('Phase 2: Worktree Management');
+    expect(comments).toContain('Phase 3: Lock and Claim Management');
+    expect(comments).toContain('avoid huge PRDs');
+    expect(comments).toContain('Slice large work into smaller PRDs/phases');
+  });
+
   it('executor should trigger native Claude fallback and include rate_limit_fallback marker when proxy returns 429', () => {
     const projectDir = mkTempDir('nw-smoke-executor-rate-limit-fallback-');
     initGitRepo(projectDir);

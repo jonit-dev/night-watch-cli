@@ -123,6 +123,13 @@ export function buildDescription(ctx: INotificationContext): string {
   if (ctx.duration !== undefined) {
     lines.push(`Duration: ${ctx.duration}s`);
   }
+  if (ctx.event === 'run_timeout') {
+    lines.push('Cause: Execution hit the max runtime limit and was terminated.');
+    lines.push(
+      'Resume: Progress is checkpointed on timeout, and the next run resumes from that branch state.',
+    );
+    lines.push('Recommendation: Avoid huge PRDs; slice large work into smaller PRDs/phases.');
+  }
   // Include retry info for review events when attempts > 1
   if (ctx.event === 'review_completed' && ctx.attempts !== undefined && ctx.attempts > 1) {
     const retryInfo = `Attempts: ${ctx.attempts}`;

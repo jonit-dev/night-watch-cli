@@ -207,6 +207,28 @@ describe('notification utilities', () => {
       });
       expect(text).not.toContain('Attempts:');
     });
+
+    it('should include actionable guidance for run_timeout events', () => {
+      const text = buildDescription({
+        ...baseCtx,
+        event: 'run_timeout',
+        exitCode: 124,
+        prdName: '57-migrate-bash-business-logic-to-typescript',
+        branchName: 'night-watch/57-migrate-bash-business-logic-to-typescript',
+        duration: 7200,
+      });
+
+      expect(text).toContain('PRD: 57-migrate-bash-business-logic-to-typescript');
+      expect(text).toContain('Branch: night-watch/57-migrate-bash-business-logic-to-typescript');
+      expect(text).toContain('Duration: 7200s');
+      expect(text).toContain('Cause: Execution hit the max runtime limit and was terminated.');
+      expect(text).toContain(
+        'Resume: Progress is checkpointed on timeout, and the next run resumes from that branch state.',
+      );
+      expect(text).toContain(
+        'Recommendation: Avoid huge PRDs; slice large work into smaller PRDs/phases.',
+      );
+    });
   });
 
   describe('sendWebhook', () => {
