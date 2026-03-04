@@ -42,9 +42,7 @@ export function slugify(name: string): string {
  */
 export function getNextPrdNumber(prdDir: string): number {
   if (!fs.existsSync(prdDir)) return 1;
-  const files = fs
-    .readdirSync(prdDir)
-    .filter((f) => f.endsWith('.md') && f !== 'NIGHT-WATCH-SUMMARY.md');
+  const files = fs.readdirSync(prdDir).filter((f) => f.endsWith('.md'));
   const numbers = files.map((f) => {
     const match = f.match(/^(\d+)-/);
     return match ? parseInt(match[1], 10) : 0;
@@ -268,9 +266,7 @@ export function prdCommand(program: Command): void {
         claimInfo?: { hostname: string; pid: number };
       }> = [];
       if (fs.existsSync(absolutePrdDir)) {
-        const files = fs
-          .readdirSync(absolutePrdDir)
-          .filter((f) => f.endsWith('.md') && f !== 'NIGHT-WATCH-SUMMARY.md');
+        const files = fs.readdirSync(absolutePrdDir).filter((f) => f.endsWith('.md'));
         for (const file of files) {
           const content = fs.readFileSync(path.join(absolutePrdDir, file), 'utf-8');
           const deps = parseDependencies(content);

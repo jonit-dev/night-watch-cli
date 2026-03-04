@@ -70,7 +70,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
     it('should provide default values for all new PRD fields', () => {
       // Verify defaults for new fields from PRD
       const defaults = {
-        prdDir: 'docs/PRDs/night-watch',
+        prdDir: 'docs/prds',
         fallbackOnRateLimit: false,
         claudeModel: 'sonnet',
         cronSchedule: '0 0-21 * * *',
@@ -93,7 +93,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
       };
 
       // These defaults match the toFormState() function in Settings.tsx
-      expect(defaults.prdDir).toBe('docs/PRDs/night-watch');
+      expect(defaults.prdDir).toBe('docs/prds');
       expect(defaults.fallbackOnRateLimit).toBe(false);
       expect(defaults.claudeModel).toBe('sonnet');
       expect(defaults.qa.artifacts).toBe('both');

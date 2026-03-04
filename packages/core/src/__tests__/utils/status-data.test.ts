@@ -67,7 +67,7 @@ import { INightWatchConfig } from '../../types.js';
 function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConfig {
   return {
     defaultBranch: 'main',
-    prdDir: 'docs/PRDs/night-watch',
+    prdDir: 'docs/prds',
     maxRuntime: 7200,
     reviewerMaxRuntime: 3600,
     branchPrefix: 'night-watch',
@@ -270,12 +270,12 @@ describe('status-data utilities', () => {
 
   describe('countPRDs', () => {
     it('should return zeros when PRD directory does not exist', async () => {
-      const result = countPRDs(tempDir, 'docs/PRDs/night-watch', 7200);
+      const result = countPRDs(tempDir, 'docs/prds', 7200);
       expect(result).toEqual({ pending: 0, claimed: 0, done: 0 });
     });
 
     it('should count pending and done PRDs', async () => {
-      const prdDir = path.join(tempDir, 'docs', 'PRDs', 'night-watch');
+      const prdDir = path.join(tempDir, 'docs', 'prds');
       fs.mkdirSync(prdDir, { recursive: true });
       fs.mkdirSync(path.join(prdDir, 'done'), { recursive: true });
 
@@ -283,14 +283,14 @@ describe('status-data utilities', () => {
       fs.writeFileSync(path.join(prdDir, 'phase2.md'), '# Phase 2');
       fs.writeFileSync(path.join(prdDir, 'done', 'phase0.md'), '# Phase 0');
 
-      const result = countPRDs(tempDir, 'docs/PRDs/night-watch', 7200);
+      const result = countPRDs(tempDir, 'docs/prds', 7200);
       expect(result.pending).toBe(2);
       expect(result.claimed).toBe(0);
       expect(result.done).toBe(1);
     });
 
     it('should count claimed PRDs separately', async () => {
-      const prdDir = path.join(tempDir, 'docs', 'PRDs', 'night-watch');
+      const prdDir = path.join(tempDir, 'docs', 'prds');
       fs.mkdirSync(prdDir, { recursive: true });
 
       fs.writeFileSync(path.join(prdDir, 'phase1.md'), '# Phase 1');
@@ -302,13 +302,13 @@ describe('status-data utilities', () => {
         JSON.stringify({ timestamp: Math.floor(Date.now() / 1000), hostname: 'test', pid: 1234 }),
       );
 
-      const result = countPRDs(tempDir, 'docs/PRDs/night-watch', 7200);
+      const result = countPRDs(tempDir, 'docs/prds', 7200);
       expect(result.pending).toBe(1);
       expect(result.claimed).toBe(1);
     });
 
     it('should treat expired claims as pending', async () => {
-      const prdDir = path.join(tempDir, 'docs', 'PRDs', 'night-watch');
+      const prdDir = path.join(tempDir, 'docs', 'prds');
       fs.mkdirSync(prdDir, { recursive: true });
 
       fs.writeFileSync(path.join(prdDir, 'phase1.md'), '# Phase 1');
@@ -322,7 +322,7 @@ describe('status-data utilities', () => {
         }),
       );
 
-      const result = countPRDs(tempDir, 'docs/PRDs/night-watch', 7200);
+      const result = countPRDs(tempDir, 'docs/prds', 7200);
       expect(result.pending).toBe(1);
       expect(result.claimed).toBe(0);
     });
@@ -330,12 +330,12 @@ describe('status-data utilities', () => {
 
   describe('collectPrdInfo', () => {
     it('should return empty array when PRD directory does not exist', async () => {
-      const result = collectPrdInfo(tempDir, 'docs/PRDs/night-watch', 7200);
+      const result = collectPrdInfo(tempDir, 'docs/prds', 7200);
       expect(result).toEqual([]);
     });
 
     it('should collect PRD info with correct statuses', async () => {
-      const prdDir = path.join(tempDir, 'docs', 'PRDs', 'night-watch');
+      const prdDir = path.join(tempDir, 'docs', 'prds');
       fs.mkdirSync(prdDir, { recursive: true });
       fs.mkdirSync(path.join(prdDir, 'done'), { recursive: true });
 
@@ -358,7 +358,7 @@ describe('status-data utilities', () => {
       (process as any).kill = vi.fn().mockReturnValue(true);
 
       try {
-        const result = collectPrdInfo(tempDir, 'docs/PRDs/night-watch', 7200);
+        const result = collectPrdInfo(tempDir, 'docs/prds', 7200);
         expect(result).toHaveLength(3);
 
         const phase0 = result.find((p) => p.name === 'phase0');
@@ -384,7 +384,7 @@ describe('status-data utilities', () => {
     });
 
     it('marks PRD ready when claim exists but lock is gone', async () => {
-      const prdDir = path.join(tempDir, 'docs', 'PRDs', 'night-watch');
+      const prdDir = path.join(tempDir, 'docs', 'prds');
       fs.mkdirSync(prdDir, { recursive: true });
 
       fs.writeFileSync(path.join(prdDir, 'my-prd.md'), '# My PRD');
@@ -402,7 +402,7 @@ describe('status-data utilities', () => {
       });
 
       try {
-        const result = collectPrdInfo(tempDir, 'docs/PRDs/night-watch', 7200);
+        const result = collectPrdInfo(tempDir, 'docs/prds', 7200);
         const myPrd = result.find((p) => p.name === 'my-prd');
         expect(myPrd).toBeDefined();
         expect(myPrd!.status).toBe('ready');
@@ -412,7 +412,7 @@ describe('status-data utilities', () => {
     });
 
     it('marks PRD in-progress when claim AND lock both exist', async () => {
-      const prdDir = path.join(tempDir, 'docs', 'PRDs', 'night-watch');
+      const prdDir = path.join(tempDir, 'docs', 'prds');
       fs.mkdirSync(prdDir, { recursive: true });
 
       fs.writeFileSync(path.join(prdDir, 'my-prd.md'), '# My PRD');
@@ -432,7 +432,7 @@ describe('status-data utilities', () => {
       (process as any).kill = vi.fn().mockReturnValue(true);
 
       try {
-        const result = collectPrdInfo(tempDir, 'docs/PRDs/night-watch', 7200);
+        const result = collectPrdInfo(tempDir, 'docs/prds', 7200);
         const myPrd = result.find((p) => p.name === 'my-prd');
         expect(myPrd).toBeDefined();
         expect(myPrd!.status).toBe('in-progress');
@@ -448,7 +448,7 @@ describe('status-data utilities', () => {
     });
 
     it('deletes orphaned claim file when lock is gone', async () => {
-      const prdDir = path.join(tempDir, 'docs', 'PRDs', 'night-watch');
+      const prdDir = path.join(tempDir, 'docs', 'prds');
       fs.mkdirSync(prdDir, { recursive: true });
 
       fs.writeFileSync(path.join(prdDir, 'my-prd.md'), '# My PRD');
@@ -469,7 +469,7 @@ describe('status-data utilities', () => {
       });
 
       try {
-        collectPrdInfo(tempDir, 'docs/PRDs/night-watch', 7200);
+        collectPrdInfo(tempDir, 'docs/prds', 7200);
 
         // Claim file should have been deleted
         expect(fs.existsSync(claimPath)).toBe(false);
@@ -1463,7 +1463,7 @@ describe('status-data utilities', () => {
 
   describe('collectPrdInfo with dependencies', () => {
     it('should mark PRDs with unmet dependencies as blocked', async () => {
-      const prdDir = path.join(tempDir, 'docs', 'PRDs', 'night-watch');
+      const prdDir = path.join(tempDir, 'docs', 'prds');
       fs.mkdirSync(prdDir, { recursive: true });
       fs.mkdirSync(path.join(prdDir, 'done'), { recursive: true });
 
@@ -1474,7 +1474,7 @@ describe('status-data utilities', () => {
       // phase2 depends on phase1 (which is NOT done) => blocked
       fs.writeFileSync(path.join(prdDir, 'phase2.md'), '# Phase 2\n\nDepends on: `phase1`');
 
-      const result = collectPrdInfo(tempDir, 'docs/PRDs/night-watch', 7200);
+      const result = collectPrdInfo(tempDir, 'docs/prds', 7200);
 
       const phase1 = result.find((p) => p.name === 'phase1');
       expect(phase1).toBeDefined();
@@ -1490,7 +1490,7 @@ describe('status-data utilities', () => {
     });
 
     it('should resolve deps with .md extension against done PRDs', async () => {
-      const prdDir = path.join(tempDir, 'docs', 'PRDs', 'night-watch');
+      const prdDir = path.join(tempDir, 'docs', 'prds');
       fs.mkdirSync(prdDir, { recursive: true });
       fs.mkdirSync(path.join(prdDir, 'done'), { recursive: true });
 
@@ -1499,7 +1499,7 @@ describe('status-data utilities', () => {
       // phase1 depends on "phase0.md" (with extension) => should still resolve as ready
       fs.writeFileSync(path.join(prdDir, 'phase1.md'), '# Phase 1\n\n**Depends on:** `phase0.md`');
 
-      const result = collectPrdInfo(tempDir, 'docs/PRDs/night-watch', 7200);
+      const result = collectPrdInfo(tempDir, 'docs/prds', 7200);
 
       const phase1 = result.find((p) => p.name === 'phase1');
       expect(phase1).toBeDefined();
@@ -1544,7 +1544,7 @@ describe('status-data utilities', () => {
         JSON.stringify({ name: 'test-project' }),
       );
 
-      const prdDir = path.join(tempDir, 'docs', 'PRDs', 'night-watch');
+      const prdDir = path.join(tempDir, 'docs', 'prds');
       fs.mkdirSync(prdDir, { recursive: true });
       fs.mkdirSync(path.join(prdDir, 'done'), { recursive: true });
 
@@ -1605,7 +1605,7 @@ describe('status-data utilities', () => {
         JSON.stringify({ name: 'test-project' }),
       );
 
-      const prdDir = path.join(tempDir, 'docs', 'PRDs', 'night-watch');
+      const prdDir = path.join(tempDir, 'docs', 'prds');
       fs.mkdirSync(prdDir, { recursive: true });
 
       fs.writeFileSync(path.join(prdDir, 'my-prd.md'), '# My PRD');
@@ -1646,7 +1646,7 @@ describe('status-data utilities', () => {
         JSON.stringify({ name: 'test-project' }),
       );
 
-      const prdDir = path.join(tempDir, 'docs', 'PRDs', 'night-watch');
+      const prdDir = path.join(tempDir, 'docs', 'prds');
       fs.mkdirSync(prdDir, { recursive: true });
 
       fs.writeFileSync(path.join(prdDir, 'my-prd.md'), '# My PRD');

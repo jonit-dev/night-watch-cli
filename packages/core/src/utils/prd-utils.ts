@@ -19,9 +19,7 @@ export function slugify(name: string): string {
  */
 export function getNextPrdNumber(prdDir: string): number {
   if (!fs.existsSync(prdDir)) return 1;
-  const files = fs
-    .readdirSync(prdDir)
-    .filter((f) => f.endsWith('.md') && f !== 'NIGHT-WATCH-SUMMARY.md');
+  const files = fs.readdirSync(prdDir).filter((f) => f.endsWith('.md'));
   const numbers = files.map((f) => {
     const match = f.match(/^(\d+)-/);
     return match ? parseInt(match[1], 10) : 0;

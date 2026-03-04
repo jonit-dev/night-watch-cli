@@ -3,11 +3,11 @@
  * Used by init, doctor, and other commands that need to verify environment
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import { execSync } from "child_process";
-import { Provider } from "../types.js";
-import { CONFIG_FILE_NAME, LOG_DIR, VALID_PROVIDERS } from "../constants.js";
+import * as fs from 'fs';
+import * as path from 'path';
+import { execSync } from 'child_process';
+import { Provider } from '../types.js';
+import { CONFIG_FILE_NAME, LOG_DIR, VALID_PROVIDERS } from '../constants.js';
 
 /**
  * Result of an environment check
@@ -23,10 +23,10 @@ export interface ICheckResult {
  * Check if directory is a git repository
  */
 export function checkGitRepo(cwd: string): ICheckResult {
-  const isRepo = fs.existsSync(path.join(cwd, ".git"));
+  const isRepo = fs.existsSync(path.join(cwd, '.git'));
   return {
     passed: isRepo,
-    message: isRepo ? "Git repository found" : "Not a git repository",
+    message: isRepo ? 'Git repository found' : 'Not a git repository',
     fixable: false,
   };
 }
@@ -36,19 +36,19 @@ export function checkGitRepo(cwd: string): ICheckResult {
  */
 export function checkGhCli(): ICheckResult {
   try {
-    execSync("gh auth status", {
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
+    execSync('gh auth status', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
     return {
       passed: true,
-      message: "GitHub CLI authenticated",
+      message: 'GitHub CLI authenticated',
       fixable: false,
     };
   } catch {
     return {
       passed: false,
-      message: "GitHub CLI not authenticated (run: gh auth login)",
+      message: 'GitHub CLI not authenticated (run: gh auth login)',
       fixable: false,
     };
   }
@@ -60,8 +60,8 @@ export function checkGhCli(): ICheckResult {
 export function checkProviderCli(provider: Provider): ICheckResult {
   try {
     execSync(`which ${provider}`, {
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
     return {
       passed: true,
@@ -85,8 +85,8 @@ export function detectProviders(): Provider[] {
   for (const provider of VALID_PROVIDERS) {
     try {
       execSync(`which ${provider}`, {
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
       });
       providers.push(provider);
     } catch {
@@ -138,7 +138,7 @@ export function checkConfigFile(projectDir: string): ICheckResult {
   }
 
   try {
-    const content = fs.readFileSync(configPath, "utf-8");
+    const content = fs.readFileSync(configPath, 'utf-8');
     JSON.parse(content);
     return {
       passed: true,
@@ -146,8 +146,7 @@ export function checkConfigFile(projectDir: string): ICheckResult {
       fixable: false,
     };
   } catch (err) {
-    const errorMsg =
-      err instanceof Error ? err.message : String(err);
+    const errorMsg = err instanceof Error ? err.message : String(err);
     return {
       passed: false,
       message: `Config file has invalid JSON: ${errorMsg}`,
@@ -159,10 +158,7 @@ export function checkConfigFile(projectDir: string): ICheckResult {
 /**
  * Check if PRD directory exists
  */
-export function checkPrdDirectory(
-  projectDir: string,
-  prdDir: string
-): ICheckResult {
+export function checkPrdDirectory(projectDir: string, prdDir: string): ICheckResult {
   const prdPath = path.join(projectDir, prdDir);
 
   if (!fs.existsSync(prdPath)) {
@@ -173,15 +169,13 @@ export function checkPrdDirectory(
       fix: () => {
         fs.mkdirSync(prdPath, { recursive: true });
         // Also create the done subdirectory
-        fs.mkdirSync(path.join(prdPath, "done"), { recursive: true });
+        fs.mkdirSync(path.join(prdPath, 'done'), { recursive: true });
       },
     };
   }
 
   // Count PRD files (exclude summary and files in done/)
-  const prds = fs
-    .readdirSync(prdPath)
-    .filter((f) => f.endsWith(".md") && f !== "NIGHT-WATCH-SUMMARY.md");
+  const prds = fs.readdirSync(prdPath).filter((f) => f.endsWith('.md'));
 
   return {
     passed: true,
@@ -219,13 +213,13 @@ export function checkLogsDirectory(projectDir: string): ICheckResult {
  */
 export function checkCrontabAccess(): ICheckResult {
   try {
-    execSync("crontab -l", {
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
+    execSync('crontab -l', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
     });
     return {
       passed: true,
-      message: "Crontab accessible",
+      message: 'Crontab accessible',
       fixable: false,
     };
   } catch {
@@ -233,7 +227,7 @@ export function checkCrontabAccess(): ICheckResult {
     // We check if the error is about access or just "no crontab"
     return {
       passed: true,
-      message: "Crontab accessible (empty)",
+      message: 'Crontab accessible (empty)',
       fixable: false,
     };
   }
@@ -242,10 +236,7 @@ export function checkCrontabAccess(): ICheckResult {
 /**
  * Run all environment checks and return results
  */
-export function runAllChecks(
-  projectDir: string,
-  prdDir: string
-): ICheckResult[] {
+export function runAllChecks(projectDir: string, prdDir: string): ICheckResult[] {
   const results: ICheckResult[] = [];
 
   // Check Node version
@@ -262,7 +253,7 @@ export function runAllChecks(
   if (providers.length === 0) {
     results.push({
       passed: false,
-      message: "No AI provider CLI found (install claude or codex)",
+      message: 'No AI provider CLI found (install claude or codex)',
       fixable: false,
     });
   } else {

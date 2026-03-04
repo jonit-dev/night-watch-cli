@@ -63,7 +63,7 @@ type ConfigForm = {
 const toFormState = (config: INightWatchConfig): ConfigForm => ({
   provider: config.provider,
   defaultBranch: config.defaultBranch,
-  prdDir: config.prdDir || 'docs/PRDs/night-watch',
+  prdDir: config.prdDir || 'docs/prds',
   branchPrefix: config.branchPrefix,
   branchPatterns: config.branchPatterns || [],
   executorEnabled: config.executorEnabled ?? true,

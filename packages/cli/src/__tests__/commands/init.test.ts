@@ -270,28 +270,6 @@ describe('init command', () => {
     });
   });
 
-  describeIfExternalTools('should create NIGHT-WATCH-SUMMARY.md', () => {
-    it('should create NIGHT-WATCH-SUMMARY.md with template header', () => {
-      // Initialize git repo
-      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
-      execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
-      execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
-
-      execSync(`${TSX_CMD} init --provider claude`, {
-        encoding: 'utf-8',
-        cwd: tempDir,
-        stdio: 'pipe',
-        timeout: 15000,
-      });
-
-      const summaryPath = path.join(tempDir, 'docs', 'prds', 'NIGHT-WATCH-SUMMARY.md');
-      expect(fs.existsSync(summaryPath)).toBe(true);
-
-      const content = fs.readFileSync(summaryPath, 'utf-8');
-      expect(content).toContain('Night Watch Summary');
-    });
-  });
-
   describeIfExternalTools('--force flag', () => {
     it('should overwrite existing files with --force flag', () => {
       // Initialize git repo

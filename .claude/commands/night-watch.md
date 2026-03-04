@@ -33,7 +33,7 @@ If `NW_BOARD_ENABLED` is set to `true` in the environment, use board mode instea
 
 ## Instructions
 
-1. **Scan for PRDs**: List files in the configured `prdDir` (exclude `NIGHT-WATCH-SUMMARY.md` and the `done/` subdirectory). Each `.md` file is a ticket.
+1. **Scan for PRDs**: List files in the configured `prdDir` (exclude the `done/` subdirectory). Each `.md` file is a ticket.
 
 2. **Check dependencies**: Read each PRD. If it says "Depends on:" another PRD, check if that dependency is already in `prdDir/done/`. Skip PRDs with unmet dependencies.
 

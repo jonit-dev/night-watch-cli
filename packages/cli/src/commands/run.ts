@@ -387,7 +387,7 @@ export function scanPrdDirectory(
   if (fs.existsSync(absolutePrdDir)) {
     const entries = fs.readdirSync(absolutePrdDir, { withFileTypes: true });
     for (const entry of entries) {
-      if (entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'NIGHT-WATCH-SUMMARY.md') {
+      if (entry.isFile() && entry.name.endsWith('.md')) {
         const claimPath = path.join(absolutePrdDir, entry.name + CLAIM_FILE_EXTENSION);
         let claimed = false;
         let claimInfo: IPrdScanItem['claimInfo'] = null;
