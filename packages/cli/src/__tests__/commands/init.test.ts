@@ -270,6 +270,55 @@ describe('init command', () => {
     });
   });
 
+  describeIfExternalTools('should NOT create .claude/commands/ directory', () => {
+    it('should not create .claude/commands/ after nw init', () => {
+      // Initialize git repo
+      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
+
+      execSync(`${TSX_CMD} init --provider claude`, {
+        encoding: 'utf-8',
+        cwd: tempDir,
+        stdio: 'pipe',
+        timeout: 15000,
+      });
+
+      // Guard against accidentally leaving .claude/commands/ creation code behind
+      const claudeCommandsDir = path.join(tempDir, '.claude', 'commands');
+      expect(fs.existsSync(claudeCommandsDir)).toBe(false);
+    });
+  });
+
+  describeIfExternalTools('should overwrite instructions files with --force', () => {
+    it('should overwrite existing instructions/night-watch.md with --force flag', () => {
+      // Initialize git repo
+      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
+
+      // Pre-create instructions/night-watch.md with stale content
+      const instructionsDir = path.join(tempDir, 'instructions');
+      fs.mkdirSync(instructionsDir, { recursive: true });
+      const nightWatchMd = path.join(instructionsDir, 'night-watch.md');
+      const staleContent = '# STALE CONTENT - should be overwritten';
+      fs.writeFileSync(nightWatchMd, staleContent);
+
+      // Run with --force
+      execSync(`${TSX_CMD} init --force --provider claude`, {
+        encoding: 'utf-8',
+        cwd: tempDir,
+        stdio: 'pipe',
+        timeout: 15000,
+      });
+
+      // File content should have changed (no longer stale)
+      const newContent = fs.readFileSync(nightWatchMd, 'utf-8');
+      expect(newContent).not.toBe(staleContent);
+      expect(newContent).not.toContain('STALE CONTENT');
+    });
+  });
+
   describeIfExternalTools('--force flag', () => {
     it('should overwrite existing files with --force flag', () => {
       // Initialize git repo
