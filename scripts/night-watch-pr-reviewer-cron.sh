@@ -143,6 +143,135 @@ get_pr_score() {
     | grep -oP '\d+(?=/100)' || echo ""
 }
 
+# Count failed CI checks for a PR.
+# Uses JSON fields when available (more reliable across check name/status formats),
+# then falls back to text parsing for older/mocked gh outputs.
+get_pr_failed_ci_checks() {
+  local pr_number="${1:?PR number required}"
+  local failed_count=""
+
+  failed_count="$(
+    gh pr checks "${pr_number}" --json bucket,state,conclusion --jq '
+      [ .[]
+        | (.bucket // "" | ascii_downcase) as $bucket
+        | (.state // "" | ascii_downcase) as $state
+        | (.conclusion // "" | ascii_downcase) as $conclusion
+        | select(
+            $bucket == "fail" or
+            $bucket == "cancel" or
+            $state == "failure" or
+            $state == "error" or
+            $state == "cancelled" or
+            $conclusion == "failure" or
+            $conclusion == "error" or
+            $conclusion == "cancelled" or
+            $conclusion == "timed_out" or
+            $conclusion == "action_required" or
+            $conclusion == "startup_failure" or
+            $conclusion == "stale"
+          )
+      ] | length
+    ' 2>/dev/null || true
+  )"
+
+  if [[ "${failed_count}" =~ ^[0-9]+$ ]]; then
+    echo "${failed_count}"
+    return 0
+  fi
+
+  failed_count=$(
+    gh pr checks "${pr_number}" 2>/dev/null \
+      | grep -Eci 'fail|error|cancel|timed[_ -]?out|action_required|startup_failure|stale' || true
+  )
+
+  if [[ "${failed_count}" =~ ^[0-9]+$ ]]; then
+    echo "${failed_count}"
+  else
+    echo "0"
+  fi
+}
+
+# Return a semicolon-separated summary of failing CI checks for a PR.
+# Format: "<check name> [state=<state>, conclusion=<conclusion>]"
+get_pr_failed_ci_summary() {
+  local pr_number="${1:?PR number required}"
+  local failed_summary=""
+
+  failed_summary="$(
+    gh pr checks "${pr_number}" --json name,bucket,state,conclusion --jq '
+      [ .[]
+        | (.bucket // "" | ascii_downcase) as $bucket
+        | (.state // "" | ascii_downcase) as $state
+        | (.conclusion // "" | ascii_downcase) as $conclusion
+        | select(
+            $bucket == "fail" or
+            $bucket == "cancel" or
+            $state == "failure" or
+            $state == "error" or
+            $state == "cancelled" or
+            $conclusion == "failure" or
+            $conclusion == "error" or
+            $conclusion == "cancelled" or
+            $conclusion == "timed_out" or
+            $conclusion == "action_required" or
+            $conclusion == "startup_failure" or
+            $conclusion == "stale"
+          )
+        | "\(.name // "unknown") [state=\(.state // "unknown"), conclusion=\(.conclusion // "unknown")]"
+      ] | join("; ")
+    ' 2>/dev/null || true
+  )"
+
+  if [ -n "${failed_summary}" ]; then
+    echo "${failed_summary}"
+    return 0
+  fi
+
+  # Fallback for older/mocked outputs where JSON fields aren't available.
+  failed_summary=$(
+    gh pr checks "${pr_number}" 2>/dev/null \
+      | grep -Ei 'fail|error|cancel|timed[_ -]?out|action_required|startup_failure|stale' \
+      | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]][[:space:]]*/ /g' \
+      | paste -sd '; ' - || true
+  )
+
+  echo "${failed_summary}"
+}
+
+# Clean up reviewer-managed worktrees.
+# - Always removes the caller's runner worktree when runner_scope is provided.
+# - Only non-worker/controller processes perform broad cleanup to avoid
+#   parallel workers deleting each other's active worktrees.
+cleanup_reviewer_worktrees() {
+  local runner_scope="${1:-}"
+
+  if [ -n "${runner_scope}" ]; then
+    cleanup_worktrees "${PROJECT_DIR}" "${runner_scope}"
+  fi
+
+  if [ "${WORKER_MODE}" = "1" ]; then
+    return 0
+  fi
+
+  # Remove per-PR reviewer worktrees created by prompts from older runs.
+  cleanup_worktrees "${PROJECT_DIR}" "${PROJECT_NAME}-nw-review-"
+
+  # Remove legacy reviewer worktree naming used in some older prompt variants.
+  local escaped_project_name
+  escaped_project_name=$(printf '%s\n' "${PROJECT_NAME}" | sed 's/[][(){}.^$*+?|\\/]/\\&/g')
+  git -C "${PROJECT_DIR}" worktree list --porcelain 2>/dev/null \
+    | grep '^worktree ' \
+    | awk '{print $2}' \
+    | while read -r wt; do
+        local wt_basename
+        wt_basename=$(basename "${wt}")
+        if printf '%s\n' "${wt_basename}" | grep -Eq "^${escaped_project_name}-pr-?[0-9]+$"; then
+          log "CLEANUP: Removing legacy reviewer worktree ${wt}"
+          git -C "${PROJECT_DIR}" worktree remove --force "${wt}" 2>/dev/null || true
+        fi
+      done || true
+}
+
 # Validate provider
 if ! validate_provider "${PROVIDER_CMD}"; then
   echo "ERROR: Unknown provider: ${PROVIDER_CMD}" >&2
@@ -221,9 +350,14 @@ while IFS=$'\t' read -r pr_number pr_branch; do
     continue
   fi
 
-  FAILED_CHECKS=$(gh pr checks "${pr_number}" 2>/dev/null | grep -ci 'fail' || true)
+  FAILED_CHECKS=$(get_pr_failed_ci_checks "${pr_number}")
   if [ "${FAILED_CHECKS}" -gt 0 ]; then
-    log "INFO: PR #${pr_number} (${pr_branch}) has ${FAILED_CHECKS} failed CI check(s)"
+    FAILED_SUMMARY=$(get_pr_failed_ci_summary "${pr_number}")
+    if [ -n "${FAILED_SUMMARY}" ]; then
+      log "INFO: PR #${pr_number} (${pr_branch}) has ${FAILED_CHECKS} failed CI check(s): ${FAILED_SUMMARY}"
+    else
+      log "INFO: PR #${pr_number} (${pr_branch}) has ${FAILED_CHECKS} failed CI check(s)"
+    fi
     NEEDS_WORK=1
     PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
     continue
@@ -325,6 +459,10 @@ fi
 
 log "START: Found PR(s) needing work:${PRS_NEEDING_WORK}"
 
+# Remove stale reviewer worktrees from previous interrupted runs.
+# Worker processes skip broad cleanup to avoid parallel interference.
+cleanup_reviewer_worktrees
+
 # Convert "#12 #34" into ["12", "34"] for worker fan-out.
 PR_NUMBER_ARRAY=()
 for pr_token in ${PRS_NEEDING_WORK}; do
@@ -355,7 +493,14 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
   declare -a WORKER_PRS=()
   declare -a WORKER_OUTPUTS=()
 
+  WORKER_IDX=0
+  WORKER_STAGGER_DELAY="${NW_REVIEWER_WORKER_STAGGER:-60}"
   for pr_number in "${PR_NUMBER_ARRAY[@]}"; do
+    if [ "${WORKER_IDX}" -gt 0 ]; then
+      log "PARALLEL: Staggering worker launch by ${WORKER_STAGGER_DELAY}s (worker $((WORKER_IDX + 1))/${#PR_NUMBER_ARRAY[@]})"
+      sleep "${WORKER_STAGGER_DELAY}"
+    fi
+
     worker_output=$(mktemp "/tmp/night-watch-pr-reviewer-${PROJECT_RUNTIME_KEY}-pr-${pr_number}.XXXXXX")
     WORKER_OUTPUTS+=("${worker_output}")
     WORKER_PRS+=("${pr_number}")
@@ -370,6 +515,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
     worker_pid=$!
     WORKER_PIDS+=("${worker_pid}")
     log "PARALLEL: Worker PID ${worker_pid} started for PR #${pr_number}"
+    WORKER_IDX=$((WORKER_IDX + 1))
   done
 
   EXIT_CODE=0
@@ -439,6 +585,10 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
     fi
   done
 
+  # Parent/controller process cleans up any per-PR reviewer worktrees that
+  # worker runs may have left behind.
+  cleanup_reviewer_worktrees
+
   emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${MAX_WORKER_ATTEMPTS}" "${MAX_WORKER_FINAL_SCORE}"
   exit 0
 fi
@@ -449,7 +599,7 @@ if [ -n "${TARGET_PR}" ]; then
 fi
 REVIEW_WORKTREE_DIR="$(dirname "${PROJECT_DIR}")/${REVIEW_WORKTREE_BASENAME}"
 
-cleanup_worktrees "${PROJECT_DIR}" "${REVIEW_WORKTREE_BASENAME}"
+cleanup_reviewer_worktrees "${REVIEW_WORKTREE_BASENAME}"
 
 # Dry-run mode: print diagnostics and exit
 if [ "${NW_DRY_RUN:-0}" = "1" ]; then
@@ -485,6 +635,22 @@ FINAL_SCORE=""
 TARGET_SCOPE_PROMPT=""
 if [ -n "${TARGET_PR}" ]; then
   TARGET_SCOPE_PROMPT=$'\n\n## Target Scope\n- Only process PR #'"${TARGET_PR}"$'.\n- Ignore all other PRs.\n- If this PR no longer needs work, stop immediately.\n'
+
+  TARGET_MERGE_STATE=$(gh pr view "${TARGET_PR}" --json mergeStateStatus --jq '.mergeStateStatus' 2>/dev/null || echo "UNKNOWN")
+  TARGET_FAILED_CHECKS=$(get_pr_failed_ci_summary "${TARGET_PR}")
+  TARGET_SCORE=$(get_pr_score "${TARGET_PR}")
+
+  TARGET_SCOPE_PROMPT+=$'\n## Preflight Data (from CLI)\n- mergeStateStatus: '"${TARGET_MERGE_STATE}"$'\n'
+  if [ -n "${TARGET_FAILED_CHECKS}" ]; then
+    TARGET_SCOPE_PROMPT+=$'- failing checks: '"${TARGET_FAILED_CHECKS}"$'\n'
+  else
+    TARGET_SCOPE_PROMPT+=$'- failing checks: none detected\n'
+  fi
+  if [ -n "${TARGET_SCORE}" ]; then
+    TARGET_SCOPE_PROMPT+=$'- latest review score: '"${TARGET_SCORE}"$'/100\n'
+  else
+    TARGET_SCOPE_PROMPT+=$'- latest review score: not found\n'
+  fi
 fi
 
 # ── Retry Loop for Targeted PR Review ──────────────────────────────────────────
@@ -518,6 +684,7 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
   fi
 
   log "RETRY: Starting attempt ${ATTEMPT}/${TOTAL_ATTEMPTS} (timeout: ${ATTEMPT_TIMEOUT}s)"
+  LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
 
   case "${PROVIDER_CMD}" in
     claude)
@@ -553,8 +720,16 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
       ;;
   esac
 
-  # If provider failed (non-zero exit), don't retry
+  # If provider failed (non-zero exit), check for rate limit before giving up
   if [ "${EXIT_CODE}" -ne 0 ]; then
+    if [ "${EXIT_CODE}" -ne 124 ] && \
+       check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}" && \
+       [ -n "${TARGET_PR}" ] && \
+       [ "${ATTEMPT}" -lt "${TOTAL_ATTEMPTS}" ]; then
+      log "RATE-LIMITED: 429 detected for PR #${TARGET_PR} (attempt ${ATTEMPT}/${TOTAL_ATTEMPTS}), retrying in 120s..."
+      sleep 120
+      continue
+    fi
     log "RETRY: Provider exited with code ${EXIT_CODE}, not retrying"
     break
   fi
@@ -585,7 +760,7 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
   fi
 done
 
-cleanup_worktrees "${PROJECT_DIR}" "${REVIEW_WORKTREE_BASENAME}"
+cleanup_reviewer_worktrees "${REVIEW_WORKTREE_BASENAME}"
 
 # ── Auto-merge eligible PRs ─────────────────────────────────────────────────────
 # After the reviewer completes, check for PRs that are merge-ready and queue them

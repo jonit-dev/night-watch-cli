@@ -54,6 +54,7 @@ flowchart LR
 **User-visible outcome:** Running `nw init` creates an `instructions/` directory with all agent files instead of `.claude/commands/`.
 
 **Files:**
+
 - `packages/cli/src/commands/init.ts` — change target directory, update summary output
 
 **Implementation:**
@@ -67,11 +68,11 @@ flowchart LR
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `packages/cli/src/__tests__/commands/init.test.ts` (if exists) or add tests | `should create instructions directory` | `instructions/` dir exists after init |
-| Same | `should write night-watch.md to instructions/` | `instructions/night-watch.md` is present |
-| Same | `should not create .claude/commands directory` | `.claude/commands/` does NOT exist |
+| Test File                                                                   | Test Name                                      | Assertion                                |
+| --------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------- |
+| `packages/cli/src/__tests__/commands/init.test.ts` (if exists) or add tests | `should create instructions directory`         | `instructions/` dir exists after init    |
+| Same                                                                        | `should write night-watch.md to instructions/` | `instructions/night-watch.md` is present |
+| Same                                                                        | `should not create .claude/commands directory` | `.claude/commands/` does NOT exist       |
 
 **Verification Plan:**
 
@@ -86,6 +87,7 @@ flowchart LR
 **User-visible outcome:** Codex and other providers can execute PRDs, reviewer, and QA runs because the bash scripts point to provider-neutral `instructions/` paths.
 
 **Files:**
+
 - `scripts/night-watch-cron.sh` — replace `.claude/skills/prd-executor/SKILL.md` and `.claude/commands/prd-executor.md` references
 - `scripts/night-watch-pr-reviewer-cron.sh` — replace `.claude/commands/night-watch-pr-reviewer.md` reference
 - `scripts/night-watch-qa-cron.sh` — replace `.claude/commands/night-watch-qa.md` reference
@@ -93,22 +95,25 @@ flowchart LR
 **Implementation:**
 
 In `scripts/night-watch-cron.sh` (lines 231 and 259):
+
 - [ ] Replace: `Read .claude/skills/prd-executor/SKILL.md (preferred) or .claude/commands/prd-executor.md (fallback), and follow the FULL execution pipeline:`
 - [ ] With: `Read instructions/prd-executor.md and follow the FULL execution pipeline:`
 - [ ] Remove any remaining fallback references to `.claude/` paths in the same prompt block
 
 In `scripts/night-watch-pr-reviewer-cron.sh` (line ~537):
+
 - [ ] Replace: `cat "${REVIEW_WORKTREE_DIR}/.claude/commands/night-watch-pr-reviewer.md"`
 - [ ] With: `cat "${REVIEW_WORKTREE_DIR}/instructions/night-watch-pr-reviewer.md"`
 
 In `scripts/night-watch-qa-cron.sh` (line ~244):
+
 - [ ] Replace: `cat "${QA_WORKTREE_DIR}/.claude/commands/night-watch-qa.md"`
 - [ ] With: `cat "${QA_WORKTREE_DIR}/instructions/night-watch-qa.md"`
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
+| Test File   | Test Name                            | Assertion                                      |
+| ----------- | ------------------------------------ | ---------------------------------------------- |
 | Manual grep | No `.claude/` refs remain in scripts | `grep -r '\.claude/' scripts/` returns nothing |
 
 **Verification Plan:**
@@ -123,6 +128,7 @@ In `scripts/night-watch-qa-cron.sh` (line ~244):
 **User-visible outcome:** The night-watch-cli repo itself follows the same provider-agnostic convention — instructions live in `instructions/`, not `.claude/commands/` or `.claude/skills/`.
 
 **Files:**
+
 - `instructions/night-watch.md` ← from `.claude/commands/night-watch.md`
 - `instructions/prd-executor.md` ← from `.claude/commands/prd-executor.md` + `.claude/skills/prd-executor/SKILL.md`
 - `instructions/night-watch-audit.md` ← from `.claude/commands/night-watch-audit.md`
@@ -141,10 +147,10 @@ In `scripts/night-watch-qa-cron.sh` (line ~244):
 
 **Tests Required:**
 
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| Manual check | `instructions/` dir exists | 4 files present |
-| Manual grep | No `.claude/skills` refs in templates | `grep -r '\.claude/skills' templates/` returns nothing |
+| Test File    | Test Name                             | Assertion                                              |
+| ------------ | ------------------------------------- | ------------------------------------------------------ |
+| Manual check | `instructions/` dir exists            | 4 files present                                        |
+| Manual grep  | No `.claude/skills` refs in templates | `grep -r '\.claude/skills' templates/` returns nothing |
 
 **Verification Plan:**
 

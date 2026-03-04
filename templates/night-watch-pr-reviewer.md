@@ -5,9 +5,9 @@ You are the Night Watch PR Reviewer agent. Your job is to check open PRs for thr
 
 ## Context
 
-The repo has two GitHub Actions workflows that run on PRs:
-- **`.github/workflows/pr-review.yml`** -- AI review that posts a score (0-100) as a comment.
-- **`.github/workflows/ci.yml`** -- CI pipeline with jobs: `typecheck`, `lint`, `test`, `build`, and `verify`.
+The repo can have multiple PR checks/workflows (project CI plus Night Watch automation jobs).
+Common examples include `typecheck`, `lint`, `test`, `build`, `verify`, `executor`, `qa`, and `audit`.
+Treat `gh pr checks <number> --json name,state,conclusion` as the source of truth for which checks failed.
 
 A PR needs attention if **any** of the following: merge conflicts present, review score below 80, or any CI job failed.
 
@@ -75,21 +75,16 @@ A PR needs attention if **any** of the following: merge conflicts present, revie
 
 4. **Fix the PR**:
 
-   a. **Create an isolated review worktree**:
+   a. **Use the current runner worktree** and check out the PR branch (do **not** create additional worktrees):
       ```
       git fetch origin
-      git worktree add --detach ../${PROJECT_NAME}-nw-review-<branch-name> origin/${DEFAULT_BRANCH}
-      ```
-
-   b. **Check out the PR branch inside that worktree**:
-      ```
-      cd ../${PROJECT_NAME}-nw-review-<branch-name>
       git checkout <branch-name>
       git pull origin <branch-name>
       ```
-      Run package install (npm install, yarn install, or pnpm install as appropriate).
+      The reviewer cron wrapper already runs you inside an isolated worktree and performs cleanup.
+      Stay in the current directory and run package install (npm install, yarn install, or pnpm install as appropriate).
 
-   c. **Resolve merge conflicts** (if `mergeStateStatus` was `DIRTY` or `CONFLICTING`):
+   b. **Resolve merge conflicts** (if `mergeStateStatus` was `DIRTY` or `CONFLICTING`):
       - Get the base branch: `gh pr view <number> --json baseRefName --jq '.baseRefName'`
       - Rebase the PR branch onto the latest base branch:
         ```
@@ -105,7 +100,7 @@ A PR needs attention if **any** of the following: merge conflicts present, revie
       - Push the clean branch: `git push --force-with-lease origin <branch-name>`
       - **Do NOT leave any conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) in any file.**
 
-   d. **Address review feedback** (if score < 80):
+   c. **Address review feedback** (if score < 80):
       - Read the review comments carefully. Extract areas for improvement, bugs found, issues found, and specific file/line suggestions.
       - For each review suggestion:
         - If you agree, implement the change.
@@ -116,22 +111,19 @@ A PR needs attention if **any** of the following: merge conflicts present, revie
       - Refactor code if structure was criticized.
       - Follow all project conventions from AI assistant documentation files (e.g., CLAUDE.md, AGENTS.md, or similar).
 
-   e. **Address CI failures** (if any):
+   d. **Address CI failures** (if any):
       - Check CI status and identify non-passing checks:
         ```
         gh pr checks <number> --json name,state,conclusion
         ```
       - Read the failed job logs carefully to understand the root cause.
-      - **typecheck failures**: Fix TypeScript type errors.
-      - **lint failures**: Fix ESLint violations.
-      - **test failures**: Fix broken tests or update tests to match code changes.
-      - **build failures**: Fix compilation/bundling errors.
-      - **verify failures**: This runs after all others -- usually means one of the above needs fixing.
+      - Fix checks based on their actual names and errors (for example: `typecheck`, `lint`, `test`, `build`, `verify`, `executor`, `qa`, `audit`).
+      - Do not assume only a fixed set of CI job names.
       - Re-run local equivalents of the failing jobs before pushing to confirm the CI issues are fixed.
 
-   f. **Run verification**: Run the project's test/lint commands (e.g., `npm test`, `npm run lint`, `npm run verify` or equivalent). Fix until it passes.
+   e. **Run verification**: Run the project's test/lint commands (e.g., `npm test`, `npm run lint`, `npm run verify` or equivalent). Fix until it passes.
 
-   g. **Commit and push** the fixes (only if there are staged changes beyond the rebase):
+   f. **Commit and push** the fixes (only if there are staged changes beyond the rebase):
       ```
       git add <files>
       git commit -m "fix: address PR review feedback and CI failures
@@ -150,9 +142,9 @@ A PR needs attention if **any** of the following: merge conflicts present, revie
 
       git push origin <branch-name>
       ```
-      Note: if the only change was a conflict-free rebase, the `--force-with-lease` push from step (c) is sufficient -- no extra commit needed.
+      Note: if the only change was a conflict-free rebase, the `--force-with-lease` push from step (b) is sufficient -- no extra commit needed.
 
-   h. **Comment on the PR** summarizing what was addressed:
+   g. **Comment on the PR** summarizing what was addressed:
       ```
       gh pr comment <number> --body "## Night Watch PR Fix
 
@@ -176,7 +168,9 @@ A PR needs attention if **any** of the following: merge conflicts present, revie
       Night Watch PR Reviewer"
       ```
 
-   i. **Clean up worktree**: `git worktree remove ../${PROJECT_NAME}-nw-review-<branch-name>`
+   h. **Do not manage worktrees directly**:
+      - Do **not** run `git worktree add`, `git worktree remove`, or `git worktree prune`.
+      - The cron wrapper handles worktree lifecycle.
 
 5. **Repeat** for all open PRs that need work.
 
