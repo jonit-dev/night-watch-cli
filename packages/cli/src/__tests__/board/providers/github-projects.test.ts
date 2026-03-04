@@ -5,6 +5,7 @@ vi.mock('child_process');
 
 // Import the provider at the top level — the mock is already set up
 import { GitHubProjectsProvider } from '@night-watch/core/board/providers/github-projects.js';
+import { BoardColumnName } from '@night-watch/core/board/types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -478,6 +479,66 @@ describe('GitHubProjectsProvider', () => {
       expect(updateCall).toBeDefined();
       const updateArgs = updateCall![1] as string[];
       expect(updateArgs).toContain('optionId=opt-ready');
+    });
+
+    it('uses config.defaultIssueColumn when no input.column is specified', async () => {
+      queueCachePrimingMocks();
+
+      mockExecFileSync
+        // gh issue create → returns URL
+        .mockReturnValueOnce('https://github.com/owner/repo/issues/9\n' as unknown as Buffer)
+        // gh api repos/owner/repo/issues/9 --jq .node_id → returns node ID
+        .mockReturnValueOnce('issue-node-id-9\n' as unknown as Buffer)
+        // addProjectV2ItemById mutation
+        .mockReturnValueOnce(
+          gqlResponse({
+            addProjectV2ItemById: { item: { id: 'item-node-id-9' } },
+          }) as unknown as Buffer,
+        )
+        // updateProjectV2ItemFieldValue mutation (set In Progress via config.defaultIssueColumn)
+        .mockReturnValueOnce(
+          gqlResponse({
+            updateProjectV2ItemFieldValue: {
+              projectV2Item: { id: 'item-node-id-9' },
+            },
+          }) as unknown as Buffer,
+        )
+        // gh issue view
+        .mockReturnValueOnce(
+          JSON.stringify({
+            number: 9,
+            title: 'Task',
+            body: 'body',
+            url: 'https://github.com/owner/repo/issues/9',
+            id: 'issue-node-id-9',
+            labels: [],
+            assignees: [],
+          }) as unknown as Buffer,
+        )
+        // getAllIssues — project items (column resolution, cache already warm)
+        .mockReturnValueOnce(
+          makeItemsResponse([
+            { id: '9', number: 9, title: 'Task', statusName: 'In Progress' },
+          ]) as unknown as Buffer,
+        );
+
+      const provider = new GitHubProjectsProvider(
+        { ...mockConfig, defaultIssueColumn: 'In Progress' as BoardColumnName },
+        CWD,
+      );
+      const issue = await provider.createIssue({ title: 'Task', body: 'body' });
+
+      expect(issue.column).toBe('In Progress');
+
+      // Verify updateProjectV2ItemFieldValue used opt-wip (the 'In Progress' option)
+      const updateCall = mockExecFileSync.mock.calls.find(
+        (c) =>
+          Array.isArray(c[1]) &&
+          (c[1] as string[]).some((a) => a.includes('updateProjectV2ItemFieldValue')),
+      );
+      expect(updateCall).toBeDefined();
+      const updateArgs = updateCall![1] as string[];
+      expect(updateArgs).toContain('optionId=opt-wip');
     });
   });
 
