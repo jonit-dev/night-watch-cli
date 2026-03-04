@@ -21,6 +21,7 @@ import {
   sendNotifications,
   error as uiError,
 } from '@night-watch/core';
+import { buildBaseEnvVars } from './shared/env-builder.js';
 import type { IPrDetails } from '@night-watch/core';
 import { execFileSync } from 'child_process';
 import * as path from 'path';
@@ -115,16 +116,8 @@ export function buildEnvVars(
   config: INightWatchConfig,
   options: IReviewOptions,
 ): Record<string, string> {
-  const env: Record<string, string> = {};
-
-  // Provider command - the actual CLI binary to call (use job-specific provider for reviewer)
-  const reviewerProvider = resolveJobProvider(config, 'reviewer');
-  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[reviewerProvider];
-
-  // Default branch (empty = auto-detect in bash script)
-  if (config.defaultBranch) {
-    env.NW_DEFAULT_BRANCH = config.defaultBranch;
-  }
+  // Start with base env vars shared by all job types
+  const env = buildBaseEnvVars(config, 'reviewer', options.dryRun);
 
   // Runtime for reviewer (uses NW_REVIEWER_* variables)
   env.NW_REVIEWER_MAX_RUNTIME = String(config.reviewerMaxRuntime);
@@ -133,24 +126,11 @@ export function buildEnvVars(
   env.NW_MIN_REVIEW_SCORE = String(config.minReviewScore);
   env.NW_BRANCH_PATTERNS = config.branchPatterns.join(',');
 
-  // Provider environment variables (API keys, base URLs, etc.)
-  if (config.providerEnv) {
-    Object.assign(env, config.providerEnv);
-  }
-
   // Auto-merge configuration
   if (config.autoMerge) {
     env.NW_AUTO_MERGE = '1';
   }
   env.NW_AUTO_MERGE_METHOD = config.autoMergeMethod;
-
-  // Dry run flag
-  if (options.dryRun) {
-    env.NW_DRY_RUN = '1';
-  }
-
-  // Sandbox flag — prevents the agent from modifying crontab during execution
-  env.NW_EXECUTION_CONTEXT = 'agent';
 
   return env;
 }

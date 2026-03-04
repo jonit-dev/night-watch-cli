@@ -5,7 +5,6 @@
 import { Command } from 'commander';
 import {
   INightWatchConfig,
-  IWebhookConfig,
   LOCK_FILE_PREFIX,
   PROVIDER_COMMANDS,
   createSpinner,
@@ -22,6 +21,7 @@ import {
   sliceNextItem,
   error as uiError,
 } from '@night-watch/core';
+import { buildBaseEnvVars, getTelegramStatusWebhooks } from './shared/env-builder.js';
 import type { ISliceResult } from '@night-watch/core';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -33,21 +33,6 @@ export interface ISliceOptions {
   dryRun: boolean;
   timeout?: string;
   provider?: string;
-}
-
-function getTelegramStatusWebhooks(
-  config: INightWatchConfig,
-): Array<{ botToken: string; chatId: string }> {
-  return (config.notifications?.webhooks ?? [])
-    .filter(
-      (wh): wh is IWebhookConfig & { botToken: string; chatId: string } =>
-        wh.type === 'telegram' &&
-        typeof wh.botToken === 'string' &&
-        wh.botToken.trim().length > 0 &&
-        typeof wh.chatId === 'string' &&
-        wh.chatId.trim().length > 0,
-    )
-    .map((wh) => ({ botToken: wh.botToken, chatId: wh.chatId }));
 }
 
 function plannerLockPath(projectDir: string): string {
@@ -95,11 +80,8 @@ export function buildEnvVars(
   config: INightWatchConfig,
   options: ISliceOptions,
 ): Record<string, string> {
-  const env: Record<string, string> = {};
-
-  // Provider command - the actual CLI binary to call (use job-specific provider for slicer)
-  const slicerProvider = resolveJobProvider(config, 'slicer');
-  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[slicerProvider];
+  // Start with base env vars shared by all job types
+  const env = buildBaseEnvVars(config, 'slicer', options.dryRun);
 
   // Slicer runtime
   env.NW_SLICER_MAX_RUNTIME = String(config.roadmapScanner.slicerMaxRuntime);
@@ -110,11 +92,6 @@ export function buildEnvVars(
   // Roadmap path
   env.NW_ROADMAP_PATH = config.roadmapScanner.roadmapPath;
 
-  // Provider environment variables (API keys, base URLs, etc.)
-  if (config.providerEnv) {
-    Object.assign(env, config.providerEnv);
-  }
-
   // Telegram status messages from bash scripts (start/progress/final status)
   const telegramWebhooks = getTelegramStatusWebhooks(config);
   if (telegramWebhooks.length > 0) {
@@ -122,14 +99,6 @@ export function buildEnvVars(
     env.NW_TELEGRAM_BOT_TOKEN = telegramWebhooks[0].botToken;
     env.NW_TELEGRAM_CHAT_ID = telegramWebhooks[0].chatId;
   }
-
-  // Dry run flag
-  if (options.dryRun) {
-    env.NW_DRY_RUN = '1';
-  }
-
-  // Sandbox flag - prevents the agent from modifying crontab during execution
-  env.NW_EXECUTION_CONTEXT = 'agent';
 
   return env;
 }

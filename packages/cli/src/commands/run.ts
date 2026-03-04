@@ -28,6 +28,7 @@ import {
   validateRegistry,
   warn,
 } from '@night-watch/core';
+import { buildBaseEnvVars } from './shared/env-builder.js';
 import type { IPrDetails } from '@night-watch/core';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -267,39 +268,18 @@ export function buildEnvVars(
   config: INightWatchConfig,
   options: IRunOptions,
 ): Record<string, string> {
-  const env: Record<string, string> = {};
-
-  // Provider command - the actual CLI binary to call (use job-specific provider for executor)
-  const executorProvider = resolveJobProvider(config, 'executor');
-  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[executorProvider];
-
-  // Default branch (empty = auto-detect in bash script)
-  if (config.defaultBranch) {
-    env.NW_DEFAULT_BRANCH = config.defaultBranch;
-  }
+  // Start with base env vars shared by all job types
+  const env = buildBaseEnvVars(config, 'executor', options.dryRun);
 
   // Runtime
   env.NW_MAX_RUNTIME = String(config.maxRuntime);
   env.NW_PRD_DIR = config.prdDir;
   env.NW_BRANCH_PREFIX = config.branchPrefix;
 
-  // Provider environment variables (API keys, base URLs, etc.)
-  if (config.providerEnv) {
-    Object.assign(env, config.providerEnv);
-  }
-
   // PRD priority order
   if (config.prdPriority && config.prdPriority.length > 0) {
     env.NW_PRD_PRIORITY = config.prdPriority.join(':');
   }
-
-  // Dry run flag
-  if (options.dryRun) {
-    env.NW_DRY_RUN = '1';
-  }
-
-  // Sandbox flag — prevents the agent from modifying crontab during execution
-  env.NW_EXECUTION_CONTEXT = 'agent';
 
   // Max retries for rate-limited API calls (minimum 1 attempt)
   const maxRetries = Number.isFinite(config.maxRetries)
