@@ -51,6 +51,42 @@ resolve_night_watch_cli() {
   return 1
 }
 
+resolve_instruction_path() {
+  local project_dir="${1:?project_dir required}"
+  local instruction_file="${2:?instruction_file required}"
+  local script_dir=""
+  local candidate=""
+
+  if [ -n "${SCRIPT_DIR:-}" ]; then
+    script_dir="${SCRIPT_DIR}"
+  else
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  fi
+
+  for candidate in \
+    "${project_dir}/instructions/${instruction_file}" \
+    "${project_dir}/.claude/commands/${instruction_file}" \
+    "${script_dir}/../templates/${instruction_file}"; do
+    if [ -f "${candidate}" ]; then
+      printf "%s" "${candidate}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+instruction_ref_for_prompt() {
+  local root_dir="${1:?root_dir required}"
+  local instruction_path="${2:?instruction_path required}"
+
+  if [[ "${instruction_path}" == "${root_dir}/"* ]]; then
+    printf "%s" "${instruction_path#${root_dir}/}"
+  else
+    printf "%s" "${instruction_path}"
+  fi
+}
+
 night_watch_history() {
   local cli_bin
   cli_bin=$(resolve_night_watch_cli) || return 127

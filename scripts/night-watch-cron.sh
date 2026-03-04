@@ -304,6 +304,16 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" || true
 
 log "START: Processing ${ELIGIBLE_PRD} on branch ${BRANCH_NAME} (worktree: ${WORKTREE_DIR})"
 
+EXECUTOR_PROMPT_PATH=$(resolve_instruction_path "${PROJECT_DIR}" "prd-executor.md" || true)
+if [ -z "${EXECUTOR_PROMPT_PATH}" ]; then
+  log "FAIL: Missing PRD executor instructions. Checked instructions/, .claude/commands/, and bundled templates/"
+  restore_issue_to_ready "Failed to locate PRD executor instructions. Checked instructions/, .claude/commands/, and bundled templates/."
+  night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
+  emit_result "failure" "reason=missing_executor_prompt"
+  exit 1
+fi
+EXECUTOR_PROMPT_REF=$(instruction_ref_for_prompt "${PROJECT_DIR}" "${EXECUTOR_PROMPT_PATH}")
+
 if [ -n "${ISSUE_NUMBER}" ]; then
   PROMPT="Implement the following PRD (GitHub issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}):
 
@@ -317,7 +327,7 @@ ${ISSUE_BODY}
 - Install dependencies if needed and implement in the current worktree only
 
 ## Implementation — PRD Executor Workflow
-Read instructions/prd-executor.md and follow the FULL execution pipeline:
+Read ${EXECUTOR_PROMPT_REF} and follow the FULL execution pipeline:
 1. Parse the PRD into phases and extract dependencies
 2. Build a dependency graph to identify parallelism
 3. Create a task list with one task per phase
@@ -345,7 +355,7 @@ else
 - Install dependencies if needed and implement in the current worktree only
 
 ## Implementation — PRD Executor Workflow
-Read instructions/prd-executor.md and follow the FULL execution pipeline:
+Read ${EXECUTOR_PROMPT_REF} and follow the FULL execution pipeline:
 1. Parse the PRD into phases and extract dependencies
 2. Build a dependency graph to identify parallelism
 3. Create a task list with one task per phase
