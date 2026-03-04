@@ -183,6 +183,55 @@ export function checkLockFile(lockPath: string): { running: boolean; pid: number
 }
 
 /**
+ * Attempt to acquire a lock file.
+ * Returns true if lock was acquired, false if already locked by another process.
+ * Removes stale locks from processes that are no longer running.
+ */
+export function acquireLock(lockPath: string, pid?: number): boolean {
+  const effectivePid = pid ?? process.pid;
+
+  // Check if lock file exists
+  if (fs.existsSync(lockPath)) {
+    const lockInfo = checkLockFile(lockPath);
+
+    if (lockInfo.running) {
+      // Lock is held by an active process
+      return false;
+    }
+
+    // Stale lock file - remove it
+    try {
+      fs.unlinkSync(lockPath);
+    } catch {
+      // If we can't remove it, we can't acquire
+      return false;
+    }
+  }
+
+  // Write our PID to the lock file
+  try {
+    fs.writeFileSync(lockPath, String(effectivePid), 'utf-8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Release a lock file.
+ * Silent no-op if file doesn't exist or can't be removed.
+ */
+export function releaseLock(lockPath: string): void {
+  try {
+    if (fs.existsSync(lockPath)) {
+      fs.unlinkSync(lockPath);
+    }
+  } catch {
+    // Silent failure
+  }
+}
+
+/**
  * Count PRDs in the PRD directory and return counts
  */
 export function countPRDs(
