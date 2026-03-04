@@ -80,6 +80,9 @@ export interface INightWatchConfig {
   /** AI provider to use for execution */
   provider: Provider;
 
+  /** Whether the executor is enabled */
+  executorEnabled?: boolean;
+
   /** Whether the reviewer is enabled */
   reviewerEnabled: boolean;
 

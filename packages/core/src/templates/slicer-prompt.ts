@@ -52,6 +52,8 @@ The PRD directory is: \`{{PRD_DIR}}\`
 
 ## Your Task
 
+0. **Load Planner Skill** - Read and apply \`.claude/skills/prd-creator/SKILL.md\` before writing the PRD. If unavailable, continue with this template.
+
 1. **Explore the Codebase** - Read relevant existing files to understand the project structure, patterns, and conventions.
 
 2. **Assess Complexity** - Score the complexity using the rubric and determine whether this is LOW, MEDIUM, or HIGH complexity.

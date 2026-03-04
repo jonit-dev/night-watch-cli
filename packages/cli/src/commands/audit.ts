@@ -5,6 +5,7 @@
 import { Command } from 'commander';
 import {
   INightWatchConfig,
+  IWebhookConfig,
   PROVIDER_COMMANDS,
   createSpinner,
   createTable,
@@ -12,6 +13,7 @@ import {
   executeScriptWithOutput,
   getScriptPath,
   header,
+  info,
   loadConfig,
   parseScriptResult,
   resolveJobProvider,
@@ -23,6 +25,21 @@ export interface IAuditOptions {
   dryRun: boolean;
   timeout?: string;
   provider?: string;
+}
+
+function getTelegramStatusWebhooks(
+  config: INightWatchConfig,
+): Array<{ botToken: string; chatId: string }> {
+  return (config.notifications?.webhooks ?? [])
+    .filter(
+      (wh): wh is IWebhookConfig & { botToken: string; chatId: string } =>
+        wh.type === 'telegram' &&
+        typeof wh.botToken === 'string' &&
+        wh.botToken.trim().length > 0 &&
+        typeof wh.chatId === 'string' &&
+        wh.chatId.trim().length > 0,
+    )
+    .map((wh) => ({ botToken: wh.botToken, chatId: wh.chatId }));
 }
 
 /**
@@ -45,6 +62,14 @@ export function buildEnvVars(
 
   if (config.providerEnv) {
     Object.assign(env, config.providerEnv);
+  }
+
+  // Telegram status messages from bash scripts (start/progress/final status)
+  const telegramWebhooks = getTelegramStatusWebhooks(config);
+  if (telegramWebhooks.length > 0) {
+    env.NW_TELEGRAM_STATUS_WEBHOOKS = JSON.stringify(telegramWebhooks);
+    env.NW_TELEGRAM_BOT_TOKEN = telegramWebhooks[0].botToken;
+    env.NW_TELEGRAM_CHAT_ID = telegramWebhooks[0].chatId;
   }
 
   if (options.dryRun) {
@@ -83,6 +108,11 @@ export function auditCommand(program: Command): void {
           ...config,
           _cliProviderOverride: options.provider as INightWatchConfig['provider'],
         };
+      }
+
+      if (!config.audit.enabled && !options.dryRun) {
+        info('Audit is disabled in config; skipping run.');
+        process.exit(0);
       }
 
       const envVars = buildEnvVars(config, options);

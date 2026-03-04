@@ -58,6 +58,10 @@ if ! acquire_lock "${LOCK_FILE}"; then
   exit 0
 fi
 
+send_telegram_status_message "🔎 Night Watch Auditor: started" "Project: ${PROJECT_NAME}
+Provider: ${PROVIDER_CMD}
+Running code quality audit."
+
 # Dry-run mode: print diagnostics and exit
 if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   echo "=== Dry Run: Code Auditor ==="
@@ -71,6 +75,9 @@ fi
 
 if [ ! -f "${AUDIT_PROMPT_TEMPLATE}" ]; then
   log "FAIL: Missing bundled audit prompt template at ${AUDIT_PROMPT_TEMPLATE}"
+  send_telegram_status_message "🔎 Night Watch Auditor: failed" "Project: ${PROJECT_NAME}
+Missing prompt template:
+${AUDIT_PROMPT_TEMPLATE}"
   emit_result "failure_missing_prompt"
   exit 1
 fi
@@ -90,6 +97,8 @@ cleanup_worktrees "${PROJECT_DIR}" "${AUDIT_WORKTREE_BASENAME}"
 
 if ! prepare_detached_worktree "${PROJECT_DIR}" "${AUDIT_WORKTREE_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
   log "FAIL: Unable to create isolated audit worktree ${AUDIT_WORKTREE_DIR}"
+  send_telegram_status_message "🔎 Night Watch Auditor: failed" "Project: ${PROJECT_NAME}
+Failed to create audit worktree."
   emit_result "failure" "reason=worktree_setup_failed"
   exit 1
 fi
@@ -146,22 +155,32 @@ cleanup_worktrees "${PROJECT_DIR}" "${AUDIT_WORKTREE_BASENAME}"
 if [ "${EXIT_CODE}" -eq 0 ]; then
   if [ ! -f "${REPORT_FILE}" ]; then
     log "FAIL: Audit provider exited 0 but no report was generated at ${REPORT_FILE}"
+    send_telegram_status_message "🔎 Night Watch Auditor: failed" "Project: ${PROJECT_NAME}
+Provider exited successfully but no report file was generated."
     emit_result "failure_no_report"
     exit 1
   fi
 
   if grep -q "NO_ISSUES_FOUND" "${REPORT_FILE}" 2>/dev/null; then
     log "DONE: Audit complete — no actionable issues found"
+    send_telegram_status_message "🔎 Night Watch Auditor: complete (clean)" "Project: ${PROJECT_NAME}
+No actionable issues found."
     emit_result "skip_clean"
   else
     log "DONE: Audit complete — report written to ${REPORT_FILE}"
+    send_telegram_status_message "🔎 Night Watch Auditor: complete" "Project: ${PROJECT_NAME}
+Report: ${REPORT_FILE}"
     emit_result "success_audit"
   fi
 elif [ "${EXIT_CODE}" -eq 124 ]; then
   log "TIMEOUT: Audit killed after ${MAX_RUNTIME}s"
+  send_telegram_status_message "🔎 Night Watch Auditor: timeout" "Project: ${PROJECT_NAME}
+Timeout: ${MAX_RUNTIME}s"
   emit_result "timeout"
 else
   log "FAIL: Audit exited with code ${EXIT_CODE}"
+  send_telegram_status_message "🔎 Night Watch Auditor: failed" "Project: ${PROJECT_NAME}
+Exit code: ${EXIT_CODE}"
   emit_result "failure" "provider_exit=${EXIT_CODE}"
 fi
 

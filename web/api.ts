@@ -177,6 +177,8 @@ export interface IScheduleInfo {
   executor: { schedule: string; installed: boolean; nextRun: string | null };
   reviewer: { schedule: string; installed: boolean; nextRun: string | null };
   qa?: { schedule: string; installed: boolean; nextRun: string | null };
+  audit?: { schedule: string; installed: boolean; nextRun: string | null };
+  planner?: { schedule: string; installed: boolean; nextRun: string | null };
   paused: boolean;
   entries: string[];
 }
@@ -231,6 +233,24 @@ export function triggerRun(): Promise<ActionResult> {
 
 export function triggerReview(): Promise<ActionResult> {
   return apiFetch<ActionResult>(apiPath('/api/actions/review'), {
+    method: 'POST',
+  });
+}
+
+export function triggerQa(): Promise<ActionResult> {
+  return apiFetch<ActionResult>(apiPath('/api/actions/qa'), {
+    method: 'POST',
+  });
+}
+
+export function triggerAudit(): Promise<ActionResult> {
+  return apiFetch<ActionResult>(apiPath('/api/actions/audit'), {
+    method: 'POST',
+  });
+}
+
+export function triggerPlanner(): Promise<ActionResult> {
+  return apiFetch<ActionResult>(apiPath('/api/actions/planner'), {
     method: 'POST',
   });
 }

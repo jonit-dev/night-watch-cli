@@ -4,7 +4,7 @@ import Button from '../components/ui/Button';
 import { useApi, fetchLogs, fetchStatus } from '../api';
 import { useStore } from '../store/useStore';
 
-type LogName = 'executor' | 'reviewer' | 'qa';
+type LogName = 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner';
 
 const Logs: React.FC = () => {
   const [autoScroll, setAutoScroll] = useState(true);
@@ -119,8 +119,34 @@ const Logs: React.FC = () => {
                  <div className="flex items-center space-x-2">
                    <span>QA</span>
                    {getProcessStatus('qa') && <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>}
-                 </div>
-               </button>
+                </div>
+              </button>
+              <button
+                onClick={() => handleLogChange('audit')}
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                  activeLog === 'audit'
+                    ? 'bg-slate-800 text-slate-200 shadow-sm border border-slate-700'
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <span>Auditor</span>
+                  {getProcessStatus('audit') && <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>}
+                </div>
+              </button>
+              <button
+                onClick={() => handleLogChange('planner')}
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                  activeLog === 'planner'
+                    ? 'bg-slate-800 text-slate-200 shadow-sm border border-slate-700'
+                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <span>Planner</span>
+                  {getProcessStatus('planner') && <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>}
+                </div>
+              </button>
             </div>
          </div>
          <div className="flex items-center space-x-2">

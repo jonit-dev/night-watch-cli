@@ -10,7 +10,7 @@ import {
   Map,
   Settings,
   Terminal,
-  Users,
+  // Users,
 } from 'lucide-react';
 import React, { useState, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
@@ -32,7 +32,7 @@ const Sidebar: React.FC = () => {
     { icon: Map, label: 'Roadmap', path: '/roadmap' },
     { icon: Calendar, label: 'Scheduling', path: '/scheduling' },
     { icon: Terminal, label: 'Logs', path: '/logs' },
-    { icon: Users, label: 'Agents', path: '/agents' },
+    // { icon: Users, label: 'Agents', path: '/agents' },
     { icon: Settings, label: 'Settings', path: '/settings' },
   ], [openPrCount]);
 
@@ -86,11 +86,11 @@ const Sidebar: React.FC = () => {
         <ul className="space-y-1.5 px-4">
           {navItems.map((item) => (
             <React.Fragment key={item.path}>
-              {item.path === '/agents' && !collapsed && (
+              {/* {item.path === '/agents' && !collapsed && (
                 <li className="pt-3 pb-1 px-3.5">
                   <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Team</span>
                 </li>
-              )}
+              )} */}
               <li>
                 <NavLink
                   to={item.path}

@@ -68,6 +68,10 @@ fi
 
 cd "${PROJECT_DIR}"
 
+send_telegram_status_message "🧪 Night Watch QA: started" "Project: ${PROJECT_NAME}
+Provider: ${PROVIDER_CMD}
+Scanning open PRs for QA candidates."
+
 # Convert comma-separated branch prefixes into a regex that matches branch starts.
 BRANCH_REGEX=""
 IFS=',' read -r -a BRANCH_PATTERNS <<< "${BRANCH_PATTERNS_RAW}"
@@ -96,6 +100,8 @@ OPEN_PRS=$(
 
 if [ "${OPEN_PRS}" -eq 0 ]; then
   log "SKIP: No open PRs matching branch patterns (${BRANCH_PATTERNS_RAW})"
+  send_telegram_status_message "🧪 Night Watch QA: no matching PRs" "Project: ${PROJECT_NAME}
+Branch patterns: ${BRANCH_PATTERNS_RAW}"
   emit_result "skip_no_open_prs"
   exit 0
 fi
@@ -151,6 +157,8 @@ done < <(
 
 if [ "${QA_NEEDED}" -eq 0 ]; then
   log "SKIP: All ${OPEN_PRS} open PR(s) matching patterns already have QA comments"
+  send_telegram_status_message "🧪 Night Watch QA: nothing to do" "Project: ${PROJECT_NAME}
+All matching PRs already have QA results."
   emit_result "skip_all_qa_done"
   exit 0
 fi
@@ -190,6 +198,9 @@ EXIT_CODE=0
 # Process each PR that needs QA
 for pr_ref in ${PRS_NEEDING_QA}; do
   pr_num="${pr_ref#\#}"
+  send_telegram_status_message "🧪 Night Watch QA: processing PR #${pr_num}" "Project: ${PROJECT_NAME}
+Provider: ${PROVIDER_CMD}
+Artifacts: ${QA_ARTIFACTS}"
 
   cleanup_worktrees "${PROJECT_DIR}"
   if ! prepare_detached_worktree "${PROJECT_DIR}" "${QA_WORKTREE_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
@@ -257,6 +268,8 @@ cleanup_worktrees "${PROJECT_DIR}"
 
 if [ ${EXIT_CODE} -eq 0 ]; then
   log "DONE: QA runner completed successfully"
+  send_telegram_status_message "🧪 Night Watch QA: completed" "Project: ${PROJECT_NAME}
+Processed PRs: ${PRS_NEEDING_QA_CSV}"
   if [ -n "${REPO}" ]; then
     emit_result "success_qa" "prs=${PRS_NEEDING_QA_CSV}|repo=${REPO}"
   else
@@ -264,6 +277,9 @@ if [ ${EXIT_CODE} -eq 0 ]; then
   fi
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: QA runner killed after ${MAX_RUNTIME}s"
+  send_telegram_status_message "🧪 Night Watch QA: timeout" "Project: ${PROJECT_NAME}
+Timeout: ${MAX_RUNTIME}s
+Processed PRs: ${PRS_NEEDING_QA_CSV}"
   if [ -n "${REPO}" ]; then
     emit_result "timeout" "prs=${PRS_NEEDING_QA_CSV}|repo=${REPO}"
   else
@@ -271,6 +287,9 @@ elif [ ${EXIT_CODE} -eq 124 ]; then
   fi
 else
   log "FAIL: QA runner exited with code ${EXIT_CODE}"
+  send_telegram_status_message "🧪 Night Watch QA: failed" "Project: ${PROJECT_NAME}
+Exit code: ${EXIT_CODE}
+Processed PRs: ${PRS_NEEDING_QA_CSV}"
   if [ -n "${REPO}" ]; then
     emit_result "failure" "prs=${PRS_NEEDING_QA_CSV}|repo=${REPO}"
   else

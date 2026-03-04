@@ -1,9 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { Pause, Play, Clock, Edit, Check, AlertCircle, Calendar } from 'lucide-react';
+import {
+  Pause,
+  Play,
+  Clock,
+  Edit,
+  Check,
+  AlertCircle,
+  Calendar,
+  TestTube2,
+  Search,
+  ClipboardList,
+} from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
+import Switch from '../components/ui/Switch';
 import { useStore } from '../store/useStore';
 import {
   fetchScheduleInfo,
@@ -32,6 +44,7 @@ const Scheduling: React.FC = () => {
   const { addToast, selectedProjectId, globalModeLoading } = useStore();
   const [toggling, setToggling] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [updatingJob, setUpdatingJob] = useState<string | null>(null);
   const [editState, setEditState] = useState<ScheduleEditState>({
     executorSchedule: '',
     reviewerSchedule: '',
@@ -155,6 +168,47 @@ const Scheduling: React.FC = () => {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleJobToggle = async (
+    job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner',
+    enabled: boolean,
+  ) => {
+    if (!config) return;
+
+    setUpdatingJob(job);
+    try {
+      if (job === 'executor') {
+        await updateConfig({ executorEnabled: enabled });
+      } else if (job === 'reviewer') {
+        await updateConfig({ reviewerEnabled: enabled });
+      } else if (job === 'qa') {
+        await updateConfig({ qa: { ...config.qa, enabled } });
+      } else if (job === 'audit') {
+        await updateConfig({ audit: { ...config.audit, enabled } });
+      } else {
+        await updateConfig({
+          roadmapScanner: { ...config.roadmapScanner, enabled },
+        });
+      }
+
+      addToast({
+        title: 'Job Updated',
+        message: `${job[0].toUpperCase() + job.slice(1)} ${enabled ? 'enabled' : 'disabled'}.`,
+        type: 'success',
+      });
+
+      refetchConfig();
+      refetchSchedule();
+    } catch (error) {
+      addToast({
+        title: 'Update Failed',
+        message: error instanceof Error ? error.message : 'Failed to update job configuration',
+        type: 'error',
+      });
+    } finally {
+      setUpdatingJob(null);
     }
   };
 
@@ -285,10 +339,12 @@ const Scheduling: React.FC = () => {
       {/* B. Schedule Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Executor Schedule */}
-        <Card className="p-6">
+        <Card className={`p-6 ${config.executorEnabled === false ? 'opacity-50' : ''}`}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-slate-200">Executor Schedule</h3>
-            {!editState.isEditing && (
+            {config.executorEnabled === false ? (
+              <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">Disabled</span>
+            ) : !editState.isEditing && (
               <Button variant="ghost" size="sm" onClick={handleEdit}>
                 <Edit className="h-4 w-4 mr-1" />
                 Edit
@@ -300,24 +356,33 @@ const Scheduling: React.FC = () => {
             renderScheduleEditor(
               'Executor',
               editState.executorSchedule,
-              (val) => setEditState(prev => ({ ...prev, executorSchedule: val }))
+              (val) => setEditState(prev => ({ ...prev, executorSchedule: val })),
+              config.executorEnabled === false
             )
           ) : (
             <>
               <div className="space-y-4">
-                <div>
-                  <div className="text-sm text-slate-400 mb-1">Schedule</div>
-                  <div className="text-lg text-slate-200 font-medium">{cronToHuman(config.cronSchedule)}</div>
-                  <div className="text-xs text-slate-500 font-mono mt-1">{config.cronSchedule}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-slate-400 mb-1">Next Run</div>
-                  {renderNextRun(scheduleInfo.executor.nextRun, config.cronSchedule)}
-                </div>
-                <div className={`flex items-center space-x-2 text-sm ${scheduleInfo.executor.installed ? 'text-green-400' : 'text-amber-400'}`}>
-                  <Check className="h-4 w-4" />
-                  <span>{scheduleInfo.executor.installed ? 'Installed' : 'Not installed'}</span>
-                </div>
+                {config.executorEnabled !== false ? (
+                  <>
+                    <div>
+                      <div className="text-sm text-slate-400 mb-1">Schedule</div>
+                      <div className="text-lg text-slate-200 font-medium">{cronToHuman(config.cronSchedule)}</div>
+                      <div className="text-xs text-slate-500 font-mono mt-1">{config.cronSchedule}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-slate-400 mb-1">Next Run</div>
+                      {renderNextRun(scheduleInfo.executor.nextRun, config.cronSchedule)}
+                    </div>
+                    <div className={`flex items-center space-x-2 text-sm ${scheduleInfo.executor.installed ? 'text-green-400' : 'text-amber-400'}`}>
+                      <Check className="h-4 w-4" />
+                      <span>{scheduleInfo.executor.installed ? 'Installed' : 'Not installed'}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-slate-500 text-sm">
+                    Executor is disabled in settings.
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -369,7 +434,160 @@ const Scheduling: React.FC = () => {
         </Card>
       </div>
 
-      {/* C. Active Crontab Entries */}
+      {/* C. Per-Job Enablement */}
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold text-slate-200 mb-4">Job Enablement</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
+            <div>
+              <div className="text-sm font-medium text-slate-200">Executor</div>
+              <div className="text-xs text-slate-500">Creates implementation PRs from PRDs</div>
+            </div>
+            <Switch
+              checked={config.executorEnabled !== false}
+              disabled={updatingJob !== null}
+              onChange={(checked) => handleJobToggle('executor', checked)}
+            />
+          </div>
+          <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
+            <div>
+              <div className="text-sm font-medium text-slate-200">Reviewer</div>
+              <div className="text-xs text-slate-500">Reviews PRs and manages merge readiness</div>
+            </div>
+            <Switch
+              checked={config.reviewerEnabled}
+              disabled={updatingJob !== null}
+              onChange={(checked) => handleJobToggle('reviewer', checked)}
+            />
+          </div>
+          <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
+            <div>
+              <div className="text-sm font-medium text-slate-200">QA</div>
+              <div className="text-xs text-slate-500">Generates and runs quality checks on PRs</div>
+            </div>
+            <Switch
+              checked={config.qa.enabled}
+              disabled={updatingJob !== null}
+              onChange={(checked) => handleJobToggle('qa', checked)}
+            />
+          </div>
+          <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
+            <div>
+              <div className="text-sm font-medium text-slate-200">Auditor</div>
+              <div className="text-xs text-slate-500">Runs automated audit reports</div>
+            </div>
+            <Switch
+              checked={config.audit.enabled}
+              disabled={updatingJob !== null}
+              onChange={(checked) => handleJobToggle('audit', checked)}
+            />
+          </div>
+          <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40 md:col-span-2">
+            <div>
+              <div className="text-sm font-medium text-slate-200">Planner</div>
+              <div className="text-xs text-slate-500">Creates PRDs from audit findings and pending roadmap items</div>
+            </div>
+            <Switch
+              checked={config.roadmapScanner.enabled}
+              disabled={updatingJob !== null}
+              onChange={(checked) => handleJobToggle('planner', checked)}
+            />
+          </div>
+        </div>
+      </Card>
+
+      {/* D. Background Jobs */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className={`p-6 ${!config.qa.enabled ? 'opacity-50' : ''}`}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+              <TestTube2 className="h-4 w-4" />
+              QA
+            </h3>
+            {!config.qa.enabled && (
+              <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">Disabled</span>
+            )}
+          </div>
+          {config.qa.enabled ? (
+            <div className="space-y-4">
+              <div>
+                <div className="text-sm text-slate-400 mb-1">Schedule</div>
+                <div className="text-lg text-slate-200 font-medium">{cronToHuman(config.qa.schedule)}</div>
+                <div className="text-xs text-slate-500 font-mono mt-1">{config.qa.schedule}</div>
+              </div>
+              <div>
+                <div className="text-sm text-slate-400 mb-1">Next Run</div>
+                {renderNextRun(scheduleInfo.qa?.nextRun, config.qa.schedule)}
+              </div>
+            </div>
+          ) : (
+            <div className="text-slate-500 text-sm">QA is disabled in settings.</div>
+          )}
+        </Card>
+
+        <Card className={`p-6 ${!config.audit.enabled ? 'opacity-50' : ''}`}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+              <Search className="h-4 w-4" />
+              Auditor
+            </h3>
+            {!config.audit.enabled && (
+              <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">Disabled</span>
+            )}
+          </div>
+          {config.audit.enabled ? (
+            <div className="space-y-4">
+              <div>
+                <div className="text-sm text-slate-400 mb-1">Schedule</div>
+                <div className="text-lg text-slate-200 font-medium">{cronToHuman(config.audit.schedule)}</div>
+                <div className="text-xs text-slate-500 font-mono mt-1">{config.audit.schedule}</div>
+              </div>
+              <div>
+                <div className="text-sm text-slate-400 mb-1">Next Run</div>
+                {renderNextRun(scheduleInfo.audit?.nextRun, config.audit.schedule)}
+              </div>
+            </div>
+          ) : (
+            <div className="text-slate-500 text-sm">Audit is disabled in settings.</div>
+          )}
+        </Card>
+
+        <Card className={`p-6 ${!config.roadmapScanner.enabled ? 'opacity-50' : ''}`}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+              <ClipboardList className="h-4 w-4" />
+              Planner
+            </h3>
+            {!config.roadmapScanner.enabled && (
+              <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">Disabled</span>
+            )}
+          </div>
+          {config.roadmapScanner.enabled ? (
+            <div className="space-y-4">
+              <div>
+                <div className="text-sm text-slate-400 mb-1">Schedule</div>
+                <div className="text-lg text-slate-200 font-medium">
+                  {cronToHuman(config.roadmapScanner.slicerSchedule)}
+                </div>
+                <div className="text-xs text-slate-500 font-mono mt-1">
+                  {config.roadmapScanner.slicerSchedule}
+                </div>
+              </div>
+              <div>
+                <div className="text-sm text-slate-400 mb-1">Next Run</div>
+                {renderNextRun(
+                  scheduleInfo.planner?.nextRun,
+                  config.roadmapScanner.slicerSchedule,
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="text-slate-500 text-sm">Planner uses roadmap scanner scheduling.</div>
+          )}
+        </Card>
+      </div>
+
+      {/* E. Active Crontab Entries */}
       <Card className="p-6">
         <div className="flex items-center space-x-2 mb-4">
           <Calendar className="h-5 w-5 text-slate-400" />
@@ -388,7 +606,7 @@ const Scheduling: React.FC = () => {
         )}
       </Card>
 
-      {/* D. Save & Install Button */}
+      {/* F. Save & Install Button */}
       {editState.isEditing && (
         <div className="flex items-center justify-end space-x-4 pt-4 border-t border-slate-800">
           <Button variant="ghost" onClick={handleCancelEdit}>

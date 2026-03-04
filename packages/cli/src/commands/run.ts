@@ -211,7 +211,10 @@ async function runCrossProjectFallback(
         continue;
       }
 
-      if (scriptResult?.status?.startsWith('skip_') || scriptResult?.status === 'success_already_merged') {
+      if (
+        scriptResult?.status?.startsWith('skip_') ||
+        scriptResult?.status === 'success_already_merged'
+      ) {
         continue;
       }
 
@@ -448,6 +451,11 @@ export function runCommand(program: Command): void {
 
       // Apply CLI flag overrides
       config = applyCliOverrides(config, options);
+
+      if (config.executorEnabled === false && !options.dryRun) {
+        info('Executor is disabled in config; skipping run.');
+        process.exit(0);
+      }
 
       // Build environment variables
       const envVars = buildEnvVars(config, options);

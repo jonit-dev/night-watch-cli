@@ -1,5 +1,5 @@
 /**
- * Action routes: /api/actions/* (run, review, cancel, retry, clear-lock, install-cron, uninstall-cron)
+ * Action routes: /api/actions/* (run, review, qa, audit, planner, cancel, retry, clear-lock, install-cron, uninstall-cron)
  */
 
 import * as fs from 'fs';
@@ -16,6 +16,7 @@ import {
   fetchStatusSnapshot,
   loadConfig,
   performCancel,
+  plannerLockPath,
   reviewerLockPath,
   sendNotifications,
 } from '@night-watch/core';
@@ -65,12 +66,16 @@ function spawnAction(
       lockPath = executorLockPath(projectDir);
     } else if (command[0] === 'review') {
       lockPath = reviewerLockPath(projectDir);
+    } else if (command[0] === 'planner') {
+      lockPath = plannerLockPath(projectDir);
     }
 
     if (lockPath) {
       const lock = checkLockFile(lockPath);
       if (lock.running) {
-        const processType = command[0] === 'run' ? 'Executor' : 'Reviewer';
+        let processType = 'Planner';
+        if (command[0] === 'run') processType = 'Executor';
+        else if (command[0] === 'review') processType = 'Reviewer';
         res.status(409).json({
           error: `${processType} is already running (PID ${lock.pid})`,
           pid: lock.pid,
@@ -147,6 +152,18 @@ function createActionRouteHandlers(ctx: IActionRouteContext): Router {
 
   router.post(`/${p}review`, (req: Request, res: Response): void => {
     spawnAction(ctx.getProjectDir(req), ['review'], req, res);
+  });
+
+  router.post(`/${p}qa`, (req: Request, res: Response): void => {
+    spawnAction(ctx.getProjectDir(req), ['qa'], req, res);
+  });
+
+  router.post(`/${p}audit`, (req: Request, res: Response): void => {
+    spawnAction(ctx.getProjectDir(req), ['audit'], req, res);
+  });
+
+  router.post(`/${p}planner`, (req: Request, res: Response): void => {
+    spawnAction(ctx.getProjectDir(req), ['planner'], req, res);
   });
 
   router.post(`/${p}install-cron`, (req: Request, res: Response): void => {

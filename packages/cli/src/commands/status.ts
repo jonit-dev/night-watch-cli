@@ -35,6 +35,18 @@ interface IStatusInfo {
     running: boolean;
     pid: number | null;
   };
+  qa: {
+    running: boolean;
+    pid: number | null;
+  };
+  audit: {
+    running: boolean;
+    pid: number | null;
+  };
+  planner: {
+    running: boolean;
+    pid: number | null;
+  };
   prds: {
     pending: number;
     claimed: number;
@@ -55,6 +67,24 @@ interface IStatusInfo {
       size: number;
     };
     reviewer?: {
+      path: string;
+      lastLines: string[];
+      exists: boolean;
+      size: number;
+    };
+    qa?: {
+      path: string;
+      lastLines: string[];
+      exists: boolean;
+      size: number;
+    };
+    audit?: {
+      path: string;
+      lastLines: string[];
+      exists: boolean;
+      size: number;
+    };
+    planner?: {
       path: string;
       lastLines: string[];
       exists: boolean;
@@ -92,8 +122,14 @@ export function statusCommand(program: Command): void {
         // Derive legacy status shape from snapshot for backward-compatible JSON output
         const executorProc = snapshot.processes.find((p) => p.name === 'executor');
         const reviewerProc = snapshot.processes.find((p) => p.name === 'reviewer');
+        const qaProc = snapshot.processes.find((p) => p.name === 'qa');
+        const auditProc = snapshot.processes.find((p) => p.name === 'audit');
+        const plannerProc = snapshot.processes.find((p) => p.name === 'planner');
         const executorLog = snapshot.logs.find((l) => l.name === 'executor');
         const reviewerLog = snapshot.logs.find((l) => l.name === 'reviewer');
+        const qaLog = snapshot.logs.find((l) => l.name === 'qa');
+        const auditLog = snapshot.logs.find((l) => l.name === 'audit');
+        const plannerLog = snapshot.logs.find((l) => l.name === 'planner');
 
         const pendingPrds = snapshot.prds.filter(
           (p) => p.status === 'ready' || p.status === 'blocked',
@@ -110,6 +146,9 @@ export function statusCommand(program: Command): void {
           autoMergeMethod: config.autoMergeMethod,
           executor: { running: executorProc?.running ?? false, pid: executorProc?.pid ?? null },
           reviewer: { running: reviewerProc?.running ?? false, pid: reviewerProc?.pid ?? null },
+          qa: { running: qaProc?.running ?? false, pid: qaProc?.pid ?? null },
+          audit: { running: auditProc?.running ?? false, pid: auditProc?.pid ?? null },
+          planner: { running: plannerProc?.running ?? false, pid: plannerProc?.pid ?? null },
           prds: { pending: pendingPrds, claimed: claimedPrds, done: donePrds },
           prs: { open: snapshot.prs.length },
           crontab: snapshot.crontab,
@@ -128,6 +167,30 @@ export function statusCommand(program: Command): void {
                   lastLines: reviewerLog.lastLines,
                   exists: reviewerLog.exists,
                   size: reviewerLog.size,
+                }
+              : undefined,
+            qa: qaLog
+              ? {
+                  path: qaLog.path,
+                  lastLines: qaLog.lastLines,
+                  exists: qaLog.exists,
+                  size: qaLog.size,
+                }
+              : undefined,
+            audit: auditLog
+              ? {
+                  path: auditLog.path,
+                  lastLines: auditLog.lastLines,
+                  exists: auditLog.exists,
+                  size: auditLog.size,
+                }
+              : undefined,
+            planner: plannerLog
+              ? {
+                  path: plannerLog.path,
+                  lastLines: plannerLog.lastLines,
+                  exists: plannerLog.exists,
+                  size: plannerLog.size,
                 }
               : undefined,
           },
@@ -167,6 +230,12 @@ export function statusCommand(program: Command): void {
         processTable.push([
           'Reviewer',
           formatRunningStatus(status.reviewer.running, status.reviewer.pid),
+        ]);
+        processTable.push(['QA', formatRunningStatus(status.qa.running, status.qa.pid)]);
+        processTable.push(['Audit', formatRunningStatus(status.audit.running, status.audit.pid)]);
+        processTable.push([
+          'Planner',
+          formatRunningStatus(status.planner.running, status.planner.pid),
         ]);
         console.log(processTable.toString());
 
@@ -211,6 +280,27 @@ export function statusCommand(program: Command): void {
             status.logs.reviewer.exists ? 'Exists' : 'Not found',
           ]);
         }
+        if (status.logs.qa) {
+          logTable.push([
+            'QA',
+            status.logs.qa.exists ? formatBytes(status.logs.qa.size) : '-',
+            status.logs.qa.exists ? 'Exists' : 'Not found',
+          ]);
+        }
+        if (status.logs.audit) {
+          logTable.push([
+            'Audit',
+            status.logs.audit.exists ? formatBytes(status.logs.audit.size) : '-',
+            status.logs.audit.exists ? 'Exists' : 'Not found',
+          ]);
+        }
+        if (status.logs.planner) {
+          logTable.push([
+            'Planner',
+            status.logs.planner.exists ? formatBytes(status.logs.planner.size) : '-',
+            status.logs.planner.exists ? 'Exists' : 'Not found',
+          ]);
+        }
         console.log(logTable.toString());
 
         // Show last lines in verbose mode
@@ -223,6 +313,18 @@ export function statusCommand(program: Command): void {
             dim('  Reviewer last 5 lines:');
             status.logs.reviewer.lastLines.forEach((line) => dim(`    ${line}`));
           }
+          if (status.logs.qa?.exists && status.logs.qa.lastLines.length > 0) {
+            dim('  QA last 5 lines:');
+            status.logs.qa.lastLines.forEach((line) => dim(`    ${line}`));
+          }
+          if (status.logs.audit?.exists && status.logs.audit.lastLines.length > 0) {
+            dim('  Audit last 5 lines:');
+            status.logs.audit.lastLines.forEach((line) => dim(`    ${line}`));
+          }
+          if (status.logs.planner?.exists && status.logs.planner.lastLines.length > 0) {
+            dim('  Planner last 5 lines:');
+            status.logs.planner.lastLines.forEach((line) => dim(`    ${line}`));
+          }
         }
 
         // Tips section with dim styling
@@ -231,6 +333,9 @@ export function statusCommand(program: Command): void {
         dim('  night-watch logs     - View logs');
         dim('  night-watch run      - Run executor now');
         dim('  night-watch review   - Run reviewer now');
+        dim('  night-watch qa       - Run QA now');
+        dim('  night-watch audit    - Run audit now');
+        dim('  night-watch planner  - Run planner now');
         console.log();
       } catch (error) {
         console.error(

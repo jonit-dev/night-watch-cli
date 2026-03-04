@@ -14,17 +14,23 @@ import { INightWatchConfig } from '@night-watch/core/types.js';
 let mockProjectDir: string;
 
 // exec is used by status-data.ts (via promisify); execSync is used by doctor.routes.ts
-let mockExecServerImpl: ((cmd: string) => string) = () => "";
+let mockExecServerImpl: (cmd: string) => string = () => '';
 vi.mock('child_process', () => ({
-  exec: vi.fn((_cmd: string, _opts: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
-    const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
-    try {
-      const result = mockExecServerImpl(_cmd);
-      callback?.(null, { stdout: result, stderr: '' });
-    } catch (err) {
-      callback?.(err instanceof Error ? err : new Error(String(err)), { stdout: '', stderr: '' });
-    }
-  }),
+  exec: vi.fn(
+    (
+      _cmd: string,
+      _opts: unknown,
+      cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+    ) => {
+      const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
+      try {
+        const result = mockExecServerImpl(_cmd);
+        callback?.(null, { stdout: result, stderr: '' });
+      } catch (err) {
+        callback?.(err instanceof Error ? err : new Error(String(err)), { stdout: '', stderr: '' });
+      }
+    },
+  ),
   execSync: vi.fn((_cmd: string) => {
     const result = mockExecServerImpl(_cmd);
     return result;
@@ -134,15 +140,24 @@ describe('server API', () => {
       if (cmd.includes('which claude')) return '/usr/bin/claude';
       return '';
     };
-    vi.mocked(exec).mockImplementation((_cmd: string, _opts: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
-      const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
-      try {
-        const result = mockExecServerImpl(_cmd);
-        callback?.(null, { stdout: result, stderr: '' });
-      } catch (err) {
-        callback?.(err instanceof Error ? err : new Error(String(err)), { stdout: '', stderr: '' });
-      }
-    });
+    vi.mocked(exec).mockImplementation(
+      (
+        _cmd: string,
+        _opts: unknown,
+        cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+      ) => {
+        const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
+        try {
+          const result = mockExecServerImpl(_cmd);
+          callback?.(null, { stdout: result, stderr: '' });
+        } catch (err) {
+          callback?.(err instanceof Error ? err : new Error(String(err)), {
+            stdout: '',
+            stderr: '',
+          });
+        }
+      },
+    );
     vi.mocked(execSync).mockImplementation((_cmd: string) => {
       return mockExecServerImpl(_cmd);
     });
@@ -223,15 +238,24 @@ describe('server API', () => {
         if (cmd.includes('which gh')) return '/usr/bin/gh';
         return '';
       };
-      vi.mocked(exec).mockImplementation((_cmd: string, _opts: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
-        const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
-        try {
-          const result = mockExecServerImpl(_cmd);
-          callback?.(null, { stdout: result, stderr: '' });
-        } catch (err) {
-          callback?.(err instanceof Error ? err : new Error(String(err)), { stdout: '', stderr: '' });
-        }
-      });
+      vi.mocked(exec).mockImplementation(
+        (
+          _cmd: string,
+          _opts: unknown,
+          cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+        ) => {
+          const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
+          try {
+            const result = mockExecServerImpl(_cmd);
+            callback?.(null, { stdout: result, stderr: '' });
+          } catch (err) {
+            callback?.(err instanceof Error ? err : new Error(String(err)), {
+              stdout: '',
+              stderr: '',
+            });
+          }
+        },
+      );
 
       const response = await request(app).get('/api/prs');
 
@@ -309,6 +333,13 @@ describe('server API', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('boolean');
+    });
+
+    it('should validate executorEnabled is boolean', async () => {
+      const response = await request(app).put('/api/config').send({ executorEnabled: 'true' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('executorEnabled');
     });
 
     it('should validate maxRuntime is number >= 60', async () => {
@@ -488,9 +519,7 @@ describe('server API', () => {
     });
 
     it('should validate fallbackOnRateLimit is boolean', async () => {
-      const response = await request(app)
-        .put('/api/config')
-        .send({ fallbackOnRateLimit: 'true' });
+      const response = await request(app).put('/api/config').send({ fallbackOnRateLimit: 'true' });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('fallbackOnRateLimit');
@@ -518,21 +547,27 @@ describe('server API', () => {
     });
 
     it('should validate qa.enabled is boolean', async () => {
-      const response = await request(app).put('/api/config').send({ qa: { enabled: 'true' } });
+      const response = await request(app)
+        .put('/api/config')
+        .send({ qa: { enabled: 'true' } });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('qa.enabled');
     });
 
     it('should validate qa.schedule is non-empty string', async () => {
-      const response = await request(app).put('/api/config').send({ qa: { schedule: '' } });
+      const response = await request(app)
+        .put('/api/config')
+        .send({ qa: { schedule: '' } });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('qa.schedule');
     });
 
     it('should validate qa.maxRuntime is number >= 60', async () => {
-      const response = await request(app).put('/api/config').send({ qa: { maxRuntime: 30 } });
+      const response = await request(app)
+        .put('/api/config')
+        .send({ qa: { maxRuntime: 30 } });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('qa.maxRuntime');
@@ -548,7 +583,9 @@ describe('server API', () => {
     });
 
     it('should validate qa.artifacts is valid value', async () => {
-      const response = await request(app).put('/api/config').send({ qa: { artifacts: 'invalid' } });
+      const response = await request(app)
+        .put('/api/config')
+        .send({ qa: { artifacts: 'invalid' } });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('qa.artifacts');
@@ -574,21 +611,27 @@ describe('server API', () => {
     });
 
     it('should validate audit.enabled is boolean', async () => {
-      const response = await request(app).put('/api/config').send({ audit: { enabled: 'true' } });
+      const response = await request(app)
+        .put('/api/config')
+        .send({ audit: { enabled: 'true' } });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('audit.enabled');
     });
 
     it('should validate audit.schedule is non-empty string', async () => {
-      const response = await request(app).put('/api/config').send({ audit: { schedule: '' } });
+      const response = await request(app)
+        .put('/api/config')
+        .send({ audit: { schedule: '' } });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('audit.schedule');
     });
 
     it('should validate audit.maxRuntime is number >= 60', async () => {
-      const response = await request(app).put('/api/config').send({ audit: { maxRuntime: 30 } });
+      const response = await request(app)
+        .put('/api/config')
+        .send({ audit: { maxRuntime: 30 } });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('audit.maxRuntime');
@@ -653,7 +696,9 @@ describe('server API', () => {
     });
 
     it('should accept valid boardProvider.enabled', async () => {
-      const response = await request(app).put('/api/config').send({ boardProvider: { enabled: false } });
+      const response = await request(app)
+        .put('/api/config')
+        .send({ boardProvider: { enabled: false } });
 
       expect(response.status).toBe(200);
       expect(response.body.boardProvider.enabled).toBe(false);

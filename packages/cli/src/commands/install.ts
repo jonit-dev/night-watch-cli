@@ -184,8 +184,11 @@ export function performInstall(
       providerEnvPrefix = exports + ' && ';
     }
 
-    const executorEntry = `${executorSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
-    entries.push(executorEntry);
+    const installExecutor = config.executorEnabled !== false;
+    if (installExecutor) {
+      const executorEntry = `${executorSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
+      entries.push(executorEntry);
+    }
 
     const installReviewer = options?.noReviewer === true ? false : config.reviewerEnabled;
     if (installReviewer) {
@@ -193,12 +196,12 @@ export function performInstall(
       entries.push(reviewerEntry);
     }
 
-    // Slicer entry (if roadmap scanner enabled and noSlicer not set)
+    // Planner entry (uses roadmap scanner schedule; noSlicer flag kept for backward compatibility)
     const installSlicer = options?.noSlicer === true ? false : config.roadmapScanner.enabled;
     if (installSlicer) {
       const slicerSchedule = applyScheduleOffset(config.roadmapScanner.slicerSchedule, offset);
       const slicerLog = path.join(logDir, 'slicer.log');
-      const slicerEntry = `${slicerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} slice >> ${shellQuote(slicerLog)} 2>&1  ${marker}`;
+      const slicerEntry = `${slicerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} planner >> ${shellQuote(slicerLog)} 2>&1  ${marker}`;
       entries.push(slicerEntry);
     }
 
@@ -313,9 +316,12 @@ export function installCommand(program: Command): void {
           providerEnvPrefix = exports + ' && ';
         }
 
-        // Executor entry
-        const executorEntry = `${executorSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
-        entries.push(executorEntry);
+        // Executor entry (if enabled)
+        const installExecutor = config.executorEnabled !== false;
+        if (installExecutor) {
+          const executorEntry = `${executorSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
+          entries.push(executorEntry);
+        }
 
         // Determine if reviewer should be installed
         // Priority: --no-reviewer flag > config.reviewerEnabled
@@ -327,16 +333,16 @@ export function installCommand(program: Command): void {
           entries.push(reviewerEntry);
         }
 
-        // Determine if slicer should be installed
+        // Determine if planner should be installed
         // Priority: --no-slicer flag > config.roadmapScanner.enabled
         const installSlicer = options.noSlicer === true ? false : config.roadmapScanner.enabled;
 
-        // Slicer entry (if roadmap scanner enabled)
+        // Planner entry (if roadmap scanner enabled)
         let slicerLog: string | undefined;
         if (installSlicer) {
           slicerLog = path.join(logDir, 'slicer.log');
           const slicerSchedule = applyScheduleOffset(config.roadmapScanner.slicerSchedule, offset);
-          const slicerEntry = `${slicerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} slice >> ${shellQuote(slicerLog)} 2>&1  ${marker}`;
+          const slicerEntry = `${slicerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} planner >> ${shellQuote(slicerLog)} 2>&1  ${marker}`;
           entries.push(slicerEntry);
         }
 
@@ -378,12 +384,14 @@ export function installCommand(program: Command): void {
         entries.forEach((entry) => dim(`  ${entry}`));
         console.log();
         header('Log Files');
-        dim(`  Executor: ${executorLog}`);
+        if (installExecutor) {
+          dim(`  Executor: ${executorLog}`);
+        }
         if (installReviewer) {
           dim(`  Reviewer: ${reviewerLog}`);
         }
         if (installSlicer && slicerLog) {
-          dim(`  Slicer: ${slicerLog}`);
+          dim(`  Planner: ${slicerLog}`);
         }
         if (installQa && qaLog) {
           dim(`  QA: ${qaLog}`);

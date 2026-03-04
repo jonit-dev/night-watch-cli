@@ -118,6 +118,7 @@ export interface INightWatchConfig {
   cronScheduleOffset: number;
   maxRetries: number;
   provider: Provider;
+  executorEnabled?: boolean;
   reviewerEnabled: boolean;
   providerEnv: Record<string, string>;
   notifications: INotificationConfig;
