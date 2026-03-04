@@ -36,6 +36,10 @@ export const DEFAULT_CRON_SCHEDULE_OFFSET = 0;
 // Max Retries for rate-limited API calls
 export const DEFAULT_MAX_RETRIES = 3;
 
+// Reviewer Retry Configuration
+export const DEFAULT_REVIEWER_MAX_RETRIES = 2;
+export const DEFAULT_REVIEWER_RETRY_DELAY = 30; // seconds
+
 // Branch Configuration
 export const DEFAULT_BRANCH_PREFIX = 'night-watch';
 export const DEFAULT_BRANCH_PATTERNS = ['feat/', 'night-watch/'];

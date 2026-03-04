@@ -59,6 +59,33 @@ export function parseAutoMergedPrNumbers(raw?: string): number[] {
 }
 
 /**
+ * Parse retry attempts from script result data.
+ * Returns the number of attempts (defaults to 1 if not present or invalid).
+ */
+export function parseRetryAttempts(raw?: string): number {
+  if (!raw) {
+    return 1;
+  }
+  const parsed = parseInt(raw, 10);
+  return Number.isNaN(parsed) || parsed < 1 ? 1 : parsed;
+}
+
+/**
+ * Parse final review score from script result data.
+ * Returns undefined when missing or invalid.
+ */
+export function parseFinalReviewScore(raw?: string): number | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  const parsed = parseInt(raw, 10);
+  if (Number.isNaN(parsed)) {
+    return undefined;
+  }
+  return parsed;
+}
+
+/**
  * Build environment variables map from config and CLI options for reviewer
  */
 export function buildEnvVars(
@@ -78,6 +105,8 @@ export function buildEnvVars(
 
   // Runtime for reviewer (uses NW_REVIEWER_* variables)
   env.NW_REVIEWER_MAX_RUNTIME = String(config.reviewerMaxRuntime);
+  env.NW_REVIEWER_MAX_RETRIES = String(config.reviewerMaxRetries);
+  env.NW_REVIEWER_RETRY_DELAY = String(config.reviewerRetryDelay);
   env.NW_MIN_REVIEW_SCORE = String(config.minReviewScore);
   env.NW_BRANCH_PATTERNS = config.branchPatterns.join(',');
 
@@ -215,6 +244,8 @@ export function reviewCommand(program: Command): void {
           'Auto-merge',
           config.autoMerge ? `Enabled (${config.autoMergeMethod})` : 'Disabled',
         ]);
+        configTable.push(['Max Retry Attempts', String(config.reviewerMaxRetries)]);
+        configTable.push(['Retry Delay', `${config.reviewerRetryDelay}s`]);
         console.log(configTable.toString());
 
         // Check for open PRs needing work
@@ -299,6 +330,10 @@ export function reviewCommand(program: Command): void {
           }
 
           if (!skipNotification) {
+            // Extract retry attempts from script result
+            const attempts = parseRetryAttempts(scriptResult?.data.attempts);
+            const finalScore = parseFinalReviewScore(scriptResult?.data.final_score);
+
             const _reviewCtx = {
               event: 'review_completed' as const,
               projectName: path.basename(projectDir),
@@ -311,6 +346,8 @@ export function reviewCommand(program: Command): void {
               filesChanged: prDetails?.changedFiles,
               additions: prDetails?.additions,
               deletions: prDetails?.deletions,
+              attempts,
+              finalScore,
             };
             await sendNotifications(config, _reviewCtx);
           }

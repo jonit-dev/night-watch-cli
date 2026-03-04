@@ -43,6 +43,8 @@ type ConfigForm = {
   reviewerSchedule: string;
   cronScheduleOffset: number;
   maxRetries: number;
+  reviewerMaxRetries: number;
+  reviewerRetryDelay: number;
   providerEnv: Record<string, string>;
   notifications: INotificationConfig;
   prdPriority: string[];
@@ -74,6 +76,8 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   reviewerSchedule: config.reviewerSchedule || '0 0,3,6,9,12,15,18,21 * * *',
   cronScheduleOffset: config.cronScheduleOffset ?? 0,
   maxRetries: config.maxRetries ?? 3,
+  reviewerMaxRetries: config.reviewerMaxRetries ?? 2,
+  reviewerRetryDelay: config.reviewerRetryDelay ?? 30,
   providerEnv: config.providerEnv || {},
   notifications: config.notifications || { webhooks: [] },
   prdPriority: config.prdPriority || [],
@@ -650,6 +654,8 @@ const Settings: React.FC = () => {
         reviewerSchedule: form.reviewerSchedule,
         cronScheduleOffset: form.cronScheduleOffset,
         maxRetries: form.maxRetries,
+        reviewerMaxRetries: form.reviewerMaxRetries,
+        reviewerRetryDelay: form.reviewerRetryDelay,
         providerEnv: form.providerEnv,
         notifications: form.notifications,
         prdPriority: form.prdPriority,
@@ -886,46 +892,83 @@ const Settings: React.FC = () => {
       id: 'runtime',
       label: 'Runtime',
       content: (
-        <Card className="p-6 space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-slate-400 mb-2">Min Review Score (0-100)</label>
-            <div className="flex items-center space-x-4">
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={form.minReviewScore}
-                onChange={(e) => updateField('minReviewScore', Number(e.target.value))}
-                className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-              />
-              <span className="text-sm font-bold text-slate-200 w-10">{form.minReviewScore}</span>
+        <div className="space-y-6">
+          <Card className="p-6 space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-slate-400 mb-2">Min Review Score (0-100)</label>
+              <div className="flex items-center space-x-4">
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={form.minReviewScore}
+                  onChange={(e) => updateField('minReviewScore', Number(e.target.value))}
+                  className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                />
+                <span className="text-sm font-bold text-slate-200 w-10">{form.minReviewScore}</span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1">PRs below this score will be marked as "Needs Work".</p>
             </div>
-            <p className="text-xs text-slate-500 mt-1">PRs below this score will be marked as "Needs Work".</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Input
-              label="Max Runtime (Executor)"
-              type="number"
-              value={String(form.maxRuntime)}
-              onChange={(e) => updateField('maxRuntime', Number(e.target.value || 0))}
-              rightIcon={<span className="text-xs">sec</span>}
-            />
-            <Input
-              label="Max Runtime (Reviewer)"
-              type="number"
-              value={String(form.reviewerMaxRuntime)}
-              onChange={(e) => updateField('reviewerMaxRuntime', Number(e.target.value || 0))}
-              rightIcon={<span className="text-xs">sec</span>}
-            />
-            <Input
-              label="Max Log Size"
-              type="number"
-              value={String(form.maxLogSize)}
-              onChange={(e) => updateField('maxLogSize', Number(e.target.value || 0))}
-              rightIcon={<span className="text-xs">bytes</span>}
-            />
-          </div>
-        </Card>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Input
+                label="Max Runtime (Executor)"
+                type="number"
+                value={String(form.maxRuntime)}
+                onChange={(e) => updateField('maxRuntime', Number(e.target.value || 0))}
+                rightIcon={<span className="text-xs">sec</span>}
+              />
+              <Input
+                label="Max Runtime (Reviewer)"
+                type="number"
+                value={String(form.reviewerMaxRuntime)}
+                onChange={(e) => updateField('reviewerMaxRuntime', Number(e.target.value || 0))}
+                rightIcon={<span className="text-xs">sec</span>}
+              />
+              <Input
+                label="Max Log Size"
+                type="number"
+                value={String(form.maxLogSize)}
+                onChange={(e) => updateField('maxLogSize', Number(e.target.value || 0))}
+                rightIcon={<span className="text-xs">bytes</span>}
+              />
+            </div>
+          </Card>
+
+          <Card className="p-6 space-y-6">
+            <div>
+              <h3 className="text-lg font-medium text-slate-200">Retry Settings</h3>
+              <p className="text-sm text-slate-400 mt-1">
+                Configure automatic retry behavior for the PR reviewer when fixes do not fully resolve issues.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Input
+                label="Max Retry Attempts"
+                type="number"
+                min="0"
+                max="10"
+                value={String(form.reviewerMaxRetries)}
+                onChange={(e) => {
+                  const val = Math.min(10, Math.max(0, Number(e.target.value || 0)));
+                  updateField('reviewerMaxRetries', val);
+                }}
+                helperText="Additional fix attempts after initial review. 0 = no retries."
+              />
+              <Input
+                label="Retry Delay (seconds)"
+                type="number"
+                min="0"
+                max="300"
+                value={String(form.reviewerRetryDelay)}
+                onChange={(e) => {
+                  const val = Math.min(300, Math.max(0, Number(e.target.value || 0)));
+                  updateField('reviewerRetryDelay', val);
+                }}
+                helperText="Wait time between retry attempts to let CI settle."
+              />
+            </div>
+          </Card>
+        </div>
       ),
     },
     {

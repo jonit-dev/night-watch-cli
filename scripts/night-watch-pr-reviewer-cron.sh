@@ -28,6 +28,24 @@ TARGET_PR="${NW_TARGET_PR:-}"
 PARALLEL_ENABLED="${NW_REVIEWER_PARALLEL:-1}"
 WORKER_MODE="${NW_REVIEWER_WORKER_MODE:-0}"
 
+# Retry configuration
+REVIEWER_MAX_RETRIES="${NW_REVIEWER_MAX_RETRIES:-2}"
+REVIEWER_RETRY_DELAY="${NW_REVIEWER_RETRY_DELAY:-30}"
+
+# Normalize retry settings to safe numeric ranges
+if ! [[ "${REVIEWER_MAX_RETRIES}" =~ ^[0-9]+$ ]]; then
+  REVIEWER_MAX_RETRIES="2"
+fi
+if ! [[ "${REVIEWER_RETRY_DELAY}" =~ ^[0-9]+$ ]]; then
+  REVIEWER_RETRY_DELAY="30"
+fi
+if [ "${REVIEWER_MAX_RETRIES}" -gt 10 ]; then
+  REVIEWER_MAX_RETRIES="10"
+fi
+if [ "${REVIEWER_RETRY_DELAY}" -gt 300 ]; then
+  REVIEWER_RETRY_DELAY="300"
+fi
+
 # Ensure NVM / Node / Claude are on PATH
 export NVM_DIR="${HOME}/.nvm"
 [ -s "${NVM_DIR}/nvm.sh" ] && . "${NVM_DIR}/nvm.sh"
@@ -64,16 +82,31 @@ emit_final_status() {
   local prs_csv="${2:-}"
   local auto_merged="${3:-}"
   local auto_merge_failed="${4:-}"
+  local attempts="${5:-1}"
+  local final_score="${6:-}"
+  local details=""
 
   if [ "${exit_code}" -eq 0 ]; then
+    details="prs=${prs_csv}|auto_merged=${auto_merged}|auto_merge_failed=${auto_merge_failed}|attempts=${attempts}"
+    if [ -n "${final_score}" ]; then
+      details="${details}|final_score=${final_score}"
+    fi
     log "DONE: PR reviewer completed successfully"
-    emit_result "success_reviewed" "prs=${prs_csv}|auto_merged=${auto_merged}|auto_merge_failed=${auto_merge_failed}"
+    emit_result "success_reviewed" "${details}"
   elif [ "${exit_code}" -eq 124 ]; then
+    details="prs=${prs_csv}|attempts=${attempts}"
+    if [ -n "${final_score}" ]; then
+      details="${details}|final_score=${final_score}"
+    fi
     log "TIMEOUT: PR reviewer killed after ${MAX_RUNTIME}s"
-    emit_result "timeout" "prs=${prs_csv}"
+    emit_result "timeout" "${details}"
   else
+    details="prs=${prs_csv}|attempts=${attempts}"
+    if [ -n "${final_score}" ]; then
+      details="${details}|final_score=${final_score}"
+    fi
     log "FAIL: PR reviewer exited with code ${exit_code}"
-    emit_result "failure" "prs=${prs_csv}"
+    emit_result "failure" "${details}"
   fi
 }
 
@@ -89,6 +122,25 @@ append_csv() {
   else
     printf "%s,%s" "${current}" "${incoming}"
   fi
+}
+
+# Extract the latest review score from PR comments
+# Returns empty string if no score found
+get_pr_score() {
+  local pr_number="${1:?PR number required}"
+  local all_comments
+  all_comments=$(
+    {
+      gh pr view "${pr_number}" --json comments --jq '.comments[].body' 2>/dev/null || true
+      if [ -n "${REPO:-}" ]; then
+        gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
+      fi
+    } | sort -u
+  )
+  echo "${all_comments}" \
+    | grep -oP 'Overall Score:\*?\*?\s*(\d+)/100' \
+    | tail -1 \
+    | grep -oP '\d+(?=/100)' || echo ""
 }
 
 # Validate provider
@@ -323,6 +375,8 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
   EXIT_CODE=0
   AUTO_MERGED_PRS=""
   AUTO_MERGE_FAILED_PRS=""
+  MAX_WORKER_ATTEMPTS=1
+  MAX_WORKER_FINAL_SCORE=""
 
   for idx in "${!WORKER_PIDS[@]}"; do
     worker_pid="${WORKER_PIDS[$idx]}"
@@ -344,9 +398,20 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
     worker_status=$(printf '%s' "${worker_result}" | sed -n 's/^NIGHT_WATCH_RESULT:\([^|]*\).*$/\1/p')
     worker_auto_merged=$(printf '%s' "${worker_result}" | grep -oP '(?<=auto_merged=)[^|]+' || true)
     worker_auto_merge_failed=$(printf '%s' "${worker_result}" | grep -oP '(?<=auto_merge_failed=)[^|]+' || true)
+    worker_attempts=$(printf '%s' "${worker_result}" | grep -oP '(?<=attempts=)[^|]+' || true)
+    worker_final_score=$(printf '%s' "${worker_result}" | grep -oP '(?<=final_score=)[^|]+' || true)
 
     AUTO_MERGED_PRS=$(append_csv "${AUTO_MERGED_PRS}" "${worker_auto_merged}")
     AUTO_MERGE_FAILED_PRS=$(append_csv "${AUTO_MERGE_FAILED_PRS}" "${worker_auto_merge_failed}")
+
+    if [[ "${worker_attempts}" =~ ^[0-9]+$ ]] && [ "${worker_attempts}" -gt "${MAX_WORKER_ATTEMPTS}" ]; then
+      MAX_WORKER_ATTEMPTS="${worker_attempts}"
+    fi
+    if [[ "${worker_final_score}" =~ ^[0-9]+$ ]]; then
+      if [ -z "${MAX_WORKER_FINAL_SCORE}" ] || [ "${worker_final_score}" -gt "${MAX_WORKER_FINAL_SCORE}" ]; then
+        MAX_WORKER_FINAL_SCORE="${worker_final_score}"
+      fi
+    fi
 
     rm -f "${worker_output}"
 
@@ -374,7 +439,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
     fi
   done
 
-  emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}"
+  emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${MAX_WORKER_ATTEMPTS}" "${MAX_WORKER_FINAL_SCORE}"
   exit 0
 fi
 
@@ -396,6 +461,8 @@ if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   if [ "${AUTO_MERGE}" = "1" ]; then
     echo "Auto-merge Method: ${AUTO_MERGE_METHOD}"
   fi
+  echo "Max Retries: ${REVIEWER_MAX_RETRIES}"
+  echo "Retry Delay: ${REVIEWER_RETRY_DELAY}s"
   echo "Open PRs needing work:${PRS_NEEDING_WORK}"
   echo "Default Branch: ${DEFAULT_BRANCH}"
   echo "Review Worktree: ${REVIEW_WORKTREE_DIR}"
@@ -413,44 +480,110 @@ if ! prepare_detached_worktree "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}" "${DEFA
 fi
 
 EXIT_CODE=0
+ATTEMPTS_MADE=1
+FINAL_SCORE=""
 TARGET_SCOPE_PROMPT=""
 if [ -n "${TARGET_PR}" ]; then
   TARGET_SCOPE_PROMPT=$'\n\n## Target Scope\n- Only process PR #'"${TARGET_PR}"$'.\n- Ignore all other PRs.\n- If this PR no longer needs work, stop immediately.\n'
 fi
 
-case "${PROVIDER_CMD}" in
-  claude)
-    CLAUDE_PROMPT="/night-watch-pr-reviewer${TARGET_SCOPE_PROMPT}"
-    if (
-      cd "${REVIEW_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
-        claude -p "${CLAUDE_PROMPT}" \
-          --dangerously-skip-permissions \
-          >> "${LOG_FILE}" 2>&1
-    ); then
-      EXIT_CODE=0
-    else
-      EXIT_CODE=$?
+# ── Retry Loop for Targeted PR Review ──────────────────────────────────────────
+# Only retry when targeting a specific PR. Non-targeted mode handles all PRs in one shot.
+TOTAL_ATTEMPTS=1
+if [ -n "${TARGET_PR}" ]; then
+  TOTAL_ATTEMPTS=$((REVIEWER_MAX_RETRIES + 1))
+fi
+RUN_STARTED_AT=$(date +%s)
+
+for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
+  ATTEMPTS_MADE="${ATTEMPT}"
+
+  ATTEMPT_TIMEOUT="${MAX_RUNTIME}"
+  if [ -n "${TARGET_PR}" ]; then
+    # Calculate timeout from remaining runtime budget.
+    NOW_TS=$(date +%s)
+    ELAPSED=$((NOW_TS - RUN_STARTED_AT))
+    REMAINING_BUDGET=$((MAX_RUNTIME - ELAPSED))
+    if [ "${REMAINING_BUDGET}" -le 0 ]; then
+      EXIT_CODE=124
+      log "RETRY: Runtime budget exhausted before attempt ${ATTEMPT}"
+      break
     fi
-    ;;
-  codex)
-    CODEX_PROMPT="$(cat "${REVIEW_WORKTREE_DIR}/.claude/commands/night-watch-pr-reviewer.md")${TARGET_SCOPE_PROMPT}"
-    if (
-      cd "${REVIEW_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
-        codex --quiet \
-          --yolo \
-          --prompt "${CODEX_PROMPT}" \
-          >> "${LOG_FILE}" 2>&1
-    ); then
-      EXIT_CODE=0
-    else
-      EXIT_CODE=$?
+
+    REMAINING_ATTEMPTS=$((TOTAL_ATTEMPTS - ATTEMPT + 1))
+    ATTEMPT_TIMEOUT=$((REMAINING_BUDGET / REMAINING_ATTEMPTS))
+    if [ "${ATTEMPT_TIMEOUT}" -lt 1 ]; then
+      ATTEMPT_TIMEOUT=1
     fi
-    ;;
-  *)
-    log "ERROR: Unknown provider: ${PROVIDER_CMD}"
-    exit 1
-    ;;
-esac
+  fi
+
+  log "RETRY: Starting attempt ${ATTEMPT}/${TOTAL_ATTEMPTS} (timeout: ${ATTEMPT_TIMEOUT}s)"
+
+  case "${PROVIDER_CMD}" in
+    claude)
+      CLAUDE_PROMPT="/night-watch-pr-reviewer${TARGET_SCOPE_PROMPT}"
+      if (
+        cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" \
+          claude -p "${CLAUDE_PROMPT}" \
+            --dangerously-skip-permissions \
+            >> "${LOG_FILE}" 2>&1
+      ); then
+        EXIT_CODE=0
+      else
+        EXIT_CODE=$?
+      fi
+      ;;
+    codex)
+      CODEX_PROMPT="$(cat "${REVIEW_WORKTREE_DIR}/.claude/commands/night-watch-pr-reviewer.md")${TARGET_SCOPE_PROMPT}"
+      if (
+        cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" \
+          codex --quiet \
+            --yolo \
+            --prompt "${CODEX_PROMPT}" \
+            >> "${LOG_FILE}" 2>&1
+      ); then
+        EXIT_CODE=0
+      else
+        EXIT_CODE=$?
+      fi
+      ;;
+    *)
+      log "ERROR: Unknown provider: ${PROVIDER_CMD}"
+      exit 1
+      ;;
+  esac
+
+  # If provider failed (non-zero exit), don't retry
+  if [ "${EXIT_CODE}" -ne 0 ]; then
+    log "RETRY: Provider exited with code ${EXIT_CODE}, not retrying"
+    break
+  fi
+
+  # Re-check score for the target PR (only in targeted mode)
+  if [ -n "${TARGET_PR}" ]; then
+    CURRENT_SCORE=$(get_pr_score "${TARGET_PR}")
+    if [ -z "${CURRENT_SCORE}" ]; then
+      log "RETRY: No review score found for PR #${TARGET_PR} after attempt ${ATTEMPT}; not retrying"
+      break
+    fi
+
+    FINAL_SCORE="${CURRENT_SCORE}"
+    if [ "${CURRENT_SCORE}" -ge "${MIN_REVIEW_SCORE}" ]; then
+      log "RETRY: PR #${TARGET_PR} now scores ${CURRENT_SCORE}/100 (>= ${MIN_REVIEW_SCORE}) after attempt ${ATTEMPT}"
+      break
+    fi
+    if [ "${ATTEMPT}" -lt "${TOTAL_ATTEMPTS}" ]; then
+      log "RETRY: PR #${TARGET_PR} scores ${CURRENT_SCORE:-unknown}/100 after attempt ${ATTEMPT}/${TOTAL_ATTEMPTS}, retrying in ${REVIEWER_RETRY_DELAY}s..."
+      sleep "${REVIEWER_RETRY_DELAY}"
+    else
+      log "RETRY: PR #${TARGET_PR} still at ${CURRENT_SCORE:-unknown}/100 after ${TOTAL_ATTEMPTS} attempts - giving up"
+      gh pr edit "${TARGET_PR}" --add-label "needs-human-review" 2>/dev/null || true
+    fi
+  else
+    # Non-targeted mode: no retry (reviewer handles all PRs in one shot)
+    break
+  fi
+done
 
 cleanup_worktrees "${PROJECT_DIR}" "${REVIEW_WORKTREE_BASENAME}"
 
@@ -529,4 +662,4 @@ if [ "${AUTO_MERGE}" = "1" ] && [ ${EXIT_CODE} -eq 0 ]; then
   done < <(gh pr list --state open --json number,headRefName --jq '.[] | [.number, .headRefName] | @tsv' 2>/dev/null || true)
 fi
 
-emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}"
+emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${ATTEMPTS_MADE}" "${FINAL_SCORE}"

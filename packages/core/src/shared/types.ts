@@ -117,6 +117,8 @@ export interface INightWatchConfig {
   reviewerSchedule: string;
   cronScheduleOffset: number;
   maxRetries: number;
+  reviewerMaxRetries: number;
+  reviewerRetryDelay: number;
   provider: Provider;
   executorEnabled?: boolean;
   reviewerEnabled: boolean;
