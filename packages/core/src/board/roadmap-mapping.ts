@@ -4,7 +4,12 @@
  * Maps ROADMAP.md sections to their corresponding category and horizon labels.
  */
 
-import type { CategoryLabel, HorizonLabel } from "./labels.js";
+import type { CategoryLabel, HorizonLabel } from './labels.js';
+
+// Horizon label constants
+const HORIZON_SHORT_TERM: HorizonLabel = 'short-term';
+const HORIZON_MEDIUM_TERM: HorizonLabel = 'medium-term';
+const HORIZON_LONG_TERM: HorizonLabel = 'long-term';
 
 export interface IRoadmapSectionMapping {
   sectionPattern: RegExp;
@@ -19,94 +24,94 @@ export interface IRoadmapSectionMapping {
 export const ROADMAP_SECTION_MAPPINGS: IRoadmapSectionMapping[] = [
   {
     sectionPattern: /§1.*Reliability.*correctness/i,
-    category: "reliability",
-    horizon: "short-term",
+    category: 'reliability',
+    horizon: HORIZON_SHORT_TERM,
   },
   {
     sectionPattern: /§2.*Quality.*developer/i,
-    category: "quality",
-    horizon: "short-term",
+    category: 'quality',
+    horizon: HORIZON_SHORT_TERM,
   },
   {
     sectionPattern: /§3.*Product.*operators/i,
-    category: "product",
-    horizon: "short-term",
+    category: 'product',
+    horizon: HORIZON_SHORT_TERM,
   },
   {
     sectionPattern: /§4.*Unified.*operations/i,
-    category: "ux",
-    horizon: "medium-term",
+    category: 'ux',
+    horizon: HORIZON_MEDIUM_TERM,
   },
   {
     sectionPattern: /§5.*Provider.*execution/i,
-    category: "provider",
-    horizon: "medium-term",
+    category: 'provider',
+    horizon: HORIZON_MEDIUM_TERM,
   },
   {
     sectionPattern: /§6.*Team.*multi-project/i,
-    category: "team",
-    horizon: "medium-term",
+    category: 'team',
+    horizon: HORIZON_MEDIUM_TERM,
   },
   {
     sectionPattern: /§7.*Platformization.*enterprise/i,
-    category: "platform",
-    horizon: "long-term",
+    category: 'platform',
+    horizon: HORIZON_LONG_TERM,
   },
   {
     sectionPattern: /§8.*Intelligence.*autonomous/i,
-    category: "intelligence",
-    horizon: "long-term",
+    category: 'intelligence',
+    horizon: HORIZON_LONG_TERM,
   },
   {
     sectionPattern: /§9.*Ecosystem.*adoption/i,
-    category: "ecosystem",
-    horizon: "long-term",
+    category: 'ecosystem',
+    horizon: HORIZON_LONG_TERM,
   },
   // Fallback patterns without section numbers
   {
     sectionPattern: /Reliability.*correctness/i,
-    category: "reliability",
-    horizon: "short-term",
+    category: 'reliability',
+    horizon: HORIZON_SHORT_TERM,
   },
   {
     sectionPattern: /Quality.*developer.*workflow/i,
-    category: "quality",
-    horizon: "short-term",
+    category: 'quality',
+    horizon: HORIZON_SHORT_TERM,
   },
   {
     sectionPattern: /Product.*completeness/i,
-    category: "product",
-    horizon: "short-term",
+    category: 'product',
+    horizon: HORIZON_SHORT_TERM,
   },
   {
     sectionPattern: /Unified.*operations/i,
-    category: "ux",
-    horizon: "medium-term",
+    category: 'ux',
+    horizon: HORIZON_MEDIUM_TERM,
   },
   {
     sectionPattern: /Provider.*execution/i,
-    category: "provider",
-    horizon: "medium-term",
+    category: 'provider',
+    horizon: HORIZON_MEDIUM_TERM,
   },
   {
     sectionPattern: /Team.*multi-project/i,
-    category: "team",
-    horizon: "medium-term",
+    category: 'team',
+    horizon: HORIZON_MEDIUM_TERM,
   },
   {
     sectionPattern: /Platformization.*enterprise/i,
-    category: "platform",
-    horizon: "long-term",
+    category: 'platform',
+    horizon: HORIZON_LONG_TERM,
   },
   {
     sectionPattern: /Intelligence.*autonomous/i,
-    category: "intelligence",
-    horizon: "long-term",
+    category: 'intelligence',
+    horizon: HORIZON_LONG_TERM,
   },
   {
     sectionPattern: /Ecosystem.*adoption/i,
-    category: "ecosystem",
-    horizon: "long-term",
+    category: 'ecosystem',
+    horizon: HORIZON_LONG_TERM,
   },
 ];
 
@@ -115,7 +120,7 @@ export const ROADMAP_SECTION_MAPPINGS: IRoadmapSectionMapping[] = [
  * Returns null if no mapping is found.
  */
 export function getLabelsForSection(
-  sectionName: string
+  sectionName: string,
 ): { category: CategoryLabel; horizon: HorizonLabel } | null {
   for (const mapping of ROADMAP_SECTION_MAPPINGS) {
     if (mapping.sectionPattern.test(sectionName)) {
@@ -155,7 +160,7 @@ export function calculateStringSimilarity(a: string, b: string): number {
         matrix[i][j] = Math.min(
           matrix[i - 1][j - 1] + 1,
           matrix[i][j - 1] + 1,
-          matrix[i - 1][j] + 1
+          matrix[i - 1][j] + 1,
         );
       }
     }
@@ -173,7 +178,7 @@ export function calculateStringSimilarity(a: string, b: string): number {
 export function findMatchingIssue<T extends { title: string }>(
   targetTitle: string,
   issues: T[],
-  threshold = 0.8
+  threshold = 0.8,
 ): T | null {
   let bestMatch: T | null = null;
   let bestSimilarity = 0;
