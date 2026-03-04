@@ -29,7 +29,9 @@ import {
   IReviewOptions,
   parseFinalReviewScore,
   parseAutoMergedPrNumbers,
+  parseReviewedPrNumbers,
   parseRetryAttempts,
+  isFailingCheck,
   shouldSendReviewNotification,
 } from '@/cli/commands/review.js';
 import { INightWatchConfig } from '@night-watch/core/types.js';
@@ -315,6 +317,46 @@ describe('review command', () => {
     it('returns empty array when value is missing', () => {
       expect(parseAutoMergedPrNumbers(undefined)).toEqual([]);
       expect(parseAutoMergedPrNumbers('')).toEqual([]);
+    });
+  });
+
+  describe('parseReviewedPrNumbers', () => {
+    it('parses comma-separated #PR tokens', () => {
+      expect(parseReviewedPrNumbers('#12,#34,#56')).toEqual([12, 34, 56]);
+    });
+
+    it('deduplicates while preserving order', () => {
+      expect(parseReviewedPrNumbers('#12,#34,#12,#56,#34')).toEqual([12, 34, 56]);
+    });
+
+    it('ignores invalid tokens and empty values', () => {
+      expect(parseReviewedPrNumbers('#12,,abc,#x,#34')).toEqual([12, 34]);
+    });
+
+    it('returns empty array when value is missing', () => {
+      expect(parseReviewedPrNumbers(undefined)).toEqual([]);
+      expect(parseReviewedPrNumbers('')).toEqual([]);
+    });
+  });
+
+  describe('isFailingCheck', () => {
+    it('returns true for known failing conclusions', () => {
+      expect(isFailingCheck({ conclusion: 'failure' })).toBe(true);
+      expect(isFailingCheck({ conclusion: 'timed_out' })).toBe(true);
+      expect(isFailingCheck({ conclusion: 'action_required' })).toBe(true);
+    });
+
+    it('returns true for known failing states/buckets', () => {
+      expect(isFailingCheck({ state: 'error' })).toBe(true);
+      expect(isFailingCheck({ state: 'cancelled' })).toBe(true);
+      expect(isFailingCheck({ bucket: 'fail' })).toBe(true);
+      expect(isFailingCheck({ bucket: 'cancel' })).toBe(true);
+    });
+
+    it('returns false for successful checks', () => {
+      expect(isFailingCheck({ state: 'success', conclusion: 'success', bucket: 'pass' })).toBe(
+        false,
+      );
     });
   });
 
