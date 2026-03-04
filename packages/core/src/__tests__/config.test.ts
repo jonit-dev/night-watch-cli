@@ -1455,6 +1455,107 @@ describe('config', () => {
     });
   });
 
+  describe('mergeConfigLayer semantics', () => {
+    it('providerEnv from file merges with defaults (not replace)', () => {
+      // DEFAULT_PROVIDER_ENV is {}, so writing a key should produce that key in the result
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          providerEnv: { MY_VAR: 'hello' },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      // The file-provided key must be present
+      expect(config.providerEnv.MY_VAR).toBe('hello');
+      // Default providerEnv is empty so no default keys exist to check; verify the object shape
+      expect(typeof config.providerEnv).toBe('object');
+    });
+
+    it('boardProvider from file shallow-merges with default (preserves unset keys)', () => {
+      // Default boardProvider: { enabled: true, provider: 'github' }
+      // File only sets enabled: the default provider field must survive the merge
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          boardProvider: { enabled: false },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      // The file-provided field is applied
+      expect(config.boardProvider.enabled).toBe(false);
+      // The default-provided field is preserved (shallow merge, not replace)
+      expect(config.boardProvider.provider).toBe('github');
+    });
+
+    it('roadmapScanner from file replaces default entirely (replace semantics)', () => {
+      // roadmapScanner uses REPLACE semantics: the normalised value from the file
+      // fully replaces the base object. normalizeConfig fills missing fields from
+      // DEFAULT_ROADMAP_SCANNER, so autoScanInterval gets its default value.
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          roadmapScanner: { enabled: true },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.roadmapScanner.enabled).toBe(true);
+      // normalizeConfig fills missing fields from DEFAULT_ROADMAP_SCANNER
+      expect(config.roadmapScanner.autoScanInterval).toBe(300);
+      expect(config.roadmapScanner.roadmapPath).toBe('ROADMAP.md');
+    });
+
+    it('jobProviders from file replaces default (replace semantics)', () => {
+      // jobProviders uses REPLACE semantics; only the keys present in the file
+      // survive — job types not listed in the file config are absent from the result.
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          jobProviders: { executor: 'codex' },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.jobProviders.executor).toBe('codex');
+      // Absent keys should not bleed through from the default (which is also empty, {})
+      expect(config.jobProviders.reviewer).toBeUndefined();
+      expect(config.jobProviders.qa).toBeUndefined();
+    });
+
+    it('providerEnv keys from two file-side sources are all present after shallow merge', () => {
+      // Verify the shallow merge direction: when the file sets multiple providerEnv keys
+      // they all survive (no key is silently dropped by the merge).
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          providerEnv: {
+            FIRST_VAR: 'alpha',
+            SECOND_VAR: 'beta',
+          },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      // Both keys must appear after the shallow merge with the empty default
+      expect(config.providerEnv.FIRST_VAR).toBe('alpha');
+      expect(config.providerEnv.SECOND_VAR).toBe('beta');
+      // No extra keys injected from defaults (DEFAULT_PROVIDER_ENV is {})
+      expect(Object.keys(config.providerEnv)).toEqual(['FIRST_VAR', 'SECOND_VAR']);
+    });
+  });
+
   describe('Config parity contract', () => {
     /**
      * This test ensures that the shared INightWatchConfig contract includes
