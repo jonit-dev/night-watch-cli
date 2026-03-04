@@ -33,6 +33,7 @@ type ConfigForm = {
   prdDir: string;
   branchPrefix: string;
   branchPatterns: string[];
+  executorEnabled: boolean;
   reviewerEnabled: boolean;
   minReviewScore: number;
   maxRuntime: number;
@@ -63,6 +64,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   prdDir: config.prdDir || 'docs/PRDs/night-watch',
   branchPrefix: config.branchPrefix,
   branchPatterns: config.branchPatterns || [],
+  executorEnabled: config.executorEnabled ?? true,
   reviewerEnabled: config.reviewerEnabled,
   minReviewScore: config.minReviewScore,
   maxRuntime: config.maxRuntime,
@@ -76,7 +78,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   notifications: config.notifications || { webhooks: [] },
   prdPriority: config.prdPriority || [],
   roadmapScanner: config.roadmapScanner || {
-    enabled: false,
+    enabled: true,
     roadmapPath: 'ROADMAP.md',
     autoScanInterval: 300,
   },
@@ -638,6 +640,7 @@ const Settings: React.FC = () => {
         prdDir: form.prdDir,
         branchPrefix: form.branchPrefix,
         branchPatterns: form.branchPatterns,
+        executorEnabled: form.executorEnabled,
         reviewerEnabled: form.reviewerEnabled,
         minReviewScore: form.minReviewScore,
         maxRuntime: form.maxRuntime,
@@ -748,6 +751,13 @@ const Settings: React.FC = () => {
               <Input label="Branch Prefix" value={form.branchPrefix} onChange={(e) => updateField('branchPrefix', e.target.value)} />
               <div className="md:col-span-2">
                 <Switch
+                  label="Enable PRD Executor"
+                  checked={form.executorEnabled}
+                  onChange={(checked) => updateField('executorEnabled', checked)}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <Switch
                   label="Enable Automated Reviews"
                   checked={form.reviewerEnabled}
                   onChange={(checked) => updateField('reviewerEnabled', checked)}
@@ -833,7 +843,7 @@ const Settings: React.FC = () => {
                 { key: 'reviewer', label: 'Reviewer' },
                 { key: 'qa', label: 'QA' },
                 { key: 'audit', label: 'Audit' },
-                { key: 'slicer', label: 'Slicer' },
+                { key: 'slicer', label: 'Planner' },
               ] as const).map(({ key, label }) => (
                 <div
                   key={key}
@@ -963,7 +973,7 @@ const Settings: React.FC = () => {
             />
             {form.roadmapScanner.enabled && (
               <CronScheduleInput
-                label="Slicer Schedule"
+                label="Planner Schedule"
                 value={form.roadmapScanner.slicerSchedule || '0 */6 * * *'}
                 onChange={(val) =>
                   updateField('roadmapScanner', {
@@ -1050,13 +1060,13 @@ const Settings: React.FC = () => {
               </div>
 
               <div className="pt-4 border-t border-slate-800">
-                <h4 className="text-md font-medium text-slate-200 mb-4">Slicer Configuration</h4>
+                <h4 className="text-md font-medium text-slate-200 mb-4">Planner Configuration</h4>
                 <p className="text-sm text-slate-400 mb-4">
-                  The Slicer generates detailed PRDs from roadmap items using AI
+                  The Planner generates detailed PRDs from roadmap items using AI
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <Input
-                    label="Slicer Max Runtime"
+                    label="Planner Max Runtime"
                     type="number"
                     value={String(form.roadmapScanner.slicerMaxRuntime || '')}
                     onChange={(e) =>
@@ -1066,7 +1076,7 @@ const Settings: React.FC = () => {
                       })
                     }
                     rightIcon={<span className="text-xs">sec</span>}
-                    helperText="Maximum runtime for slicer tasks"
+                    helperText="Maximum runtime for planner tasks"
                   />
                 </div>
               </div>

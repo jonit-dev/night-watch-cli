@@ -3,23 +3,21 @@
  * Scans ROADMAP.md files and generates PRD skeleton files
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import { spawn } from "child_process";
-import { INightWatchConfig, Provider } from "../types.js";
-import { getNextPrdNumber, slugify } from "./prd-utils.js";
-import { IRoadmapItem, parseRoadmap } from "./roadmap-parser.js";
+import * as fs from 'fs';
+import * as path from 'path';
+import { spawn } from 'child_process';
+import { createHash } from 'crypto';
+import { INightWatchConfig, Provider } from '../types.js';
+import { getNextPrdNumber, slugify } from './prd-utils.js';
+import { IRoadmapItem, parseRoadmap } from './roadmap-parser.js';
 import {
   IRoadmapStateItem,
   isItemProcessed,
   loadRoadmapState,
   markItemProcessed,
   saveRoadmapState,
-} from "./roadmap-state.js";
-import {
-  createSlicerPromptVars,
-  renderSlicerPrompt,
-} from "../templates/slicer-prompt.js";
+} from './roadmap-state.js';
+import { createSlicerPromptVars, renderSlicerPrompt } from '../templates/slicer-prompt.js';
 
 /**
  * Status of the roadmap scanner
@@ -36,7 +34,7 @@ export interface IRoadmapStatus {
   /** Number of items pending processing */
   pendingItems: number;
   /** Current status of the scanner */
-  status: "idle" | "scanning" | "complete" | "disabled" | "no-roadmap";
+  status: 'idle' | 'scanning' | 'complete' | 'disabled' | 'no-roadmap';
   /** All roadmap items with processing status */
   items: Array<IRoadmapItem & { processed: boolean; prdFile?: string }>;
   /** Raw ROADMAP.md file content for agent reference */
@@ -69,6 +67,148 @@ export interface ISliceResult {
   item?: IRoadmapItem;
 }
 
+type AuditSeverity = 'critical' | 'high' | 'medium' | 'low';
+
+interface IAuditFinding {
+  number: number;
+  severity: AuditSeverity;
+  category: string;
+  location: string;
+  description: string;
+  suggestedFix: string;
+}
+
+function normalizeAuditSeverity(raw: string): AuditSeverity {
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === 'critical') return 'critical';
+  if (normalized === 'high') return 'high';
+  if (normalized === 'low') return 'low';
+  return 'medium';
+}
+
+function extractAuditField(block: string, field: string): string {
+  const pattern = new RegExp(
+    `- \\*\\*${field}\\*\\*:\\s*([\\s\\S]*?)(?=\\n- \\*\\*|\\n###\\s+Finding\\s+\\d+|$)`,
+    'i',
+  );
+  const match = block.match(pattern);
+  if (!match) return '';
+  return match[1].replace(/`/g, '').replace(/\r/g, '').trim();
+}
+
+function parseAuditFindings(reportContent: string): IAuditFinding[] {
+  const headingRegex = /^###\s+Finding\s+(\d+)\s*$/gm;
+  const headings: Array<{ number: number; bodyStart: number; headingStart: number }> = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = headingRegex.exec(reportContent)) !== null) {
+    const number = parseInt(match[1], 10);
+    if (!Number.isNaN(number)) {
+      headings.push({
+        number,
+        bodyStart: headingRegex.lastIndex,
+        headingStart: match.index,
+      });
+    }
+  }
+
+  if (headings.length === 0) {
+    return [];
+  }
+
+  const findings: IAuditFinding[] = [];
+  for (let i = 0; i < headings.length; i++) {
+    const current = headings[i];
+    const next = headings[i + 1];
+    const block = reportContent.slice(
+      current.bodyStart,
+      next?.headingStart ?? reportContent.length,
+    );
+
+    const severityRaw = extractAuditField(block, 'Severity');
+    const category = extractAuditField(block, 'Category') || 'uncategorized';
+    const location = extractAuditField(block, 'Location') || 'unknown location';
+    const description = extractAuditField(block, 'Description') || 'No description provided';
+    const suggestedFix = extractAuditField(block, 'Suggested Fix') || 'No suggested fix provided';
+
+    findings.push({
+      number: current.number,
+      severity: normalizeAuditSeverity(severityRaw),
+      category,
+      location,
+      description,
+      suggestedFix,
+    });
+  }
+
+  return findings;
+}
+
+function auditSeverityRank(severity: AuditSeverity): number {
+  switch (severity) {
+    case 'critical':
+      return 0;
+    case 'high':
+      return 1;
+    case 'medium':
+      return 2;
+    case 'low':
+      return 3;
+    default:
+      return 4;
+  }
+}
+
+function auditFindingToRoadmapItem(finding: IAuditFinding): IRoadmapItem {
+  const title = `Audit Finding ${finding.number}: ${finding.category} (${finding.severity}) at ${finding.location}`;
+  const hashSource = [
+    finding.severity,
+    finding.category,
+    finding.location,
+    finding.description,
+    finding.suggestedFix,
+  ].join('|');
+  const hash = createHash('sha256').update(hashSource).digest('hex').slice(0, 8);
+
+  const description = [
+    'Source: logs/audit-report.md',
+    `Severity: ${finding.severity}`,
+    `Category: ${finding.category}`,
+    `Location: ${finding.location}`,
+    '',
+    finding.description,
+    '',
+    `Suggested fix: ${finding.suggestedFix}`,
+  ].join('\n');
+
+  return {
+    hash,
+    title,
+    description,
+    checked: false,
+    section: 'Audit Findings',
+  };
+}
+
+function collectAuditPlannerItems(projectDir: string): IRoadmapItem[] {
+  const reportPath = path.join(projectDir, 'logs', 'audit-report.md');
+  if (!fs.existsSync(reportPath)) {
+    return [];
+  }
+
+  const reportContent = fs.readFileSync(reportPath, 'utf-8');
+  if (!reportContent.trim() || /\bNO_ISSUES_FOUND\b/.test(reportContent)) {
+    return [];
+  }
+
+  const findings = parseAuditFindings(reportContent);
+  findings.sort(
+    (a, b) => auditSeverityRank(a.severity) - auditSeverityRank(b.severity) || a.number - b.number,
+  );
+
+  return findings.map(auditFindingToRoadmapItem);
+}
+
 /**
  * Get the current status of the roadmap scanner
  *
@@ -76,10 +216,7 @@ export interface ISliceResult {
  * @param config - The Night Watch configuration
  * @returns The roadmap scanner status
  */
-export function getRoadmapStatus(
-  projectDir: string,
-  config: INightWatchConfig
-): IRoadmapStatus {
+export function getRoadmapStatus(projectDir: string, config: INightWatchConfig): IRoadmapStatus {
   const roadmapPath = path.join(projectDir, config.roadmapScanner.roadmapPath);
 
   const scannerEnabled = config.roadmapScanner.enabled;
@@ -93,13 +230,13 @@ export function getRoadmapStatus(
       totalItems: 0,
       processedItems: 0,
       pendingItems: 0,
-      status: scannerEnabled ? "no-roadmap" : "disabled",
+      status: scannerEnabled ? 'no-roadmap' : 'disabled',
       items: [],
     };
   }
 
   // Parse roadmap — always, so agents can reference the file content
-  const content = fs.readFileSync(roadmapPath, "utf-8");
+  const content = fs.readFileSync(roadmapPath, 'utf-8');
   const items = parseRoadmap(content);
 
   // Load state (PRD processing status)
@@ -127,18 +264,16 @@ export function getRoadmapStatus(
 
   // Count processed and pending
   const processedItems = statusItems.filter((item) => item.processed).length;
-  const pendingItems = statusItems.filter(
-    (item) => !item.processed && !item.checked
-  ).length;
+  const pendingItems = statusItems.filter((item) => !item.processed && !item.checked).length;
 
   // Determine status
-  let status: IRoadmapStatus["status"];
+  let status: IRoadmapStatus['status'];
   if (!scannerEnabled) {
-    status = "disabled";
+    status = 'disabled';
   } else if (pendingItems === 0 && statusItems.length > 0) {
-    status = "complete";
+    status = 'complete';
   } else {
-    status = "idle";
+    status = 'idle';
   }
 
   return {
@@ -166,7 +301,7 @@ function scanExistingPrdSlugs(prdDir: string): Set<string> {
   const files = fs.readdirSync(prdDir);
   for (const file of files) {
     // Skip non-markdown files and special files
-    if (!file.endsWith(".md") || file === "NIGHT-WATCH-SUMMARY.md") {
+    if (!file.endsWith('.md') || file === 'NIGHT-WATCH-SUMMARY.md') {
       continue;
     }
 
@@ -190,11 +325,11 @@ function scanExistingPrdSlugs(prdDir: string): Set<string> {
  * Build provider CLI arguments based on provider type
  */
 function buildProviderArgs(provider: Provider, prompt: string): string[] {
-  if (provider === "codex") {
-    return ["--quiet", "--yolo", "--prompt", prompt];
+  if (provider === 'codex') {
+    return ['--quiet', '--yolo', '--prompt', prompt];
   }
   // Default: claude
-  return ["-p", prompt, "--dangerously-skip-permissions"];
+  return ['-p', prompt, '--dangerously-skip-permissions'];
 }
 
 /**
@@ -210,7 +345,7 @@ export async function sliceRoadmapItem(
   projectDir: string,
   prdDir: string,
   item: IRoadmapItem,
-  config: INightWatchConfig
+  config: INightWatchConfig,
 ): Promise<ISliceResult> {
   // Check for duplicate by slug
   const itemSlug = slugify(item.title);
@@ -226,7 +361,7 @@ export async function sliceRoadmapItem(
 
   // Compute next PRD number and filename
   const nextNum = getNextPrdNumber(prdDir);
-  const padded = String(nextNum).padStart(2, "0");
+  const padded = String(nextNum).padStart(2, '0');
   const filename = `${padded}-${itemSlug}.md`;
   const filePath = path.join(prdDir, filename);
 
@@ -241,7 +376,7 @@ export async function sliceRoadmapItem(
     item.section,
     item.description,
     prdDir,
-    filename
+    filename,
   );
   const prompt = renderSlicerPrompt(promptVars);
 
@@ -249,15 +384,15 @@ export async function sliceRoadmapItem(
   const providerArgs = buildProviderArgs(config.provider, prompt);
 
   // Create log file for stdout/stderr
-  const logDir = path.join(projectDir, "logs");
+  const logDir = path.join(projectDir, 'logs');
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true });
   }
   const logFile = path.join(logDir, `slicer-${itemSlug}.log`);
-  const logStream = fs.createWriteStream(logFile, { flags: "w" });
+  const logStream = fs.createWriteStream(logFile, { flags: 'w' });
 
   // Handle log stream errors silently (don't fail the slice on logging errors)
-  logStream.on("error", () => {
+  logStream.on('error', () => {
     // Silently ignore log file errors - the main operation is more important
   });
 
@@ -271,21 +406,21 @@ export async function sliceRoadmapItem(
     const child = spawn(config.provider, providerArgs, {
       env: childEnv,
       cwd: projectDir,
-      stdio: ["inherit", "pipe", "pipe"],
+      stdio: ['inherit', 'pipe', 'pipe'],
     });
 
     // Pipe stdout to log file
-    child.stdout?.on("data", (data: Buffer) => {
+    child.stdout?.on('data', (data: Buffer) => {
       logStream.write(data);
     });
 
     // Pipe stderr to log file
-    child.stderr?.on("data", (data: Buffer) => {
+    child.stderr?.on('data', (data: Buffer) => {
       logStream.write(data);
     });
 
     // Handle process errors
-    child.on("error", (error: Error) => {
+    child.on('error', (error: Error) => {
       logStream.end();
       resolve({
         sliced: false,
@@ -295,7 +430,7 @@ export async function sliceRoadmapItem(
     });
 
     // Handle process completion
-    child.on("close", (code: number | null) => {
+    child.on('close', (code: number | null) => {
       logStream.end();
 
       if (code !== 0) {
@@ -335,34 +470,34 @@ export async function sliceRoadmapItem(
  */
 export async function sliceNextItem(
   projectDir: string,
-  config: INightWatchConfig
+  config: INightWatchConfig,
 ): Promise<ISliceResult> {
   // Check if scanner is enabled
   if (!config.roadmapScanner.enabled) {
     return {
       sliced: false,
-      error: "Roadmap scanner is disabled",
+      error: 'Roadmap scanner is disabled',
     };
   }
 
   const roadmapPath = path.join(projectDir, config.roadmapScanner.roadmapPath);
+  const auditItems = collectAuditPlannerItems(projectDir);
 
-  // Check if roadmap file exists
-  if (!fs.existsSync(roadmapPath)) {
+  // Check if there is anything to plan from roadmap/audit
+  const roadmapExists = fs.existsSync(roadmapPath);
+  if (!roadmapExists && auditItems.length === 0) {
     return {
       sliced: false,
-      error: "ROADMAP.md not found",
+      error: 'ROADMAP.md not found',
     };
   }
 
-  // Parse roadmap
-  const content = fs.readFileSync(roadmapPath, "utf-8");
-  const items = parseRoadmap(content);
-
-  if (items.length === 0) {
+  // Parse roadmap (when present)
+  const roadmapItems = roadmapExists ? parseRoadmap(fs.readFileSync(roadmapPath, 'utf-8')) : [];
+  if (roadmapExists && roadmapItems.length === 0 && auditItems.length === 0) {
     return {
       sliced: false,
-      error: "No items in roadmap",
+      error: 'No items in roadmap',
     };
   }
 
@@ -375,33 +510,30 @@ export async function sliceNextItem(
   // Scan existing PRD files for duplicate detection
   const existingPrdSlugs = scanExistingPrdSlugs(prdDir);
 
-  // Find first unprocessed, unchecked, non-duplicate item
-  let targetItem: IRoadmapItem | undefined;
-  for (const item of items) {
-    // Skip checked items
-    if (item.checked) {
-      continue;
+  const pickEligibleItem = (items: IRoadmapItem[]): IRoadmapItem | undefined => {
+    for (const item of items) {
+      if (item.checked) {
+        continue;
+      }
+      if (isItemProcessed(state, item.hash)) {
+        continue;
+      }
+      const itemSlug = slugify(item.title);
+      if (existingPrdSlugs.has(itemSlug)) {
+        continue;
+      }
+      return item;
     }
+    return undefined;
+  };
 
-    // Skip already processed items
-    if (isItemProcessed(state, item.hash)) {
-      continue;
-    }
-
-    // Skip duplicates by title
-    const itemSlug = slugify(item.title);
-    if (existingPrdSlugs.has(itemSlug)) {
-      continue;
-    }
-
-    targetItem = item;
-    break;
-  }
+  // Planner priority: actionable audit findings first, then pending roadmap items.
+  const targetItem = pickEligibleItem(auditItems) ?? pickEligibleItem(roadmapItems);
 
   if (!targetItem) {
     return {
       sliced: false,
-      error: "No pending items to process",
+      error: 'No pending items to process',
     };
   }
 
@@ -433,7 +565,7 @@ export async function sliceNextItem(
  */
 export async function scanRoadmap(
   projectDir: string,
-  config: INightWatchConfig
+  config: INightWatchConfig,
 ): Promise<IScanResult> {
   const result: IScanResult = {
     created: [],
@@ -448,11 +580,11 @@ export async function scanRoadmap(
     result.created.push(sliceResult.file);
   } else if (sliceResult.item) {
     // Item was found but not sliced
-    if (sliceResult.error?.includes("checked")) {
+    if (sliceResult.error?.includes('checked')) {
       result.skipped.push(`${sliceResult.item.title} (checked)`);
-    } else if (sliceResult.error?.includes("processed")) {
+    } else if (sliceResult.error?.includes('processed')) {
       result.skipped.push(`${sliceResult.item.title} (processed)`);
-    } else if (sliceResult.error?.includes("duplicate")) {
+    } else if (sliceResult.error?.includes('duplicate')) {
       result.skipped.push(`${sliceResult.item.title} (duplicate)`);
     } else if (sliceResult.error) {
       result.errors.push(`${sliceResult.item.title}: ${sliceResult.error}`);
@@ -466,10 +598,7 @@ export async function scanRoadmap(
 /**
  * Check if there are new (unprocessed) items in the roadmap
  */
-export function hasNewItems(
-  projectDir: string,
-  config: INightWatchConfig
-): boolean {
+export function hasNewItems(projectDir: string, config: INightWatchConfig): boolean {
   const status = getRoadmapStatus(projectDir, config);
   return status.pendingItems > 0;
 }

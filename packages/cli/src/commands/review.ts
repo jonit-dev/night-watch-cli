@@ -183,6 +183,11 @@ export function reviewCommand(program: Command): void {
       // Apply CLI flag overrides
       config = applyCliOverrides(config, options);
 
+      if (!config.reviewerEnabled && !options.dryRun) {
+        info('Reviewer is disabled in config; skipping review.');
+        process.exit(0);
+      }
+
       // Build environment variables
       const envVars = buildEnvVars(config, options);
 

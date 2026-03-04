@@ -3,6 +3,7 @@
   "projectName": "",
   "defaultBranch": "",
   "provider": "claude",
+  "executorEnabled": true,
   "reviewerEnabled": true,
   "prdDir": "docs/PRDs/night-watch",
   "templatesDir": ".night-watch/templates",

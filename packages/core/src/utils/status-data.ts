@@ -10,7 +10,14 @@ import * as fs from 'fs';
 
 const execAsync = promisify(exec);
 import * as path from 'path';
-import { CLAIM_FILE_EXTENSION, LOCK_FILE_PREFIX, LOG_DIR, QA_LOG_NAME } from '../constants.js';
+import {
+  AUDIT_LOG_NAME,
+  CLAIM_FILE_EXTENSION,
+  LOCK_FILE_PREFIX,
+  LOG_DIR,
+  PLANNER_LOG_NAME,
+  QA_LOG_NAME,
+} from '../constants.js';
 import { getPrdStatesForProject } from './prd-states.js';
 import { INightWatchConfig } from '../types.js';
 import { generateMarker, getEntries, getProjectEntries } from './crontab.js';
@@ -117,10 +124,25 @@ export function reviewerLockPath(projectDir: string): string {
 }
 
 /**
+ * Compute the lock file path for the QA runner of a given project directory.
+ */
+export function qaLockPath(projectDir: string): string {
+  return `${LOCK_FILE_PREFIX}qa-${projectRuntimeKey(projectDir)}.lock`;
+}
+
+/**
  * Compute the lock file path for the code auditor of a given project directory.
  */
 export function auditLockPath(projectDir: string): string {
   return `${LOCK_FILE_PREFIX}audit-${projectRuntimeKey(projectDir)}.lock`;
+}
+
+/**
+ * Compute the lock file path for the planner (roadmap slicer) of a given project directory.
+ * Uses the historical "slicer" lock naming for backward compatibility.
+ */
+export function plannerLockPath(projectDir: string): string {
+  return `${LOCK_FILE_PREFIX}slicer-${projectRuntimeKey(projectDir)}.lock`;
 }
 
 /**
@@ -388,10 +410,13 @@ export async function countOpenPRs(projectDir: string, branchPatterns: string[])
       return 0;
     }
 
-    const { stdout: output } = await execAsync('gh pr list --state open --json headRefName,number', {
-      cwd: projectDir,
-      encoding: 'utf-8',
-    });
+    const { stdout: output } = await execAsync(
+      'gh pr list --state open --json headRefName,number',
+      {
+        cwd: projectDir,
+        encoding: 'utf-8',
+      },
+    );
 
     // Guard: return 0 if output is empty or whitespace-only
     const trimmed = output.trim();
@@ -526,7 +551,10 @@ function deriveReviewScore(reviewDecision?: string | null): number | null {
 /**
  * Collect open PR info using gh CLI
  */
-export async function collectPrInfo(projectDir: string, branchPatterns: string[]): Promise<IPrInfo[]> {
+export async function collectPrInfo(
+  projectDir: string,
+  branchPatterns: string[],
+): Promise<IPrInfo[]> {
   try {
     await execAsync('git rev-parse --git-dir', {
       cwd: projectDir,
@@ -642,6 +670,8 @@ export function collectLogInfo(projectDir: string): ILogInfo[] {
     { name: 'executor', fileName: 'executor.log' },
     { name: 'reviewer', fileName: 'reviewer.log' },
     { name: 'qa', fileName: `${QA_LOG_NAME}.log` },
+    { name: 'audit', fileName: `${AUDIT_LOG_NAME}.log` },
+    { name: 'planner', fileName: `${PLANNER_LOG_NAME}.log` },
   ];
   return logEntries.map(({ name, fileName }) => {
     const logPath = path.join(projectDir, LOG_DIR, fileName);
@@ -684,10 +714,16 @@ export async function fetchStatusSnapshot(
 
   const executorLock = checkLockFile(executorLockPath(projectDir));
   const reviewerLock = checkLockFile(reviewerLockPath(projectDir));
+  const qaLock = checkLockFile(qaLockPath(projectDir));
+  const auditLock = checkLockFile(auditLockPath(projectDir));
+  const plannerLock = checkLockFile(plannerLockPath(projectDir));
 
   const processes: IProcessInfo[] = [
     { name: 'executor', running: executorLock.running, pid: executorLock.pid },
     { name: 'reviewer', running: reviewerLock.running, pid: reviewerLock.pid },
+    { name: 'qa', running: qaLock.running, pid: qaLock.pid },
+    { name: 'audit', running: auditLock.running, pid: auditLock.pid },
+    { name: 'planner', running: plannerLock.running, pid: plannerLock.pid },
   ];
 
   const prds = collectPrdInfo(projectDir, config.prdDir, config.maxRuntime);

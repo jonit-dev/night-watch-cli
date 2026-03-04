@@ -48,6 +48,7 @@ export const DEFAULT_MAX_LOG_SIZE = 524288; // 512 KB
 
 // Provider Configuration
 export const DEFAULT_PROVIDER: Provider = 'claude';
+export const DEFAULT_EXECUTOR_ENABLED = true;
 export const DEFAULT_REVIEWER_ENABLED = true;
 export const DEFAULT_PROVIDER_ENV: Record<string, string> = {};
 
@@ -74,7 +75,7 @@ export const DEFAULT_SLICER_SCHEDULE = '0 */6 * * *'; // every 6 hours
 export const DEFAULT_SLICER_MAX_RUNTIME = 600; // 10 minutes
 
 export const DEFAULT_ROADMAP_SCANNER: IRoadmapScannerConfig = {
-  enabled: false,
+  enabled: true,
   roadmapPath: 'ROADMAP.md',
   autoScanInterval: 300,
   slicerSchedule: DEFAULT_SLICER_SCHEDULE,
@@ -129,6 +130,7 @@ export const DEFAULT_AUDIT: IAuditConfig = {
 };
 
 export const AUDIT_LOG_NAME = 'audit';
+export const PLANNER_LOG_NAME = 'slicer';
 
 // Valid providers
 export const VALID_PROVIDERS: Provider[] = ['claude', 'codex'];
@@ -164,6 +166,8 @@ export const LOG_FILE_NAMES: Record<string, string> = {
   executor: EXECUTOR_LOG_NAME,
   reviewer: REVIEWER_LOG_NAME,
   qa: QA_LOG_NAME,
+  audit: AUDIT_LOG_NAME,
+  planner: PLANNER_LOG_NAME,
 };
 
 // Global Registry

@@ -6,6 +6,8 @@ import { Request, Response, Router } from 'express';
 
 import {
   INightWatchConfig,
+  JobType,
+  Provider,
   VALID_CLAUDE_MODELS,
   VALID_JOB_TYPES,
   VALID_PROVIDERS,
@@ -13,7 +15,6 @@ import {
   saveConfig,
   validateWebhook,
 } from '@night-watch/core';
-import { JobType, Provider } from '@night-watch/core/types.js';
 
 /**
  * Validates config changes and returns an error string if invalid, null if valid.
@@ -32,6 +33,10 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
 
   if (changes.reviewerEnabled !== undefined && typeof changes.reviewerEnabled !== 'boolean') {
     return 'reviewerEnabled must be a boolean';
+  }
+
+  if (changes.executorEnabled !== undefined && typeof changes.executorEnabled !== 'boolean') {
+    return 'executorEnabled must be a boolean';
   }
 
   if (
@@ -164,7 +169,10 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
   }
 
   // prdDir validation
-  if (changes.prdDir !== undefined && (typeof changes.prdDir !== 'string' || changes.prdDir.trim().length === 0)) {
+  if (
+    changes.prdDir !== undefined &&
+    (typeof changes.prdDir !== 'string' || changes.prdDir.trim().length === 0)
+  ) {
     return 'prdDir must be a non-empty string';
   }
 
@@ -179,7 +187,10 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
   }
 
   // fallbackOnRateLimit validation
-  if (changes.fallbackOnRateLimit !== undefined && typeof changes.fallbackOnRateLimit !== 'boolean') {
+  if (
+    changes.fallbackOnRateLimit !== undefined &&
+    typeof changes.fallbackOnRateLimit !== 'boolean'
+  ) {
     return 'fallbackOnRateLimit must be a boolean';
   }
 
@@ -200,7 +211,10 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
       return 'qa.enabled must be a boolean';
     }
 
-    if (qa.schedule !== undefined && (typeof qa.schedule !== 'string' || qa.schedule.trim().length === 0)) {
+    if (
+      qa.schedule !== undefined &&
+      (typeof qa.schedule !== 'string' || qa.schedule.trim().length === 0)
+    ) {
       return 'qa.schedule must be a non-empty string';
     }
 
@@ -209,7 +223,10 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
     }
 
     if (qa.branchPatterns !== undefined) {
-      if (!Array.isArray(qa.branchPatterns) || !qa.branchPatterns.every((p) => typeof p === 'string')) {
+      if (
+        !Array.isArray(qa.branchPatterns) ||
+        !qa.branchPatterns.every((p) => typeof p === 'string')
+      ) {
         return 'qa.branchPatterns must be an array of strings';
       }
     }
@@ -242,11 +259,17 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
       return 'audit.enabled must be a boolean';
     }
 
-    if (audit.schedule !== undefined && (typeof audit.schedule !== 'string' || audit.schedule.trim().length === 0)) {
+    if (
+      audit.schedule !== undefined &&
+      (typeof audit.schedule !== 'string' || audit.schedule.trim().length === 0)
+    ) {
       return 'audit.schedule must be a non-empty string';
     }
 
-    if (audit.maxRuntime !== undefined && (typeof audit.maxRuntime !== 'number' || audit.maxRuntime < 60)) {
+    if (
+      audit.maxRuntime !== undefined &&
+      (typeof audit.maxRuntime !== 'number' || audit.maxRuntime < 60)
+    ) {
       return 'audit.maxRuntime must be a number >= 60';
     }
   }
@@ -255,11 +278,17 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
   if (changes.roadmapScanner !== undefined) {
     const rs = changes.roadmapScanner;
 
-    if (rs.slicerSchedule !== undefined && (typeof rs.slicerSchedule !== 'string' || rs.slicerSchedule.trim().length === 0)) {
+    if (
+      rs.slicerSchedule !== undefined &&
+      (typeof rs.slicerSchedule !== 'string' || rs.slicerSchedule.trim().length === 0)
+    ) {
       return 'roadmapScanner.slicerSchedule must be a non-empty string';
     }
 
-    if (rs.slicerMaxRuntime !== undefined && (typeof rs.slicerMaxRuntime !== 'number' || rs.slicerMaxRuntime < 60)) {
+    if (
+      rs.slicerMaxRuntime !== undefined &&
+      (typeof rs.slicerMaxRuntime !== 'number' || rs.slicerMaxRuntime < 60)
+    ) {
       return 'roadmapScanner.slicerMaxRuntime must be a number >= 60';
     }
   }
@@ -270,7 +299,10 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
       return 'boardProvider must be an object';
     }
 
-    if (changes.boardProvider.enabled !== undefined && typeof changes.boardProvider.enabled !== 'boolean') {
+    if (
+      changes.boardProvider.enabled !== undefined &&
+      typeof changes.boardProvider.enabled !== 'boolean'
+    ) {
       return 'boardProvider.enabled must be a boolean';
     }
   }

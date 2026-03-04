@@ -5,7 +5,8 @@
 import { Command } from 'commander';
 import {
   INightWatchConfig,
-  NotificationEvent,
+  IWebhookConfig,
+  LOCK_FILE_PREFIX,
   PROVIDER_COMMANDS,
   createSpinner,
   createTable,
@@ -13,13 +14,16 @@ import {
   getRoadmapStatus,
   header,
   info,
+  isProcessRunning,
   loadConfig,
+  projectRuntimeKey,
   resolveJobProvider,
   sendNotifications,
   sliceNextItem,
   error as uiError,
 } from '@night-watch/core';
 import type { ISliceResult } from '@night-watch/core';
+import * as fs from 'fs';
 import * as path from 'path';
 
 /**
@@ -29,6 +33,59 @@ export interface ISliceOptions {
   dryRun: boolean;
   timeout?: string;
   provider?: string;
+}
+
+function getTelegramStatusWebhooks(
+  config: INightWatchConfig,
+): Array<{ botToken: string; chatId: string }> {
+  return (config.notifications?.webhooks ?? [])
+    .filter(
+      (wh): wh is IWebhookConfig & { botToken: string; chatId: string } =>
+        wh.type === 'telegram' &&
+        typeof wh.botToken === 'string' &&
+        wh.botToken.trim().length > 0 &&
+        typeof wh.chatId === 'string' &&
+        wh.chatId.trim().length > 0,
+    )
+    .map((wh) => ({ botToken: wh.botToken, chatId: wh.chatId }));
+}
+
+function plannerLockPath(projectDir: string): string {
+  return `${LOCK_FILE_PREFIX}slicer-${projectRuntimeKey(projectDir)}.lock`;
+}
+
+function acquirePlannerLock(projectDir: string): {
+  acquired: boolean;
+  lockFile: string;
+  pid?: number;
+} {
+  const lockFile = plannerLockPath(projectDir);
+  if (fs.existsSync(lockFile)) {
+    const pidRaw = fs.readFileSync(lockFile, 'utf-8').trim();
+    const pid = parseInt(pidRaw, 10);
+    if (!Number.isNaN(pid) && isProcessRunning(pid)) {
+      return { acquired: false, lockFile, pid };
+    }
+    // stale lock
+    try {
+      fs.unlinkSync(lockFile);
+    } catch {
+      // ignore stale-lock cleanup errors
+    }
+  }
+
+  fs.writeFileSync(lockFile, String(process.pid));
+  return { acquired: true, lockFile };
+}
+
+function releasePlannerLock(lockFile: string): void {
+  try {
+    if (fs.existsSync(lockFile)) {
+      fs.unlinkSync(lockFile);
+    }
+  } catch {
+    // ignore cleanup errors
+  }
 }
 
 /**
@@ -56,6 +113,14 @@ export function buildEnvVars(
   // Provider environment variables (API keys, base URLs, etc.)
   if (config.providerEnv) {
     Object.assign(env, config.providerEnv);
+  }
+
+  // Telegram status messages from bash scripts (start/progress/final status)
+  const telegramWebhooks = getTelegramStatusWebhooks(config);
+  if (telegramWebhooks.length > 0) {
+    env.NW_TELEGRAM_STATUS_WEBHOOKS = JSON.stringify(telegramWebhooks);
+    env.NW_TELEGRAM_BOT_TOKEN = telegramWebhooks[0].botToken;
+    env.NW_TELEGRAM_CHAT_ID = telegramWebhooks[0].chatId;
   }
 
   // Dry run flag
@@ -102,13 +167,21 @@ export function applyCliOverrides(
 export function sliceCommand(program: Command): void {
   program
     .command('slice')
-    .description('Run roadmap slicer to create PRD from next roadmap item')
+    .alias('planner')
+    .description('Run Planner (roadmap slicer) to create a PRD from the next roadmap item')
     .option('--dry-run', 'Show what would be executed without running')
     .option('--timeout <seconds>', 'Override max runtime in seconds for slicer')
     .option('--provider <string>', 'AI provider to use (claude or codex)')
     .action(async (options: ISliceOptions) => {
       // Get the project directory (current working directory)
       const projectDir = process.cwd();
+      const lockResult = acquirePlannerLock(projectDir);
+      if (!lockResult.acquired) {
+        info(`Planner is already running${lockResult.pid ? ` (PID ${lockResult.pid})` : ''}`);
+        process.exit(0);
+      }
+      const cleanupLock = () => releasePlannerLock(lockResult.lockFile);
+      process.on('exit', cleanupLock);
 
       // Load config from file and environment
       let config = loadConfig(projectDir);
@@ -120,7 +193,7 @@ export function sliceCommand(program: Command): void {
       const envVars = buildEnvVars(config, options);
 
       if (options.dryRun) {
-        header('Dry Run: Roadmap Slicer');
+        header('Dry Run: Planner');
 
         // Resolve slicer-specific provider
         const slicerProvider = resolveJobProvider(config, 'slicer');
@@ -133,10 +206,10 @@ export function sliceCommand(program: Command): void {
         configTable.push(['PRD Directory', config.prdDir]);
         configTable.push(['Roadmap Path', config.roadmapScanner.roadmapPath]);
         configTable.push([
-          'Slicer Max Runtime',
+          'Planner Max Runtime',
           `${config.roadmapScanner.slicerMaxRuntime}s (${Math.floor(config.roadmapScanner.slicerMaxRuntime / 60)}min)`,
         ]);
-        configTable.push(['Slicer Schedule', config.roadmapScanner.slicerSchedule]);
+        configTable.push(['Planner Schedule', config.roadmapScanner.slicerSchedule]);
         configTable.push(['Scanner Enabled', config.roadmapScanner.enabled ? 'Yes' : 'No']);
         console.log(configTable.toString());
 
@@ -196,26 +269,33 @@ export function sliceCommand(program: Command): void {
 
       // Check if roadmap scanner is enabled
       if (!config.roadmapScanner.enabled) {
-        uiError(
-          'Roadmap scanner is disabled. Enable it in night-watch.config.json to use the slicer.',
-        );
-        process.exit(1);
+        info('Planner is disabled in config; skipping run.');
+        process.exit(0);
       }
 
-      // Execute the slicer with spinner
-      const spinner = createSpinner('Running roadmap slicer...');
+      // Execute planner with spinner
+      const spinner = createSpinner('Running Planner...');
       spinner.start();
 
       try {
+        if (!options.dryRun) {
+          await sendNotifications(config, {
+            event: 'run_started',
+            projectName: path.basename(projectDir),
+            exitCode: 0,
+            provider: config.provider,
+          });
+        }
+
         const result: ISliceResult = await sliceNextItem(projectDir, config);
 
         if (result.sliced) {
-          spinner.succeed(`Slicer completed successfully: Created ${result.file}`);
+          spinner.succeed(`Planner completed successfully: Created ${result.file}`);
         } else if (result.error) {
           if (result.error === 'No pending items to process') {
             spinner.succeed('No pending items to process');
           } else {
-            spinner.fail(`Slicer failed: ${result.error}`);
+            spinner.fail(`Planner failed: ${result.error}`);
           }
         }
 
@@ -224,21 +304,25 @@ export function sliceCommand(program: Command): void {
         const exitCode = result.sliced || nothingPending ? 0 : 1;
 
         if (!options.dryRun && result.sliced) {
-          const event: NotificationEvent = 'run_succeeded';
-
-          const _sliceCtx = {
-            event,
+          await sendNotifications(config, {
+            event: 'run_succeeded',
             projectName: path.basename(projectDir),
             exitCode,
             provider: config.provider,
             prTitle: result.item?.title,
-          };
-          await sendNotifications(config, _sliceCtx);
+          });
+        } else if (!options.dryRun && !nothingPending) {
+          await sendNotifications(config, {
+            event: 'run_failed',
+            projectName: path.basename(projectDir),
+            exitCode,
+            provider: config.provider,
+          });
         }
 
         process.exit(exitCode);
       } catch (err) {
-        spinner.fail('Failed to execute slice command');
+        spinner.fail('Failed to execute planner command');
         uiError(`${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
       }

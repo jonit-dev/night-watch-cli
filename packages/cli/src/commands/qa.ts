@@ -5,6 +5,7 @@
 import { Command } from 'commander';
 import {
   INightWatchConfig,
+  IWebhookConfig,
   PROVIDER_COMMANDS,
   createSpinner,
   createTable,
@@ -60,6 +61,21 @@ export function parseQaPrNumbers(prsRaw?: string): number[] {
   return numbers;
 }
 
+function getTelegramStatusWebhooks(
+  config: INightWatchConfig,
+): Array<{ botToken: string; chatId: string }> {
+  return (config.notifications?.webhooks ?? [])
+    .filter(
+      (wh): wh is IWebhookConfig & { botToken: string; chatId: string } =>
+        wh.type === 'telegram' &&
+        typeof wh.botToken === 'string' &&
+        wh.botToken.trim().length > 0 &&
+        typeof wh.chatId === 'string' &&
+        wh.chatId.trim().length > 0,
+    )
+    .map((wh) => ({ botToken: wh.botToken, chatId: wh.chatId }));
+}
+
 /**
  * Build environment variables map from config and CLI options for QA
  */
@@ -94,6 +110,14 @@ export function buildEnvVars(
   // Provider environment variables (API keys, base URLs, etc.)
   if (config.providerEnv) {
     Object.assign(env, config.providerEnv);
+  }
+
+  // Telegram status messages from bash scripts (start/progress/final status)
+  const telegramWebhooks = getTelegramStatusWebhooks(config);
+  if (telegramWebhooks.length > 0) {
+    env.NW_TELEGRAM_STATUS_WEBHOOKS = JSON.stringify(telegramWebhooks);
+    env.NW_TELEGRAM_BOT_TOKEN = telegramWebhooks[0].botToken;
+    env.NW_TELEGRAM_CHAT_ID = telegramWebhooks[0].chatId;
   }
 
   // Dry run flag
@@ -150,6 +174,11 @@ export function qaCommand(program: Command): void {
 
       // Apply CLI flag overrides
       config = applyCliOverrides(config, options);
+
+      if (!config.qa.enabled && !options.dryRun) {
+        info('QA is disabled in config; skipping run.');
+        process.exit(0);
+      }
 
       // Build environment variables
       const envVars = buildEnvVars(config, options);

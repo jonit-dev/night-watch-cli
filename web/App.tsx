@@ -4,7 +4,7 @@ import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import { ToastContainer } from './components/ui/Toast';
 import { useGlobalMode } from './hooks/useGlobalMode';
-import Agents from './pages/Agents';
+// import Agents from './pages/Agents';
 import Board from './pages/Board';
 import Dashboard from './pages/Dashboard';
 import Logs from './pages/Logs';
@@ -36,7 +36,7 @@ const App: React.FC = () => {
                 <Route path="/scheduling" element={<Scheduling />} />
                 <Route path="/logs" element={<Logs />} />
                 <Route path="/roadmap" element={<Roadmap />} />
-                <Route path="/agents" element={<Agents />} />
+                {/* <Route path="/agents" element={<Agents />} /> */}
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>

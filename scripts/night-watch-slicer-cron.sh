@@ -17,7 +17,7 @@ set -euo pipefail
 PROJECT_DIR="${1:?Usage: $0 /path/to/project}"
 PROJECT_NAME=$(basename "${PROJECT_DIR}")
 LOG_DIR="${PROJECT_DIR}/logs"
-LOG_FILE="${LOG_DIR}/night-watch-slicer.log"
+LOG_FILE="${LOG_DIR}/slicer.log"
 LOCK_FILE=""
 MAX_RUNTIME="${NW_SLICER_MAX_RUNTIME:-600}"  # 10 minutes
 MAX_LOG_SIZE="524288"  # 512 KB
@@ -54,6 +54,9 @@ cleanup_on_exit() {
 trap cleanup_on_exit EXIT
 
 log "START: Running roadmap slicer for ${PROJECT_DIR}"
+send_telegram_status_message "📋 Night Watch Planner: started" "Project: ${PROJECT_NAME}
+Provider: ${PROVIDER_CMD}
+Planning next roadmap item into a PRD."
 
 # Dry-run mode: print diagnostics and exit
 if [ "${NW_DRY_RUN:-0}" = "1" ]; then
@@ -81,10 +84,16 @@ fi
 
 if [ ${EXIT_CODE} -eq 0 ]; then
   log "DONE: Slicer completed successfully"
+  send_telegram_status_message "📋 Night Watch Planner: completed" "Project: ${PROJECT_NAME}
+PRD planning run finished successfully."
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: Slicer killed after ${MAX_RUNTIME}s"
+  send_telegram_status_message "📋 Night Watch Planner: timeout" "Project: ${PROJECT_NAME}
+Timeout: ${MAX_RUNTIME}s"
 else
   log "FAIL: Slicer exited with code ${EXIT_CODE}"
+  send_telegram_status_message "📋 Night Watch Planner: failed" "Project: ${PROJECT_NAME}
+Exit code: ${EXIT_CODE}"
 fi
 
 exit ${EXIT_CODE}

@@ -35,6 +35,7 @@ import {
   DEFAULT_CRON_SCHEDULE,
   DEFAULT_CRON_SCHEDULE_OFFSET,
   DEFAULT_DEFAULT_BRANCH,
+  DEFAULT_EXECUTOR_ENABLED,
   DEFAULT_FALLBACK_ON_RATE_LIMIT,
   DEFAULT_JOB_PROVIDERS,
   DEFAULT_MAX_LOG_SIZE,
@@ -81,6 +82,7 @@ export function getDefaultConfig(): INightWatchConfig {
 
     // Provider configuration
     provider: DEFAULT_PROVIDER,
+    executorEnabled: DEFAULT_EXECUTOR_ENABLED,
     reviewerEnabled: DEFAULT_REVIEWER_ENABLED,
     providerEnv: { ...DEFAULT_PROVIDER_ENV },
 
@@ -182,6 +184,7 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   normalized.cronScheduleOffset = readNumber(rawConfig.cronScheduleOffset);
   normalized.maxRetries = readNumber(rawConfig.maxRetries);
   normalized.provider = validateProvider(String(rawConfig.provider ?? '')) ?? undefined;
+  normalized.executorEnabled = readBoolean(rawConfig.executorEnabled);
   normalized.reviewerEnabled = readBoolean(rawConfig.reviewerEnabled);
 
   // providerEnv: Record<string, string> of extra env vars for the provider CLI
@@ -405,6 +408,8 @@ function mergeConfigs(
       merged.cronScheduleOffset = fileConfig.cronScheduleOffset;
     if (fileConfig.maxRetries !== undefined) merged.maxRetries = fileConfig.maxRetries;
     if (fileConfig.provider !== undefined) merged.provider = fileConfig.provider;
+    if (fileConfig.executorEnabled !== undefined)
+      merged.executorEnabled = fileConfig.executorEnabled;
     if (fileConfig.reviewerEnabled !== undefined)
       merged.reviewerEnabled = fileConfig.reviewerEnabled;
     if (fileConfig.providerEnv !== undefined)
@@ -444,6 +449,7 @@ function mergeConfigs(
     merged.cronScheduleOffset = envConfig.cronScheduleOffset;
   if (envConfig.maxRetries !== undefined) merged.maxRetries = envConfig.maxRetries;
   if (envConfig.provider !== undefined) merged.provider = envConfig.provider;
+  if (envConfig.executorEnabled !== undefined) merged.executorEnabled = envConfig.executorEnabled;
   if (envConfig.reviewerEnabled !== undefined) merged.reviewerEnabled = envConfig.reviewerEnabled;
   if (envConfig.providerEnv !== undefined)
     merged.providerEnv = { ...merged.providerEnv, ...envConfig.providerEnv };
@@ -572,6 +578,14 @@ export function loadConfig(projectDir: string): INightWatchConfig {
     const reviewerEnabled = parseBoolean(process.env.NW_REVIEWER_ENABLED);
     if (reviewerEnabled !== null) {
       envConfig.reviewerEnabled = reviewerEnabled;
+    }
+  }
+
+  // NW_EXECUTOR_ENABLED environment variable
+  if (process.env.NW_EXECUTOR_ENABLED) {
+    const executorEnabled = parseBoolean(process.env.NW_EXECUTOR_ENABLED);
+    if (executorEnabled !== null) {
+      envConfig.executorEnabled = executorEnabled;
     }
   }
 

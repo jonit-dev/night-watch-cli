@@ -2,84 +2,91 @@
  * Tests for status command
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from "vitest";
-import * as fs from "fs";
-import * as path from "path";
-import * as os from "os";
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 
 // Mock process.cwd to return our temp directory
 let mockProjectDir: string;
 
-let mockExecImpl: ((cmd: string) => string) = () => "";
-vi.mock("child_process", () => ({
-  exec: vi.fn((_cmd: string, _opts: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
-    const callback = typeof _opts === "function" ? (_opts as typeof cb) : cb;
-    try {
-      const result = mockExecImpl(_cmd);
-      callback?.(null, { stdout: result, stderr: "" });
-    } catch (err) {
-      callback?.(err instanceof Error ? err : new Error(String(err)), { stdout: "", stderr: "" });
-    }
-  }),
+let mockExecImpl: (cmd: string) => string = () => '';
+vi.mock('child_process', () => ({
+  exec: vi.fn(
+    (
+      _cmd: string,
+      _opts: unknown,
+      cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+    ) => {
+      const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
+      try {
+        const result = mockExecImpl(_cmd);
+        callback?.(null, { stdout: result, stderr: '' });
+      } catch (err) {
+        callback?.(err instanceof Error ? err : new Error(String(err)), { stdout: '', stderr: '' });
+      }
+    },
+  ),
   execFile: vi.fn(),
   execSync: vi.fn(),
   spawn: vi.fn(),
 }));
 
-vi.mock("@night-watch/core/utils/crontab.js", () => ({
+vi.mock('@night-watch/core/utils/crontab.js', () => ({
   getEntries: vi.fn(() => []),
   getProjectEntries: vi.fn(() => []),
   generateMarker: vi.fn((name: string) => `# night-watch-cli: ${name}`),
 }));
 
-import { exec } from "child_process";
-import { getEntries, getProjectEntries } from "@night-watch/core/utils/crontab.js";
+import { exec } from 'child_process';
+import { getEntries, getProjectEntries } from '@night-watch/core/utils/crontab.js';
 
 // Mock process.cwd before importing status module
 const originalCwd = process.cwd;
 process.cwd = () => mockProjectDir;
 
 // Import after mocking
-import { statusCommand } from "@/cli/commands/status.js";
-import { Command } from "commander";
+import { statusCommand } from '@/cli/commands/status.js';
+import { Command } from 'commander';
 
-describe("status command", () => {
+describe('status command', () => {
   let tempDir: string;
 
   beforeEach(() => {
     vi.resetAllMocks();
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "night-watch-status-test-"));
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'night-watch-status-test-'));
     mockProjectDir = tempDir;
 
     // Create basic package.json
-    fs.writeFileSync(
-      path.join(tempDir, "package.json"),
-      JSON.stringify({ name: "test-project" })
-    );
+    fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify({ name: 'test-project' }));
 
     // Create config file with no budget fields
     fs.writeFileSync(
-      path.join(tempDir, "night-watch.config.json"),
-      JSON.stringify({
-        projectName: "test-project",
-        defaultBranch: "main",
-        provider: "claude",
-        reviewerEnabled: true,
-        prdDirectory: "docs/PRDs/night-watch",
-        maxRuntime: 7200,
-        reviewerMaxRuntime: 3600,
-        cron: {
-          executorSchedule: "0 0-21 * * *",
-          reviewerSchedule: "0 0,3,6,9,12,15,18,21 * * *"
+      path.join(tempDir, 'night-watch.config.json'),
+      JSON.stringify(
+        {
+          projectName: 'test-project',
+          defaultBranch: 'main',
+          provider: 'claude',
+          reviewerEnabled: true,
+          prdDirectory: 'docs/PRDs/night-watch',
+          maxRuntime: 7200,
+          reviewerMaxRuntime: 3600,
+          cron: {
+            executorSchedule: '0 0-21 * * *',
+            reviewerSchedule: '0 0,3,6,9,12,15,18,21 * * *',
+          },
+          review: {
+            minScore: 80,
+            branchPatterns: ['feat/', 'night-watch/'],
+          },
+          logging: {
+            maxLogSize: 524288,
+          },
         },
-        review: {
-          minScore: 80,
-          branchPatterns: ["feat/", "night-watch/"]
-        },
-        logging: {
-          maxLogSize: 524288
-        }
-      }, null, 2)
+        null,
+        2,
+      ),
     );
 
     // Mock getEntries
@@ -88,20 +95,29 @@ describe("status command", () => {
 
     // Mock exec for most operations (fetchStatusSnapshot uses promisified exec)
     mockExecImpl = (cmd: string) => {
-      if (cmd.includes("git rev-parse")) {
-        throw new Error("not a git repo");
+      if (cmd.includes('git rev-parse')) {
+        throw new Error('not a git repo');
       }
-      return "";
+      return '';
     };
-    vi.mocked(exec).mockImplementation((_cmd: string, _opts: unknown, cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void) => {
-      const callback = typeof _opts === "function" ? (_opts as typeof cb) : cb;
-      try {
-        const result = mockExecImpl(_cmd);
-        callback?.(null, { stdout: result, stderr: "" });
-      } catch (err) {
-        callback?.(err instanceof Error ? err : new Error(String(err)), { stdout: "", stderr: "" });
-      }
-    });
+    vi.mocked(exec).mockImplementation(
+      (
+        _cmd: string,
+        _opts: unknown,
+        cb?: (err: Error | null, result: { stdout: string; stderr: string }) => void,
+      ) => {
+        const callback = typeof _opts === 'function' ? (_opts as typeof cb) : cb;
+        try {
+          const result = mockExecImpl(_cmd);
+          callback?.(null, { stdout: result, stderr: '' });
+        } catch (err) {
+          callback?.(err instanceof Error ? err : new Error(String(err)), {
+            stdout: '',
+            stderr: '',
+          });
+        }
+      },
+    );
   });
 
   afterEach(() => {
@@ -113,29 +129,35 @@ describe("status command", () => {
     process.cwd = originalCwd;
   });
 
-  describe("lock file status", () => {
-    it("should show lock file status - not running", async () => {
+  describe('lock file status', () => {
+    it('should show lock file status - not running', async () => {
       const program = new Command();
       statusCommand(program);
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await program.parseAsync(["node", "test", "status", "--json"]);
+      await program.parseAsync(['node', 'test', 'status', '--json']);
 
       const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
       expect(jsonOutput.executor.running).toBe(false);
       expect(jsonOutput.executor.pid).toBeNull();
       expect(jsonOutput.reviewer.running).toBe(false);
       expect(jsonOutput.reviewer.pid).toBeNull();
+      expect(jsonOutput.qa.running).toBe(false);
+      expect(jsonOutput.qa.pid).toBeNull();
+      expect(jsonOutput.audit.running).toBe(false);
+      expect(jsonOutput.audit.pid).toBeNull();
+      expect(jsonOutput.planner.running).toBe(false);
+      expect(jsonOutput.planner.pid).toBeNull();
 
       consoleSpy.mockRestore();
     });
 
-    it("should show lock file status - running", async () => {
+    it('should show lock file status - running', async () => {
       // Create lock file with PID using the hashed runtime key
-      const { executorLockPath } = await import("@night-watch/core/utils/status-data.js");
+      const { executorLockPath } = await import('@night-watch/core/utils/status-data.js');
       const lockFile = executorLockPath(tempDir);
-      fs.writeFileSync(lockFile, "12345");
+      fs.writeFileSync(lockFile, '12345');
 
       // Mock process.kill to return true (process exists)
       const originalKill = process.kill;
@@ -145,9 +167,9 @@ describe("status command", () => {
         const program = new Command();
         statusCommand(program);
 
-        const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+        const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-        await program.parseAsync(["node", "test", "status", "--json"]);
+        await program.parseAsync(['node', 'test', 'status', '--json']);
 
         const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
         expect(jsonOutput.executor.running).toBe(true);
@@ -163,26 +185,26 @@ describe("status command", () => {
     });
   });
 
-  describe("PRD counting", () => {
-    it("should count pending and done PRDs", async () => {
+  describe('PRD counting', () => {
+    it('should count pending and done PRDs', async () => {
       // Create PRD directory structure
-      const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
+      const prdDir = path.join(tempDir, 'docs', 'PRDs', 'night-watch');
       fs.mkdirSync(prdDir, { recursive: true });
-      fs.mkdirSync(path.join(prdDir, "done"), { recursive: true });
+      fs.mkdirSync(path.join(prdDir, 'done'), { recursive: true });
 
       // Create pending PRDs
-      fs.writeFileSync(path.join(prdDir, "phase1.md"), "# Phase 1");
-      fs.writeFileSync(path.join(prdDir, "phase2.md"), "# Phase 2");
+      fs.writeFileSync(path.join(prdDir, 'phase1.md'), '# Phase 1');
+      fs.writeFileSync(path.join(prdDir, 'phase2.md'), '# Phase 2');
 
       // Create done PRDs
-      fs.writeFileSync(path.join(prdDir, "done", "phase0.md"), "# Phase 0");
+      fs.writeFileSync(path.join(prdDir, 'done', 'phase0.md'), '# Phase 0');
 
       const program = new Command();
       statusCommand(program);
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await program.parseAsync(["node", "test", "status", "--json"]);
+      await program.parseAsync(['node', 'test', 'status', '--json']);
 
       const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
       expect(jsonOutput.prds.pending).toBe(2);
@@ -191,30 +213,30 @@ describe("status command", () => {
       consoleSpy.mockRestore();
     });
 
-    it("should count claimed PRDs separately", async () => {
+    it('should count claimed PRDs separately', async () => {
       // Create PRD directory structure
-      const prdDir = path.join(tempDir, "docs", "PRDs", "night-watch");
+      const prdDir = path.join(tempDir, 'docs', 'PRDs', 'night-watch');
       fs.mkdirSync(prdDir, { recursive: true });
-      fs.mkdirSync(path.join(prdDir, "done"), { recursive: true });
+      fs.mkdirSync(path.join(prdDir, 'done'), { recursive: true });
 
       // Create pending PRDs
-      fs.writeFileSync(path.join(prdDir, "phase1.md"), "# Phase 1");
-      fs.writeFileSync(path.join(prdDir, "phase2.md"), "# Phase 2");
+      fs.writeFileSync(path.join(prdDir, 'phase1.md'), '# Phase 1');
+      fs.writeFileSync(path.join(prdDir, 'phase2.md'), '# Phase 2');
 
       // Create an active claim for phase1
       fs.writeFileSync(
-        path.join(prdDir, "phase1.md.claim"),
-        JSON.stringify({ timestamp: Math.floor(Date.now() / 1000), hostname: "test", pid: 1234 })
+        path.join(prdDir, 'phase1.md.claim'),
+        JSON.stringify({ timestamp: Math.floor(Date.now() / 1000), hostname: 'test', pid: 1234 }),
       );
 
       // Create done PRDs
-      fs.writeFileSync(path.join(prdDir, "done", "phase0.md"), "# Phase 0");
+      fs.writeFileSync(path.join(prdDir, 'done', 'phase0.md'), '# Phase 0');
 
       // Create executor lock file and mock process.kill to simulate running executor
       // This is required for cross-validation of in-progress status
-      const { executorLockPath } = await import("@night-watch/core/utils/status-data.js");
+      const { executorLockPath } = await import('@night-watch/core/utils/status-data.js');
       const lockPath = executorLockPath(tempDir);
-      fs.writeFileSync(lockPath, "12345");
+      fs.writeFileSync(lockPath, '12345');
 
       const originalKill = process.kill;
       (process as any).kill = vi.fn().mockReturnValue(true);
@@ -223,9 +245,9 @@ describe("status command", () => {
         const program = new Command();
         statusCommand(program);
 
-        const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+        const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-        await program.parseAsync(["node", "test", "status", "--json"]);
+        await program.parseAsync(['node', 'test', 'status', '--json']);
 
         const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
         expect(jsonOutput.prds.pending).toBe(1);
@@ -235,26 +257,30 @@ describe("status command", () => {
         consoleSpy.mockRestore();
       } finally {
         (process as any).kill = originalKill;
-        try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
+        try {
+          fs.unlinkSync(lockPath);
+        } catch {
+          /* ignore */
+        }
       }
     });
   });
 
-  describe("crontab status", () => {
-    it("should show installed crontab entries", async () => {
+  describe('crontab status', () => {
+    it('should show installed crontab entries', async () => {
       // Mock crontab entries
       vi.mocked(getEntries).mockReturnValue([
-        "0 * * * * night-watch run  # night-watch-cli: test-project",
-        "0 0 * * * night-watch review  # night-watch-cli: test-project",
+        '0 * * * * night-watch run  # night-watch-cli: test-project',
+        '0 0 * * * night-watch review  # night-watch-cli: test-project',
       ]);
       vi.mocked(getProjectEntries).mockReturnValue([]);
 
       const program = new Command();
       statusCommand(program);
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await program.parseAsync(["node", "test", "status", "--json"]);
+      await program.parseAsync(['node', 'test', 'status', '--json']);
 
       const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
       expect(jsonOutput.crontab.installed).toBe(true);
@@ -264,22 +290,22 @@ describe("status command", () => {
     });
   });
 
-  describe("log files", () => {
-    it("should show log file info", async () => {
+  describe('log files', () => {
+    it('should show log file info', async () => {
       // Create log directory and file
-      const logDir = path.join(tempDir, "logs");
+      const logDir = path.join(tempDir, 'logs');
       fs.mkdirSync(logDir, { recursive: true });
       fs.writeFileSync(
-        path.join(logDir, "executor.log"),
-        "Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6"
+        path.join(logDir, 'executor.log'),
+        'Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6',
       );
 
       const program = new Command();
       statusCommand(program);
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await program.parseAsync(["node", "test", "status", "--json"]);
+      await program.parseAsync(['node', 'test', 'status', '--json']);
 
       const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
       expect(jsonOutput.logs.executor.exists).toBe(true);
@@ -290,28 +316,28 @@ describe("status command", () => {
     });
   });
 
-  describe("configuration output", () => {
-    it("should include provider field in JSON output", async () => {
+  describe('configuration output', () => {
+    it('should include provider field in JSON output', async () => {
       const program = new Command();
       statusCommand(program);
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await program.parseAsync(["node", "test", "status", "--json"]);
+      await program.parseAsync(['node', 'test', 'status', '--json']);
 
       const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
-      expect(jsonOutput.provider).toBe("claude");
+      expect(jsonOutput.provider).toBe('claude');
 
       consoleSpy.mockRestore();
     });
 
-    it("should include reviewerEnabled field in JSON output", async () => {
+    it('should include reviewerEnabled field in JSON output', async () => {
       const program = new Command();
       statusCommand(program);
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await program.parseAsync(["node", "test", "status", "--json"]);
+      await program.parseAsync(['node', 'test', 'status', '--json']);
 
       const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
       expect(jsonOutput.reviewerEnabled).toBe(true);
@@ -319,38 +345,42 @@ describe("status command", () => {
       consoleSpy.mockRestore();
     });
 
-    it("should show reviewer as Disabled when reviewerEnabled is false", async () => {
+    it('should show reviewer as Disabled when reviewerEnabled is false', async () => {
       // Update config to have reviewerEnabled: false
       fs.writeFileSync(
-        path.join(tempDir, "night-watch.config.json"),
-        JSON.stringify({
-          projectName: "test-project",
-          defaultBranch: "main",
-          provider: "claude",
-          reviewerEnabled: false,
-          prdDirectory: "docs/PRDs/night-watch",
-          maxRuntime: 7200,
-          reviewerMaxRuntime: 3600,
-          cron: {
-            executorSchedule: "0 0-21 * * *",
-            reviewerSchedule: "0 0,3,6,9,12,15,18,21 * * *"
+        path.join(tempDir, 'night-watch.config.json'),
+        JSON.stringify(
+          {
+            projectName: 'test-project',
+            defaultBranch: 'main',
+            provider: 'claude',
+            reviewerEnabled: false,
+            prdDirectory: 'docs/PRDs/night-watch',
+            maxRuntime: 7200,
+            reviewerMaxRuntime: 3600,
+            cron: {
+              executorSchedule: '0 0-21 * * *',
+              reviewerSchedule: '0 0,3,6,9,12,15,18,21 * * *',
+            },
+            review: {
+              minScore: 80,
+              branchPatterns: ['feat/', 'night-watch/'],
+            },
+            logging: {
+              maxLogSize: 524288,
+            },
           },
-          review: {
-            minScore: 80,
-            branchPatterns: ["feat/", "night-watch/"]
-          },
-          logging: {
-            maxLogSize: 524288
-          }
-        }, null, 2)
+          null,
+          2,
+        ),
       );
 
       const program = new Command();
       statusCommand(program);
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await program.parseAsync(["node", "test", "status", "--json"]);
+      await program.parseAsync(['node', 'test', 'status', '--json']);
 
       const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
       expect(jsonOutput.reviewerEnabled).toBe(false);
@@ -358,98 +388,106 @@ describe("status command", () => {
       consoleSpy.mockRestore();
     });
 
-    it("should show codex provider when configured", async () => {
+    it('should show codex provider when configured', async () => {
       // Update config to use codex provider
       fs.writeFileSync(
-        path.join(tempDir, "night-watch.config.json"),
-        JSON.stringify({
-          projectName: "test-project",
-          defaultBranch: "main",
-          provider: "codex",
-          reviewerEnabled: true,
-          prdDirectory: "docs/PRDs/night-watch",
-          maxRuntime: 7200,
-          reviewerMaxRuntime: 3600,
-          cron: {
-            executorSchedule: "0 0-21 * * *",
-            reviewerSchedule: "0 0,3,6,9,12,15,18,21 * * *"
+        path.join(tempDir, 'night-watch.config.json'),
+        JSON.stringify(
+          {
+            projectName: 'test-project',
+            defaultBranch: 'main',
+            provider: 'codex',
+            reviewerEnabled: true,
+            prdDirectory: 'docs/PRDs/night-watch',
+            maxRuntime: 7200,
+            reviewerMaxRuntime: 3600,
+            cron: {
+              executorSchedule: '0 0-21 * * *',
+              reviewerSchedule: '0 0,3,6,9,12,15,18,21 * * *',
+            },
+            review: {
+              minScore: 80,
+              branchPatterns: ['feat/', 'night-watch/'],
+            },
+            logging: {
+              maxLogSize: 524288,
+            },
           },
-          review: {
-            minScore: 80,
-            branchPatterns: ["feat/", "night-watch/"]
-          },
-          logging: {
-            maxLogSize: 524288
-          }
-        }, null, 2)
+          null,
+          2,
+        ),
       );
 
       const program = new Command();
       statusCommand(program);
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await program.parseAsync(["node", "test", "status", "--json"]);
+      await program.parseAsync(['node', 'test', 'status', '--json']);
 
       const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
-      expect(jsonOutput.provider).toBe("codex");
+      expect(jsonOutput.provider).toBe('codex');
 
       consoleSpy.mockRestore();
     });
 
-    it("should include autoMerge field in JSON output", async () => {
+    it('should include autoMerge field in JSON output', async () => {
       const program = new Command();
       statusCommand(program);
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await program.parseAsync(["node", "test", "status", "--json"]);
+      await program.parseAsync(['node', 'test', 'status', '--json']);
 
       const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
       expect(jsonOutput.autoMerge).toBe(false);
-      expect(jsonOutput.autoMergeMethod).toBe("squash");
+      expect(jsonOutput.autoMergeMethod).toBe('squash');
 
       consoleSpy.mockRestore();
     });
 
-    it("should show auto-merge status when enabled", async () => {
+    it('should show auto-merge status when enabled', async () => {
       // Update config to enable auto-merge
       fs.writeFileSync(
-        path.join(tempDir, "night-watch.config.json"),
-        JSON.stringify({
-          projectName: "test-project",
-          defaultBranch: "main",
-          provider: "claude",
-          reviewerEnabled: true,
-          autoMerge: true,
-          autoMergeMethod: "rebase",
-          prdDirectory: "docs/PRDs/night-watch",
-          maxRuntime: 7200,
-          reviewerMaxRuntime: 3600,
-          cron: {
-            executorSchedule: "0 0-21 * * *",
-            reviewerSchedule: "0 0,3,6,9,12,15,18,21 * * *"
+        path.join(tempDir, 'night-watch.config.json'),
+        JSON.stringify(
+          {
+            projectName: 'test-project',
+            defaultBranch: 'main',
+            provider: 'claude',
+            reviewerEnabled: true,
+            autoMerge: true,
+            autoMergeMethod: 'rebase',
+            prdDirectory: 'docs/PRDs/night-watch',
+            maxRuntime: 7200,
+            reviewerMaxRuntime: 3600,
+            cron: {
+              executorSchedule: '0 0-21 * * *',
+              reviewerSchedule: '0 0,3,6,9,12,15,18,21 * * *',
+            },
+            review: {
+              minScore: 80,
+              branchPatterns: ['feat/', 'night-watch/'],
+            },
+            logging: {
+              maxLogSize: 524288,
+            },
           },
-          review: {
-            minScore: 80,
-            branchPatterns: ["feat/", "night-watch/"]
-          },
-          logging: {
-            maxLogSize: 524288
-          }
-        }, null, 2)
+          null,
+          2,
+        ),
       );
 
       const program = new Command();
       statusCommand(program);
 
-      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-      await program.parseAsync(["node", "test", "status", "--json"]);
+      await program.parseAsync(['node', 'test', 'status', '--json']);
 
       const jsonOutput = JSON.parse(consoleSpy.mock.calls[0][0]);
       expect(jsonOutput.autoMerge).toBe(true);
-      expect(jsonOutput.autoMergeMethod).toBe("rebase");
+      expect(jsonOutput.autoMergeMethod).toBe('rebase');
 
       consoleSpy.mockRestore();
     });

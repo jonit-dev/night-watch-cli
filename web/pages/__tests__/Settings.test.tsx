@@ -6,7 +6,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
       // This is a compile-time check - the test passes if the code compiles
       // The ConfigForm type in Settings.tsx includes:
       // - provider, defaultBranch, prdDir, branchPrefix, branchPatterns
-      // - reviewerEnabled, minReviewScore, maxRuntime, reviewerMaxRuntime, maxLogSize
+      // - executorEnabled, reviewerEnabled, minReviewScore, maxRuntime, reviewerMaxRuntime, maxLogSize
       // - cronSchedule, reviewerSchedule, cronScheduleOffset, maxRetries
       // - providerEnv, notifications, prdPriority
       // - roadmapScanner, templatesDir, boardProvider, jobProviders
@@ -19,6 +19,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
         'prdDir',
         'branchPrefix',
         'branchPatterns',
+        'executorEnabled',
         'reviewerEnabled',
         'minReviewScore',
         'maxRuntime',
@@ -53,8 +54,8 @@ describe('Settings Page - PRD Coverage Verification', () => {
       expect(requiredFields).toContain('reviewerSchedule');
       expect(requiredFields).toContain('cronScheduleOffset');
 
-      // If we got here, all 27 fields are defined in ConfigForm
-      expect(requiredFields.length).toBe(27);
+      // If we got here, all 28 fields are defined in ConfigForm
+      expect(requiredFields.length).toBe(28);
     });
   });
 
