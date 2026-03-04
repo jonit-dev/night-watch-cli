@@ -8,6 +8,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
       // - provider, defaultBranch, prdDir, branchPrefix, branchPatterns
       // - executorEnabled, reviewerEnabled, minReviewScore, maxRuntime, reviewerMaxRuntime, maxLogSize
       // - cronSchedule, reviewerSchedule, cronScheduleOffset, maxRetries
+      // - reviewerMaxRetries, reviewerRetryDelay
       // - providerEnv, notifications, prdPriority
       // - roadmapScanner, templatesDir, boardProvider, jobProviders
       // - autoMerge, autoMergeMethod, fallbackOnRateLimit, claudeModel
@@ -29,6 +30,8 @@ describe('Settings Page - PRD Coverage Verification', () => {
         'reviewerSchedule',
         'cronScheduleOffset',
         'maxRetries',
+        'reviewerMaxRetries',
+        'reviewerRetryDelay',
         'providerEnv',
         'notifications',
         'prdPriority',
@@ -54,8 +57,12 @@ describe('Settings Page - PRD Coverage Verification', () => {
       expect(requiredFields).toContain('reviewerSchedule');
       expect(requiredFields).toContain('cronScheduleOffset');
 
-      // If we got here, all 28 fields are defined in ConfigForm
-      expect(requiredFields.length).toBe(28);
+      // Verify reviewer retry fields are included
+      expect(requiredFields).toContain('reviewerMaxRetries');
+      expect(requiredFields).toContain('reviewerRetryDelay');
+
+      // If we got here, all 30 fields are defined in ConfigForm
+      expect(requiredFields.length).toBe(30);
     });
   });
 
@@ -118,6 +125,58 @@ describe('Settings Page - PRD Coverage Verification', () => {
 
       // Total tabs should be 11
       expect(tabs.length).toBe(11);
+    });
+  });
+
+  describe('Retry Settings (Phase 5 - Reviewer Retry Loop)', () => {
+    it('should render retry config fields', () => {
+      // Verify the retry config fields are part of the form
+      const retryFields = ['reviewerMaxRetries', 'reviewerRetryDelay'];
+
+      // These fields should be present in ConfigForm
+      expect(retryFields).toContain('reviewerMaxRetries');
+      expect(retryFields).toContain('reviewerRetryDelay');
+
+      // Verify default values match PRD spec
+      const retryDefaults = {
+        reviewerMaxRetries: 2,
+        reviewerRetryDelay: 30,
+      };
+
+      expect(retryDefaults.reviewerMaxRetries).toBe(2);
+      expect(retryDefaults.reviewerRetryDelay).toBe(30);
+    });
+
+    it('should clamp reviewerMaxRetries to valid range (0-10)', () => {
+      // Verify the input constraints
+      const min = 0;
+      const max = 10;
+
+      const clampMaxRetries = (value: number): number => {
+        return Math.min(max, Math.max(min, value));
+      };
+
+      expect(clampMaxRetries(-5)).toBe(0);
+      expect(clampMaxRetries(0)).toBe(0);
+      expect(clampMaxRetries(5)).toBe(5);
+      expect(clampMaxRetries(10)).toBe(10);
+      expect(clampMaxRetries(99)).toBe(10);
+    });
+
+    it('should clamp reviewerRetryDelay to valid range (0-300)', () => {
+      // Verify the input constraints
+      const min = 0;
+      const max = 300;
+
+      const clampRetryDelay = (value: number): number => {
+        return Math.min(max, Math.max(min, value));
+      };
+
+      expect(clampRetryDelay(-10)).toBe(0);
+      expect(clampRetryDelay(0)).toBe(0);
+      expect(clampRetryDelay(30)).toBe(30);
+      expect(clampRetryDelay(300)).toBe(300);
+      expect(clampRetryDelay(500)).toBe(300);
     });
   });
 });

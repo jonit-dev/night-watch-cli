@@ -23,6 +23,7 @@ vi.mock('chalk', () => ({
 }));
 
 import {
+  buildDescription,
   formatSlackPayload,
   formatDiscordPayload,
   formatTelegramPayload,
@@ -71,6 +72,17 @@ describe('notification utilities', () => {
     it('should set red color for failure', () => {
       const payload = formatSlackPayload({ ...baseCtx, event: 'run_failed' }) as any;
       expect(payload.attachments[0].color).toBe('#ff0000');
+    });
+
+    it('should include retry info for review_completed when attempts > 1', () => {
+      const payload = formatSlackPayload({
+        ...baseCtx,
+        event: 'review_completed',
+        attempts: 3,
+        finalScore: 88,
+      }) as any;
+      const text = payload.attachments[0].blocks[0].text.text;
+      expect(text).toContain('Attempts: 3 (final score: 88/100)');
     });
   });
 
@@ -167,6 +179,33 @@ describe('notification utilities', () => {
       // Should not crash, should not have Summary section
       expect(payload.text).toContain('feat: no body');
       expect(payload.text).not.toContain('Summary');
+    });
+
+    it('should include retry info in structured review payload', () => {
+      const payload = formatTelegramPayload({
+        ...baseCtx,
+        event: 'review_completed',
+        prUrl: 'https://github.com/user/repo/pull/42',
+        prTitle: 'feat: review retries',
+        prNumber: 42,
+        attempts: 3,
+        finalScore: 92,
+      });
+
+      expect(payload.text).toContain('Attempts: 3');
+      expect(payload.text).toContain('final score: 92/100');
+    });
+  });
+
+  describe('buildDescription', () => {
+    it('should not include retry info when review was single-attempt', () => {
+      const text = buildDescription({
+        ...baseCtx,
+        event: 'review_completed',
+        attempts: 1,
+        finalScore: 87,
+      });
+      expect(text).not.toContain('Attempts:');
     });
   });
 

@@ -49,7 +49,9 @@ import {
   DEFAULT_PROVIDER_ENV,
   DEFAULT_QA,
   DEFAULT_REVIEWER_ENABLED,
+  DEFAULT_REVIEWER_MAX_RETRIES,
   DEFAULT_REVIEWER_MAX_RUNTIME,
+  DEFAULT_REVIEWER_RETRY_DELAY,
   DEFAULT_REVIEWER_SCHEDULE,
   DEFAULT_ROADMAP_SCANNER,
   DEFAULT_TEMPLATES_DIR,
@@ -79,6 +81,10 @@ export function getDefaultConfig(): INightWatchConfig {
     reviewerSchedule: DEFAULT_REVIEWER_SCHEDULE,
     cronScheduleOffset: DEFAULT_CRON_SCHEDULE_OFFSET,
     maxRetries: DEFAULT_MAX_RETRIES,
+
+    // Reviewer retry configuration
+    reviewerMaxRetries: DEFAULT_REVIEWER_MAX_RETRIES,
+    reviewerRetryDelay: DEFAULT_REVIEWER_RETRY_DELAY,
 
     // Provider configuration
     provider: DEFAULT_PROVIDER,
@@ -183,6 +189,8 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     readString(rawConfig.reviewerSchedule) ?? readString(cron?.reviewerSchedule);
   normalized.cronScheduleOffset = readNumber(rawConfig.cronScheduleOffset);
   normalized.maxRetries = readNumber(rawConfig.maxRetries);
+  normalized.reviewerMaxRetries = readNumber(rawConfig.reviewerMaxRetries);
+  normalized.reviewerRetryDelay = readNumber(rawConfig.reviewerRetryDelay);
   normalized.provider = validateProvider(String(rawConfig.provider ?? '')) ?? undefined;
   normalized.executorEnabled = readBoolean(rawConfig.executorEnabled);
   normalized.reviewerEnabled = readBoolean(rawConfig.reviewerEnabled);
@@ -379,6 +387,32 @@ function sanitizeMaxRetries(value: number, fallback: number): number {
 }
 
 /**
+ * Clamp reviewerMaxRetries to valid range (0-10).
+ */
+function sanitizeReviewerMaxRetries(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+  const normalized = Math.floor(value);
+  if (normalized < 0) return 0;
+  if (normalized > 10) return 10;
+  return normalized;
+}
+
+/**
+ * Clamp reviewerRetryDelay to valid range (0-300 seconds).
+ */
+function sanitizeReviewerRetryDelay(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+  const normalized = Math.floor(value);
+  if (normalized < 0) return 0;
+  if (normalized > 300) return 300;
+  return normalized;
+}
+
+/**
  * Deep merge configuration objects
  * Environment values take precedence over file values
  */
@@ -407,6 +441,10 @@ function mergeConfigs(
     if (fileConfig.cronScheduleOffset !== undefined)
       merged.cronScheduleOffset = fileConfig.cronScheduleOffset;
     if (fileConfig.maxRetries !== undefined) merged.maxRetries = fileConfig.maxRetries;
+    if (fileConfig.reviewerMaxRetries !== undefined)
+      merged.reviewerMaxRetries = fileConfig.reviewerMaxRetries;
+    if (fileConfig.reviewerRetryDelay !== undefined)
+      merged.reviewerRetryDelay = fileConfig.reviewerRetryDelay;
     if (fileConfig.provider !== undefined) merged.provider = fileConfig.provider;
     if (fileConfig.executorEnabled !== undefined)
       merged.executorEnabled = fileConfig.executorEnabled;
@@ -448,6 +486,10 @@ function mergeConfigs(
   if (envConfig.cronScheduleOffset !== undefined)
     merged.cronScheduleOffset = envConfig.cronScheduleOffset;
   if (envConfig.maxRetries !== undefined) merged.maxRetries = envConfig.maxRetries;
+  if (envConfig.reviewerMaxRetries !== undefined)
+    merged.reviewerMaxRetries = envConfig.reviewerMaxRetries;
+  if (envConfig.reviewerRetryDelay !== undefined)
+    merged.reviewerRetryDelay = envConfig.reviewerRetryDelay;
   if (envConfig.provider !== undefined) merged.provider = envConfig.provider;
   if (envConfig.executorEnabled !== undefined) merged.executorEnabled = envConfig.executorEnabled;
   if (envConfig.reviewerEnabled !== undefined) merged.reviewerEnabled = envConfig.reviewerEnabled;
@@ -470,6 +512,14 @@ function mergeConfigs(
   if (envConfig.jobProviders !== undefined) merged.jobProviders = { ...envConfig.jobProviders };
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
+  merged.reviewerMaxRetries = sanitizeReviewerMaxRetries(
+    merged.reviewerMaxRetries,
+    DEFAULT_REVIEWER_MAX_RETRIES,
+  );
+  merged.reviewerRetryDelay = sanitizeReviewerRetryDelay(
+    merged.reviewerRetryDelay,
+    DEFAULT_REVIEWER_RETRY_DELAY,
+  );
 
   return merged;
 }
@@ -561,6 +611,22 @@ export function loadConfig(projectDir: string): INightWatchConfig {
     const retries = parseInt(process.env.NW_MAX_RETRIES, 10);
     if (!isNaN(retries) && retries >= 1) {
       envConfig.maxRetries = retries;
+    }
+  }
+
+  // NW_REVIEWER_MAX_RETRIES environment variable
+  if (process.env.NW_REVIEWER_MAX_RETRIES !== undefined) {
+    const reviewerMaxRetries = parseInt(process.env.NW_REVIEWER_MAX_RETRIES, 10);
+    if (!isNaN(reviewerMaxRetries) && reviewerMaxRetries >= 0) {
+      envConfig.reviewerMaxRetries = reviewerMaxRetries;
+    }
+  }
+
+  // NW_REVIEWER_RETRY_DELAY environment variable
+  if (process.env.NW_REVIEWER_RETRY_DELAY !== undefined) {
+    const reviewerRetryDelay = parseInt(process.env.NW_REVIEWER_RETRY_DELAY, 10);
+    if (!isNaN(reviewerRetryDelay) && reviewerRetryDelay >= 0) {
+      envConfig.reviewerRetryDelay = reviewerRetryDelay;
     }
   }
 

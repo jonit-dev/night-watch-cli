@@ -284,7 +284,7 @@ describe('init command', () => {
         timeout: 15000,
       });
 
-      const summaryPath = path.join(tempDir, 'docs', 'PRDs', 'night-watch', 'NIGHT-WATCH-SUMMARY.md');
+      const summaryPath = path.join(tempDir, 'docs', 'prds', 'NIGHT-WATCH-SUMMARY.md');
       expect(fs.existsSync(summaryPath)).toBe(true);
 
       const content = fs.readFileSync(summaryPath, 'utf-8');
@@ -413,7 +413,7 @@ describe('init command', () => {
       fs.mkdirSync(customTemplatesDir, { recursive: true });
       fs.writeFileSync(
         path.join(customTemplatesDir, 'night-watch.md'),
-        '# Custom Night Watch Template\n\nThis is a custom template.\n'
+        '# Custom Night Watch Template\n\nThis is a custom template.\n',
       );
 
       // Create config to point to custom templates
@@ -421,7 +421,7 @@ describe('init command', () => {
         path.join(tempDir, 'night-watch.config.json'),
         JSON.stringify({
           templatesDir: '.night-watch/templates',
-        })
+        }),
       );
 
       execSync(`${TSX_CMD} init --force --provider claude`, {

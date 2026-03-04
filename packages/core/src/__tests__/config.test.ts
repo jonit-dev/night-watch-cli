@@ -288,6 +288,121 @@ describe('config', () => {
       expect(config.maxRetries).toBe(defaults.maxRetries);
     });
 
+    // Reviewer retry configuration tests
+    it('should include reviewer retry defaults', () => {
+      const config = getDefaultConfig();
+
+      expect(config.reviewerMaxRetries).toBe(2);
+      expect(config.reviewerRetryDelay).toBe(30);
+    });
+
+    it('should clamp reviewerMaxRetries to valid range (0-10)', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          reviewerMaxRetries: 99,
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.reviewerMaxRetries).toBe(10);
+    });
+
+    it('should clamp reviewerMaxRetries to 0 minimum', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          reviewerMaxRetries: -5,
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.reviewerMaxRetries).toBe(0);
+    });
+
+    it('should clamp reviewerRetryDelay to valid range (0-300)', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          reviewerRetryDelay: 500,
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.reviewerRetryDelay).toBe(300);
+    });
+
+    it('should clamp reviewerRetryDelay to 0 minimum', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          reviewerRetryDelay: -10,
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.reviewerRetryDelay).toBe(0);
+    });
+
+    it('should handle NW_REVIEWER_MAX_RETRIES env var', () => {
+      process.env.NW_REVIEWER_MAX_RETRIES = '5';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.reviewerMaxRetries).toBe(5);
+    });
+
+    it('should handle NW_REVIEWER_RETRY_DELAY env var', () => {
+      process.env.NW_REVIEWER_RETRY_DELAY = '60';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.reviewerRetryDelay).toBe(60);
+    });
+
+    it('should handle NW_REVIEWER_MAX_RETRIES=0 env var', () => {
+      process.env.NW_REVIEWER_MAX_RETRIES = '0';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.reviewerMaxRetries).toBe(0);
+    });
+
+    it('should handle NW_REVIEWER_RETRY_DELAY=0 env var', () => {
+      process.env.NW_REVIEWER_RETRY_DELAY = '0';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.reviewerRetryDelay).toBe(0);
+    });
+
+    it('should let env vars override config file for reviewer retry settings', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          reviewerMaxRetries: 3,
+          reviewerRetryDelay: 45,
+        }),
+      );
+
+      process.env.NW_REVIEWER_MAX_RETRIES = '7';
+      process.env.NW_REVIEWER_RETRY_DELAY = '90';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.reviewerMaxRetries).toBe(7);
+      expect(config.reviewerRetryDelay).toBe(90);
+    });
+
     it('should handle NW_BRANCH_PREFIX env var', () => {
       process.env.NW_BRANCH_PREFIX = 'auto';
 
@@ -1364,6 +1479,8 @@ describe('config', () => {
         'reviewerSchedule',
         'cronScheduleOffset',
         'maxRetries',
+        'reviewerMaxRetries',
+        'reviewerRetryDelay',
         'provider',
         'executorEnabled',
         'reviewerEnabled',
@@ -1402,6 +1519,8 @@ describe('config', () => {
         'reviewerSchedule',
         'cronScheduleOffset',
         'maxRetries',
+        'reviewerMaxRetries',
+        'reviewerRetryDelay',
         'provider',
         'executorEnabled',
         'reviewerEnabled',
@@ -1491,6 +1610,8 @@ describe('config', () => {
         'reviewerSchedule',
         'cronScheduleOffset',
         'maxRetries',
+        'reviewerMaxRetries',
+        'reviewerRetryDelay',
         'provider',
         'executorEnabled',
         'reviewerEnabled',

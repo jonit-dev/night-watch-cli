@@ -26,6 +26,9 @@ export interface INotificationContext {
   filesChanged?: number;
   additions?: number;
   deletions?: number;
+  // Review retry info (optional — populated when retries occurred)
+  attempts?: number;
+  finalScore?: number;
 }
 
 /**
@@ -119,6 +122,15 @@ export function buildDescription(ctx: INotificationContext): string {
   }
   if (ctx.duration !== undefined) {
     lines.push(`Duration: ${ctx.duration}s`);
+  }
+  // Include retry info for review events when attempts > 1
+  if (ctx.event === 'review_completed' && ctx.attempts !== undefined && ctx.attempts > 1) {
+    const retryInfo = `Attempts: ${ctx.attempts}`;
+    if (ctx.finalScore !== undefined) {
+      lines.push(`${retryInfo} (final score: ${ctx.finalScore}/100)`);
+    } else {
+      lines.push(retryInfo);
+    }
   }
   return lines.join('\n');
 }
@@ -231,6 +243,17 @@ export function formatTelegramPayload(ctx: INotificationContext): {
         stats.push(`+${ctx.additions} / -${ctx.deletions}`);
       }
       lines.push(escapeMarkdownV2(stats.join(' | ')));
+    }
+
+    if (ctx.event === 'review_completed' && ctx.attempts !== undefined && ctx.attempts > 1) {
+      lines.push('');
+      if (ctx.finalScore !== undefined) {
+        lines.push(
+          escapeMarkdownV2(`🔁 Attempts: ${ctx.attempts} (final score: ${ctx.finalScore}/100)`),
+        );
+      } else {
+        lines.push(escapeMarkdownV2(`🔁 Attempts: ${ctx.attempts}`));
+      }
     }
 
     // Footer

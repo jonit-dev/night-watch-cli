@@ -75,6 +75,12 @@ export interface INightWatchConfig {
   /** Maximum retry attempts for rate-limited API calls (default: 3) */
   maxRetries: number;
 
+  /** Maximum retry attempts for reviewer fix iterations within a single cron run (default: 2) */
+  reviewerMaxRetries: number;
+
+  /** Delay in seconds between reviewer retry attempts (default: 30) */
+  reviewerRetryDelay: number;
+
   // Provider configuration
 
   /** AI provider to use for execution */

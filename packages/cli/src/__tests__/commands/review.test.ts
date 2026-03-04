@@ -27,7 +27,9 @@ import {
   buildEnvVars,
   applyCliOverrides,
   IReviewOptions,
+  parseFinalReviewScore,
   parseAutoMergedPrNumbers,
+  parseRetryAttempts,
   shouldSendReviewNotification,
 } from '@/cli/commands/review.js';
 import { INightWatchConfig } from '@night-watch/core/types.js';
@@ -313,6 +315,21 @@ describe('review command', () => {
     it('returns empty array when value is missing', () => {
       expect(parseAutoMergedPrNumbers(undefined)).toEqual([]);
       expect(parseAutoMergedPrNumbers('')).toEqual([]);
+    });
+  });
+
+  describe('retry metadata parsing', () => {
+    it('should parse retry attempts with safe defaults', () => {
+      expect(parseRetryAttempts('3')).toBe(3);
+      expect(parseRetryAttempts('0')).toBe(1);
+      expect(parseRetryAttempts(undefined)).toBe(1);
+      expect(parseRetryAttempts('abc')).toBe(1);
+    });
+
+    it('should parse final review score when present', () => {
+      expect(parseFinalReviewScore('88')).toBe(88);
+      expect(parseFinalReviewScore(undefined)).toBeUndefined();
+      expect(parseFinalReviewScore('abc')).toBeUndefined();
     });
   });
 

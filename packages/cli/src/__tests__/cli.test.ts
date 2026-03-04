@@ -3,7 +3,9 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', '..', 'package.json'), 'utf-8'));
+const packageJson = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, '..', '..', 'package.json'), 'utf-8'),
+);
 
 describe('CLI', () => {
   describe('help output', () => {
@@ -253,6 +255,17 @@ describe('CLI', () => {
       expect(output).toContain('night-watch-pr-reviewer-cron.sh');
     });
 
+    it('should show retry config in review dry-run output', () => {
+      const output = execSync('node dist/cli.js review --dry-run', {
+        encoding: 'utf-8',
+        cwd: process.cwd(),
+      });
+
+      // Verify retry env vars are passed to the script
+      expect(output).toContain('NW_REVIEWER_MAX_RETRIES');
+      expect(output).toContain('NW_REVIEWER_RETRY_DELAY');
+    });
+
     it('should execute install command', () => {
       const output = execSync('node dist/cli.js install', {
         encoding: 'utf-8',
@@ -260,7 +273,8 @@ describe('CLI', () => {
       });
 
       // Accept either a fresh install or an already-installed message
-      const isInstalled = output.includes('Night Watch installed') || output.includes('already installed');
+      const isInstalled =
+        output.includes('Night Watch installed') || output.includes('already installed');
       expect(isInstalled).toBe(true);
     });
 
