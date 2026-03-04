@@ -125,6 +125,7 @@ export function buildEnvVars(
   env.NW_REVIEWER_RETRY_DELAY = String(config.reviewerRetryDelay);
   env.NW_MIN_REVIEW_SCORE = String(config.minReviewScore);
   env.NW_BRANCH_PATTERNS = config.branchPatterns.join(',');
+  env.NW_PRD_DIR = config.prdDir;
 
   // Auto-merge configuration
   if (config.autoMerge) {

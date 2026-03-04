@@ -27,6 +27,12 @@ AUTO_MERGE_METHOD="${NW_AUTO_MERGE_METHOD:-squash}"
 TARGET_PR="${NW_TARGET_PR:-}"
 PARALLEL_ENABLED="${NW_REVIEWER_PARALLEL:-1}"
 WORKER_MODE="${NW_REVIEWER_WORKER_MODE:-0}"
+PRD_DIR_REL="${NW_PRD_DIR:-docs/PRDs/night-watch}"
+if [[ "${PRD_DIR_REL}" = /* ]]; then
+  PRD_DIR="${PRD_DIR_REL}"
+else
+  PRD_DIR="${PROJECT_DIR}/${PRD_DIR_REL}"
+fi
 
 # Retry configuration
 REVIEWER_MAX_RETRIES="${NW_REVIEWER_MAX_RETRIES:-2}"
@@ -122,6 +128,175 @@ append_csv() {
   else
     printf "%s,%s" "${current}" "${incoming}"
   fi
+}
+
+truncate_for_prompt() {
+  local text="${1:-}"
+  local limit="${2:-7000}"
+  if [ "${#text}" -le "${limit}" ]; then
+    printf "%s" "${text}"
+  else
+    printf '%s\n\n[truncated to %s chars]' "${text:0:${limit}}" "${limit}"
+  fi
+}
+
+extract_linked_issue_numbers() {
+  local body="${1:-}"
+  printf '%s\n' "${body}" \
+    | grep -Eoi '(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]*:?[[:space:]]*#[0-9]+' \
+    | grep -Eo '[0-9]+' \
+    | awk '!seen[$0]++' || true
+}
+
+find_prd_file_by_branch() {
+  local branch_name="${1:-}"
+  local branch_slug="${branch_name#*/}"
+  local branch_number=""
+  local candidate_dirs=()
+  local candidate=""
+  local base_name=""
+  local dir=""
+
+  if [ -z "${branch_slug}" ]; then
+    branch_slug="${branch_name}"
+  fi
+  [ -z "${branch_slug}" ] && return 1
+
+  if [ -d "${PRD_DIR}" ]; then
+    candidate_dirs+=("${PRD_DIR}")
+  fi
+  if [ -d "${PRD_DIR}/done" ]; then
+    candidate_dirs+=("${PRD_DIR}/done")
+  fi
+  [ "${#candidate_dirs[@]}" -eq 0 ] && return 1
+
+  for dir in "${candidate_dirs[@]}"; do
+    if [ -f "${dir}/${branch_slug}.md" ]; then
+      printf "%s" "${dir}/${branch_slug}.md"
+      return 0
+    fi
+  done
+
+  branch_number=$(printf '%s' "${branch_slug}" | grep -oE '^[0-9]+' || true)
+  for dir in "${candidate_dirs[@]}"; do
+    while IFS= read -r candidate; do
+      [ -z "${candidate}" ] && continue
+      base_name=$(basename "${candidate}" .md)
+      if [[ "${base_name}" == "${branch_slug}"* ]] || [[ "${branch_slug}" == "${base_name}"* ]]; then
+        printf "%s" "${candidate}"
+        return 0
+      fi
+      if [ -n "${branch_number}" ] && [[ "${base_name}" == "${branch_number}-"* ]]; then
+        printf "%s" "${candidate}"
+        return 0
+      fi
+    done < <(find "${dir}" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort)
+  done
+
+  return 1
+}
+
+build_prd_context_for_pr() {
+  local pr_number="${1:?PR number required}"
+  local pr_payload=""
+  local pr_title=""
+  local pr_branch=""
+  local pr_body=""
+  local pr_url=""
+  local issue_context=""
+  local issue_count=0
+  local issue_number=""
+  local issue_payload=""
+  local issue_title=""
+  local issue_body=""
+  local issue_excerpt=""
+  local prd_file=""
+  local prd_payload=""
+  local prd_excerpt=""
+  local prd_rel_path=""
+  local section=""
+
+  pr_payload=$(gh pr view "${pr_number}" --json title,headRefName,body,url 2>/dev/null || true)
+  pr_title=$(printf '%s' "${pr_payload}" | jq -r '.title // ""' 2>/dev/null || echo "")
+  pr_branch=$(printf '%s' "${pr_payload}" | jq -r '.headRefName // ""' 2>/dev/null || echo "")
+  pr_body=$(printf '%s' "${pr_payload}" | jq -r '.body // ""' 2>/dev/null || echo "")
+  pr_url=$(printf '%s' "${pr_payload}" | jq -r '.url // ""' 2>/dev/null || echo "")
+
+  if [ -n "${pr_body}" ]; then
+    while IFS= read -r issue_number; do
+      [ -z "${issue_number}" ] && continue
+      issue_count=$((issue_count + 1))
+      if [ "${issue_count}" -gt 2 ]; then
+        break
+      fi
+
+      issue_payload=$(gh issue view "${issue_number}" --json title,body,url 2>/dev/null || true)
+      issue_title=$(printf '%s' "${issue_payload}" | jq -r '.title // ""' 2>/dev/null || echo "")
+      issue_body=$(printf '%s' "${issue_payload}" | jq -r '.body // ""' 2>/dev/null || echo "")
+      [ -z "${issue_body}" ] && continue
+
+      issue_excerpt=$(truncate_for_prompt "${issue_body}" 4500)
+      issue_context="${issue_context}${issue_context:+$'\n\n'}Issue #${issue_number}: ${issue_title}
+${issue_excerpt}"
+    done < <(extract_linked_issue_numbers "${pr_body}")
+  fi
+
+  if [ -z "${issue_context}" ] && [ -n "${pr_branch}" ]; then
+    prd_file=$(find_prd_file_by_branch "${pr_branch}" || true)
+    if [ -n "${prd_file}" ] && [ -f "${prd_file}" ]; then
+      prd_payload=$(cat "${prd_file}" 2>/dev/null || true)
+      if [ -n "${prd_payload}" ]; then
+        prd_excerpt=$(truncate_for_prompt "${prd_payload}" 4500)
+        if [[ "${prd_file}" == "${PROJECT_DIR}/"* ]]; then
+          prd_rel_path="${prd_file#${PROJECT_DIR}/}"
+        else
+          prd_rel_path="${prd_file}"
+        fi
+      fi
+    fi
+  fi
+
+  section="### PR #${pr_number}"
+  if [ -n "${pr_title}" ]; then
+    section="${section} — ${pr_title}"
+  fi
+  section="${section}
+- branch: ${pr_branch:-unknown}"
+  if [ -n "${pr_url}" ]; then
+    section="${section}
+- url: ${pr_url}"
+  fi
+
+  if [ -n "${issue_context}" ]; then
+    section="${section}
+- context source: linked GitHub issue body
+${issue_context}"
+  elif [ -n "${prd_excerpt}" ]; then
+    section="${section}
+- context source: ${prd_rel_path}
+${prd_excerpt}"
+  else
+    section="${section}
+- context source: not found"
+  fi
+
+  printf "%s" "${section}"
+}
+
+build_prd_context_prompt() {
+  local pr_number=""
+  local entry=""
+  local combined=""
+
+  for pr_number in "$@"; do
+    [ -z "${pr_number}" ] && continue
+    entry=$(build_prd_context_for_pr "${pr_number}")
+    [ -z "${entry}" ] && continue
+    combined="${combined}${combined:+$'\n\n'}${entry}"
+  done
+
+  [ -z "${combined}" ] && return 0
+  printf '\n\n## PRD Context\nUse this product context while reviewing and fixing PRs.\n%s\n' "${combined}"
 }
 
 # Extract the latest review score from PR comments
@@ -629,12 +804,17 @@ if ! prepare_detached_worktree "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}" "${DEFA
   exit 1
 fi
 
-REVIEWER_PROMPT_PATH=$(resolve_instruction_path "${REVIEW_WORKTREE_DIR}" "night-watch-pr-reviewer.md" || true)
+REVIEWER_PROMPT_PATH=$(resolve_instruction_path_with_fallback "${REVIEW_WORKTREE_DIR}" "pr-reviewer.md" "night-watch-pr-reviewer.md" || true)
 if [ -z "${REVIEWER_PROMPT_PATH}" ]; then
-  log "FAIL: Missing reviewer prompt file. Checked instructions/, .claude/commands/, and bundled templates/"
+  log "FAIL: Missing reviewer prompt file. Checked pr-reviewer.md/night-watch-pr-reviewer.md in instructions/, .claude/commands/, and bundled templates/"
   emit_result "failure" "reason=missing_reviewer_prompt"
   exit 1
 fi
+REVIEWER_PROMPT_BUNDLED_NAME="pr-reviewer.md"
+if [[ "${REVIEWER_PROMPT_PATH}" == */night-watch-pr-reviewer.md ]]; then
+  REVIEWER_PROMPT_BUNDLED_NAME="night-watch-pr-reviewer.md"
+fi
+REVIEWER_PROMPT_PATH=$(prefer_bundled_prompt_if_legacy_command "${REVIEW_WORKTREE_DIR}" "${REVIEWER_PROMPT_PATH}" "${REVIEWER_PROMPT_BUNDLED_NAME}")
 REVIEWER_PROMPT_BASE=$(cat "${REVIEWER_PROMPT_PATH}")
 REVIEWER_PROMPT_REF=$(instruction_ref_for_prompt "${REVIEW_WORKTREE_DIR}" "${REVIEWER_PROMPT_PATH}")
 log "INFO: Using reviewer prompt from ${REVIEWER_PROMPT_REF}"
@@ -661,6 +841,22 @@ if [ -n "${TARGET_PR}" ]; then
   else
     TARGET_SCOPE_PROMPT+=$'- latest review score: not found\n'
   fi
+fi
+
+PRD_CONTEXT_PROMPT=""
+if [ -n "${TARGET_PR}" ]; then
+  PRD_CONTEXT_PROMPT=$(build_prd_context_prompt "${TARGET_PR}")
+elif [ "${#PR_NUMBER_ARRAY[@]}" -gt 0 ]; then
+  PRD_CONTEXT_PROMPT=$(build_prd_context_prompt "${PR_NUMBER_ARRAY[@]}")
+fi
+if [ -n "${PRD_CONTEXT_PROMPT}" ]; then
+  if [ -n "${TARGET_PR}" ]; then
+    log "INFO: Added PRD context for PR #${TARGET_PR}"
+  else
+    log "INFO: Added PRD context for ${#PR_NUMBER_ARRAY[@]} PR(s)"
+  fi
+else
+  log "WARN: No PRD context found for current reviewer scope"
 fi
 
 # ── Retry Loop for Targeted PR Review ──────────────────────────────────────────
@@ -695,7 +891,7 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
 
   log "RETRY: Starting attempt ${ATTEMPT}/${TOTAL_ATTEMPTS} (timeout: ${ATTEMPT_TIMEOUT}s)"
   LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
-  REVIEWER_PROMPT="${REVIEWER_PROMPT_BASE}${TARGET_SCOPE_PROMPT}"
+  REVIEWER_PROMPT="${REVIEWER_PROMPT_BASE}${TARGET_SCOPE_PROMPT}${PRD_CONTEXT_PROMPT}"
 
   case "${PROVIDER_CMD}" in
     claude)
