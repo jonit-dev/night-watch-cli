@@ -6,7 +6,12 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { findEligiblePrd, sortPrdsByPriority } from '../../utils/prd-discovery.js';
+import { execFileSync } from 'child_process';
+import {
+  findEligibleBoardIssue,
+  findEligiblePrd,
+  sortPrdsByPriority,
+} from '../../utils/prd-discovery.js';
 
 let tmpDir: string;
 let prdDir: string;
@@ -20,6 +25,9 @@ vi.mock('child_process', async (importOriginal) => {
     execFileSync: vi.fn((cmd: string, args: string[]) => {
       if (cmd === 'gh' && args.includes('pr') && args.includes('list')) {
         return ''; // No open PRs by default
+      }
+      if (cmd === 'gh' && args.includes('issue') && args.includes('list')) {
+        return ''; // No open issues by default
       }
       return '';
     }),
@@ -157,5 +165,127 @@ describe('findEligiblePrd', () => {
     });
 
     expect(result).toBeNull();
+  });
+});
+
+describe('findEligibleBoardIssue', () => {
+  beforeEach(() => {
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args: string[]) => {
+      if (
+        cmd === 'gh' &&
+        (args as string[]).includes('pr') &&
+        (args as string[]).includes('list')
+      ) {
+        return '';
+      }
+      if (
+        cmd === 'gh' &&
+        (args as string[]).includes('issue') &&
+        (args as string[]).includes('list')
+      ) {
+        return '';
+      }
+      return '';
+    });
+  });
+
+  afterEach(() => {
+    vi.mocked(execFileSync).mockRestore();
+  });
+
+  it('returns null when gh issue list returns empty output', () => {
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && (args as string[]).includes('issue')) {
+        return '';
+      }
+      return '';
+    });
+
+    const result = findEligibleBoardIssue({ projectDir, maxRuntime: 7200 });
+    expect(result).toBeNull();
+  });
+
+  it('returns null when gh command throws', () => {
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && (args as string[]).includes('issue')) {
+        throw new Error('gh: command not found');
+      }
+      return '';
+    });
+
+    const result = findEligibleBoardIssue({ projectDir, maxRuntime: 7200 });
+    expect(result).toBeNull();
+  });
+
+  it('returns the first unclaimed issue', () => {
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && (args as string[]).includes('issue')) {
+        return '{"number":1,"title":"Do X","body":"details"}';
+      }
+      return '';
+    });
+
+    const result = findEligibleBoardIssue({ projectDir, maxRuntime: 7200 });
+    expect(result).toEqual({ number: 1, title: 'Do X', body: 'details' });
+  });
+
+  it('skips claimed issues and returns next unclaimed', () => {
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && (args as string[]).includes('issue')) {
+        return [
+          '{"number":1,"title":"Issue One","body":"first"}',
+          '{"number":2,"title":"Issue Two","body":"second"}',
+        ].join('\n');
+      }
+      return '';
+    });
+
+    // Claim issue 1 by writing a claim file at projectDir/issue-1.claim
+    const claimData = JSON.stringify({
+      timestamp: Math.floor(Date.now() / 1000),
+      hostname: 'test-host',
+      pid: 99999,
+    });
+    fs.writeFileSync(path.join(projectDir, 'issue-1.claim'), claimData, 'utf-8');
+
+    const result = findEligibleBoardIssue({ projectDir, maxRuntime: 7200 });
+    expect(result).toEqual({ number: 2, title: 'Issue Two', body: 'second' });
+  });
+
+  it('returns null when all issues are claimed', () => {
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && (args as string[]).includes('issue')) {
+        return [
+          '{"number":1,"title":"Issue One","body":"first"}',
+          '{"number":2,"title":"Issue Two","body":"second"}',
+        ].join('\n');
+      }
+      return '';
+    });
+
+    const claimData = JSON.stringify({
+      timestamp: Math.floor(Date.now() / 1000),
+      hostname: 'test-host',
+      pid: 99999,
+    });
+    fs.writeFileSync(path.join(projectDir, 'issue-1.claim'), claimData, 'utf-8');
+    fs.writeFileSync(path.join(projectDir, 'issue-2.claim'), claimData, 'utf-8');
+
+    const result = findEligibleBoardIssue({ projectDir, maxRuntime: 7200 });
+    expect(result).toBeNull();
+  });
+
+  it('skips malformed JSON lines', () => {
+    vi.mocked(execFileSync).mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'gh' && (args as string[]).includes('issue')) {
+        return ['not valid json {{{', '{"number":3,"title":"Valid Issue","body":"body text"}'].join(
+          '\n',
+        );
+      }
+      return '';
+    });
+
+    const result = findEligibleBoardIssue({ projectDir, maxRuntime: 7200 });
+    expect(result).toEqual({ number: 3, title: 'Valid Issue', body: 'body text' });
   });
 });
