@@ -12,6 +12,10 @@ import {
   setCachedBoardData,
 } from '../helpers.js';
 
+// ==================== Constants ====================
+
+const ERROR_BOARD_NOT_CONFIGURED = 'Board not configured';
+
 // ==================== Context interface ====================
 
 interface IBoardRouteContext {
@@ -32,7 +36,7 @@ function createBoardRouteHandlers(ctx: IBoardRouteContext): Router {
       const projectDir = ctx.getProjectDir(req);
       const provider = getBoardProvider(config, projectDir);
       if (!provider) {
-        res.status(404).json({ error: 'Board not configured' });
+        res.status(404).json({ error: ERROR_BOARD_NOT_CONFIGURED });
         return;
       }
 
@@ -69,7 +73,7 @@ function createBoardRouteHandlers(ctx: IBoardRouteContext): Router {
       const projectDir = ctx.getProjectDir(req);
       const provider = getBoardProvider(config, projectDir);
       if (!provider) {
-        res.status(404).json({ error: 'Board not configured' });
+        res.status(404).json({ error: ERROR_BOARD_NOT_CONFIGURED });
         return;
       }
       const issues = await provider.getAllIssues();
@@ -85,7 +89,7 @@ function createBoardRouteHandlers(ctx: IBoardRouteContext): Router {
       const projectDir = ctx.getProjectDir(req);
       const provider = getBoardProvider(config, projectDir);
       if (!provider) {
-        res.status(404).json({ error: 'Board not configured' });
+        res.status(404).json({ error: ERROR_BOARD_NOT_CONFIGURED });
         return;
       }
       const { title, body, column } = req.body as {
@@ -121,7 +125,7 @@ function createBoardRouteHandlers(ctx: IBoardRouteContext): Router {
       const projectDir = ctx.getProjectDir(req);
       const provider = getBoardProvider(config, projectDir);
       if (!provider) {
-        res.status(404).json({ error: 'Board not configured' });
+        res.status(404).json({ error: ERROR_BOARD_NOT_CONFIGURED });
         return;
       }
       const issueNumber = parseInt(req.params.number as string, 10);
@@ -146,37 +150,34 @@ function createBoardRouteHandlers(ctx: IBoardRouteContext): Router {
     }
   });
 
-  router.post(
-    `/${p}issues/:number/comment`,
-    async (req: Request, res: Response): Promise<void> => {
-      try {
-        const config = ctx.getConfig(req);
-        const projectDir = ctx.getProjectDir(req);
-        const provider = getBoardProvider(config, projectDir);
-        if (!provider) {
-          res.status(404).json({ error: 'Board not configured' });
-          return;
-        }
-        const issueNumber = parseInt(req.params.number as string, 10);
-        if (isNaN(issueNumber)) {
-          res.status(400).json({ error: 'Invalid issue number' });
-          return;
-        }
-        const { body } = req.body as { body?: string };
-        if (!body || typeof body !== 'string' || body.trim().length === 0) {
-          res.status(400).json({ error: 'body is required' });
-          return;
-        }
-        await provider.commentOnIssue(issueNumber, body);
-        invalidateBoardCache(projectDir);
-        res.json({ commented: true });
-      } catch (error) {
-        res.status(500).json({
-          error: error instanceof Error ? error.message : String(error),
-        });
+  router.post(`/${p}issues/:number/comment`, async (req: Request, res: Response): Promise<void> => {
+    try {
+      const config = ctx.getConfig(req);
+      const projectDir = ctx.getProjectDir(req);
+      const provider = getBoardProvider(config, projectDir);
+      if (!provider) {
+        res.status(404).json({ error: ERROR_BOARD_NOT_CONFIGURED });
+        return;
       }
-    },
-  );
+      const issueNumber = parseInt(req.params.number as string, 10);
+      if (isNaN(issueNumber)) {
+        res.status(400).json({ error: 'Invalid issue number' });
+        return;
+      }
+      const { body } = req.body as { body?: string };
+      if (!body || typeof body !== 'string' || body.trim().length === 0) {
+        res.status(400).json({ error: 'body is required' });
+        return;
+      }
+      await provider.commentOnIssue(issueNumber, body);
+      invalidateBoardCache(projectDir);
+      res.json({ commented: true });
+    } catch (error) {
+      res.status(500).json({
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  });
 
   router.delete(`/${p}issues/:number`, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -184,7 +185,7 @@ function createBoardRouteHandlers(ctx: IBoardRouteContext): Router {
       const projectDir = ctx.getProjectDir(req);
       const provider = getBoardProvider(config, projectDir);
       if (!provider) {
-        res.status(404).json({ error: 'Board not configured' });
+        res.status(404).json({ error: ERROR_BOARD_NOT_CONFIGURED });
         return;
       }
       const issueNumber = parseInt(req.params.number as string, 10);

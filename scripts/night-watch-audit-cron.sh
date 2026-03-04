@@ -106,42 +106,65 @@ fi
 # Ensure the logs dir exists inside the worktree so the provider can write the report
 mkdir -p "${AUDIT_WORKTREE_DIR}/logs"
 
+AUDIT_MAX_RETRIES="${NW_AUDIT_MAX_RETRIES:-3}"
+AUDIT_RETRY_DELAY="${NW_AUDIT_RETRY_DELAY:-120}"
+
 log "START: Running code audit for ${PROJECT_NAME} (provider: ${PROVIDER_CMD})"
 
 EXIT_CODE=0
 
-case "${PROVIDER_CMD}" in
-  claude)
-    if (
-      cd "${AUDIT_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
-        claude -p "${AUDIT_PROMPT}" \
-          --dangerously-skip-permissions \
-          >> "${LOG_FILE}" 2>&1
-    ); then
-      EXIT_CODE=0
-    else
-      EXIT_CODE=$?
-    fi
-    ;;
-  codex)
-    if (
-      cd "${AUDIT_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
-        codex --quiet \
-          --yolo \
-          --prompt "${AUDIT_PROMPT}" \
-          >> "${LOG_FILE}" 2>&1
-    ); then
-      EXIT_CODE=0
-    else
-      EXIT_CODE=$?
-    fi
-    ;;
-  *)
-    log "ERROR: Unknown provider: ${PROVIDER_CMD}"
-    emit_result "failure" "reason=unknown_provider"
-    exit 1
-    ;;
-esac
+for AUDIT_ATTEMPT in $(seq 1 "${AUDIT_MAX_RETRIES}"); do
+  LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
+  log "AUDIT: Attempt ${AUDIT_ATTEMPT}/${AUDIT_MAX_RETRIES}"
+
+  case "${PROVIDER_CMD}" in
+    claude)
+      if (
+        cd "${AUDIT_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
+          claude -p "${AUDIT_PROMPT}" \
+            --dangerously-skip-permissions \
+            >> "${LOG_FILE}" 2>&1
+      ); then
+        EXIT_CODE=0
+      else
+        EXIT_CODE=$?
+      fi
+      ;;
+    codex)
+      if (
+        cd "${AUDIT_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
+          codex --quiet \
+            --yolo \
+            --prompt "${AUDIT_PROMPT}" \
+            >> "${LOG_FILE}" 2>&1
+      ); then
+        EXIT_CODE=0
+      else
+        EXIT_CODE=$?
+      fi
+      ;;
+    *)
+      log "ERROR: Unknown provider: ${PROVIDER_CMD}"
+      emit_result "failure" "reason=unknown_provider"
+      exit 1
+      ;;
+  esac
+
+  # Success or timeout — don't retry
+  if [ "${EXIT_CODE}" -eq 0 ] || [ "${EXIT_CODE}" -eq 124 ]; then
+    break
+  fi
+
+  # Rate-limit retry with backoff
+  if check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}" && [ "${AUDIT_ATTEMPT}" -lt "${AUDIT_MAX_RETRIES}" ]; then
+    log "RATE-LIMITED: 429 detected (attempt ${AUDIT_ATTEMPT}/${AUDIT_MAX_RETRIES}), retrying in ${AUDIT_RETRY_DELAY}s..."
+    sleep "${AUDIT_RETRY_DELAY}"
+    continue
+  fi
+
+  # Non-retryable failure
+  break
+done
 
 # Copy report back to project dir (if it was written in the worktree)
 WORKTREE_REPORT="${AUDIT_WORKTREE_DIR}/logs/audit-report.md"

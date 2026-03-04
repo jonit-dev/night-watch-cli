@@ -25,6 +25,7 @@
 4. Delete migrated bash functions and bats tests
 
 **Key decisions:**
+
 - **Batched `find-eligible` command** — internalizes the PRD scanning loop (calls `isInCooldown()`, `isClaimed()` directly instead of N subprocess calls)
 - **Git ops via `execFileSync('git', ...)`** — testable via real temp git repos (pattern from `execution-history.test.ts`)
 - **Claims stay file-based** — SQLite would be over-engineering for cron-level concurrency
@@ -38,11 +39,13 @@
 ### Phase 1: Git Utilities
 
 **Files:**
+
 - `packages/core/src/utils/git-utils.ts` (NEW)
 - `packages/core/src/__tests__/utils/git-utils.test.ts` (NEW)
 - `packages/core/src/index.ts` (add export)
 
 **Implementation:**
+
 - `getBranchTipTimestamp(projectDir, branch): number | null` — replaces `get_branch_tip_timestamp()`
 - `detectDefaultBranch(projectDir): string` — replaces `detect_default_branch()`
 - `resolveWorktreeBaseRef(projectDir, defaultBranch): string | null` — replaces `resolve_worktree_base_ref()`
@@ -55,11 +58,13 @@
 ### Phase 2: Worktree Management
 
 **Files:**
+
 - `packages/core/src/utils/worktree-manager.ts` (NEW)
 - `packages/core/src/__tests__/utils/worktree-manager.test.ts` (NEW)
 - `packages/core/src/index.ts` (add export)
 
 **Implementation:**
+
 - `prepareBranchWorktree({ projectDir, worktreeDir, branchName, defaultBranch }): IPrepareWorktreeResult`
 - `prepareDetachedWorktree({ projectDir, worktreeDir, defaultBranch }): IPrepareWorktreeResult`
 - `cleanupWorktrees(projectDir, scope?): string[]` — returns removed paths
@@ -71,6 +76,7 @@
 ### Phase 3: Lock & Claim Management
 
 **Files:**
+
 - `packages/core/src/utils/status-data.ts` (extend with `acquireLock`, `releaseLock`)
 - `packages/core/src/utils/claim-manager.ts` (NEW)
 - `packages/core/src/__tests__/utils/claim-manager.test.ts` (NEW)
@@ -78,6 +84,7 @@
 - `packages/core/src/index.ts` (add export)
 
 **Implementation:**
+
 - `acquireLock(lockPath, pid?): boolean` — extends existing `checkLockFile()`, writes PID
 - `releaseLock(lockPath): void`
 - `claimPrd(prdDir, prdFile, pid?): void` — writes JSON claim file
@@ -92,11 +99,13 @@
 ### Phase 4: PRD Discovery
 
 **Files:**
+
 - `packages/core/src/utils/prd-discovery.ts` (NEW)
 - `packages/core/src/__tests__/utils/prd-discovery.test.ts` (NEW)
 - `packages/core/src/index.ts` (add export)
 
 **Implementation:**
+
 - `findEligiblePrd({ prdDir, projectDir, maxRuntime, prdPriority? }): string | null`
   - Scans PRD files, applies priority ordering
   - Calls `isClaimed()` from Phase 3 directly (no subprocess)
@@ -113,6 +122,7 @@
 ### Phase 5: Remaining Helpers
 
 **Files:**
+
 - `packages/core/src/utils/log-utils.ts` (NEW)
 - `packages/core/src/__tests__/utils/log-utils.test.ts` (NEW)
 - `packages/core/src/utils/prd-utils.ts` (add `markPrdDone`)
@@ -120,6 +130,7 @@
 - `packages/core/src/index.ts` (add export)
 
 **Implementation:**
+
 - `rotateLog(logFile, maxSize?): boolean` — replaces `rotate_log()`
 - `checkRateLimited(logFile, startLine?): boolean` — replaces `check_rate_limited()`
 - `markPrdDone(prdDir, prdFile): boolean` — replaces `mark_prd_done()`
@@ -129,11 +140,13 @@
 ### Phase 6: CLI Subcommands
 
 **Files:**
+
 - `packages/cli/src/commands/cron.ts` (NEW)
 - `packages/cli/src/__tests__/commands/cron.test.ts` (NEW)
 - `packages/cli/src/cli.ts` (register `cronCommand`)
 
 **Subcommands** (following `history.ts` exit-code signaling pattern):
+
 ```
 cron detect-branch [projectDir]           → stdout: branch name
 cron acquire-lock <lockFile>              → exit 0=acquired, 1=locked
@@ -155,6 +168,7 @@ cron rotate-log <logFile>                 → exit 0=rotated
 Replace `source night-watch-helpers.sh` function calls with `"${NW_CLI}" cron <subcommand>` calls.
 
 **Order** (simplest to most complex):
+
 1. `night-watch-slicer-cron.sh` — only uses `rotate_log`, `acquire_lock`
 2. `night-watch-audit-cron.sh` — adds `detect_default_branch`, worktrees
 3. `night-watch-qa-cron.sh` — similar to audit
@@ -191,6 +205,7 @@ Phases 1, 2, 3, 5 can run in parallel. Phase 4 depends on Phase 3. Phase 6 depen
 ## Verification
 
 After each phase:
+
 1. `yarn verify` (typecheck + lint)
 2. `yarn test` for changed packages
 3. Phase 6: test CLI subcommands via `node dist/cli.js cron <cmd>` with temp dirs
