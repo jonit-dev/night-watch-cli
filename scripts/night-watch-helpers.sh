@@ -228,7 +228,7 @@ find_eligible_prd() {
   local done_dir="${prd_dir}/done"
 
   local prd_files
-  prd_files=$(find "${prd_dir}" -maxdepth 1 -name '*.md' ! -name 'NIGHT-WATCH-SUMMARY.md' -type f 2>/dev/null | sort)
+  prd_files=$(find "${prd_dir}" -maxdepth 1 -name '*.md' -type f 2>/dev/null | sort)
 
   if [ -z "${prd_files}" ]; then
     return 0

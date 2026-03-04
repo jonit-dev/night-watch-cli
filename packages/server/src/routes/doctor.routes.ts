@@ -88,9 +88,7 @@ function runDoctorChecks(projectDir: string, config: INightWatchConfig): IHealth
 
   const prdDir = path.join(projectDir, config.prdDir);
   if (fs.existsSync(prdDir)) {
-    const prds = fs
-      .readdirSync(prdDir)
-      .filter((f) => f.endsWith('.md') && f !== 'NIGHT-WATCH-SUMMARY.md');
+    const prds = fs.readdirSync(prdDir).filter((f) => f.endsWith('.md'));
     checks.push({
       name: 'prdDir',
       status: 'pass',

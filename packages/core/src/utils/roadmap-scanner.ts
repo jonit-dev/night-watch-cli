@@ -301,7 +301,7 @@ function scanExistingPrdSlugs(prdDir: string): Set<string> {
   const files = fs.readdirSync(prdDir);
   for (const file of files) {
     // Skip non-markdown files and special files
-    if (!file.endsWith('.md') || file === 'NIGHT-WATCH-SUMMARY.md') {
+    if (!file.endsWith('.md')) {
       continue;
     }
 

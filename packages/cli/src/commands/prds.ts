@@ -155,9 +155,7 @@ export function prdsCommand(program: Command): void {
         const openPrBranches = getOpenPrBranches(projectDir);
 
         // Filter out summary file and update in-progress status based on open PRs
-        const filteredPrds: IPrdDisplay[] = prds.filter(
-          (prd) => !prd.name.toLowerCase().includes('night-watch-summary'),
-        );
+        const filteredPrds: IPrdDisplay[] = prds;
 
         // Update status based on open PRs
         for (const prd of filteredPrds) {

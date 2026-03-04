@@ -361,26 +361,6 @@ function addToGitignore(cwd: string): void {
 }
 
 /**
- * Create NIGHT-WATCH-SUMMARY.md template if it doesn't exist
- */
-function createSummaryFile(summaryPath: string, force: boolean): void {
-  if (fs.existsSync(summaryPath) && !force) {
-    console.log(`  Skipped (exists): ${summaryPath}`);
-    return;
-  }
-
-  const content = `# Night Watch Summary
-
-This file tracks the progress of PRDs executed by Night Watch.
-
----
-
-`;
-  fs.writeFileSync(summaryPath, content);
-  console.log(`  Created: ${summaryPath}`);
-}
-
-/**
  * Main init command implementation
  */
 export function initCommand(program: Command): void {
@@ -395,7 +375,7 @@ export function initCommand(program: Command): void {
       const cwd = process.cwd();
       const force = options.force || false;
       const prdDir = options.prdDir || DEFAULT_PRD_DIR;
-      const totalSteps = 12;
+      const totalSteps = 11;
 
       console.log();
       header('Night Watch CLI - Initializing');
@@ -508,13 +488,8 @@ export function initCommand(program: Command): void {
       success(`Created ${prdDirPath}/`);
       success(`Created ${doneDirPath}/`);
 
-      // Step 6: Create NIGHT-WATCH-SUMMARY.md
-      step(6, totalSteps, 'Creating NIGHT-WATCH-SUMMARY.md...');
-      const summaryPath = path.join(prdDirPath, 'NIGHT-WATCH-SUMMARY.md');
-      createSummaryFile(summaryPath, force);
-
-      // Step 7: Create logs directory
-      step(7, totalSteps, 'Creating logs directory...');
+      // Step 6: Create logs directory
+      step(6, totalSteps, 'Creating logs directory...');
       const logsPath = path.join(cwd, LOG_DIR);
       ensureDir(logsPath);
       success(`Created ${logsPath}/`);
@@ -522,8 +497,8 @@ export function initCommand(program: Command): void {
       // Add /logs/ to .gitignore
       addToGitignore(cwd);
 
-      // Step 8: Create .claude/commands directory and copy templates
-      step(8, totalSteps, 'Creating Claude slash commands...');
+      // Step 7: Create .claude/commands directory and copy templates
+      step(7, totalSteps, 'Creating Claude slash commands...');
       const commandsDir = path.join(cwd, '.claude', 'commands');
       ensureDir(commandsDir);
       success(`Created ${commandsDir}/`);
@@ -614,8 +589,8 @@ export function initCommand(program: Command): void {
       );
       templateSources.push({ name: 'night-watch-audit.md', source: auditResult.source });
 
-      // Step 9: Create config file
-      step(9, totalSteps, 'Creating configuration file...');
+      // Step 8: Create config file
+      step(8, totalSteps, 'Creating configuration file...');
       const configPath = path.join(cwd, CONFIG_FILE_NAME);
 
       if (fs.existsSync(configPath) && !force) {
@@ -653,8 +628,8 @@ export function initCommand(program: Command): void {
         success(`Created ${configPath}`);
       }
 
-      // Step 10: Create GitHub Project board (only when repo has a GitHub remote)
-      step(10, totalSteps, 'Setting up GitHub Project board...');
+      // Step 9: Create GitHub Project board (only when repo has a GitHub remote)
+      step(9, totalSteps, 'Setting up GitHub Project board...');
       const existingRaw = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<
         string,
         unknown
@@ -706,8 +681,8 @@ export function initCommand(program: Command): void {
         }
       }
 
-      // Step 11: Register in global registry
-      step(11, totalSteps, 'Registering project in global registry...');
+      // Step 10: Register in global registry
+      step(10, totalSteps, 'Registering project in global registry...');
       try {
         const { registerProject } = await import('@night-watch/core');
         const entry = registerProject(cwd);
@@ -718,14 +693,13 @@ export function initCommand(program: Command): void {
         );
       }
 
-      // Step 12: Print summary
-      step(12, totalSteps, 'Initialization complete!');
+      // Step 11: Print summary
+      step(11, totalSteps, 'Initialization complete!');
 
       // Summary with table
       header('Initialization Complete');
       const filesTable = createTable({ head: ['Created Files', ''] });
       filesTable.push(['PRD Directory', `${prdDir}/done/`]);
-      filesTable.push(['Summary File', `${prdDir}/NIGHT-WATCH-SUMMARY.md`]);
       filesTable.push(['Logs Directory', `${LOG_DIR}/`]);
       filesTable.push([
         'Slash Commands',
