@@ -219,9 +219,7 @@ describe('notification utilities', () => {
       });
 
       expect(text).toContain('PRD: 57-migrate-bash-business-logic-to-typescript');
-      expect(text).toContain(
-        'Branch: night-watch/57-migrate-bash-business-logic-to-typescript',
-      );
+      expect(text).toContain('Branch: night-watch/57-migrate-bash-business-logic-to-typescript');
       expect(text).toContain('Duration: 7200s');
       expect(text).toContain('Cause: Execution hit the max runtime limit and was terminated.');
       expect(text).toContain(

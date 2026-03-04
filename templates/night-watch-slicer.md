@@ -21,7 +21,7 @@ The PRD directory is: `{{PRD_DIR}}`
 
 ## Your Task
 
-0. **Load Planner Skill** - Read and apply `.claude/skills/prd-creator/SKILL.md` before writing the PRD. If unavailable, continue with the instructions in this template.
+0. **Load Planner Skill** - Read and apply `instructions/prd-creator.md` before writing the PRD. If unavailable, continue with the instructions in this template.
 
 1. **Explore the Codebase** - Read relevant existing files to understand the project structure, patterns, and conventions. Look for:
    - CLAUDE.md or similar AI assistant documentation files

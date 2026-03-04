@@ -125,7 +125,9 @@ export function buildDescription(ctx: INotificationContext): string {
   }
   if (ctx.event === 'run_timeout') {
     lines.push('Cause: Execution hit the max runtime limit and was terminated.');
-    lines.push('Resume: Progress is checkpointed on timeout, and the next run resumes from that branch state.');
+    lines.push(
+      'Resume: Progress is checkpointed on timeout, and the next run resumes from that branch state.',
+    );
     lines.push('Recommendation: Avoid huge PRDs; slice large work into smaller PRDs/phases.');
   }
   // Include retry info for review events when attempts > 1

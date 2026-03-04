@@ -7,6 +7,7 @@
 **Problem:** Three distinct code quality issues add maintenance burden and will compound as the codebase grows: (1) `buildEnvVars` and `getTelegramStatusWebhooks` are copy-pasted across four command files, (2) `mergeConfigs` in `config.ts` manually copies ~25 properties twice, and (3) a stale doc file describes a deleted system and misleads readers (including AI agents).
 
 **Files Analyzed:**
+
 - `packages/cli/src/commands/run.ts`
 - `packages/cli/src/commands/review.ts`
 - `packages/cli/src/commands/qa.ts`
@@ -15,6 +16,7 @@
 - `docs/slack-agent-system-architecture.md`
 
 **Current Behavior:**
+
 - `buildEnvVars` exists independently in all 4 command files with overlapping logic: `NW_PROVIDER_CMD`, `NW_DEFAULT_BRANCH`, `providerEnv` injection, `NW_DRY_RUN`, and `NW_EXECUTION_CONTEXT='agent'` are built identically in each
 - `getTelegramStatusWebhooks` is copy-pasted verbatim in both `qa.ts` and `slice.ts`
 - `mergeConfigs` in `config.ts` (lines 427–512) manually checks ~25 config properties twice — once for `fileConfig`, once for `envConfig` — ~85 lines of repetition
@@ -23,12 +25,14 @@
 ## Solution
 
 **Approach:**
+
 - Extract shared env-var building logic into `packages/cli/src/commands/shared/env-builder.ts` — a `buildBaseEnvVars(config, isDryRun)` function that handles the 5 always-identical fields, then each command calls it and extends with job-specific vars
 - Extract `getTelegramStatusWebhooks` into the same shared module (it's identical in qa.ts and slice.ts)
 - Replace the two-pass manual merge in `mergeConfigs` with a generic `mergeConfigLayer` helper that iterates over defined keys from a partial config — eliminating the duplication while preserving exact semantics (shallow-merge for nested objects, spread for arrays)
 - Delete `docs/slack-agent-system-architecture.md`
 
 **Key Decisions:**
+
 - No behavior changes — pure refactor. Output of `buildEnvVars` in each command must be bit-for-bit identical after the change
 - Keep each command's `buildEnvVars` as a named export (tests may reference them); just have them delegate to the shared base
 - `mergeConfigLayer` stays private to `config.ts` — not exported — since it's an implementation detail
@@ -51,6 +55,7 @@ config.ts mergeConfigLayer: private helper, called only inside mergeConfigs
 **User-visible outcome:** No behavior change; `buildEnvVars` in each command delegates to a shared base, removing ~40 lines of duplication.
 
 **Files (max 5):**
+
 - `packages/cli/src/commands/shared/env-builder.ts` — new file: `buildBaseEnvVars` + `getTelegramStatusWebhooks`
 - `packages/cli/src/commands/run.ts` — call `buildBaseEnvVars`, remove duplicate logic
 - `packages/cli/src/commands/review.ts` — call `buildBaseEnvVars`, remove duplicate logic
@@ -60,6 +65,7 @@ config.ts mergeConfigLayer: private helper, called only inside mergeConfigs
 **Implementation:**
 
 `buildBaseEnvVars` should set exactly these 5 fields shared by all jobs:
+
 ```ts
 env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[resolveJobProvider(config, jobType)];
 if (config.defaultBranch) env.NW_DEFAULT_BRANCH = config.defaultBranch;
@@ -69,15 +75,17 @@ env.NW_EXECUTION_CONTEXT = 'agent';
 ```
 
 Signature:
+
 ```ts
 export function buildBaseEnvVars(
   config: INightWatchConfig,
   jobType: 'executor' | 'reviewer' | 'qa' | 'slicer' | 'audit',
   isDryRun: boolean,
-): Record<string, string>
+): Record<string, string>;
 ```
 
 Each command's `buildEnvVars` becomes:
+
 ```ts
 export function buildEnvVars(config, options): Record<string, string> {
   const env = buildBaseEnvVars(config, 'executor', options.dryRun);
@@ -87,10 +95,11 @@ export function buildEnvVars(config, options): Record<string, string> {
 ```
 
 `getTelegramStatusWebhooks` (identical in qa.ts and slice.ts):
+
 ```ts
 export function getTelegramStatusWebhooks(
   config: INightWatchConfig,
-): Array<{ botToken: string; chatId: string }>
+): Array<{ botToken: string; chatId: string }>;
 ```
 
 - [ ] Create `packages/cli/src/commands/shared/env-builder.ts` with `buildBaseEnvVars` and `getTelegramStatusWebhooks`
@@ -119,20 +128,19 @@ export function getTelegramStatusWebhooks(
 **User-visible outcome:** No behavior change; `mergeConfigs` reduces from ~90 lines to ~30 by using a generic `mergeConfigLayer` helper.
 
 **Files (max 5):**
+
 - `packages/core/src/config.ts` — replace lines 427–512 with `mergeConfigLayer` helper
 
 **Implementation:**
 
 Add a private helper before `mergeConfigs`:
+
 ```ts
 /**
  * Apply a partial config layer onto a base, skipping undefined values.
  * Nested objects are shallow-merged; arrays are spread (not concatenated).
  */
-function mergeConfigLayer(
-  base: INightWatchConfig,
-  layer: Partial<INightWatchConfig>,
-): void {
+function mergeConfigLayer(base: INightWatchConfig, layer: Partial<INightWatchConfig>): void {
   for (const _key of Object.keys(layer) as Array<keyof INightWatchConfig>) {
     const value = layer[_key];
     if (value === undefined) continue;
@@ -143,7 +151,12 @@ function mergeConfigLayer(
         ...(base[_key] as object),
         ...(value as object),
       };
-    } else if (_key === 'roadmapScanner' || _key === 'qa' || _key === 'audit' || _key === 'jobProviders') {
+    } else if (
+      _key === 'roadmapScanner' ||
+      _key === 'qa' ||
+      _key === 'audit' ||
+      _key === 'jobProviders'
+    ) {
       (base as Record<string, unknown>)[_key] = {
         ...(base[_key] as object),
         ...(value as object),
@@ -158,6 +171,7 @@ function mergeConfigLayer(
 ```
 
 Then `mergeConfigs` becomes:
+
 ```ts
 function mergeConfigs(
   base: INightWatchConfig,
@@ -169,8 +183,14 @@ function mergeConfigs(
   mergeConfigLayer(merged, envConfig);
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
-  merged.reviewerMaxRetries = sanitizeReviewerMaxRetries(merged.reviewerMaxRetries, DEFAULT_REVIEWER_MAX_RETRIES);
-  merged.reviewerRetryDelay = sanitizeReviewerRetryDelay(merged.reviewerRetryDelay, DEFAULT_REVIEWER_RETRY_DELAY);
+  merged.reviewerMaxRetries = sanitizeReviewerMaxRetries(
+    merged.reviewerMaxRetries,
+    DEFAULT_REVIEWER_MAX_RETRIES,
+  );
+  merged.reviewerRetryDelay = sanitizeReviewerRetryDelay(
+    merged.reviewerRetryDelay,
+    DEFAULT_REVIEWER_RETRY_DELAY,
+  );
 
   return merged;
 }
@@ -193,9 +213,11 @@ The existing `packages/core/src/__tests__/config.test.ts` suite covers this full
 **User-visible outcome:** `docs/slack-agent-system-architecture.md` is removed; AI agents and developers reading the codebase no longer encounter documentation for a deleted system.
 
 **Files:**
+
 - `docs/slack-agent-system-architecture.md` — delete
 
 **Implementation:**
+
 - [ ] Delete `docs/slack-agent-system-architecture.md`
 - [ ] Verify no other doc links to it (check `docs/*.md` for references)
 

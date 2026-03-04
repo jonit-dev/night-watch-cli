@@ -30,7 +30,7 @@ You are the Night Watch agent. Your job is to autonomously pick up PRD tickets a
    d. `cd` into the worktree and run package install (npm install, yarn install, or pnpm install as appropriate). Keep all implementation steps inside this worktree.
 
    e. **Implement the PRD using the PRD Executor workflow**:
-   - Read `.claude/skills/prd-executor/SKILL.md` (preferred) or `.claude/commands/prd-executor.md` (fallback), and follow the full execution pipeline.
+   - Read `instructions/prd-executor.md` and follow the full execution pipeline.
    - This means: parse the PRD phases, build a dependency graph, create a task list, and execute phases in parallel waves using agent swarms.
    - Maximize parallelism — launch all independent phases concurrently.
    - Run the project's verify/test command between waves to catch issues early.

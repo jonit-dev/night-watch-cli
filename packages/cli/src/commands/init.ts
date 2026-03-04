@@ -497,11 +497,11 @@ export function initCommand(program: Command): void {
       // Add /logs/ to .gitignore
       addToGitignore(cwd);
 
-      // Step 7: Create .claude/commands directory and copy templates
-      step(7, totalSteps, 'Creating Claude slash commands...');
-      const commandsDir = path.join(cwd, '.claude', 'commands');
-      ensureDir(commandsDir);
-      success(`Created ${commandsDir}/`);
+      // Step 7: Create instructions directory and copy templates
+      step(7, totalSteps, 'Creating instructions directory...');
+      const instructionsDir = path.join(cwd, 'instructions');
+      ensureDir(instructionsDir);
+      success(`Created ${instructionsDir}/`);
 
       // Load existing config (if present) to get templatesDir
       const existingConfig = loadConfig(cwd);
@@ -517,7 +517,7 @@ export function initCommand(program: Command): void {
       const nwResolution = resolveTemplatePath('night-watch.md', customTemplatesDir, TEMPLATES_DIR);
       const nwResult = processTemplate(
         'night-watch.md',
-        path.join(commandsDir, 'night-watch.md'),
+        path.join(instructionsDir, 'night-watch.md'),
         replacements,
         force,
         nwResolution.path,
@@ -533,7 +533,7 @@ export function initCommand(program: Command): void {
       );
       const peResult = processTemplate(
         'prd-executor.md',
-        path.join(commandsDir, 'prd-executor.md'),
+        path.join(instructionsDir, 'prd-executor.md'),
         replacements,
         force,
         peResolution.path,
@@ -549,7 +549,7 @@ export function initCommand(program: Command): void {
       );
       const prResult = processTemplate(
         'night-watch-pr-reviewer.md',
-        path.join(commandsDir, 'night-watch-pr-reviewer.md'),
+        path.join(instructionsDir, 'night-watch-pr-reviewer.md'),
         replacements,
         force,
         prResolution.path,
@@ -565,7 +565,7 @@ export function initCommand(program: Command): void {
       );
       const qaResult = processTemplate(
         'night-watch-qa.md',
-        path.join(commandsDir, 'night-watch-qa.md'),
+        path.join(instructionsDir, 'night-watch-qa.md'),
         replacements,
         force,
         qaResolution.path,
@@ -581,7 +581,7 @@ export function initCommand(program: Command): void {
       );
       const auditResult = processTemplate(
         'night-watch-audit.md',
-        path.join(commandsDir, 'night-watch-audit.md'),
+        path.join(instructionsDir, 'night-watch-audit.md'),
         replacements,
         force,
         auditResolution.path,
@@ -702,16 +702,16 @@ export function initCommand(program: Command): void {
       filesTable.push(['PRD Directory', `${prdDir}/done/`]);
       filesTable.push(['Logs Directory', `${LOG_DIR}/`]);
       filesTable.push([
-        'Slash Commands',
-        `.claude/commands/night-watch.md (${templateSources[0].source})`,
+        'Instructions',
+        `instructions/night-watch.md (${templateSources[0].source})`,
       ]);
-      filesTable.push(['', `.claude/commands/prd-executor.md (${templateSources[1].source})`]);
+      filesTable.push(['', `instructions/prd-executor.md (${templateSources[1].source})`]);
       filesTable.push([
         '',
-        `.claude/commands/night-watch-pr-reviewer.md (${templateSources[2].source})`,
+        `instructions/night-watch-pr-reviewer.md (${templateSources[2].source})`,
       ]);
-      filesTable.push(['', `.claude/commands/night-watch-qa.md (${templateSources[3].source})`]);
-      filesTable.push(['', `.claude/commands/night-watch-audit.md (${templateSources[4].source})`]);
+      filesTable.push(['', `instructions/night-watch-qa.md (${templateSources[3].source})`]);
+      filesTable.push(['', `instructions/night-watch-audit.md (${templateSources[4].source})`]);
       filesTable.push(['Config File', CONFIG_FILE_NAME]);
       filesTable.push(['Global Registry', '~/.night-watch/projects.json']);
       console.log(filesTable.toString());

@@ -217,11 +217,21 @@ Artifacts: ${QA_ARTIFACTS}"
     continue
   fi
 
+  QA_PROMPT_PATH=$(resolve_instruction_path "${QA_WORKTREE_DIR}" "night-watch-qa.md" || true)
+  if [ -z "${QA_PROMPT_PATH}" ]; then
+    log "FAIL: Missing QA prompt file for PR #${pr_num}. Checked instructions/, .claude/commands/, and bundled templates/"
+    EXIT_CODE=1
+    break
+  fi
+  QA_PROMPT=$(cat "${QA_PROMPT_PATH}")
+  QA_PROMPT_REF=$(instruction_ref_for_prompt "${QA_WORKTREE_DIR}" "${QA_PROMPT_PATH}")
+  log "QA: PR #${pr_num} — using prompt from ${QA_PROMPT_REF}"
+
   case "${PROVIDER_CMD}" in
     claude)
       if (
         cd "${QA_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
-          claude -p "/night-watch-qa" \
+          claude -p "${QA_PROMPT}" \
             --dangerously-skip-permissions \
             >> "${LOG_FILE}" 2>&1
       ); then
@@ -241,7 +251,7 @@ Artifacts: ${QA_ARTIFACTS}"
         cd "${QA_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
           codex --quiet \
             --yolo \
-            --prompt "$(cat "${QA_WORKTREE_DIR}/.claude/commands/night-watch-qa.md")" \
+            --prompt "${QA_PROMPT}" \
             >> "${LOG_FILE}" 2>&1
       ); then
         log "QA: PR #${pr_num} — provider completed successfully"
