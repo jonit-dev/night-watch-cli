@@ -14,17 +14,89 @@ import * as path from 'path';
 export const CRONTAB_MARKER_PREFIX = '# night-watch-cli:';
 
 /**
+ * Legacy script names used by older Night Watch installs.
+ */
+const LEGACY_SCRIPT_NAMES = [
+  'night-watch-cron.sh',
+  'night-watch-pr-reviewer-cron.sh',
+  'night-watch-qa-cron.sh',
+  'night-watch-audit-cron.sh',
+  'night-watch-slice-cron.sh',
+  'night-watch-slicer-cron.sh',
+];
+
+/**
+ * Check whether a crontab line is a Night Watch-managed entry.
+ * Marker-based detection is preferred, but we also support legacy
+ * markerless lines that invoke night-watch commands/scripts directly.
+ */
+function isNightWatchEntry(line: string): boolean {
+  if (line.includes(CRONTAB_MARKER_PREFIX)) {
+    return true;
+  }
+
+  if (line.includes('night-watch')) {
+    return true;
+  }
+
+  return LEGACY_SCRIPT_NAMES.some((scriptName) => line.includes(scriptName));
+}
+
+/**
+ * Normalize extracted cd path values for stable comparisons.
+ */
+function normalizePathValue(value: string): string {
+  const trimmed = value.trim();
+
+  let unquoted = trimmed;
+  if (
+    (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+    (trimmed.startsWith('"') && trimmed.endsWith('"'))
+  ) {
+    unquoted = trimmed.slice(1, -1);
+  }
+
+  return unquoted.replace(/\\ /g, ' ').replace(/\/+$/, '');
+}
+
+/**
+ * Extract the path used by "cd ... &&" or "cd ...;" from a cron line.
+ */
+function extractCdPath(line: string): string | null {
+  const match = line.match(/\bcd\s+((?:'[^']*'|"[^"]*"|[^;&])+?)\s*(?:&&|;)/);
+  if (!match) {
+    return null;
+  }
+  return normalizePathValue(match[1]);
+}
+
+/**
  * Check whether a crontab line belongs to the given project directory.
- * Supports unquoted, single-quoted, and double-quoted cd paths.
+ * Supports marker-based and legacy markerless entries.
  */
 function isEntryForProject(line: string, projectDir: string): boolean {
-  if (!line.includes(CRONTAB_MARKER_PREFIX)) {
+  if (!isNightWatchEntry(line)) {
     return false;
   }
 
-  // eslint-disable-next-line sonarjs/slow-regex
   const normalized = projectDir.replace(/\/+$/, '');
-  const candidates = [`cd ${normalized}`, `cd '${normalized}'`, `cd "${normalized}"`];
+
+  const extractedPath = extractCdPath(line);
+  if (extractedPath !== null) {
+    return extractedPath === normalized;
+  }
+
+  const escaped = normalized.replace(/ /g, '\\ ');
+  const candidates = [
+    `cd ${normalized}`,
+    `cd ${normalized}/`,
+    `cd '${normalized}'`,
+    `cd '${normalized}/'`,
+    `cd "${normalized}"`,
+    `cd "${normalized}/"`,
+    `cd ${escaped}`,
+    `cd ${escaped}/`,
+  ];
 
   return candidates.some((candidate) => line.includes(candidate));
 }
