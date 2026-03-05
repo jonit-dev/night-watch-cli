@@ -14,7 +14,7 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
     setupFiles: ['./src/__tests__/setup.ts'],
-    include: ['src/**/__tests__/**/*.test.tsx', 'pages/**/__tests__/**/*.test.tsx'],
+    include: ['src/**/__tests__/**/*.test.{ts,tsx}', 'utils/**/*.test.ts', 'pages/**/__tests__/**/*.test.{ts,tsx}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
