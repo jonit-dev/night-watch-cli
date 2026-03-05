@@ -25,6 +25,11 @@ LOG_FILE="${LOG_DIR}/executor.log"
 MAX_RUNTIME="${NW_MAX_RUNTIME:-7200}"  # 2 hours
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
+# Human-friendly provider label used in PR comments, board comments, and commit attribution.
+# NW_PROVIDER_LABEL is set by the Node CLI (derived from config.providerLabel or auto-detected).
+# EFFECTIVE_PROVIDER_LABEL may be updated after execution if rate-limit fallback is triggered.
+PROVIDER_LABEL="${NW_PROVIDER_LABEL:-${PROVIDER_CMD}}"
+EFFECTIVE_PROVIDER_LABEL="${PROVIDER_LABEL}"
 BRANCH_PREFIX="${NW_BRANCH_PREFIX:-night-watch}"
 
 # Ensure NVM / Node / Claude are on PATH
@@ -289,7 +294,7 @@ finalize_prd_done() {
       fi
       git -C "${BOOKKEEP_WORKTREE_DIR}" commit -m "chore: mark ${ELIGIBLE_PRD} as done (${reason})
 
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" || true
+Co-Authored-By: Night Watch [${EFFECTIVE_PROVIDER_LABEL}] <noreply@anthropic.com>" || true
       git -C "${BOOKKEEP_WORKTREE_DIR}" push origin "HEAD:${DEFAULT_BRANCH}" || true
       log "DONE: ${ELIGIBLE_PRD} ${reason}, PRD moved to done/"
       return 0
@@ -521,6 +526,8 @@ if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
   fi
 
   log "RATE-LIMIT-FALLBACK: Native Claude exited with code ${EXIT_CODE}"
+  # Update effective provider label to reflect actual executor used
+  EFFECTIVE_PROVIDER_LABEL="Claude ${FALLBACK_MODEL} (fallback)"
 fi
 
 if [ ${EXIT_CODE} -eq 0 ]; then
@@ -531,12 +538,19 @@ if [ ${EXIT_CODE} -eq 0 ]; then
       PR_URL=$(gh pr list --state open --json headRefName,url \
         --jq ".[] | select(.headRefName == \"${BRANCH_NAME}\") | .url" 2>/dev/null || true)
       if [ -n "${PR_URL}" ]; then
-        "${NW_CLI}" board comment "${ISSUE_NUMBER}" --body "PR opened: ${PR_URL}" 2>>"${LOG_FILE}" || true
+        "${NW_CLI}" board comment "${ISSUE_NUMBER}" --body "PR opened: ${PR_URL} (via ${EFFECTIVE_PROVIDER_LABEL})" 2>>"${LOG_FILE}" || true
+        gh pr comment "${PR_URL}" --body "> 🤖 Implemented by ${EFFECTIVE_PROVIDER_LABEL}" 2>>"${LOG_FILE}" || true
       fi
       "${NW_CLI}" board close-issue "${ISSUE_NUMBER}" 2>>"${LOG_FILE}" || \
         "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Done" 2>>"${LOG_FILE}" || true
       emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
     elif finalize_prd_done "implemented, PR opened on ${BRANCH_NAME}"; then
+      # Non-board mode: post attribution comment to the PR
+      NON_BOARD_PR_URL=$(gh pr list --state open --json headRefName,url \
+        --jq ".[] | select(.headRefName == \"${BRANCH_NAME}\") | .url" 2>/dev/null || true)
+      if [ -n "${NON_BOARD_PR_URL}" ]; then
+        gh pr comment "${NON_BOARD_PR_URL}" --body "> 🤖 Implemented by ${EFFECTIVE_PROVIDER_LABEL}" 2>>"${LOG_FILE}" || true
+      fi
       emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
     else
       night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
@@ -562,7 +576,7 @@ if [ ${EXIT_CODE} -eq 0 ]; then
       if [ -n "${ISSUE_NUMBER}" ]; then
         "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
         "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
-          --body "Execution completed but no PR was found. Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
+          --body "Execution completed but no PR was found (via ${EFFECTIVE_PROVIDER_LABEL}). Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
       fi
       night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
       emit_result "failure_no_pr_after_success" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
@@ -575,7 +589,7 @@ elif [ ${EXIT_CODE} -eq 124 ]; then
   if [ -n "${ISSUE_NUMBER}" ]; then
     "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
     "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
-      --body "Execution timed out after ${MAX_RUNTIME}s. Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
+      --body "Execution timed out after ${MAX_RUNTIME}s (via ${EFFECTIVE_PROVIDER_LABEL}). Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
     TIMEOUT_FOLLOWUP_COMMENT=$(build_timeout_followup_comment \
       "${MAX_RUNTIME}" \
       "${ELIGIBLE_PRD}" \
@@ -590,7 +604,7 @@ else
   if [ -n "${ISSUE_NUMBER}" ]; then
     "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
     "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
-      --body "Execution failed with exit code ${EXIT_CODE}. Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
+      --body "Execution failed with exit code ${EXIT_CODE} (via ${EFFECTIVE_PROVIDER_LABEL}). Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
   fi
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code "${EXIT_CODE}" 2>/dev/null || true
   emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"

@@ -96,6 +96,13 @@ export interface INightWatchConfig {
   providerEnv: Record<string, string>;
 
   /**
+   * Optional human-friendly label for the AI provider shown in PR bodies, review comments,
+   * board comments, and commit co-authors. Auto-derived if not set.
+   * e.g. "GLM-5", "Codex", "Claude" — useful when using a proxy (ANTHROPIC_BASE_URL).
+   */
+  providerLabel?: string;
+
+  /**
    * When true, automatically fall back to native Claude (OAuth / direct Anthropic API)
    * after the first rate-limit (429) on a proxy provider (e.g. GLM-5 via api.z.ai).
    * A Telegram warning is sent immediately when the fallback is triggered.

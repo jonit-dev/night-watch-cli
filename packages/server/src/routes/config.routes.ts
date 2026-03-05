@@ -31,6 +31,21 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
     }
   }
 
+  if (changes.providerLabel !== undefined && typeof changes.providerLabel !== 'string') {
+    return 'providerLabel must be a string';
+  }
+
+  if (changes.defaultBranch !== undefined && typeof changes.defaultBranch !== 'string') {
+    return 'defaultBranch must be a string';
+  }
+
+  if (
+    changes.branchPrefix !== undefined &&
+    (typeof changes.branchPrefix !== 'string' || changes.branchPrefix.trim().length === 0)
+  ) {
+    return 'branchPrefix must be a non-empty string';
+  }
+
   if (changes.reviewerEnabled !== undefined && typeof changes.reviewerEnabled !== 'boolean') {
     return 'reviewerEnabled must be a boolean';
   }
@@ -67,6 +82,35 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
     (typeof changes.maxLogSize !== 'number' || changes.maxLogSize < 0)
   ) {
     return 'maxLogSize must be a positive number';
+  }
+
+  if (
+    changes.maxRetries !== undefined &&
+    (typeof changes.maxRetries !== 'number' ||
+      !Number.isInteger(changes.maxRetries) ||
+      changes.maxRetries < 1)
+  ) {
+    return 'maxRetries must be an integer >= 1';
+  }
+
+  if (
+    changes.reviewerMaxRetries !== undefined &&
+    (typeof changes.reviewerMaxRetries !== 'number' ||
+      !Number.isInteger(changes.reviewerMaxRetries) ||
+      changes.reviewerMaxRetries < 0 ||
+      changes.reviewerMaxRetries > 10)
+  ) {
+    return 'reviewerMaxRetries must be an integer between 0 and 10';
+  }
+
+  if (
+    changes.reviewerRetryDelay !== undefined &&
+    (typeof changes.reviewerRetryDelay !== 'number' ||
+      !Number.isInteger(changes.reviewerRetryDelay) ||
+      changes.reviewerRetryDelay < 0 ||
+      changes.reviewerRetryDelay > 300)
+  ) {
+    return 'reviewerRetryDelay must be an integer between 0 and 300';
   }
 
   if (
@@ -137,6 +181,21 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
     }
   }
 
+  if (changes.providerEnv !== undefined) {
+    if (typeof changes.providerEnv !== 'object' || changes.providerEnv === null) {
+      return 'providerEnv must be an object';
+    }
+
+    for (const [key, value] of Object.entries(changes.providerEnv)) {
+      if (key.trim().length === 0) {
+        return 'providerEnv keys must be non-empty strings';
+      }
+      if (typeof value !== 'string') {
+        return 'providerEnv values must be strings';
+      }
+    }
+  }
+
   if (changes.autoMerge !== undefined && typeof changes.autoMerge !== 'boolean') {
     return 'autoMerge must be a boolean';
   }
@@ -174,6 +233,14 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
     (typeof changes.prdDir !== 'string' || changes.prdDir.trim().length === 0)
   ) {
     return 'prdDir must be a non-empty string';
+  }
+
+  // templatesDir validation
+  if (
+    changes.templatesDir !== undefined &&
+    (typeof changes.templatesDir !== 'string' || changes.templatesDir.trim().length === 0)
+  ) {
+    return 'templatesDir must be a non-empty string';
   }
 
   // cronScheduleOffset validation
@@ -297,6 +364,30 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
   if (changes.boardProvider !== undefined) {
     if (typeof changes.boardProvider !== 'object' || changes.boardProvider === null) {
       return 'boardProvider must be an object';
+    }
+
+    if (
+      changes.boardProvider.provider !== undefined &&
+      !['github', 'jira', 'linear', 'local'].includes(changes.boardProvider.provider)
+    ) {
+      return 'boardProvider.provider must be one of: github, jira, linear, local';
+    }
+
+    if (
+      changes.boardProvider.projectNumber !== undefined &&
+      (typeof changes.boardProvider.projectNumber !== 'number' ||
+        !Number.isInteger(changes.boardProvider.projectNumber) ||
+        changes.boardProvider.projectNumber <= 0)
+    ) {
+      return 'boardProvider.projectNumber must be an integer > 0';
+    }
+
+    if (
+      changes.boardProvider.repo !== undefined &&
+      (typeof changes.boardProvider.repo !== 'string' ||
+        changes.boardProvider.repo.trim().length === 0)
+    ) {
+      return 'boardProvider.repo must be a non-empty string';
     }
 
     if (

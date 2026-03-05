@@ -120,6 +120,7 @@ export interface INightWatchConfig {
   reviewerMaxRetries: number;
   reviewerRetryDelay: number;
   provider: Provider;
+  providerLabel?: string;
   executorEnabled?: boolean;
   reviewerEnabled: boolean;
   providerEnv: Record<string, string>;

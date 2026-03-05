@@ -328,6 +328,34 @@ describe('server API', () => {
       expect(response.body).toHaveProperty('error');
     });
 
+    it('should validate providerLabel is a string', async () => {
+      const response = await request(app).put('/api/config').send({ providerLabel: 123 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('providerLabel');
+    });
+
+    it('should accept providerLabel string (including empty string to clear)', async () => {
+      const response = await request(app).put('/api/config').send({ providerLabel: '' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.providerLabel).toBeUndefined();
+    });
+
+    it('should validate defaultBranch is a string', async () => {
+      const response = await request(app).put('/api/config').send({ defaultBranch: 42 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('defaultBranch');
+    });
+
+    it('should validate branchPrefix is non-empty string', async () => {
+      const response = await request(app).put('/api/config').send({ branchPrefix: '' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('branchPrefix');
+    });
+
     it('should validate reviewerEnabled is boolean', async () => {
       const response = await request(app).put('/api/config').send({ reviewerEnabled: 'true' });
 
@@ -354,6 +382,38 @@ describe('server API', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('minReviewScore');
+    });
+
+    it('should validate maxRetries is integer >= 1', async () => {
+      const response = await request(app).put('/api/config').send({ maxRetries: 0 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('maxRetries');
+    });
+
+    it('should validate reviewerMaxRetries range', async () => {
+      const response = await request(app).put('/api/config').send({ reviewerMaxRetries: 11 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('reviewerMaxRetries');
+    });
+
+    it('should validate reviewerRetryDelay range', async () => {
+      const response = await request(app).put('/api/config').send({ reviewerRetryDelay: 301 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('reviewerRetryDelay');
+    });
+
+    it('should accept valid retry configuration fields', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ maxRetries: 4, reviewerMaxRetries: 3, reviewerRetryDelay: 45 });
+
+      expect(response.status).toBe(200);
+      expect(response.body.maxRetries).toBe(4);
+      expect(response.body.reviewerMaxRetries).toBe(3);
+      expect(response.body.reviewerRetryDelay).toBe(45);
     });
 
     it('should validate branchPatterns is array of strings', async () => {
@@ -432,6 +492,24 @@ describe('server API', () => {
       expect(response.status).toBe(200);
     });
 
+    it('should validate providerEnv values are strings', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ providerEnv: { API_KEY: 123 } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('providerEnv');
+    });
+
+    it('should accept valid providerEnv object', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ providerEnv: { API_KEY: 'abc', BASE_URL: 'https://example.com' } });
+
+      expect(response.status).toBe(200);
+      expect(response.body.providerEnv.API_KEY).toBe('abc');
+    });
+
     it('should accept valid autoMerge boolean', async () => {
       const response = await request(app).put('/api/config').send({ autoMerge: true });
 
@@ -502,6 +580,13 @@ describe('server API', () => {
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('prdDir', 'docs/prd');
+    });
+
+    it('should validate templatesDir is non-empty string', async () => {
+      const response = await request(app).put('/api/config').send({ templatesDir: '' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('templatesDir');
     });
 
     it('should validate cronScheduleOffset is between 0 and 59', async () => {
@@ -702,6 +787,51 @@ describe('server API', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.boardProvider.enabled).toBe(false);
+    });
+
+    it('should validate boardProvider.provider value', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ boardProvider: { provider: 'trello' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('boardProvider.provider');
+    });
+
+    it('should validate boardProvider.projectNumber', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ boardProvider: { projectNumber: 0 } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('boardProvider.projectNumber');
+    });
+
+    it('should validate boardProvider.repo is non-empty string when provided', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ boardProvider: { repo: '' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('boardProvider.repo');
+    });
+
+    it('should accept valid boardProvider details', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          boardProvider: {
+            enabled: true,
+            provider: 'github',
+            projectNumber: 12,
+            repo: 'owner/repo',
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.boardProvider.provider).toBe('github');
+      expect(response.body.boardProvider.projectNumber).toBe(12);
+      expect(response.body.boardProvider.repo).toBe('owner/repo');
     });
   });
 

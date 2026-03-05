@@ -1,34 +1,35 @@
+import { Activity, AlertCircle, Check, Edit2, Eye, EyeOff, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react';
 import React from 'react';
-import { Save, RotateCcw, Activity, AlertCircle, Plus, Trash2, Eye, EyeOff, Edit2, X, Check } from 'lucide-react';
-import Button from '../components/ui/Button';
-import Card from '../components/ui/Card';
-import Input from '../components/ui/Input';
-import Select from '../components/ui/Select';
-import Tabs from '../components/ui/Tabs';
-import Switch from '../components/ui/Switch';
-import CronScheduleInput from '../components/ui/CronScheduleInput';
-import { useStore } from '../store/useStore';
 import {
+  ClaudeModel,
   fetchConfig,
   fetchDoctor,
+  IAuditConfig,
   IBoardProviderConfig,
+  IJobProviders,
   INightWatchConfig,
   INotificationConfig,
-  IWebhookConfig,
+  IQaConfig,
   IRoadmapScannerConfig,
-  IJobProviders,
+  IWebhookConfig,
   MergeMethod,
+  QaArtifacts,
+  toggleRoadmapScanner,
   updateConfig,
   useApi,
-  toggleRoadmapScanner,
-  ClaudeModel,
-  IQaConfig,
-  IAuditConfig,
-  QaArtifacts,
 } from '../api';
+import Button from '../components/ui/Button';
+import Card from '../components/ui/Card';
+import CronScheduleInput from '../components/ui/CronScheduleInput';
+import Input from '../components/ui/Input';
+import Select from '../components/ui/Select';
+import Switch from '../components/ui/Switch';
+import Tabs from '../components/ui/Tabs';
+import { useStore } from '../store/useStore';
 
 type ConfigForm = {
   provider: INightWatchConfig['provider'];
+  providerLabel: string;
   defaultBranch: string;
   prdDir: string;
   branchPrefix: string;
@@ -62,6 +63,7 @@ type ConfigForm = {
 
 const toFormState = (config: INightWatchConfig): ConfigForm => ({
   provider: config.provider,
+  providerLabel: config.providerLabel ?? '',
   defaultBranch: config.defaultBranch,
   prdDir: config.prdDir || 'docs/prds',
   branchPrefix: config.branchPrefix,
@@ -104,7 +106,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   },
   audit: config.audit || {
     enabled: true,
-    schedule: '0 2,8,14,20 * * *',
+    schedule: '0 3 * * *',
     maxRuntime: 1800,
   },
 });
@@ -132,6 +134,8 @@ const MaskedValue: React.FC<{ value: string; isSensitive: boolean }> = ({ value,
         type="button"
         onClick={() => setShow(!show)}
         className="text-slate-500 hover:text-slate-300"
+        aria-label={show ? 'Hide sensitive value' : 'Show sensitive value'}
+        title={show ? 'Hide sensitive value' : 'Show sensitive value'}
       >
         {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
       </button>
@@ -225,6 +229,8 @@ const ProviderEnvEditor: React.FC<{
                       type="button"
                       onClick={handleSaveEdit}
                       className="p-1 text-green-400 hover:text-green-300"
+                      aria-label={`Save ${key} value`}
+                      title={`Save ${key} value`}
                     >
                       <Check className="h-4 w-4" />
                     </button>
@@ -232,6 +238,8 @@ const ProviderEnvEditor: React.FC<{
                       type="button"
                       onClick={handleCancelEdit}
                       className="p-1 text-slate-400 hover:text-slate-300"
+                      aria-label={`Cancel editing ${key}`}
+                      title={`Cancel editing ${key}`}
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -246,6 +254,8 @@ const ProviderEnvEditor: React.FC<{
                     type="button"
                     onClick={() => handleStartEdit(key)}
                     className="p-1 text-slate-400 hover:text-slate-200"
+                    aria-label={`Edit ${key}`}
+                    title={`Edit ${key}`}
                   >
                     <Edit2 className="h-4 w-4" />
                   </button>
@@ -253,6 +263,8 @@ const ProviderEnvEditor: React.FC<{
                     type="button"
                     onClick={() => handleDelete(key)}
                     className="p-1 text-red-400 hover:text-red-300"
+                    aria-label={`Delete ${key}`}
+                    title={`Delete ${key}`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -409,11 +421,10 @@ const WebhookEditor: React.FC<{
               key={opt.value}
               type="button"
               onClick={() => onChange({ ...webhook, events: toggleEvent(webhook.events, opt.value) })}
-              className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-                webhook.events.includes(opt.value)
+              className={`px-3 py-1.5 rounded-md text-sm transition-colors ${webhook.events.includes(opt.value)
                   ? 'bg-indigo-600 text-white'
                   : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-              }`}
+                }`}
             >
               {opt.label}
             </button>
@@ -485,6 +496,8 @@ const WebhookEditor: React.FC<{
                       type="button"
                       onClick={() => setEditingIndex(index)}
                       className="p-2 text-slate-400 hover:text-slate-200"
+                      aria-label={`Edit ${webhook.type} webhook`}
+                      title={`Edit ${webhook.type} webhook`}
                     >
                       <Edit2 className="h-4 w-4" />
                     </button>
@@ -492,6 +505,8 @@ const WebhookEditor: React.FC<{
                       type="button"
                       onClick={() => handleDeleteWebhook(index)}
                       className="p-2 text-red-400 hover:text-red-300"
+                      aria-label={`Delete ${webhook.type} webhook`}
+                      title={`Delete ${webhook.type} webhook`}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -564,6 +579,8 @@ const TagInput: React.FC<{
               type="button"
               onClick={() => handleRemove(tag)}
               className="text-slate-500 hover:text-red-400"
+              aria-label={`Remove ${tag}`}
+              title={`Remove ${tag}`}
             >
               <X className="h-3 w-3" />
             </button>
@@ -579,7 +596,7 @@ const TagInput: React.FC<{
           placeholder={placeholder}
           className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 placeholder-slate-500"
         />
-        <Button onClick={handleAdd} disabled={!input.trim()}>
+        <Button onClick={handleAdd} disabled={!input.trim()} aria-label={`Add ${label.toLowerCase()} value`}>
           <Plus className="h-4 w-4" />
         </Button>
       </div>
@@ -640,6 +657,7 @@ const Settings: React.FC = () => {
     try {
       const savedConfig = await updateConfig({
         provider: form.provider,
+        providerLabel: form.providerLabel.trim(),
         defaultBranch: form.defaultBranch,
         prdDir: form.prdDir,
         branchPrefix: form.branchPrefix,
@@ -754,6 +772,12 @@ const Settings: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
               <Input label="Project Name" value={projectName} disabled />
               <Input label="Default Branch" value={form.defaultBranch} onChange={(e) => updateField('defaultBranch', e.target.value)} />
+              <Input
+                label="PRD Directory"
+                value={form.prdDir}
+                onChange={(e) => updateField('prdDir', e.target.value)}
+                helperText="Directory containing PRD files (relative to project root)"
+              />
               <Input label="Branch Prefix" value={form.branchPrefix} onChange={(e) => updateField('branchPrefix', e.target.value)} />
               <div className="md:col-span-2">
                 <Switch
@@ -789,6 +813,16 @@ const Settings: React.FC = () => {
                 />
               )}
             </div>
+
+            <div className="pt-4 mt-4 border-t border-slate-800">
+              <TagInput
+                label="Branch Patterns"
+                value={form.branchPatterns}
+                onChange={(patterns) => updateField('branchPatterns', patterns)}
+                placeholder="e.g., feat/"
+                helpText="Branch patterns matched by reviewer and related automation jobs"
+              />
+            </div>
           </div>
         </Card>
       ),
@@ -812,6 +846,13 @@ const Settings: React.FC = () => {
                   { label: 'Anthropic (Claude)', value: 'claude' },
                   { label: 'OpenAI (Codex)', value: 'codex' },
                 ]}
+              />
+              <Input
+                label="Provider Label"
+                value={form.providerLabel}
+                onChange={(e) => updateField('providerLabel', e.target.value)}
+                placeholder="e.g. GLM-5 (auto-derived if blank)"
+                helperText="Human-friendly name shown in PR comments, review footers, and commit attribution"
               />
               <Select
                 label="Claude Model"
@@ -853,26 +894,28 @@ const Settings: React.FC = () => {
               ] as const).map(({ key, label }) => (
                 <div
                   key={key}
-                  className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40"
+                  className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40 gap-4"
                 >
-                  <span className="text-sm font-medium text-slate-200">{label}</span>
-                  <Select
-                    value={form.jobProviders[key] ?? ''}
-                    onChange={(val) => {
-                      const newJobProviders = { ...form.jobProviders };
-                      if (val === '') {
-                        delete newJobProviders[key];
-                      } else {
-                        newJobProviders[key] = val as 'claude' | 'codex';
-                      }
-                      updateField('jobProviders', newJobProviders);
-                    }}
-                    options={[
-                      { label: 'Use Global (default)', value: '' },
-                      { label: 'Anthropic (Claude)', value: 'claude' },
-                      { label: 'OpenAI (Codex)', value: 'codex' },
-                    ]}
-                  />
+                  <span className="text-sm font-medium text-slate-200 whitespace-nowrap">{label}</span>
+                  <div className="w-64">
+                    <Select
+                      value={form.jobProviders[key] ?? ''}
+                      onChange={(val) => {
+                        const newJobProviders = { ...form.jobProviders };
+                        if (val === '') {
+                          delete newJobProviders[key];
+                        } else {
+                          newJobProviders[key] = val as 'claude' | 'codex';
+                        }
+                        updateField('jobProviders', newJobProviders);
+                      }}
+                      options={[
+                        { label: 'Use Global (default)', value: '' },
+                        { label: 'Anthropic (Claude)', value: 'claude' },
+                        { label: 'OpenAI (Codex)', value: 'codex' },
+                      ]}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
@@ -1360,9 +1403,7 @@ const Settings: React.FC = () => {
       content: (
         <Card className="p-6 space-y-6">
           <h3 className="text-lg font-medium text-slate-200">Advanced Settings</h3>
-          <p className="text-sm text-slate-400">
-            Less commonly used configuration options
-          </p>
+          <p className="text-sm text-slate-400">Templates, retry policy, and PRD execution priority</p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Input
@@ -1385,14 +1426,6 @@ const Settings: React.FC = () => {
           </div>
 
           <div className="pt-4 border-t border-slate-800 space-y-4">
-            <TagInput
-              label="Branch Patterns"
-              value={form.branchPatterns}
-              onChange={(patterns) => updateField('branchPatterns', patterns)}
-              placeholder="e.g., feat/"
-              helpText="Patterns to match for PR reviews"
-            />
-
             <TagInput
               label="PRD Priority"
               value={form.prdPriority}
