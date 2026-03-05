@@ -107,6 +107,30 @@ describe_qa_artifacts() {
   esac
 }
 
+normalize_qa_screenshot_url() {
+  local raw_url="${1:-}"
+  if [ -z "${raw_url}" ]; then
+    return 0
+  fi
+
+  if printf '%s' "${raw_url}" | grep -Eq '^https?://'; then
+    printf '%s' "${raw_url}"
+    return 0
+  fi
+
+  if [ -n "${REPO:-}" ] && printf '%s' "${raw_url}" | grep -q '^\.\./blob/'; then
+    printf 'https://github.com/%s/%s' "${REPO}" "${raw_url#../}"
+    return 0
+  fi
+
+  if [ -n "${REPO:-}" ] && printf '%s' "${raw_url}" | grep -q '^blob/'; then
+    printf 'https://github.com/%s/%s' "${REPO}" "${raw_url}"
+    return 0
+  fi
+
+  printf '%s' "${raw_url}"
+}
+
 extract_url_host() {
   local raw_url="${1:-}"
   if [ -z "${raw_url}" ]; then
@@ -206,6 +230,26 @@ get_latest_qa_comment_body() {
   done < <(get_pr_comment_bodies_base64 "${pr_number}")
 
   printf "%s" "${latest}"
+}
+
+get_qa_screenshot_links() {
+  local pr_number="${1:?PR number required}"
+  local qa_comment=""
+
+  qa_comment=$(get_latest_qa_comment_body "${pr_number}")
+  if [ -z "${qa_comment}" ]; then
+    return 0
+  fi
+
+  printf '%s' "${qa_comment}" \
+    | { grep -Eo '!\[[^]]*\]\(([^)]*qa-artifacts/[^)]*)\)' || true; } \
+    | sed -E 's/^!\[[^]]*\]\(([^)]*)\)$/\1/' \
+    | while IFS= read -r raw_url; do
+      [ -z "${raw_url}" ] && continue
+      normalize_qa_screenshot_url "${raw_url}"
+      printf '\n'
+    done \
+    | awk 'NF && !seen[$0]++'
 }
 
 classify_qa_comment_outcome() {
@@ -448,6 +492,7 @@ UNCLASSIFIED_PRS_CSV=""
 FAILED_AUTOMATION_PRS_CSV=""
 FAILED_PR=""
 FAILED_REASON="unknown"
+QA_SCREENSHOT_SUMMARY=""
 
 # Process each PR that needs QA
 for pr_ref in ${PRS_NEEDING_QA}; do
@@ -587,6 +632,12 @@ Action: generating QA tests and evidence."
           UNCLASSIFIED_PRS_CSV=$(append_csv "${UNCLASSIFIED_PRS_CSV}" "#${pr_num}")
           ;;
       esac
+
+      PR_FIRST_SCREENSHOT=$(get_qa_screenshot_links "${pr_num}" | head -n 1 || true)
+      if [ -n "${PR_FIRST_SCREENSHOT}" ]; then
+        QA_SCREENSHOT_SUMMARY="${QA_SCREENSHOT_SUMMARY}${QA_SCREENSHOT_SUMMARY:+$'\n'}#${pr_num}: ${PR_FIRST_SCREENSHOT}"
+      fi
+
       log "QA: PR #${pr_num} — provider completed with verifiable QA evidence"
     fi
   fi
@@ -606,7 +657,7 @@ FAILED_PR_SUMMARY=$(csv_or_none "${FAILED_PR}")
 
 if [ ${EXIT_CODE} -eq 0 ]; then
   log "DONE: QA runner completed successfully"
-  send_telegram_status_message "🧪 Night Watch QA: completed" "Project: ${PROJECT_NAME}
+  TELEGRAM_SUCCESS_BODY="Project: ${PROJECT_NAME}
 Provider (model): ${PROVIDER_MODEL_DISPLAY}
 Artifacts: ${QA_ARTIFACTS_DESC} (mode=${QA_ARTIFACTS})
 Processed PRs: ${FINAL_PROCESSED_PRS_CSV}
@@ -614,6 +665,12 @@ Passing tests: ${PASSING_PRS_SUMMARY}
 Issues found by tests: ${ISSUES_FOUND_PRS_SUMMARY}
 No tests needed: ${NO_TESTS_PRS_SUMMARY}
 Reported (unclassified): ${UNCLASSIFIED_PRS_SUMMARY}"
+  if [ -n "${QA_SCREENSHOT_SUMMARY}" ]; then
+    TELEGRAM_SUCCESS_BODY="${TELEGRAM_SUCCESS_BODY}
+Screenshot links:
+${QA_SCREENSHOT_SUMMARY}"
+  fi
+  send_telegram_status_message "🧪 Night Watch QA: completed" "${TELEGRAM_SUCCESS_BODY}"
   if [ -n "${REPO}" ]; then
     emit_result "success_qa" "prs=${FINAL_PROCESSED_PRS_CSV}|passing=${PASSING_PRS_SUMMARY}|issues=${ISSUES_FOUND_PRS_SUMMARY}|no_tests=${NO_TESTS_PRS_SUMMARY}|unclassified=${UNCLASSIFIED_PRS_SUMMARY}|repo=${REPO}"
   else
