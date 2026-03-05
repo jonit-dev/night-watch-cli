@@ -344,7 +344,7 @@ describe('roadmap-scanner', () => {
       expect(childProcess.spawn).not.toHaveBeenCalled();
     });
 
-    it('sliceNextItem should prioritize audit findings before roadmap items', async () => {
+    it('sliceNextItem should prioritize roadmap items before audit findings', async () => {
       fs.writeFileSync(
         roadmapPath,
         `## Features
@@ -381,7 +381,7 @@ Generated: 2026-03-03T12:00:00.000Z
         'utf-8',
       );
 
-      const expectedTitle = 'Audit Finding 2: unhandled_promise (critical) at src/high-risk.ts:88';
+      const expectedTitle = 'Roadmap Feature';
       const expectedFilename = `01-${slugify(expectedTitle)}.md`;
       mockProviderSuccess(expectedFilename);
 
@@ -390,7 +390,7 @@ Generated: 2026-03-03T12:00:00.000Z
 
       expect(result.sliced).toBe(true);
       expect(result.file).toBe(expectedFilename);
-      expect(result.item?.section).toBe('Audit Findings');
+      expect(result.item?.section).toBe('Features');
       expect(result.item?.title).toBe(expectedTitle);
     });
 

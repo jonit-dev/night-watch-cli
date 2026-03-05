@@ -529,6 +529,95 @@ check_rate_limited() {
   fi
 }
 
+# Resolve URL host from a URL-like string.
+# Example: "https://api.z.ai/api/anthropic" -> "api.z.ai"
+extract_url_host() {
+  local raw_url="${1:-}"
+  if [ -z "${raw_url}" ]; then
+    return 0
+  fi
+  printf '%s' "${raw_url}" | sed -E 's#^[[:alpha:]][[:alnum:]+.-]*://##; s#/.*$##'
+}
+
+# Resolve a Claude model hint from env vars.
+# Priority:
+# 1) ANTHROPIC_DEFAULT_SONNET_MODEL / ANTHROPIC_DEFAULT_OPUS_MODEL (providerEnv overrides)
+# 2) NW_CLAUDE_MODEL_ID (resolved from config.claudeModel by caller)
+# 3) "default"
+resolve_claude_model_hint() {
+  local sonnet="${ANTHROPIC_DEFAULT_SONNET_MODEL:-}"
+  local opus="${ANTHROPIC_DEFAULT_OPUS_MODEL:-}"
+  local native_model="${NW_CLAUDE_MODEL_ID:-}"
+
+  if [ -n "${sonnet}" ] && [ -n "${opus}" ]; then
+    if [ "${sonnet}" = "${opus}" ]; then
+      printf "%s" "${sonnet}"
+    else
+      printf "sonnet=%s, opus=%s" "${sonnet}" "${opus}"
+    fi
+    return 0
+  fi
+  if [ -n "${sonnet}" ]; then
+    printf "%s" "${sonnet}"
+    return 0
+  fi
+  if [ -n "${opus}" ]; then
+    printf "%s" "${opus}"
+    return 0
+  fi
+  if [ -n "${native_model}" ]; then
+    printf "%s" "${native_model}"
+    return 0
+  fi
+  printf "default"
+}
+
+# Build a user-facing provider/model display string.
+# Examples:
+#   claude (glm-5 via api.z.ai)
+#   claude (claude-sonnet-4-6)
+#   codex
+#   codex (Custom Label)
+resolve_provider_model_display() {
+  local provider_cmd="${1:?provider command required}"
+  local provider_label="${2:-}"
+  local label_trimmed=""
+  local model_hint=""
+  local endpoint_host=""
+  local details=""
+
+  label_trimmed=$(printf '%s' "${provider_label}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+  case "${provider_cmd}" in
+    claude)
+      model_hint=$(resolve_claude_model_hint)
+      endpoint_host=$(extract_url_host "${ANTHROPIC_BASE_URL:-}")
+      details="${model_hint}"
+      if [ -n "${endpoint_host}" ]; then
+        details="${details} via ${endpoint_host}"
+      fi
+      if [ -n "${label_trimmed}" ] && [ "${label_trimmed}" != "Claude" ] && [ "${label_trimmed}" != "Claude (proxy)" ]; then
+        details="${label_trimmed}; ${details}"
+      fi
+      printf "%s (%s)" "${provider_cmd}" "${details}"
+      ;;
+    codex)
+      if [ -n "${label_trimmed}" ] && [ "${label_trimmed}" != "Codex" ]; then
+        printf "%s (%s)" "${provider_cmd}" "${label_trimmed}"
+      else
+        printf "%s" "${provider_cmd}"
+      fi
+      ;;
+    *)
+      if [ -n "${label_trimmed}" ]; then
+        printf "%s (%s)" "${provider_cmd}" "${label_trimmed}"
+      else
+        printf "%s" "${provider_cmd}"
+      fi
+      ;;
+  esac
+}
+
 # Send a generic Telegram status message.
 # Preferred input: NW_TELEGRAM_STATUS_WEBHOOKS (JSON array with botToken/chatId).
 # Legacy fallback: NW_TELEGRAM_BOT_TOKEN + NW_TELEGRAM_CHAT_ID.

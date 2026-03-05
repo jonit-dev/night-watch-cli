@@ -20,6 +20,7 @@ LOG_FILE="${LOG_DIR}/reviewer.log"
 MAX_RUNTIME="${NW_REVIEWER_MAX_RUNTIME:-3600}"  # 1 hour
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
+PROVIDER_LABEL="${NW_PROVIDER_LABEL:-}"
 MIN_REVIEW_SCORE="${NW_MIN_REVIEW_SCORE:-80}"
 BRANCH_PATTERNS_RAW="${NW_BRANCH_PATTERNS:-feat/,night-watch/}"
 AUTO_MERGE="${NW_AUTO_MERGE:-0}"
@@ -65,6 +66,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
+PROVIDER_MODEL_DISPLAY=$(resolve_provider_model_display "${PROVIDER_CMD}" "${PROVIDER_LABEL}")
 GLOBAL_LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_RUNTIME_KEY}.lock"
 if [ "${WORKER_MODE}" = "1" ] && [ -n "${TARGET_PR}" ]; then
   LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_RUNTIME_KEY}-pr-${TARGET_PR}.lock"
@@ -91,6 +93,21 @@ emit_final_status() {
   local attempts="${5:-1}"
   local final_score="${6:-}"
   local details=""
+  local prs_summary=""
+  local auto_merged_summary=""
+  local auto_merge_failed_summary=""
+  local final_score_summary=""
+  local final_score_line=""
+
+  prs_summary="${prs_csv:-none}"
+  auto_merged_summary="${auto_merged:-none}"
+  auto_merge_failed_summary="${auto_merge_failed:-none}"
+  final_score_summary="${final_score:-n/a}"
+  if [ -n "${final_score}" ]; then
+    final_score_line="Final score: ${final_score_summary}/100"
+  else
+    final_score_line="Final score: n/a"
+  fi
 
   if [ "${exit_code}" -eq 0 ]; then
     details="prs=${prs_csv}|auto_merged=${auto_merged}|auto_merge_failed=${auto_merge_failed}|attempts=${attempts}"
@@ -98,6 +115,15 @@ emit_final_status() {
       details="${details}|final_score=${final_score}"
     fi
     log "DONE: PR reviewer completed successfully"
+    if [ "${WORKER_MODE}" != "1" ]; then
+      send_telegram_status_message "🔍 Night Watch Reviewer: completed" "Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Processed PRs: ${prs_summary}
+Attempts: ${attempts}
+${final_score_line}
+Auto-merged PRs: ${auto_merged_summary}
+Auto-merge failed: ${auto_merge_failed_summary}"
+    fi
     emit_result "success_reviewed" "${details}"
   elif [ "${exit_code}" -eq 124 ]; then
     details="prs=${prs_csv}|attempts=${attempts}"
@@ -105,6 +131,14 @@ emit_final_status() {
       details="${details}|final_score=${final_score}"
     fi
     log "TIMEOUT: PR reviewer killed after ${MAX_RUNTIME}s"
+    if [ "${WORKER_MODE}" != "1" ]; then
+      send_telegram_status_message "🔍 Night Watch Reviewer: timeout" "Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Timeout: ${MAX_RUNTIME}s
+Processed PRs: ${prs_summary}
+Attempts: ${attempts}
+${final_score_line}"
+    fi
     emit_result "timeout" "${details}"
   else
     details="prs=${prs_csv}|attempts=${attempts}"
@@ -112,6 +146,14 @@ emit_final_status() {
       details="${details}|final_score=${final_score}"
     fi
     log "FAIL: PR reviewer exited with code ${exit_code}"
+    if [ "${WORKER_MODE}" != "1" ]; then
+      send_telegram_status_message "🔍 Night Watch Reviewer: failed" "Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Exit code: ${exit_code}
+Processed PRs: ${prs_summary}
+Attempts: ${attempts}
+${final_score_line}"
+    fi
     emit_result "failure" "${details}"
   fi
 }
@@ -462,6 +504,14 @@ fi
 
 cd "${PROJECT_DIR}"
 
+if [ "${WORKER_MODE}" != "1" ]; then
+  send_telegram_status_message "🔍 Night Watch Reviewer: started" "Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Branch patterns: ${BRANCH_PATTERNS_RAW}
+Target PR: ${TARGET_PR:-all matching}
+Action: scanning open PRs for failing checks or low review scores."
+fi
+
 # Convert comma-separated branch prefixes into a regex that matches branch starts.
 BRANCH_REGEX=""
 IFS=',' read -r -a BRANCH_PATTERNS <<< "${BRANCH_PATTERNS_RAW}"
@@ -495,6 +545,13 @@ fi
 
 if [ "${OPEN_PRS}" -eq 0 ]; then
   log "SKIP: No open PRs matching branch patterns (${BRANCH_PATTERNS_RAW})"
+  if [ "${WORKER_MODE}" != "1" ]; then
+    send_telegram_status_message "🔍 Night Watch Reviewer: no matching PRs" "Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Branch patterns: ${BRANCH_PATTERNS_RAW}
+Target PR: ${TARGET_PR:-all matching}
+Result: 0 open PRs matched."
+  fi
   emit_result "skip_no_open_prs"
   exit 0
 fi
@@ -618,6 +675,11 @@ if [ "${NEEDS_WORK}" -eq 0 ]; then
     fi
   fi
 
+  if [ "${WORKER_MODE}" != "1" ]; then
+    send_telegram_status_message "🔍 Night Watch Reviewer: nothing to do" "Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Result: all ${OPEN_PRS} matching PRs already pass CI and review threshold (${MIN_REVIEW_SCORE})."
+  fi
   emit_result "skip_all_passing"
   exit 0
 fi
@@ -648,7 +710,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
   # Dry-run mode: print diagnostics and exit
   if [ "${NW_DRY_RUN:-0}" = "1" ]; then
     echo "=== Dry Run: PR Reviewer ==="
-    echo "Provider: ${PROVIDER_CMD}"
+    echo "Provider (model): ${PROVIDER_MODEL_DISPLAY}"
     echo "Branch Patterns: ${BRANCH_PATTERNS_RAW}"
     echo "Min Review Score: ${MIN_REVIEW_SCORE}"
     echo "Auto-merge: ${AUTO_MERGE}"
@@ -779,7 +841,7 @@ cleanup_reviewer_worktrees "${REVIEW_WORKTREE_BASENAME}"
 # Dry-run mode: print diagnostics and exit
 if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   echo "=== Dry Run: PR Reviewer ==="
-  echo "Provider: ${PROVIDER_CMD}"
+  echo "Provider (model): ${PROVIDER_MODEL_DISPLAY}"
   echo "Branch Patterns: ${BRANCH_PATTERNS_RAW}"
   echo "Min Review Score: ${MIN_REVIEW_SCORE}"
   echo "Auto-merge: ${AUTO_MERGE}"

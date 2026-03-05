@@ -69,6 +69,18 @@ export function buildBaseEnvVars(
 }
 
 /**
+ * Format provider display for notifications/UI using command + label.
+ */
+export function formatProviderDisplay(providerCmd?: string, providerLabel?: string): string {
+  const cmd = providerCmd?.trim();
+  if (!cmd) return 'unknown';
+  const label = providerLabel?.trim();
+  if (!label) return cmd;
+  if (label.toLowerCase() === cmd.toLowerCase()) return cmd;
+  return `${cmd} (${label})`;
+}
+
+/**
  * Extract Telegram webhooks that have both botToken and chatId configured.
  * Used for status messages from bash scripts (start/progress/final status).
  */

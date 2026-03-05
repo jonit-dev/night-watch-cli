@@ -230,4 +230,10 @@ export interface IRoadmapScannerConfig {
 
   /** Maximum runtime in seconds for the slicer */
   slicerMaxRuntime: number;
+
+  /** Source prioritization strategy when both roadmap and audit findings are available */
+  priorityMode: 'roadmap-first' | 'audit-first';
+
+  /** Board column used when planner auto-creates an issue after PRD generation */
+  issueColumn: 'Draft' | 'Ready';
 }

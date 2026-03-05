@@ -139,6 +139,15 @@ describe('slice command', () => {
       expect(env.NW_PROVIDER_CMD).toBe('codex');
     });
 
+    it('should set NW_CLAUDE_MODEL_ID from config.claudeModel', () => {
+      const config = createTestConfig({ claudeModel: 'opus' } as Partial<INightWatchConfig>);
+      const options: ISliceOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_CLAUDE_MODEL_ID).toBe('claude-opus-4-6');
+    });
+
     it('should set NW_DRY_RUN when dryRun is true', () => {
       const config = createTestConfig();
       const options: ISliceOptions = { dryRun: true };

@@ -87,6 +87,9 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
     enabled: true,
     roadmapPath: 'ROADMAP.md',
     autoScanInterval: 300,
+    slicerSchedule: '0 */6 * * *',
+    slicerMaxRuntime: 600,
+    issueColumn: 'Draft',
   },
   templatesDir: config.templatesDir || '.night-watch/templates',
   boardProvider: config.boardProvider || { enabled: true, provider: 'github' },
@@ -1100,14 +1103,14 @@ const Settings: React.FC = () => {
     },
     {
       id: 'roadmap',
-      label: 'Roadmap',
+      label: 'Planner',
       content: (
         <Card className="p-6 space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-medium text-slate-200">Roadmap Scanner</h3>
+              <h3 className="text-lg font-medium text-slate-200">Planner</h3>
               <p className="text-sm text-slate-400">
-                Automatically scan ROADMAP.md and generate PRDs for unchecked items
+                Generate one PRD per run using ROADMAP.md first, then audit findings when roadmap work is exhausted
               </p>
             </div>
             <Switch
@@ -1120,7 +1123,7 @@ const Settings: React.FC = () => {
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
                 <Input
-                  label="Roadmap Path"
+                  label="Roadmap File Path"
                   value={form.roadmapScanner.roadmapPath}
                   onChange={(e) =>
                     updateField('roadmapScanner', {
@@ -1128,27 +1131,14 @@ const Settings: React.FC = () => {
                       roadmapPath: e.target.value,
                     })
                   }
-                  helperText="Path to ROADMAP.md file (relative to project root)"
-                />
-                <Input
-                  label="Auto Scan Interval"
-                  type="number"
-                  value={String(form.roadmapScanner.autoScanInterval)}
-                  onChange={(e) =>
-                    updateField('roadmapScanner', {
-                      ...form.roadmapScanner,
-                      autoScanInterval: Math.max(30, Number(e.target.value || 30)),
-                    })
-                  }
-                  rightIcon={<span className="text-xs">sec (min 30)</span>}
-                  helperText="How often to check for new roadmap items"
+                  helperText="Primary planning source (relative to project root)."
                 />
               </div>
 
               <div className="pt-4 border-t border-slate-800">
-                <h4 className="text-md font-medium text-slate-200 mb-4">Planner Configuration</h4>
+                <h4 className="text-md font-medium text-slate-200 mb-4">Planner Execution</h4>
                 <p className="text-sm text-slate-400 mb-4">
-                  The Planner generates detailed PRDs from roadmap items using AI
+                  Planner creates one PRD at a time and can auto-create a board issue for handoff.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <Input
@@ -1163,6 +1153,21 @@ const Settings: React.FC = () => {
                     }
                     rightIcon={<span className="text-xs">sec</span>}
                     helperText="Maximum runtime for planner tasks"
+                  />
+                  <Select
+                    label="Planner Issue Column"
+                    value={form.roadmapScanner.issueColumn || 'Draft'}
+                    onChange={(val) =>
+                      updateField('roadmapScanner', {
+                        ...form.roadmapScanner,
+                        issueColumn: val === 'Ready' ? 'Ready' : 'Draft',
+                      })
+                    }
+                    options={[
+                      { label: 'Draft (default)', value: 'Draft' },
+                      { label: 'Ready', value: 'Ready' },
+                    ]}
+                    helperText="Column where planner-created issues are added after PRD generation."
                   />
                 </div>
               </div>
