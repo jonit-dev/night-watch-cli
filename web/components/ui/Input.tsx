@@ -9,16 +9,25 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className = '', label, error, helperText, rightIcon, ...props }, ref) => {
+    const generatedId = React.useId();
+    const inputId = props.id ?? generatedId;
+    const errorId = error ? `${inputId}-error` : undefined;
+    const helperTextId = !error && helperText ? `${inputId}-help` : undefined;
+    const describedBy = [errorId, helperTextId].filter(Boolean).join(' ') || undefined;
+
     return (
       <div className="w-full">
         {label && (
-          <label className="block text-sm font-medium text-slate-400 mb-1.5">
+          <label htmlFor={inputId} className="block text-sm font-medium text-slate-400 mb-1.5">
             {label}
           </label>
         )}
         <div className="relative">
           <input
             ref={ref}
+            id={inputId}
+            aria-describedby={describedBy}
+            aria-invalid={error ? true : props['aria-invalid']}
             className={`
               w-full rounded-lg bg-slate-950 border border-slate-800 
               px-3 py-2 text-sm text-slate-200 
@@ -39,9 +48,13 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           )}
         </div>
         {error ? (
-          <p className="mt-1.5 text-xs text-red-400">{error}</p>
+          <p id={errorId} className="mt-1.5 text-xs text-red-400">
+            {error}
+          </p>
         ) : helperText ? (
-          <p className="mt-1.5 text-xs text-slate-500">{helperText}</p>
+          <p id={helperTextId} className="mt-1.5 text-xs text-slate-500">
+            {helperText}
+          </p>
         ) : null}
       </div>
     );

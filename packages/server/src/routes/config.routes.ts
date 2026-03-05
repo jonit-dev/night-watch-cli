@@ -3,6 +3,7 @@
  */
 
 import { Request, Response, Router } from 'express';
+import { CronExpressionParser } from 'cron-parser';
 
 import {
   INightWatchConfig,
@@ -15,6 +16,28 @@ import {
   saveConfig,
   validateWebhook,
 } from '@night-watch/core';
+
+function isValidCronExpression(value: string): boolean {
+  try {
+    CronExpressionParser.parse(value.trim());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function validateCronField(fieldName: string, value: unknown): string | null {
+  if (value === undefined) {
+    return null;
+  }
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return `${fieldName} must be a non-empty string`;
+  }
+  if (!isValidCronExpression(value)) {
+    return `${fieldName} must be a valid cron expression`;
+  }
+  return null;
+}
 
 /**
  * Validates config changes and returns an error string if invalid, null if valid.
@@ -129,18 +152,23 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
     return 'prdPriority must be an array of strings';
   }
 
-  if (
-    changes.cronSchedule !== undefined &&
-    (typeof changes.cronSchedule !== 'string' || changes.cronSchedule.trim().length === 0)
-  ) {
-    return 'cronSchedule must be a non-empty string';
+  const rootCronFields: Array<[string, unknown]> = [
+    ['cronSchedule', changes.cronSchedule],
+    ['reviewerSchedule', changes.reviewerSchedule],
+  ];
+  for (const [fieldName, value] of rootCronFields) {
+    const cronError = validateCronField(fieldName, value);
+    if (cronError) {
+      return cronError;
+    }
   }
 
   if (
-    changes.reviewerSchedule !== undefined &&
-    (typeof changes.reviewerSchedule !== 'string' || changes.reviewerSchedule.trim().length === 0)
+    changes.scheduleBundleId !== undefined &&
+    changes.scheduleBundleId !== null &&
+    (typeof changes.scheduleBundleId !== 'string' || changes.scheduleBundleId.trim().length === 0)
   ) {
-    return 'reviewerSchedule must be a non-empty string';
+    return 'scheduleBundleId must be a non-empty string or null';
   }
 
   if (changes.notifications?.webhooks !== undefined) {
@@ -178,6 +206,32 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
       (typeof rs.autoScanInterval !== 'number' || rs.autoScanInterval < 30)
     ) {
       return 'roadmapScanner.autoScanInterval must be a number >= 30';
+    }
+    const slicerScheduleError = validateCronField(
+      'roadmapScanner.slicerSchedule',
+      rs.slicerSchedule,
+    );
+    if (slicerScheduleError) {
+      return slicerScheduleError;
+    }
+
+    if (
+      rs.slicerMaxRuntime !== undefined &&
+      (typeof rs.slicerMaxRuntime !== 'number' || rs.slicerMaxRuntime < 60)
+    ) {
+      return 'roadmapScanner.slicerMaxRuntime must be a number >= 60';
+    }
+
+    if (
+      rs.priorityMode !== undefined &&
+      rs.priorityMode !== 'roadmap-first' &&
+      rs.priorityMode !== 'audit-first'
+    ) {
+      return 'roadmapScanner.priorityMode must be one of: roadmap-first, audit-first';
+    }
+
+    if (rs.issueColumn !== undefined && rs.issueColumn !== 'Draft' && rs.issueColumn !== 'Ready') {
+      return 'roadmapScanner.issueColumn must be one of: Draft, Ready';
     }
   }
 
@@ -278,11 +332,9 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
       return 'qa.enabled must be a boolean';
     }
 
-    if (
-      qa.schedule !== undefined &&
-      (typeof qa.schedule !== 'string' || qa.schedule.trim().length === 0)
-    ) {
-      return 'qa.schedule must be a non-empty string';
+    const qaScheduleError = validateCronField('qa.schedule', qa.schedule);
+    if (qaScheduleError) {
+      return qaScheduleError;
     }
 
     if (qa.maxRuntime !== undefined && (typeof qa.maxRuntime !== 'number' || qa.maxRuntime < 60)) {
@@ -326,11 +378,9 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
       return 'audit.enabled must be a boolean';
     }
 
-    if (
-      audit.schedule !== undefined &&
-      (typeof audit.schedule !== 'string' || audit.schedule.trim().length === 0)
-    ) {
-      return 'audit.schedule must be a non-empty string';
+    const auditScheduleError = validateCronField('audit.schedule', audit.schedule);
+    if (auditScheduleError) {
+      return auditScheduleError;
     }
 
     if (
@@ -338,37 +388,6 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
       (typeof audit.maxRuntime !== 'number' || audit.maxRuntime < 60)
     ) {
       return 'audit.maxRuntime must be a number >= 60';
-    }
-  }
-
-  // roadmapScanner slicer fields validation
-  if (changes.roadmapScanner !== undefined) {
-    const rs = changes.roadmapScanner;
-
-    if (
-      rs.slicerSchedule !== undefined &&
-      (typeof rs.slicerSchedule !== 'string' || rs.slicerSchedule.trim().length === 0)
-    ) {
-      return 'roadmapScanner.slicerSchedule must be a non-empty string';
-    }
-
-    if (
-      rs.slicerMaxRuntime !== undefined &&
-      (typeof rs.slicerMaxRuntime !== 'number' || rs.slicerMaxRuntime < 60)
-    ) {
-      return 'roadmapScanner.slicerMaxRuntime must be a number >= 60';
-    }
-
-    if (
-      rs.priorityMode !== undefined &&
-      rs.priorityMode !== 'roadmap-first' &&
-      rs.priorityMode !== 'audit-first'
-    ) {
-      return 'roadmapScanner.priorityMode must be one of: roadmap-first, audit-first';
-    }
-
-    if (rs.issueColumn !== undefined && rs.issueColumn !== 'Draft' && rs.issueColumn !== 'Ready') {
-      return 'roadmapScanner.issueColumn must be one of: Draft, Ready';
     }
   }
 

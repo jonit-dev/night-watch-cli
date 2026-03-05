@@ -32,7 +32,12 @@ vi.mock('@night-watch/core/utils/crontab.js', () => ({
 
 import { execSync } from 'child_process';
 import { performInstall } from '@/cli/commands/install.js';
-import { writeCrontab } from '@night-watch/core/utils/crontab.js';
+import {
+  getEntries,
+  getProjectEntries,
+  readCrontab,
+  writeCrontab,
+} from '@night-watch/core/utils/crontab.js';
 import { INightWatchConfig } from '@night-watch/core/types.js';
 
 function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConfig {
@@ -103,6 +108,9 @@ describe('install command', () => {
       return '';
     }) as unknown as typeof execSync);
     vi.clearAllMocks();
+    vi.mocked(getEntries).mockReturnValue([]);
+    vi.mocked(getProjectEntries).mockReturnValue([]);
+    vi.mocked(readCrontab).mockReturnValue([]);
   });
 
   afterEach(() => {
@@ -121,6 +129,28 @@ describe('install command', () => {
     expect(executorEntry).toContain("export NW_CLI_BIN='/opt/night-watch/bin/night-watch' && ");
 
     expect(writeCrontab).toHaveBeenCalledTimes(1);
+  });
+
+  it('should replace existing project entries when force is enabled', () => {
+    const config = createTestConfig({
+      cronSchedule: '30 */3 * * *',
+    });
+    const existingExecutorEntry = `0 * * * * cd '${tempDir}' && '/opt/night-watch/bin/night-watch' run >> '${tempDir}/logs/executor.log' 2>&1  # night-watch-cli: ${path.basename(tempDir)}`;
+    const unrelatedEntry = '15 * * * * echo "keep me"';
+
+    vi.mocked(getEntries).mockReturnValue([existingExecutorEntry]);
+    vi.mocked(getProjectEntries).mockReturnValue([existingExecutorEntry]);
+    vi.mocked(readCrontab).mockReturnValue([existingExecutorEntry, unrelatedEntry]);
+
+    const result = performInstall(tempDir, config, { force: true });
+
+    expect(result.success).toBe(true);
+    expect(writeCrontab).toHaveBeenCalledWith(
+      expect.arrayContaining([unrelatedEntry, ...result.entries]),
+    );
+    expect(writeCrontab).not.toHaveBeenCalledWith(
+      expect.arrayContaining([existingExecutorEntry, ...result.entries]),
+    );
   });
 
   it('should add planner crontab entry when scanner enabled', () => {

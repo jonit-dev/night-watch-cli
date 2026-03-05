@@ -79,6 +79,7 @@ export function getDefaultConfig(): INightWatchConfig {
     // Cron scheduling
     cronSchedule: DEFAULT_CRON_SCHEDULE,
     reviewerSchedule: DEFAULT_REVIEWER_SCHEDULE,
+    scheduleBundleId: null,
     cronScheduleOffset: DEFAULT_CRON_SCHEDULE_OFFSET,
     maxRetries: DEFAULT_MAX_RETRIES,
 
@@ -187,6 +188,13 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     readString(rawConfig.cronSchedule) ?? readString(cron?.executorSchedule);
   normalized.reviewerSchedule =
     readString(rawConfig.reviewerSchedule) ?? readString(cron?.reviewerSchedule);
+  const rawScheduleBundleId = rawConfig.scheduleBundleId;
+  if (typeof rawScheduleBundleId === 'string') {
+    const trimmed = rawScheduleBundleId.trim();
+    normalized.scheduleBundleId = trimmed.length > 0 ? trimmed : null;
+  } else if (rawScheduleBundleId === null) {
+    normalized.scheduleBundleId = null;
+  }
   normalized.cronScheduleOffset = readNumber(rawConfig.cronScheduleOffset);
   normalized.maxRetries = readNumber(rawConfig.maxRetries);
   normalized.reviewerMaxRetries = readNumber(rawConfig.reviewerMaxRetries);

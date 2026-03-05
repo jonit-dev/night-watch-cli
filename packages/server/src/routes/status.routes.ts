@@ -59,6 +59,20 @@ export interface IScheduleInfoRoutesDeps {
   getConfig: () => INightWatchConfig;
 }
 
+function applyScheduleOffset(schedule: string, offset: number): string {
+  if (offset === 0) {
+    return schedule;
+  }
+
+  const parts = schedule.trim().split(/\s+/);
+  if (parts.length < 5 || !/^\d+$/.test(parts[0])) {
+    return schedule.trim();
+  }
+
+  parts[0] = String(offset);
+  return parts.join(' ');
+}
+
 function computeNextRun(cronExpr: string): string | null {
   try {
     const interval = CronExpressionParser.parse(cronExpr);
@@ -73,6 +87,60 @@ function hasScheduledCommand(entries: string[], command: string): boolean {
   return entries.some((entry) => commandPattern.test(entry));
 }
 
+function buildScheduleInfoResponse(
+  config: INightWatchConfig,
+  entries: string[],
+  installed: boolean,
+) {
+  const offset = config.cronScheduleOffset ?? 0;
+  const executorSchedule = applyScheduleOffset(config.cronSchedule, offset);
+  const reviewerSchedule = applyScheduleOffset(config.reviewerSchedule, offset);
+  const qaSchedule = applyScheduleOffset(config.qa.schedule, offset);
+  const auditSchedule = applyScheduleOffset(config.audit.schedule, offset);
+  const plannerSchedule = applyScheduleOffset(config.roadmapScanner.slicerSchedule, offset);
+
+  const executorInstalled =
+    installed && config.executorEnabled !== false && hasScheduledCommand(entries, 'run');
+  const reviewerInstalled =
+    installed && config.reviewerEnabled && hasScheduledCommand(entries, 'review');
+  const qaInstalled = installed && config.qa.enabled && hasScheduledCommand(entries, 'qa');
+  const auditInstalled = installed && config.audit.enabled && hasScheduledCommand(entries, 'audit');
+  const plannerInstalled =
+    installed &&
+    config.roadmapScanner.enabled &&
+    (hasScheduledCommand(entries, 'planner') || hasScheduledCommand(entries, 'slice'));
+
+  return {
+    executor: {
+      schedule: executorSchedule,
+      installed: executorInstalled,
+      nextRun: executorInstalled ? computeNextRun(executorSchedule) : null,
+    },
+    reviewer: {
+      schedule: reviewerSchedule,
+      installed: reviewerInstalled,
+      nextRun: reviewerInstalled ? computeNextRun(reviewerSchedule) : null,
+    },
+    qa: {
+      schedule: qaSchedule,
+      installed: qaInstalled,
+      nextRun: qaInstalled ? computeNextRun(qaSchedule) : null,
+    },
+    audit: {
+      schedule: auditSchedule,
+      installed: auditInstalled,
+      nextRun: auditInstalled ? computeNextRun(auditSchedule) : null,
+    },
+    planner: {
+      schedule: plannerSchedule,
+      installed: plannerInstalled,
+      nextRun: plannerInstalled ? computeNextRun(plannerSchedule) : null,
+    },
+    paused: !installed,
+    entries,
+  };
+}
+
 export function createScheduleInfoRoutes(deps: IScheduleInfoRoutesDeps): Router {
   const { projectDir, getConfig } = deps;
   const router = Router();
@@ -81,49 +149,9 @@ export function createScheduleInfoRoutes(deps: IScheduleInfoRoutesDeps): Router 
     try {
       const config = getConfig();
       const snapshot = await fetchStatusSnapshot(projectDir, config);
-      const installed = snapshot.crontab.installed;
-      const entries = snapshot.crontab.entries;
-      const executorInstalled =
-        installed && config.executorEnabled !== false && hasScheduledCommand(entries, 'run');
-      const reviewerInstalled =
-        installed && config.reviewerEnabled && hasScheduledCommand(entries, 'review');
-      const qaInstalled = installed && config.qa.enabled && hasScheduledCommand(entries, 'qa');
-      const auditInstalled =
-        installed && config.audit.enabled && hasScheduledCommand(entries, 'audit');
-      const plannerInstalled =
-        installed &&
-        config.roadmapScanner.enabled &&
-        (hasScheduledCommand(entries, 'planner') || hasScheduledCommand(entries, 'slice'));
-
-      res.json({
-        executor: {
-          schedule: config.cronSchedule,
-          installed: executorInstalled,
-          nextRun: executorInstalled ? computeNextRun(config.cronSchedule) : null,
-        },
-        reviewer: {
-          schedule: config.reviewerSchedule,
-          installed: reviewerInstalled,
-          nextRun: reviewerInstalled ? computeNextRun(config.reviewerSchedule) : null,
-        },
-        qa: {
-          schedule: config.qa.schedule,
-          installed: qaInstalled,
-          nextRun: qaInstalled ? computeNextRun(config.qa.schedule) : null,
-        },
-        audit: {
-          schedule: config.audit.schedule,
-          installed: auditInstalled,
-          nextRun: auditInstalled ? computeNextRun(config.audit.schedule) : null,
-        },
-        planner: {
-          schedule: config.roadmapScanner.slicerSchedule,
-          installed: plannerInstalled,
-          nextRun: plannerInstalled ? computeNextRun(config.roadmapScanner.slicerSchedule) : null,
-        },
-        paused: !installed,
-        entries,
-      });
+      res.json(
+        buildScheduleInfoResponse(config, snapshot.crontab.entries, snapshot.crontab.installed),
+      );
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
@@ -214,49 +242,9 @@ export function createProjectSseRoutes(deps: {
       const config = req.projectConfig!;
       const projectDir = req.projectDir!;
       const snapshot = await fetchStatusSnapshot(projectDir, config);
-      const installed = snapshot.crontab.installed;
-      const entries = snapshot.crontab.entries;
-      const executorInstalled =
-        installed && config.executorEnabled !== false && hasScheduledCommand(entries, 'run');
-      const reviewerInstalled =
-        installed && config.reviewerEnabled && hasScheduledCommand(entries, 'review');
-      const qaInstalled = installed && config.qa.enabled && hasScheduledCommand(entries, 'qa');
-      const auditInstalled =
-        installed && config.audit.enabled && hasScheduledCommand(entries, 'audit');
-      const plannerInstalled =
-        installed &&
-        config.roadmapScanner.enabled &&
-        (hasScheduledCommand(entries, 'planner') || hasScheduledCommand(entries, 'slice'));
-
-      res.json({
-        executor: {
-          schedule: config.cronSchedule,
-          installed: executorInstalled,
-          nextRun: executorInstalled ? computeNextRun(config.cronSchedule) : null,
-        },
-        reviewer: {
-          schedule: config.reviewerSchedule,
-          installed: reviewerInstalled,
-          nextRun: reviewerInstalled ? computeNextRun(config.reviewerSchedule) : null,
-        },
-        qa: {
-          schedule: config.qa.schedule,
-          installed: qaInstalled,
-          nextRun: qaInstalled ? computeNextRun(config.qa.schedule) : null,
-        },
-        audit: {
-          schedule: config.audit.schedule,
-          installed: auditInstalled,
-          nextRun: auditInstalled ? computeNextRun(config.audit.schedule) : null,
-        },
-        planner: {
-          schedule: config.roadmapScanner.slicerSchedule,
-          installed: plannerInstalled,
-          nextRun: plannerInstalled ? computeNextRun(config.roadmapScanner.slicerSchedule) : null,
-        },
-        paused: !installed,
-        entries,
-      });
+      res.json(
+        buildScheduleInfoResponse(config, snapshot.crontab.entries, snapshot.crontab.installed),
+      );
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }

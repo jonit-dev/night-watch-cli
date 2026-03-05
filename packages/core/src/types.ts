@@ -69,6 +69,12 @@ export interface INightWatchConfig {
   /** Cron schedule for PR reviewer */
   reviewerSchedule: string;
 
+  /**
+   * Optional persisted schedule bundle/template identifier selected in Settings UI
+   * (e.g. "always-on", "night-surge"). Null/undefined means custom schedules.
+   */
+  scheduleBundleId?: string | null;
+
   /** Minute offset (0-59) applied to cron schedules during install. Helps stagger multiple projects. */
   cronScheduleOffset: number;
 
