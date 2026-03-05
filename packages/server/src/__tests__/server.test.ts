@@ -948,34 +948,42 @@ describe('server API', () => {
   });
 
   describe('POST /api/actions/install-cron', () => {
-    it('should spawn install process', async () => {
+    it('should reinstall cron synchronously', async () => {
       const response = await request(app).post('/api/actions/install-cron');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('started', true);
-      expect(spawn).toHaveBeenCalledWith(
-        'night-watch',
-        ['install'],
+      expect(execSync).toHaveBeenCalledWith(
+        'night-watch uninstall --keep-logs',
         expect.objectContaining({
-          detached: true,
-          stdio: 'ignore',
+          cwd: tempDir,
+          encoding: 'utf-8',
+          stdio: 'pipe',
+        }),
+      );
+      expect(execSync).toHaveBeenCalledWith(
+        'night-watch install',
+        expect.objectContaining({
+          cwd: tempDir,
+          encoding: 'utf-8',
+          stdio: 'pipe',
         }),
       );
     });
   });
 
   describe('POST /api/actions/uninstall-cron', () => {
-    it('should spawn uninstall process', async () => {
+    it('should uninstall cron synchronously while keeping logs', async () => {
       const response = await request(app).post('/api/actions/uninstall-cron');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('started', true);
-      expect(spawn).toHaveBeenCalledWith(
-        'night-watch',
-        ['uninstall'],
+      expect(execSync).toHaveBeenCalledWith(
+        'night-watch uninstall --keep-logs',
         expect.objectContaining({
-          detached: true,
-          stdio: 'ignore',
+          cwd: tempDir,
+          encoding: 'utf-8',
+          stdio: 'pipe',
         }),
       );
     });
