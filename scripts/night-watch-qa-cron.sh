@@ -316,6 +316,10 @@ Artifacts: ${QA_ARTIFACTS}"
   QA_PROMPT_REF=$(instruction_ref_for_prompt "${QA_WORKTREE_DIR}" "${QA_PROMPT_PATH}")
   log "QA: PR #${pr_num} — using prompt from ${QA_PROMPT_REF}"
 
+  # Inject provider attribution requirement into the QA prompt.
+  QA_PROVIDER_LABEL="${NW_PROVIDER_LABEL:-${PROVIDER_CMD}}"
+  QA_PROMPT="${QA_PROMPT}"$'\n\n'"## QA Attribution (Required)"$'\n'"At the very end of each QA result comment you post, add this footer on its own line:"$'\n'"> 🧪 QA run by ${QA_PROVIDER_LABEL}"
+
   LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
   PROVIDER_OK=0
   case "${PROVIDER_CMD}" in

@@ -819,6 +819,11 @@ REVIEWER_PROMPT_BASE=$(cat "${REVIEWER_PROMPT_PATH}")
 REVIEWER_PROMPT_REF=$(instruction_ref_for_prompt "${REVIEW_WORKTREE_DIR}" "${REVIEWER_PROMPT_PATH}")
 log "INFO: Using reviewer prompt from ${REVIEWER_PROMPT_REF}"
 
+# Inject provider attribution requirement into the reviewer prompt.
+# The AI must add a footer to every review comment it posts.
+REVIEWER_PROVIDER_LABEL="${NW_PROVIDER_LABEL:-${PROVIDER_CMD}}"
+REVIEWER_PROMPT_BASE="${REVIEWER_PROMPT_BASE}"$'\n\n'"## Reviewer Attribution (Required)"$'\n'"At the very end of each review comment you post, add this footer on its own line:"$'\n'"> 🔍 Reviewed by ${REVIEWER_PROVIDER_LABEL}"
+
 EXIT_CODE=0
 ATTEMPTS_MADE=1
 FINAL_SCORE=""

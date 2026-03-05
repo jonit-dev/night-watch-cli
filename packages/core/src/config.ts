@@ -195,6 +195,12 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   normalized.executorEnabled = readBoolean(rawConfig.executorEnabled);
   normalized.reviewerEnabled = readBoolean(rawConfig.reviewerEnabled);
 
+  // providerLabel: optional human-friendly display name for the provider
+  const providerLabelVal = readString(rawConfig.providerLabel);
+  if (providerLabelVal) {
+    normalized.providerLabel = providerLabelVal;
+  }
+
   // providerEnv: Record<string, string> of extra env vars for the provider CLI
   const rawProviderEnv = readObject(rawConfig.providerEnv);
   if (rawProviderEnv) {
