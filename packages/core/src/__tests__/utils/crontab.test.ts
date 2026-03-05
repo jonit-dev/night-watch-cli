@@ -267,6 +267,22 @@ describe("crontab utilities", () => {
       expect(result[0]).toContain("old-marker");
       expect(result[1]).toContain("new-marker");
     });
+
+    it("should detect legacy markerless night-watch entries", () => {
+      const projectDir = "/home/joao/projects/night watch";
+
+      vi.mocked(execSync).mockReturnValueOnce(
+        `0 * * * * cd /home/joao/projects/other && night-watch run
+0 0 * * * cd '/home/joao/projects/night watch/' && '/usr/bin/night-watch' planner >> /tmp/slicer.log 2>&1
+15 * * * * cd /home/joao/projects/night\\ watch && /usr/local/bin/night-watch review >> /tmp/reviewer.log 2>&1`
+      );
+
+      const result = getProjectEntries(projectDir);
+
+      expect(result).toHaveLength(2);
+      expect(result[0]).toContain("planner");
+      expect(result[1]).toContain("review");
+    });
   });
 
   describe("removeEntriesForProject", () => {
@@ -286,6 +302,23 @@ describe("crontab utilities", () => {
       const removed = removeEntriesForProject(projectDir, marker);
 
       expect(removed).toBe(2);
+    });
+
+    it("should remove legacy markerless planner entries for the project", () => {
+      const projectDir = "/home/joao/projects/night watch";
+
+      vi.mocked(execSync)
+        .mockReturnValueOnce(
+          `0 * * * * cd /home/joao/projects/night\\ watch && /usr/local/bin/night-watch planner >> /tmp/slicer.log 2>&1
+0 0 * * * cd /home/joao/projects/night\\ watch && /usr/bin/custom-maintenance-job
+0 * * * * cd /home/joao/projects/other && /usr/local/bin/night-watch planner >> /tmp/slicer.log 2>&1`
+        )
+        .mockReturnValueOnce("")
+        .mockReturnValueOnce("");
+
+      const removed = removeEntriesForProject(projectDir);
+
+      expect(removed).toBe(1);
     });
   });
 });
