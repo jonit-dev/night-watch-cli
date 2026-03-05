@@ -14,7 +14,7 @@ export const DEFAULT_GLOBAL_SPEC = '@jonit-dev/night-watch-cli@latest';
 export interface IUpdateOptions {
   projects?: string;
   globalSpec: string;
-  noGlobal?: boolean;
+  global?: boolean;
 }
 
 /**
@@ -33,6 +33,10 @@ export function parseProjectDirs(projects: string | undefined, cwd: string): str
     .map((entry) => path.resolve(cwd, entry));
 
   return Array.from(new Set(dirs));
+}
+
+export function shouldInstallGlobal(options: Pick<IUpdateOptions, 'global'>): boolean {
+  return options.global !== false;
 }
 
 function runCommand(command: string, args: string[], cwd?: string): void {
@@ -80,7 +84,7 @@ export function updateCommand(program: Command): void {
         const cwd = process.cwd();
         const projectDirs = parseProjectDirs(options.projects, cwd);
 
-        if (!options.noGlobal) {
+        if (shouldInstallGlobal(options)) {
           dim(`Updating global install: npm install -g ${options.globalSpec}`);
           runCommand('npm', ['install', '-g', options.globalSpec]);
           success('Global CLI update completed.');

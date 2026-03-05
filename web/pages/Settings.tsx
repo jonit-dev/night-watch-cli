@@ -14,6 +14,7 @@ import {
   IWebhookConfig,
   MergeMethod,
   QaArtifacts,
+  triggerInstallCron,
   toggleRoadmapScanner,
   updateConfig,
   useApi,
@@ -75,8 +76,8 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   maxRuntime: config.maxRuntime,
   reviewerMaxRuntime: config.reviewerMaxRuntime,
   maxLogSize: config.maxLogSize,
-  cronSchedule: config.cronSchedule || '0 0-21 * * *',
-  reviewerSchedule: config.reviewerSchedule || '0 0,3,6,9,12,15,18,21 * * *',
+  cronSchedule: config.cronSchedule || '5 */3 * * *',
+  reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
   cronScheduleOffset: config.cronScheduleOffset ?? 0,
   maxRetries: config.maxRetries ?? 3,
   reviewerMaxRetries: config.reviewerMaxRetries ?? 2,
@@ -88,7 +89,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
     enabled: config.roadmapScanner?.enabled ?? true,
     roadmapPath: config.roadmapScanner?.roadmapPath ?? 'ROADMAP.md',
     autoScanInterval: config.roadmapScanner?.autoScanInterval ?? 300,
-    slicerSchedule: config.roadmapScanner?.slicerSchedule ?? '0 */6 * * *',
+    slicerSchedule: config.roadmapScanner?.slicerSchedule ?? '35 */12 * * *',
     slicerMaxRuntime: config.roadmapScanner?.slicerMaxRuntime ?? 600,
     priorityMode: config.roadmapScanner?.priorityMode ?? 'roadmap-first',
     issueColumn: config.roadmapScanner?.issueColumn ?? 'Draft',
@@ -98,11 +99,11 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   jobProviders: config.jobProviders || {},
   autoMerge: config.autoMerge ?? false,
   autoMergeMethod: config.autoMergeMethod ?? 'squash',
-  fallbackOnRateLimit: config.fallbackOnRateLimit ?? false,
+  fallbackOnRateLimit: config.fallbackOnRateLimit ?? true,
   claudeModel: config.claudeModel ?? 'sonnet',
   qa: config.qa || {
     enabled: true,
-    schedule: '30 1,7,13,19 * * *',
+    schedule: '45 2,14 * * *',
     maxRuntime: 3600,
     branchPatterns: [],
     artifacts: 'both',
@@ -111,7 +112,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   },
   audit: config.audit || {
     enabled: true,
-    schedule: '0 3 * * *',
+    schedule: '50 3 * * 1',
     maxRuntime: 1800,
   },
 });
@@ -642,7 +643,7 @@ const Settings: React.FC = () => {
             newForm.reviewerSchedule,
             newForm.qa.schedule,
             newForm.audit.schedule,
-            newForm.roadmapScanner.slicerSchedule ?? '0 */6 * * *',
+            newForm.roadmapScanner.slicerSchedule ?? '35 */12 * * *',
           );
           if (detected) {
             setScheduleMode('template');
@@ -677,6 +678,7 @@ const Settings: React.FC = () => {
         qa: { ...prev.qa, schedule: tpl.schedules.qa },
         audit: { ...prev.audit, schedule: tpl.schedules.audit },
         roadmapScanner: { ...prev.roadmapScanner, slicerSchedule: tpl.schedules.slicer },
+        fallbackOnRateLimit: true,
       };
     });
   };
@@ -685,6 +687,20 @@ const Settings: React.FC = () => {
     if (!form) {
       return;
     }
+
+    const shouldReinstallCron =
+      form.cronSchedule !== config?.cronSchedule ||
+      form.reviewerSchedule !== config?.reviewerSchedule ||
+      form.cronScheduleOffset !== (config?.cronScheduleOffset ?? 0) ||
+      form.executorEnabled !== (config?.executorEnabled ?? true) ||
+      form.reviewerEnabled !== (config?.reviewerEnabled ?? true) ||
+      form.qa.enabled !== (config?.qa.enabled ?? true) ||
+      form.qa.schedule !== config?.qa.schedule ||
+      form.audit.enabled !== (config?.audit.enabled ?? true) ||
+      form.audit.schedule !== config?.audit.schedule ||
+      form.roadmapScanner.enabled !== (config?.roadmapScanner?.enabled ?? true) ||
+      (form.roadmapScanner.slicerSchedule || '35 */12 * * *') !==
+        (config?.roadmapScanner?.slicerSchedule || '35 */12 * * *');
 
     // Filter out empty/undefined job provider values
     const cleanedJobProviders: IJobProviders = {};
@@ -733,11 +749,31 @@ const Settings: React.FC = () => {
       // Update form directly from server response to ensure it reflects persisted values
       setForm(toFormState(savedConfig));
 
-      addToast({
-        title: 'Settings Saved',
-        message: 'Configuration updated successfully.',
-        type: 'success',
-      });
+      let cronInstallFailedMessage = '';
+      if (shouldReinstallCron) {
+        try {
+          await triggerInstallCron();
+        } catch (cronErr) {
+          cronInstallFailedMessage =
+            cronErr instanceof Error ? cronErr.message : 'failed to reinstall cron schedules';
+        }
+      }
+
+      if (cronInstallFailedMessage) {
+        addToast({
+          title: 'Settings Saved (Cron Reinstall Failed)',
+          message: cronInstallFailedMessage,
+          type: 'warning',
+        });
+      } else {
+        addToast({
+          title: 'Settings Saved',
+          message: shouldReinstallCron
+            ? 'Configuration updated and cron schedules reinstalled.'
+            : 'Configuration updated successfully.',
+          type: 'success',
+        });
+      }
 
       // Sync useApi's internal config state but skip the form reset (already done above)
       skipNextFormResetRef.current = true;
@@ -1165,7 +1201,7 @@ const Settings: React.FC = () => {
               {form.roadmapScanner.enabled && (
                 <CronScheduleInput
                   label="Planner Schedule"
-                  value={form.roadmapScanner.slicerSchedule || '0 */6 * * *'}
+                  value={form.roadmapScanner.slicerSchedule || '35 */12 * * *'}
                   onChange={(val) =>
                     updateField('roadmapScanner', {
                       ...form.roadmapScanner,
@@ -1241,7 +1277,7 @@ const Settings: React.FC = () => {
                 />
                 <CronScheduleInput
                   label="Planner Schedule"
-                  value={form.roadmapScanner.slicerSchedule || '0 */6 * * *'}
+                  value={form.roadmapScanner.slicerSchedule || '35 */12 * * *'}
                   onChange={(val) =>
                     updateField('roadmapScanner', {
                       ...form.roadmapScanner,

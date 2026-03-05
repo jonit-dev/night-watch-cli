@@ -16,7 +16,7 @@ const CronScheduleInput: React.FC<CronScheduleInputProps> = ({
   value,
   onChange,
   helperText,
-  placeholder = '0 0-21 * * *',
+  placeholder = '5 */3 * * *',
 }) => {
   const presetValue = getPresetValue(value);
   const isCustom = presetValue === '__custom__';

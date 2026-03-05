@@ -172,6 +172,17 @@ append_csv() {
   fi
 }
 
+provider_output_looks_invalid() {
+  local from_line="${1:-0}"
+  if [ ! -f "${LOG_FILE}" ]; then
+    return 1
+  fi
+
+  tail -n "+$((from_line + 1))" "${LOG_FILE}" 2>/dev/null \
+    | grep -Eqi \
+      'Unknown skill:|session is in a broken state|working directory .* no longer exists|Path ".*" does not exist|Please restart this session|failed to start LSP server plugin|spawn .* ENOENT'
+}
+
 truncate_for_prompt() {
   local text="${1:-}"
   local limit="${2:-7000}"
@@ -830,9 +841,10 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
   exit 0
 fi
 
-REVIEW_WORKTREE_BASENAME="${PROJECT_NAME}-nw-review-runner"
+REVIEW_RUN_TOKEN="${PROJECT_RUNTIME_KEY}-$$"
+REVIEW_WORKTREE_BASENAME="${PROJECT_NAME}-nw-review-runner-${REVIEW_RUN_TOKEN}"
 if [ -n "${TARGET_PR}" ]; then
-  REVIEW_WORKTREE_BASENAME="${REVIEW_WORKTREE_BASENAME}-pr-${TARGET_PR}"
+  REVIEW_WORKTREE_BASENAME="${PROJECT_NAME}-nw-review-runner-pr-${TARGET_PR}-${REVIEW_RUN_TOKEN}"
 fi
 REVIEW_WORKTREE_DIR="$(dirname "${PROJECT_DIR}")/${REVIEW_WORKTREE_BASENAME}"
 
@@ -934,6 +946,51 @@ if [ -n "${TARGET_PR}" ]; then
 fi
 RUN_STARTED_AT=$(date +%s)
 
+remaining_runtime_budget() {
+  local now_ts
+  local elapsed
+  local remaining
+
+  now_ts=$(date +%s)
+  elapsed=$((now_ts - RUN_STARTED_AT))
+  remaining=$((MAX_RUNTIME - elapsed))
+  printf "%s" "${remaining}"
+}
+
+sleep_with_runtime_budget() {
+  local requested_sleep="${1:-0}"
+  local remaining
+  local sleep_for
+
+  if ! [[ "${requested_sleep}" =~ ^[0-9]+$ ]]; then
+    requested_sleep=0
+  fi
+  if [ "${requested_sleep}" -le 0 ]; then
+    return 0
+  fi
+
+  if [ -z "${TARGET_PR}" ]; then
+    sleep "${requested_sleep}"
+    return 0
+  fi
+
+  remaining=$(remaining_runtime_budget)
+  if [ "${remaining}" -le 0 ]; then
+    return 124
+  fi
+
+  sleep_for="${requested_sleep}"
+  if [ "${sleep_for}" -gt "${remaining}" ]; then
+    sleep_for="${remaining}"
+  fi
+  if [ "${sleep_for}" -le 0 ]; then
+    return 124
+  fi
+
+  sleep "${sleep_for}"
+  return 0
+}
+
 for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
   ATTEMPTS_MADE="${ATTEMPT}"
 
@@ -953,6 +1010,17 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
     ATTEMPT_TIMEOUT=$((REMAINING_BUDGET / REMAINING_ATTEMPTS))
     if [ "${ATTEMPT_TIMEOUT}" -lt 1 ]; then
       ATTEMPT_TIMEOUT=1
+    fi
+  fi
+
+  # Recreate worktree if it was removed unexpectedly between attempts.
+  if [ ! -d "${REVIEW_WORKTREE_DIR}" ] || ! git -C "${REVIEW_WORKTREE_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    log "RETRY: Reviewer worktree missing for attempt ${ATTEMPT}; recreating ${REVIEW_WORKTREE_DIR}"
+    cleanup_reviewer_worktrees "${REVIEW_WORKTREE_BASENAME}"
+    if ! prepare_detached_worktree "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
+      EXIT_CODE=1
+      log "RETRY: Unable to recreate reviewer worktree; aborting"
+      break
     fi
   fi
 
@@ -994,15 +1062,33 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
 
   # If provider failed (non-zero exit), check for rate limit before giving up
   if [ "${EXIT_CODE}" -ne 0 ]; then
-    if [ "${EXIT_CODE}" -ne 124 ] && \
-       check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}" && \
-       [ -n "${TARGET_PR}" ] && \
-       [ "${ATTEMPT}" -lt "${TOTAL_ATTEMPTS}" ]; then
-      log "RATE-LIMITED: 429 detected for PR #${TARGET_PR} (attempt ${ATTEMPT}/${TOTAL_ATTEMPTS}), retrying in 120s..."
-      sleep 120
-      continue
-    fi
+	    if [ "${EXIT_CODE}" -ne 124 ] && \
+	       check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}" && \
+	       [ -n "${TARGET_PR}" ] && \
+	       [ "${ATTEMPT}" -lt "${TOTAL_ATTEMPTS}" ]; then
+	      log "RATE-LIMITED: 429 detected for PR #${TARGET_PR} (attempt ${ATTEMPT}/${TOTAL_ATTEMPTS}), retrying in 120s..."
+	      if ! sleep_with_runtime_budget 120; then
+	        EXIT_CODE=124
+	        log "RETRY: Runtime budget exhausted while waiting to retry PR #${TARGET_PR}"
+	        break
+	      fi
+	      continue
+	    fi
     log "RETRY: Provider exited with code ${EXIT_CODE}, not retrying"
+    break
+  fi
+
+	  if provider_output_looks_invalid "${LOG_LINE_BEFORE}"; then
+	    log "RETRY: Invalid provider output detected for attempt ${ATTEMPT} (broken session/wrapper output)"
+	    if [ "${ATTEMPT}" -lt "${TOTAL_ATTEMPTS}" ]; then
+	      if ! sleep_with_runtime_budget "${REVIEWER_RETRY_DELAY}"; then
+	        EXIT_CODE=124
+	        log "RETRY: Runtime budget exhausted before retrying invalid provider output"
+	        break
+	      fi
+	      continue
+	    fi
+	    EXIT_CODE=1
     break
   fi
 
@@ -1010,7 +1096,22 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
   if [ -n "${TARGET_PR}" ]; then
     CURRENT_SCORE=$(get_pr_score "${TARGET_PR}")
     if [ -z "${CURRENT_SCORE}" ]; then
-      log "RETRY: No review score found for PR #${TARGET_PR} after attempt ${ATTEMPT}; not retrying"
+      CURRENT_FAILED_CHECKS=$(get_pr_failed_ci_summary "${TARGET_PR}")
+      if [ -z "${CURRENT_FAILED_CHECKS}" ]; then
+        log "RETRY: No review score for PR #${TARGET_PR}, but CI shows no failing checks; treating as successful."
+        break
+	      fi
+	      if [ "${ATTEMPT}" -lt "${TOTAL_ATTEMPTS}" ]; then
+	        log "RETRY: No review score found for PR #${TARGET_PR} after attempt ${ATTEMPT}; retrying in ${REVIEWER_RETRY_DELAY}s..."
+	        if ! sleep_with_runtime_budget "${REVIEWER_RETRY_DELAY}"; then
+	          EXIT_CODE=124
+	          log "RETRY: Runtime budget exhausted before retrying missing score for PR #${TARGET_PR}"
+	          break
+	        fi
+	        continue
+	      fi
+	      log "RETRY: No review score found for PR #${TARGET_PR} after ${TOTAL_ATTEMPTS} attempts; failing run."
+      EXIT_CODE=1
       break
     fi
 
@@ -1018,13 +1119,17 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
     if [ "${CURRENT_SCORE}" -ge "${MIN_REVIEW_SCORE}" ]; then
       log "RETRY: PR #${TARGET_PR} now scores ${CURRENT_SCORE}/100 (>= ${MIN_REVIEW_SCORE}) after attempt ${ATTEMPT}"
       break
-    fi
-    if [ "${ATTEMPT}" -lt "${TOTAL_ATTEMPTS}" ]; then
-      log "RETRY: PR #${TARGET_PR} scores ${CURRENT_SCORE:-unknown}/100 after attempt ${ATTEMPT}/${TOTAL_ATTEMPTS}, retrying in ${REVIEWER_RETRY_DELAY}s..."
-      sleep "${REVIEWER_RETRY_DELAY}"
-    else
-      log "RETRY: PR #${TARGET_PR} still at ${CURRENT_SCORE:-unknown}/100 after ${TOTAL_ATTEMPTS} attempts - giving up"
-      gh pr edit "${TARGET_PR}" --add-label "needs-human-review" 2>/dev/null || true
+	    fi
+	    if [ "${ATTEMPT}" -lt "${TOTAL_ATTEMPTS}" ]; then
+	      log "RETRY: PR #${TARGET_PR} scores ${CURRENT_SCORE:-unknown}/100 after attempt ${ATTEMPT}/${TOTAL_ATTEMPTS}, retrying in ${REVIEWER_RETRY_DELAY}s..."
+	      if ! sleep_with_runtime_budget "${REVIEWER_RETRY_DELAY}"; then
+	        EXIT_CODE=124
+	        log "RETRY: Runtime budget exhausted before retrying low score for PR #${TARGET_PR}"
+	        break
+	      fi
+	    else
+	      log "RETRY: PR #${TARGET_PR} still at ${CURRENT_SCORE:-unknown}/100 after ${TOTAL_ATTEMPTS} attempts - giving up"
+	      gh pr edit "${TARGET_PR}" --add-label "needs-human-review" 2>/dev/null || true
     fi
   else
     # Non-targeted mode: no retry (reviewer handles all PRs in one shot)

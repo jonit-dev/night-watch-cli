@@ -58,8 +58,8 @@ describe('config', () => {
       expect(config.branchPatterns).toEqual(['feat/', 'night-watch/']);
       expect(config.minReviewScore).toBe(80);
       expect(config.maxLogSize).toBe(524288);
-      expect(config.cronSchedule).toBe('0 0-21 * * *');
-      expect(config.reviewerSchedule).toBe('0 0,3,6,9,12,15,18,21 * * *');
+      expect(config.cronSchedule).toBe('5 */3 * * *');
+      expect(config.reviewerSchedule).toBe('25 */6 * * *');
     });
 
     it('should return defaults with provider and reviewerEnabled', () => {
@@ -115,8 +115,8 @@ describe('config', () => {
       expect(config.branchPrefix).toBe('night-watch');
       expect(config.minReviewScore).toBe(80);
       expect(config.maxLogSize).toBe(524288);
-      expect(config.cronSchedule).toBe('0 0-21 * * *');
-      expect(config.reviewerSchedule).toBe('0 0,3,6,9,12,15,18,21 * * *');
+      expect(config.cronSchedule).toBe('5 */3 * * *');
+      expect(config.reviewerSchedule).toBe('25 */6 * * *');
     });
 
     it('should support nested init/template config format', () => {
@@ -1019,7 +1019,7 @@ describe('config', () => {
 
       expect(config.qa).toBeDefined();
       expect(config.qa.enabled).toBe(true);
-      expect(config.qa.schedule).toBe('30 1,7,13,19 * * *');
+      expect(config.qa.schedule).toBe('45 2,14 * * *');
       expect(config.qa.maxRuntime).toBe(3600);
       expect(config.qa.branchPatterns).toEqual([]);
       expect(config.qa.artifacts).toBe('both');
@@ -1181,7 +1181,7 @@ describe('config', () => {
 
       expect(config.audit).toBeDefined();
       expect(config.audit.enabled).toBe(true);
-      expect(config.audit.schedule).toBe('0 3 * * *');
+      expect(config.audit.schedule).toBe('50 3 * * 1');
       expect(config.audit.maxRuntime).toBe(1800);
     });
 

@@ -27,8 +27,8 @@ export const DEFAULT_MAX_RUNTIME = 7200;
 export const DEFAULT_REVIEWER_MAX_RUNTIME = 3600;
 
 // Cron Schedule Configuration
-export const DEFAULT_CRON_SCHEDULE = '0 0-21 * * *';
-export const DEFAULT_REVIEWER_SCHEDULE = '0 0,3,6,9,12,15,18,21 * * *';
+export const DEFAULT_CRON_SCHEDULE = '5 */3 * * *';
+export const DEFAULT_REVIEWER_SCHEDULE = '25 */6 * * *';
 
 // Schedule Offset
 export const DEFAULT_CRON_SCHEDULE_OFFSET = 0;
@@ -57,7 +57,7 @@ export const DEFAULT_REVIEWER_ENABLED = true;
 export const DEFAULT_PROVIDER_ENV: Record<string, string> = {};
 
 // Rate-limit fallback
-export const DEFAULT_FALLBACK_ON_RATE_LIMIT = false;
+export const DEFAULT_FALLBACK_ON_RATE_LIMIT = true;
 
 // Claude model selection (for native / fallback execution)
 export const DEFAULT_CLAUDE_MODEL: ClaudeModel = 'sonnet';
@@ -75,7 +75,7 @@ export const DEFAULT_NOTIFICATIONS: INotificationConfig = { webhooks: [] };
 export const DEFAULT_PRD_PRIORITY: string[] = [];
 
 // Roadmap Scanner Configuration
-export const DEFAULT_SLICER_SCHEDULE = '0 */6 * * *'; // every 6 hours
+export const DEFAULT_SLICER_SCHEDULE = '35 */12 * * *'; // every 12 hours (staggered)
 export const DEFAULT_SLICER_MAX_RUNTIME = 600; // 10 minutes
 
 export const DEFAULT_ROADMAP_SCANNER: IRoadmapScannerConfig = {
@@ -106,7 +106,7 @@ export const VALID_MERGE_METHODS: MergeMethod[] = ['squash', 'merge', 'rebase'];
 
 // QA Configuration
 export const DEFAULT_QA_ENABLED = true;
-export const DEFAULT_QA_SCHEDULE = '30 1,7,13,19 * * *'; // 4x daily, offset from reviewer
+export const DEFAULT_QA_SCHEDULE = '45 2,14 * * *'; // 2x daily, staggered
 export const DEFAULT_QA_MAX_RUNTIME = 3600; // 1 hour
 export const DEFAULT_QA_ARTIFACTS: QaArtifacts = 'both';
 export const DEFAULT_QA_SKIP_LABEL = 'skip-qa';
@@ -126,7 +126,7 @@ export const QA_LOG_NAME = 'night-watch-qa';
 
 // Audit Configuration
 export const DEFAULT_AUDIT_ENABLED = true;
-export const DEFAULT_AUDIT_SCHEDULE = '0 3 * * *'; // daily at 3am
+export const DEFAULT_AUDIT_SCHEDULE = '50 3 * * 1'; // weekly Monday 03:50
 export const DEFAULT_AUDIT_MAX_RUNTIME = 1800; // 30 minutes
 
 export const DEFAULT_AUDIT: IAuditConfig = {
