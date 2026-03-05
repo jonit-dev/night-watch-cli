@@ -394,6 +394,55 @@ Generated: 2026-03-03T12:00:00.000Z
       expect(result.item?.title).toBe(expectedTitle);
     });
 
+    it('sliceNextItem should prioritize audit findings when priorityMode is audit-first', async () => {
+      fs.writeFileSync(
+        roadmapPath,
+        `## Features
+- [ ] Roadmap Feature
+`,
+      );
+
+      const logsDir = path.join(tempDir, 'logs');
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, 'audit-report.md'),
+        `# Code Audit Report
+
+Generated: 2026-03-03T12:00:00.000Z
+
+## Findings
+
+### Finding 1
+- **Location**: \`src/high-risk.ts:88\`
+- **Severity**: critical
+- **Category**: unhandled_promise
+- **Description**: Promise rejection can terminate process unexpectedly.
+- **Snippet**: \`doAsyncThing();\`
+- **Suggested Fix**: Await promise and handle rejection explicitly.
+`,
+        'utf-8',
+      );
+
+      const expectedTitle = 'Audit Finding 1: unhandled_promise (critical) at src/high-risk.ts:88';
+      const expectedFilename = `01-${slugify(expectedTitle)}.md`;
+      mockProviderSuccess(expectedFilename);
+
+      const config = {
+        ...defaultConfig,
+        prdDir: path.relative(tempDir, prdDir),
+        roadmapScanner: {
+          ...defaultConfig.roadmapScanner,
+          priorityMode: 'audit-first',
+        },
+      };
+      const result = await sliceNextItem(tempDir, config);
+
+      expect(result.sliced).toBe(true);
+      expect(result.file).toBe(expectedFilename);
+      expect(result.item?.section).toBe('Audit Findings');
+      expect(result.item?.title).toBe(expectedTitle);
+    });
+
     it('sliceNextItem should work from audit findings when ROADMAP.md is missing', async () => {
       const logsDir = path.join(tempDir, 'logs');
       fs.mkdirSync(logsDir, { recursive: true });

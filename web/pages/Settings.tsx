@@ -83,13 +83,14 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   providerEnv: config.providerEnv || {},
   notifications: config.notifications || { webhooks: [] },
   prdPriority: config.prdPriority || [],
-  roadmapScanner: config.roadmapScanner || {
-    enabled: true,
-    roadmapPath: 'ROADMAP.md',
-    autoScanInterval: 300,
-    slicerSchedule: '0 */6 * * *',
-    slicerMaxRuntime: 600,
-    issueColumn: 'Draft',
+  roadmapScanner: {
+    enabled: config.roadmapScanner?.enabled ?? true,
+    roadmapPath: config.roadmapScanner?.roadmapPath ?? 'ROADMAP.md',
+    autoScanInterval: config.roadmapScanner?.autoScanInterval ?? 300,
+    slicerSchedule: config.roadmapScanner?.slicerSchedule ?? '0 */6 * * *',
+    slicerMaxRuntime: config.roadmapScanner?.slicerMaxRuntime ?? 600,
+    priorityMode: config.roadmapScanner?.priorityMode ?? 'roadmap-first',
+    issueColumn: config.roadmapScanner?.issueColumn ?? 'Draft',
   },
   templatesDir: config.templatesDir || '.night-watch/templates',
   boardProvider: config.boardProvider || { enabled: true, provider: 'github' },
@@ -1133,6 +1134,16 @@ const Settings: React.FC = () => {
                   }
                   helperText="Primary planning source (relative to project root)."
                 />
+                <CronScheduleInput
+                  label="Planner Schedule"
+                  value={form.roadmapScanner.slicerSchedule || '0 */6 * * *'}
+                  onChange={(val) =>
+                    updateField('roadmapScanner', {
+                      ...form.roadmapScanner,
+                      slicerSchedule: val,
+                    })
+                  }
+                />
               </div>
 
               <div className="pt-4 border-t border-slate-800">
@@ -1153,6 +1164,21 @@ const Settings: React.FC = () => {
                     }
                     rightIcon={<span className="text-xs">sec</span>}
                     helperText="Maximum runtime for planner tasks"
+                  />
+                  <Select
+                    label="Planner Priority Mode"
+                    value={form.roadmapScanner.priorityMode || 'roadmap-first'}
+                    onChange={(val) =>
+                      updateField('roadmapScanner', {
+                        ...form.roadmapScanner,
+                        priorityMode: val === 'audit-first' ? 'audit-first' : 'roadmap-first',
+                      })
+                    }
+                    options={[
+                      { label: 'Roadmap first (recommended)', value: 'roadmap-first' },
+                      { label: 'Audit first', value: 'audit-first' },
+                    ]}
+                    helperText="Choose whether planner consumes roadmap items or audit findings first."
                   />
                   <Select
                     label="Planner Issue Column"

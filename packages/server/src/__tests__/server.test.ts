@@ -763,12 +763,34 @@ describe('server API', () => {
           roadmapScanner: {
             slicerSchedule: '0 */4 * * *',
             slicerMaxRuntime: 900,
+            priorityMode: 'roadmap-first',
+            issueColumn: 'Draft',
           },
         });
 
       expect(response.status).toBe(200);
       expect(response.body.roadmapScanner.slicerSchedule).toBe('0 */4 * * *');
       expect(response.body.roadmapScanner.slicerMaxRuntime).toBe(900);
+      expect(response.body.roadmapScanner.priorityMode).toBe('roadmap-first');
+      expect(response.body.roadmapScanner.issueColumn).toBe('Draft');
+    });
+
+    it('should validate roadmapScanner.priorityMode value', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ roadmapScanner: { priorityMode: 'invalid' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('roadmapScanner.priorityMode');
+    });
+
+    it('should validate roadmapScanner.issueColumn value', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ roadmapScanner: { issueColumn: 'In Progress' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('roadmapScanner.issueColumn');
     });
 
     it('should validate boardProvider.enabled is boolean', async () => {

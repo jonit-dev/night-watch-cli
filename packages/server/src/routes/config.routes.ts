@@ -360,10 +360,14 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
     }
 
     if (
-      rs.issueColumn !== undefined &&
-      rs.issueColumn !== 'Draft' &&
-      rs.issueColumn !== 'Ready'
+      rs.priorityMode !== undefined &&
+      rs.priorityMode !== 'roadmap-first' &&
+      rs.priorityMode !== 'audit-first'
     ) {
+      return 'roadmapScanner.priorityMode must be one of: roadmap-first, audit-first';
+    }
+
+    if (rs.issueColumn !== undefined && rs.issueColumn !== 'Draft' && rs.issueColumn !== 'Ready') {
       return 'roadmapScanner.issueColumn must be one of: Draft, Ready';
     }
   }

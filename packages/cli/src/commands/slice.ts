@@ -4,8 +4,8 @@
 
 import { Command } from 'commander';
 import {
-  CLAUDE_MODEL_IDS,
   BoardColumnName,
+  CLAUDE_MODEL_IDS,
   INightWatchConfig,
   LOCK_FILE_PREFIX,
   PROVIDER_COMMANDS,
@@ -22,8 +22,8 @@ import {
   resolveJobProvider,
   sendNotifications,
   sliceNextItem,
-  warn,
   error as uiError,
+  warn,
 } from '@night-watch/core';
 import { buildBaseEnvVars, getTelegramStatusWebhooks } from './shared/env-builder.js';
 import type { ISliceResult } from '@night-watch/core';
@@ -106,7 +106,9 @@ function buildPlannerIssueBody(
 
   const maxBodyChars = 60000;
   const truncated = prdContent.length > maxBodyChars;
-  const prdPreview = truncated ? `${prdContent.slice(0, maxBodyChars)}\n\n...[truncated]` : prdContent;
+  const prdPreview = truncated
+    ? `${prdContent.slice(0, maxBodyChars)}\n\n...[truncated]`
+    : prdContent;
 
   const sourceLines = sourceItem
     ? [
@@ -280,6 +282,7 @@ export function sliceCommand(program: Command): void {
           `${config.roadmapScanner.slicerMaxRuntime}s (${Math.floor(config.roadmapScanner.slicerMaxRuntime / 60)}min)`,
         ]);
         configTable.push(['Planner Schedule', config.roadmapScanner.slicerSchedule]);
+        configTable.push(['Planner Priority Mode', config.roadmapScanner.priorityMode]);
         configTable.push(['Planner Issue Column', resolvePlannerIssueColumn(config)]);
         configTable.push(['Scanner Enabled', config.roadmapScanner.enabled ? 'Yes' : 'No']);
         console.log(configTable.toString());
