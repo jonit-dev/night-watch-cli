@@ -60,6 +60,7 @@ describe('config', () => {
       expect(config.maxLogSize).toBe(524288);
       expect(config.cronSchedule).toBe('5 */3 * * *');
       expect(config.reviewerSchedule).toBe('25 */6 * * *');
+      expect(config.scheduleBundleId).toBeNull();
     });
 
     it('should return defaults with provider and reviewerEnabled', () => {
@@ -117,6 +118,34 @@ describe('config', () => {
       expect(config.maxLogSize).toBe(524288);
       expect(config.cronSchedule).toBe('5 */3 * * *');
       expect(config.reviewerSchedule).toBe('25 */6 * * *');
+    });
+
+    it('should load scheduleBundleId from config file', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          scheduleBundleId: 'always-on',
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.scheduleBundleId).toBe('always-on');
+    });
+
+    it('should treat null scheduleBundleId as custom mode', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          scheduleBundleId: null,
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.scheduleBundleId).toBeNull();
     });
 
     it('should support nested init/template config format', () => {
@@ -1608,6 +1637,7 @@ describe('config', () => {
         'maxLogSize',
         'cronSchedule',
         'reviewerSchedule',
+        'scheduleBundleId',
         'cronScheduleOffset',
         'maxRetries',
         'reviewerMaxRetries',
@@ -1648,6 +1678,7 @@ describe('config', () => {
         'maxLogSize',
         'cronSchedule',
         'reviewerSchedule',
+        'scheduleBundleId',
         'cronScheduleOffset',
         'maxRetries',
         'reviewerMaxRetries',
@@ -1739,6 +1770,7 @@ describe('config', () => {
         'maxLogSize',
         'cronSchedule',
         'reviewerSchedule',
+        'scheduleBundleId',
         'cronScheduleOffset',
         'maxRetries',
         'reviewerMaxRetries',

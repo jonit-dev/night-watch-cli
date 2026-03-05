@@ -3,14 +3,20 @@
  * Saves partial config changes to night-watch.config.json while preserving unknown keys
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import { CONFIG_FILE_NAME } from "../constants.js";
-import { INightWatchConfig } from "../types.js";
+import * as fs from 'fs';
+import * as path from 'path';
+import { CONFIG_FILE_NAME } from '../constants.js';
+import { INightWatchConfig } from '../types.js';
 
 export interface ISaveConfigResult {
   success: boolean;
   error?: string;
+}
+
+const PARTIAL_MERGE_KEYS = new Set(['notifications', 'qa', 'audit', 'roadmapScanner']);
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 /**
@@ -20,7 +26,7 @@ export interface ISaveConfigResult {
  */
 export function saveConfig(
   projectDir: string,
-  changes: Partial<INightWatchConfig>
+  changes: Partial<INightWatchConfig>,
 ): ISaveConfigResult {
   const configPath = path.join(projectDir, CONFIG_FILE_NAME);
 
@@ -28,16 +34,16 @@ export function saveConfig(
     // Read existing file
     let existing: Record<string, unknown> = {};
     if (fs.existsSync(configPath)) {
-      const content = fs.readFileSync(configPath, "utf-8");
+      const content = fs.readFileSync(configPath, 'utf-8');
       existing = JSON.parse(content) as Record<string, unknown>;
     }
 
-    // Merge changes (shallow merge for top-level keys, deep merge for notifications)
+    // Merge changes while preserving sibling fields for partial nested updates.
     const merged = { ...existing };
     for (const [key, value] of Object.entries(changes)) {
       if (value !== undefined) {
-        if (key === "notifications" && existing.notifications && typeof existing.notifications === "object") {
-          merged.notifications = { ...(existing.notifications as Record<string, unknown>), ...value as Record<string, unknown> };
+        if (PARTIAL_MERGE_KEYS.has(key) && isPlainObject(existing[key]) && isPlainObject(value)) {
+          merged[key] = { ...(existing[key] as Record<string, unknown>), ...value };
         } else {
           merged[key] = value;
         }
@@ -45,7 +51,7 @@ export function saveConfig(
     }
 
     // Write back with consistent formatting
-    fs.writeFileSync(configPath, JSON.stringify(merged, null, 2) + "\n");
+    fs.writeFileSync(configPath, JSON.stringify(merged, null, 2) + '\n');
 
     return { success: true };
   } catch (err) {

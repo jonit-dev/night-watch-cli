@@ -33,6 +33,7 @@ export interface IInstallOptions {
   qa?: boolean;
   noAudit?: boolean;
   audit?: boolean;
+  force?: boolean;
 }
 
 /**
@@ -225,8 +226,14 @@ export function performInstall(
       entries.push(auditEntry);
     }
 
+    const existingEntries = new Set(
+      Array.from(new Set([...getEntries(marker), ...getProjectEntries(projectDir)])),
+    );
     const currentCrontab = readCrontab();
-    const newCrontab = [...currentCrontab, ...entries];
+    const baseCrontab = options?.force
+      ? currentCrontab.filter((line) => !existingEntries.has(line) && !line.includes(marker))
+      : currentCrontab;
+    const newCrontab = [...baseCrontab, ...entries];
     writeCrontab(newCrontab);
 
     return { success: true, entries };
@@ -252,6 +259,7 @@ export function installCommand(program: Command): void {
     .option('--no-slicer', 'Skip installing slicer cron')
     .option('--no-qa', 'Skip installing QA cron')
     .option('--no-audit', 'Skip installing audit cron')
+    .option('-f, --force', 'Replace existing cron entries for this project')
     .action(async (options: IInstallOptions) => {
       try {
         // Get project directory
@@ -289,13 +297,13 @@ export function installCommand(program: Command): void {
         const existingEntries = Array.from(
           new Set([...getEntries(marker), ...getProjectEntries(projectDir)]),
         );
-        if (existingEntries.length > 0) {
+        if (existingEntries.length > 0 && !options.force) {
           warn(`Night Watch is already installed for ${projectName}.`);
           console.log();
           dim('Existing crontab entries:');
           existingEntries.forEach((entry) => dim(`  ${entry}`));
           console.log();
-          dim("Run 'night-watch uninstall' first to reinstall.");
+          dim("Run 'night-watch install --force' to replace them.");
           return;
         }
 
@@ -373,8 +381,12 @@ export function installCommand(program: Command): void {
         }
 
         // Add all entries
+        const existingEntrySet = new Set(existingEntries);
         const currentCrontab = readCrontab();
-        const newCrontab = [...currentCrontab, ...entries];
+        const baseCrontab = options.force
+          ? currentCrontab.filter((line) => !existingEntrySet.has(line) && !line.includes(marker))
+          : currentCrontab;
+        const newCrontab = [...baseCrontab, ...entries];
         writeCrontab(newCrontab);
 
         // Success message

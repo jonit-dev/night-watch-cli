@@ -117,6 +117,7 @@ export interface INightWatchConfig {
   maxLogSize: number;
   cronSchedule: string;
   reviewerSchedule: string;
+  scheduleBundleId?: string | null;
   cronScheduleOffset: number;
   maxRetries: number;
   reviewerMaxRetries: number;

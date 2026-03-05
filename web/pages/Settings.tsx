@@ -22,7 +22,7 @@ import {
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import CronScheduleInput from '../components/ui/CronScheduleInput';
-import { detectTemplate, IScheduleTemplate, SCHEDULE_TEMPLATES } from '../utils/cron.js';
+import { IScheduleTemplate, SCHEDULE_TEMPLATES, resolveActiveTemplate } from '../utils/cron.js';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Switch from '../components/ui/Switch';
@@ -44,6 +44,7 @@ type ConfigForm = {
   maxLogSize: number;
   cronSchedule: string;
   reviewerSchedule: string;
+  scheduleBundleId: string | null;
   cronScheduleOffset: number;
   maxRetries: number;
   reviewerMaxRetries: number;
@@ -78,6 +79,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   maxLogSize: config.maxLogSize,
   cronSchedule: config.cronSchedule || '5 */3 * * *',
   reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
+  scheduleBundleId: config.scheduleBundleId ?? null,
   cronScheduleOffset: config.cronScheduleOffset ?? 0,
   maxRetries: config.maxRetries ?? 3,
   reviewerMaxRetries: config.reviewerMaxRetries ?? 2,
@@ -116,6 +118,28 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
     maxRuntime: 1800,
   },
 });
+
+type ScheduleUiState = {
+  mode: 'template' | 'custom';
+  selectedTemplateId: string;
+};
+
+const resolveScheduleUiState = (form: ConfigForm): ScheduleUiState => {
+  const detected = resolveActiveTemplate(
+    form.scheduleBundleId,
+    form.cronSchedule,
+    form.reviewerSchedule,
+    form.qa.schedule,
+    form.audit.schedule,
+    form.roadmapScanner.slicerSchedule ?? '35 */12 * * *',
+  );
+
+  if (detected) {
+    return { mode: 'template', selectedTemplateId: detected.id };
+  }
+
+  return { mode: 'custom', selectedTemplateId: '' };
+};
 
 // Helper to check if a value looks sensitive
 const isSensitiveKey = (key: string): boolean => {
@@ -619,7 +643,6 @@ const Settings: React.FC = () => {
   const skipNextFormResetRef = React.useRef(false);
   const [scheduleMode, setScheduleMode] = React.useState<'template' | 'custom'>('template');
   const [selectedTemplateId, setSelectedTemplateId] = React.useState<string>('always-on');
-  const scheduleModeInitialized = React.useRef(false);
 
   const {
     data: config,
@@ -630,6 +653,12 @@ const Settings: React.FC = () => {
   const { data: doctorChecksData, loading: doctorLoading, refetch: refetchDoctor } = useApi(fetchDoctor, [selectedProjectId], { enabled: !globalModeLoading });
   const doctorChecks = doctorChecksData ?? [];
 
+  const applyScheduleUiState = React.useCallback((formState: ConfigForm) => {
+    const scheduleUiState = resolveScheduleUiState(formState);
+    setScheduleMode(scheduleUiState.mode);
+    setSelectedTemplateId(scheduleUiState.selectedTemplateId);
+  }, []);
+
   React.useEffect(() => {
     if (config) {
       if (skipNextFormResetRef.current) {
@@ -637,26 +666,10 @@ const Settings: React.FC = () => {
       } else {
         const newForm = toFormState(config);
         setForm(newForm);
-        if (!scheduleModeInitialized.current) {
-          const detected = detectTemplate(
-            newForm.cronSchedule,
-            newForm.reviewerSchedule,
-            newForm.qa.schedule,
-            newForm.audit.schedule,
-            newForm.roadmapScanner.slicerSchedule ?? '35 */12 * * *',
-          );
-          if (detected) {
-            setScheduleMode('template');
-            setSelectedTemplateId(detected.id);
-          } else {
-            setScheduleMode('custom');
-            setSelectedTemplateId('');
-          }
-          scheduleModeInitialized.current = true;
-        }
+        applyScheduleUiState(newForm);
       }
     }
-  }, [config]);
+  }, [config, applyScheduleUiState]);
 
   const updateField = <K extends keyof ConfigForm>(key: K, value: ConfigForm[K]) => {
     setForm((prev) => {
@@ -667,6 +680,25 @@ const Settings: React.FC = () => {
     });
   };
 
+  const switchToTemplateMode = () => {
+    setScheduleMode('template');
+    if (!form) {
+      return;
+    }
+
+    const scheduleUiState = resolveScheduleUiState(form);
+    if (scheduleUiState.mode === 'template') {
+      setSelectedTemplateId(scheduleUiState.selectedTemplateId);
+      updateField('scheduleBundleId', scheduleUiState.selectedTemplateId);
+    }
+  };
+
+  const switchToCustomMode = () => {
+    setScheduleMode('custom');
+    updateField('scheduleBundleId', null);
+    setSelectedTemplateId('');
+  };
+
   const applyTemplate = (tpl: IScheduleTemplate) => {
     setSelectedTemplateId(tpl.id);
     setForm((prev) => {
@@ -675,6 +707,7 @@ const Settings: React.FC = () => {
         ...prev,
         cronSchedule: tpl.schedules.executor,
         reviewerSchedule: tpl.schedules.reviewer,
+        scheduleBundleId: tpl.id,
         qa: { ...prev.qa, schedule: tpl.schedules.qa },
         audit: { ...prev.audit, schedule: tpl.schedules.audit },
         roadmapScanner: { ...prev.roadmapScanner, slicerSchedule: tpl.schedules.slicer },
@@ -727,6 +760,7 @@ const Settings: React.FC = () => {
         maxLogSize: form.maxLogSize,
         cronSchedule: form.cronSchedule,
         reviewerSchedule: form.reviewerSchedule,
+        scheduleBundleId: scheduleMode === 'template' ? form.scheduleBundleId : null,
         cronScheduleOffset: form.cronScheduleOffset,
         maxRetries: form.maxRetries,
         reviewerMaxRetries: form.reviewerMaxRetries,
@@ -747,7 +781,9 @@ const Settings: React.FC = () => {
       });
 
       // Update form directly from server response to ensure it reflects persisted values
-      setForm(toFormState(savedConfig));
+      const updatedForm = toFormState(savedConfig);
+      setForm(updatedForm);
+      applyScheduleUiState(updatedForm);
 
       let cronInstallFailedMessage = '';
       if (shouldReinstallCron) {
@@ -792,7 +828,9 @@ const Settings: React.FC = () => {
 
   const handleReset = () => {
     if (config) {
-      setForm(toFormState(config));
+      const resetForm = toFormState(config);
+      setForm(resetForm);
+      applyScheduleUiState(resetForm);
       addToast({
         title: 'Reset Complete',
         message: 'Unsaved changes were discarded.',
@@ -805,11 +843,28 @@ const Settings: React.FC = () => {
     try {
       const updatedConfig = await toggleRoadmapScanner(enabled);
       updateField('roadmapScanner', updatedConfig.roadmapScanner);
-      addToast({
-        title: enabled ? 'Roadmap Scanner Enabled' : 'Roadmap Scanner Disabled',
-        message: `Roadmap scanner has been ${enabled ? 'enabled' : 'disabled'}.`,
-        type: 'success',
-      });
+
+      let cronInstallFailedMessage = '';
+      try {
+        await triggerInstallCron();
+      } catch (cronErr) {
+        cronInstallFailedMessage =
+          cronErr instanceof Error ? cronErr.message : 'Failed to reinstall cron schedules';
+      }
+
+      addToast(
+        cronInstallFailedMessage
+          ? {
+              title: 'Planner Saved (Cron Reinstall Failed)',
+              message: cronInstallFailedMessage,
+              type: 'warning',
+            }
+          : {
+              title: enabled ? 'Roadmap Scanner Enabled' : 'Roadmap Scanner Disabled',
+              message: `Roadmap scanner has been ${enabled ? 'enabled' : 'disabled'}.`,
+              type: 'success',
+            },
+      );
     } catch (err) {
       addToast({
         title: 'Toggle Failed',
@@ -1111,7 +1166,7 @@ const Settings: React.FC = () => {
                     ? 'bg-indigo-600 text-white'
                     : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                 }`}
-                onClick={() => setScheduleMode('template')}
+                onClick={switchToTemplateMode}
               >
                 Template
               </button>
@@ -1122,7 +1177,7 @@ const Settings: React.FC = () => {
                     ? 'bg-indigo-600 text-white'
                     : 'bg-slate-800 text-slate-400 hover:text-slate-200'
                 }`}
-                onClick={() => setScheduleMode('custom')}
+                onClick={switchToCustomMode}
               >
                 Custom
               </button>
@@ -1257,6 +1312,7 @@ const Settings: React.FC = () => {
             </div>
             <Switch
               checked={form.roadmapScanner.enabled}
+              aria-label="Enable planner"
               onChange={handleRoadmapToggle}
             />
           </div>

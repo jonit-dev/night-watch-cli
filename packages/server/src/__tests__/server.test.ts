@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import request from 'supertest';
+import { CronExpressionParser } from 'cron-parser';
 import { createApp } from '../index.js';
 import { INightWatchConfig } from '@night-watch/core/types.js';
 
@@ -206,6 +207,137 @@ describe('server API', () => {
       const phase0 = response.body.prds.find((p: any) => p.name === 'phase0');
       expect(phase1.status).toBe('ready');
       expect(phase0.status).toBe('done');
+    });
+  });
+
+  describe('GET /api/schedule-info', () => {
+    it('returns installed status and next run for each scheduled job', async () => {
+      vi.mocked(getEntries).mockReturnValue([
+        `5 */3 * * * cd "${tempDir}" && night-watch run >> "${tempDir}/logs/executor.log" 2>&1`,
+        `25 */6 * * * cd "${tempDir}" && night-watch review >> "${tempDir}/logs/reviewer.log" 2>&1`,
+        `45 2,14 * * * cd "${tempDir}" && night-watch qa >> "${tempDir}/logs/qa.log" 2>&1`,
+        `50 3 * * 1 cd "${tempDir}" && night-watch audit >> "${tempDir}/logs/audit.log" 2>&1`,
+        `35 */12 * * * cd "${tempDir}" && night-watch planner >> "${tempDir}/logs/planner.log" 2>&1`,
+      ]);
+
+      const response = await request(app).get('/api/schedule-info');
+
+      expect(response.status).toBe(200);
+      expect(response.body.paused).toBe(false);
+      expect(response.body.executor.installed).toBe(true);
+      expect(response.body.reviewer.installed).toBe(true);
+      expect(response.body.qa.installed).toBe(true);
+      expect(response.body.audit.installed).toBe(true);
+      expect(response.body.planner.installed).toBe(true);
+      expect(typeof response.body.executor.nextRun).toBe('string');
+      expect(typeof response.body.reviewer.nextRun).toBe('string');
+      expect(typeof response.body.qa.nextRun).toBe('string');
+      expect(typeof response.body.audit.nextRun).toBe('string');
+      expect(typeof response.body.planner.nextRun).toBe('string');
+    });
+
+    it('recognizes legacy slice command as planner schedule', async () => {
+      vi.mocked(getEntries).mockReturnValue([
+        `35 */12 * * * cd "${tempDir}" && night-watch slice >> "${tempDir}/logs/planner.log" 2>&1`,
+      ]);
+
+      const response = await request(app).get('/api/schedule-info');
+
+      expect(response.status).toBe(200);
+      expect(response.body.paused).toBe(false);
+      expect(response.body.planner.installed).toBe(true);
+      expect(typeof response.body.planner.nextRun).toBe('string');
+    });
+
+    it('returns paused with null next-run values when no crontab entries exist', async () => {
+      vi.mocked(getEntries).mockReturnValue([]);
+      vi.mocked(getProjectEntries).mockReturnValue([]);
+
+      const response = await request(app).get('/api/schedule-info');
+
+      expect(response.status).toBe(200);
+      expect(response.body.paused).toBe(true);
+      expect(response.body.executor.installed).toBe(false);
+      expect(response.body.reviewer.installed).toBe(false);
+      expect(response.body.qa.installed).toBe(false);
+      expect(response.body.audit.installed).toBe(false);
+      expect(response.body.planner.installed).toBe(false);
+      expect(response.body.executor.nextRun).toBeNull();
+      expect(response.body.reviewer.nextRun).toBeNull();
+      expect(response.body.qa.nextRun).toBeNull();
+      expect(response.body.audit.nextRun).toBeNull();
+      expect(response.body.planner.nextRun).toBeNull();
+    });
+
+    it('rejects invalid cron updates at config boundary', async () => {
+      const updateResponse = await request(app)
+        .put('/api/config')
+        .send({ cronSchedule: 'not a cron' });
+      expect(updateResponse.status).toBe(400);
+      expect(updateResponse.body.error).toContain('valid cron expression');
+    });
+
+    it('respects enabled toggles even if cron entries exist', async () => {
+      vi.mocked(getEntries).mockReturnValue([
+        `5 */3 * * * cd "${tempDir}" && night-watch run >> "${tempDir}/logs/executor.log" 2>&1`,
+        `25 */6 * * * cd "${tempDir}" && night-watch review >> "${tempDir}/logs/reviewer.log" 2>&1`,
+        `45 2,14 * * * cd "${tempDir}" && night-watch qa >> "${tempDir}/logs/qa.log" 2>&1`,
+        `50 3 * * 1 cd "${tempDir}" && night-watch audit >> "${tempDir}/logs/audit.log" 2>&1`,
+        `35 */12 * * * cd "${tempDir}" && night-watch planner >> "${tempDir}/logs/planner.log" 2>&1`,
+      ]);
+
+      const updateResponse = await request(app)
+        .put('/api/config')
+        .send({
+          executorEnabled: false,
+          reviewerEnabled: false,
+          qa: { enabled: false },
+          audit: { enabled: false },
+          roadmapScanner: { enabled: false },
+        });
+      expect(updateResponse.status).toBe(200);
+
+      const response = await request(app).get('/api/schedule-info');
+
+      expect(response.status).toBe(200);
+      expect(response.body.executor.installed).toBe(false);
+      expect(response.body.reviewer.installed).toBe(false);
+      expect(response.body.qa.installed).toBe(false);
+      expect(response.body.audit.installed).toBe(false);
+      expect(response.body.planner.installed).toBe(false);
+    });
+
+    it('applies cronScheduleOffset to reported schedules and next runs', async () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-03-05T00:00:00.000Z'));
+
+        vi.mocked(getEntries).mockReturnValue([
+          `30 */3 * * * cd "${tempDir}" && night-watch run >> "${tempDir}/logs/executor.log" 2>&1`,
+          `30 */6 * * * cd "${tempDir}" && night-watch review >> "${tempDir}/logs/reviewer.log" 2>&1`,
+        ]);
+
+        const updateResponse = await request(app).put('/api/config').send({
+          cronSchedule: '0 */3 * * *',
+          reviewerSchedule: '0 */6 * * *',
+          cronScheduleOffset: 30,
+        });
+        expect(updateResponse.status).toBe(200);
+
+        const response = await request(app).get('/api/schedule-info');
+
+        expect(response.status).toBe(200);
+        expect(response.body.executor.schedule).toBe('30 */3 * * *');
+        expect(response.body.reviewer.schedule).toBe('30 */6 * * *');
+        expect(response.body.executor.nextRun).toBe(
+          CronExpressionParser.parse('30 */3 * * *').next().toISOString(),
+        );
+        expect(response.body.reviewer.nextRun).toBe(
+          CronExpressionParser.parse('30 */6 * * *').next().toISOString(),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
@@ -441,11 +573,60 @@ describe('server API', () => {
       expect(response.body.error).toContain('cronSchedule');
     });
 
+    it('should validate cronSchedule is valid cron expression', async () => {
+      const response = await request(app).put('/api/config').send({ cronSchedule: 'not a cron' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('valid cron expression');
+    });
+
     it('should validate reviewerSchedule is non-empty string', async () => {
       const response = await request(app).put('/api/config').send({ reviewerSchedule: '' });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('reviewerSchedule');
+    });
+
+    it('should validate reviewerSchedule is valid cron expression', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ reviewerSchedule: 'not a cron' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('valid cron expression');
+    });
+
+    it('should validate scheduleBundleId type', async () => {
+      const response = await request(app).put('/api/config').send({ scheduleBundleId: 123 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('scheduleBundleId');
+    });
+
+    it('should accept scheduleBundleId as string or null', async () => {
+      const setResponse = await request(app)
+        .put('/api/config')
+        .send({ scheduleBundleId: 'always-on' });
+      expect(setResponse.status).toBe(200);
+      expect(setResponse.body.scheduleBundleId).toBe('always-on');
+
+      const clearResponse = await request(app).put('/api/config').send({ scheduleBundleId: null });
+      expect(clearResponse.status).toBe(200);
+      expect(clearResponse.body.scheduleBundleId).toBeNull();
+    });
+
+    it('should accept valid cron expressions with surrounding whitespace across all schedule fields', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          cronSchedule: '  5 */3 * * *  ',
+          reviewerSchedule: '  25 */6 * * *  ',
+          qa: { schedule: '  45 2,14 * * *  ' },
+          audit: { schedule: '  50 3 * * 1  ' },
+          roadmapScanner: { slicerSchedule: '  35 */12 * * *  ' },
+        });
+
+      expect(response.status).toBe(200);
     });
 
     it('should reject invalid request body', async () => {
@@ -649,6 +830,15 @@ describe('server API', () => {
       expect(response.body.error).toContain('qa.schedule');
     });
 
+    it('should validate qa.schedule is valid cron expression', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ qa: { schedule: 'not a cron' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('valid cron expression');
+    });
+
     it('should validate qa.maxRuntime is number >= 60', async () => {
       const response = await request(app)
         .put('/api/config')
@@ -695,6 +885,32 @@ describe('server API', () => {
       expect(response.body.qa.artifacts).toBe('screenshot');
     });
 
+    it('should preserve existing QA schedule fields when toggling qa.enabled', async () => {
+      const firstResponse = await request(app)
+        .put('/api/config')
+        .send({
+          qa: {
+            schedule: '5 * * * *',
+            maxRuntime: 1800,
+            artifacts: 'video',
+          },
+        });
+
+      expect(firstResponse.status).toBe(200);
+
+      const secondResponse = await request(app)
+        .put('/api/config')
+        .send({ qa: { enabled: false } });
+
+      expect(secondResponse.status).toBe(200);
+      expect(secondResponse.body.qa).toMatchObject({
+        enabled: false,
+        schedule: '5 * * * *',
+        maxRuntime: 1800,
+        artifacts: 'video',
+      });
+    });
+
     it('should validate audit.enabled is boolean', async () => {
       const response = await request(app)
         .put('/api/config')
@@ -711,6 +927,15 @@ describe('server API', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('audit.schedule');
+    });
+
+    it('should validate audit.schedule is valid cron expression', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ audit: { schedule: 'not a cron' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('valid cron expression');
     });
 
     it('should validate audit.maxRuntime is number >= 60', async () => {
@@ -745,6 +970,40 @@ describe('server API', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('slicerSchedule');
+    });
+
+    it('should validate roadmapScanner.slicerSchedule is valid cron expression', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ roadmapScanner: { slicerSchedule: 'not a cron' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('valid cron expression');
+    });
+
+    it('should preserve existing planner schedule fields when toggling roadmapScanner.enabled', async () => {
+      const firstResponse = await request(app)
+        .put('/api/config')
+        .send({
+          roadmapScanner: {
+            enabled: true,
+            slicerSchedule: '15 */8 * * *',
+            slicerMaxRuntime: 900,
+          },
+        });
+
+      expect(firstResponse.status).toBe(200);
+
+      const secondResponse = await request(app)
+        .put('/api/config')
+        .send({ roadmapScanner: { enabled: false } });
+
+      expect(secondResponse.status).toBe(200);
+      expect(secondResponse.body.roadmapScanner).toMatchObject({
+        enabled: false,
+        slicerSchedule: '15 */8 * * *',
+        slicerMaxRuntime: 900,
+      });
     });
 
     it('should validate roadmapScanner.slicerMaxRuntime is number >= 60', async () => {
@@ -948,26 +1207,22 @@ describe('server API', () => {
   });
 
   describe('POST /api/actions/install-cron', () => {
-    it('should reinstall cron synchronously', async () => {
+    it('should force-install cron in a single CLI call', async () => {
       const response = await request(app).post('/api/actions/install-cron');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('started', true);
       expect(execSync).toHaveBeenCalledWith(
-        'night-watch uninstall --keep-logs',
+        'night-watch install --force',
         expect.objectContaining({
           cwd: tempDir,
           encoding: 'utf-8',
           stdio: 'pipe',
         }),
       );
-      expect(execSync).toHaveBeenCalledWith(
-        'night-watch install',
-        expect.objectContaining({
-          cwd: tempDir,
-          encoding: 'utf-8',
-          stdio: 'pipe',
-        }),
+      expect(execSync).not.toHaveBeenCalledWith(
+        'night-watch uninstall --keep-logs',
+        expect.anything(),
       );
     });
   });

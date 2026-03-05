@@ -144,11 +144,11 @@ function formatCommandError(error: unknown): string {
   const stderr =
     typeof withStreams.stderr === 'string'
       ? withStreams.stderr
-      : withStreams.stderr?.toString('utf-8') ?? '';
+      : (withStreams.stderr?.toString('utf-8') ?? '');
   const stdout =
     typeof withStreams.stdout === 'string'
       ? withStreams.stdout
-      : withStreams.stdout?.toString('utf-8') ?? '';
+      : (withStreams.stdout?.toString('utf-8') ?? '');
 
   const output = stderr.trim() || stdout.trim();
   return output || error.message;
@@ -207,9 +207,8 @@ function createActionRouteHandlers(ctx: IActionRouteContext): Router {
   router.post(`/${p}install-cron`, (req: Request, res: Response): void => {
     const projectDir = ctx.getProjectDir(req);
     try {
-      // Reinstall deterministically so toggles/schedule edits always apply.
-      runCliCommand(projectDir, ['uninstall', '--keep-logs']);
-      runCliCommand(projectDir, ['install']);
+      // Force-install replaces this project's entries in one pass.
+      runCliCommand(projectDir, ['install', '--force']);
       res.json({ started: true });
     } catch (error) {
       res.status(500).json({ error: formatCommandError(error) });

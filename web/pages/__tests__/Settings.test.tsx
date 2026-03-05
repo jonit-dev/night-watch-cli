@@ -29,6 +29,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
         'maxLogSize',
         'cronSchedule',
         'reviewerSchedule',
+        'scheduleBundleId',
         'cronScheduleOffset',
         'maxRetries',
         'reviewerMaxRetries',
@@ -56,14 +57,15 @@ describe('Settings Page - PRD Coverage Verification', () => {
       expect(requiredFields).toContain('audit');
       expect(requiredFields).toContain('cronSchedule');
       expect(requiredFields).toContain('reviewerSchedule');
+      expect(requiredFields).toContain('scheduleBundleId');
       expect(requiredFields).toContain('cronScheduleOffset');
 
       // Verify reviewer retry fields are included
       expect(requiredFields).toContain('reviewerMaxRetries');
       expect(requiredFields).toContain('reviewerRetryDelay');
 
-      // If we got here, all 31 fields are defined in ConfigForm
-      expect(requiredFields.length).toBe(31);
+      // If we got here, all 32 fields are defined in ConfigForm
+      expect(requiredFields.length).toBe(32);
     });
   });
 
@@ -77,6 +79,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
         claudeModel: 'sonnet',
         cronSchedule: '5 */3 * * *',
         reviewerSchedule: '25 */6 * * *',
+        scheduleBundleId: null,
         cronScheduleOffset: 0,
         qa: {
           enabled: true,

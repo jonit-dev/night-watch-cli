@@ -41,36 +41,37 @@ Create `night-watch.config.json` in your project root:
 
 > **Note:** All configuration fields can be customized from the Settings page in the Web UI. You no longer need to edit `night-watch.config.json` directly.
 
-| Field                 | Type     | Default                         | Description                                                   |
-| --------------------- | -------- | ------------------------------- | ------------------------------------------------------------- |
-| `defaultBranch`       | string   | `""` (auto-detect)              | Default branch name (e.g. `main`)                             |
-| `provider`            | string   | `"claude"`                      | AI provider (`claude` or `codex`)                             |
-| `executorEnabled`     | boolean  | `true`                          | Enable the PRD executor                                       |
-| `reviewerEnabled`     | boolean  | `true`                          | Enable the PR reviewer                                        |
-| `prdDir`              | string   | `"docs/prds"`                   | Directory containing PRD files                                |
-| `maxRuntime`          | number   | `7200`                          | Max runtime in seconds for PRD execution                      |
-| `reviewerMaxRuntime`  | number   | `3600`                          | Max runtime in seconds for PR reviewer                        |
-| `branchPrefix`        | string   | `"night-watch"`                 | Prefix for created branches                                   |
-| `branchPatterns`      | string[] | `["feat/", "night-watch/"]`     | Branch patterns for PR reviewer                               |
-| `minReviewScore`      | number   | `80`                            | Min review score (out of 100)                                 |
-| `maxLogSize`          | number   | `524288`                        | Max log file size in bytes (512 KB)                           |
-| `cronSchedule`        | string   | `"0 0-21 * * *"`                | Cron schedule for executor                                    |
-| `reviewerSchedule`    | string   | `"0 0,3,6,9,12,15,18,21 * * *"` | Cron schedule for reviewer                                    |
-| `cronScheduleOffset`  | number   | `0`                             | Minute offset (0-59) applied to cron schedules during install |
-| `maxRetries`          | number   | `3`                             | Retry attempts for rate-limited API calls                     |
-| `providerEnv`         | object   | `{}`                            | Custom env vars passed to the provider CLI                    |
-| `fallbackOnRateLimit` | boolean  | `false`                         | Fall back to native Claude when proxy returns 429             |
-| `claudeModel`         | string   | `"sonnet"`                      | Claude model for native execution (`"sonnet"` or `"opus"`)    |
-| `notifications`       | object   | `{ webhooks: [] }`              | Notification webhook configuration (see below)                |
-| `prdPriority`         | string[] | `[]`                            | PRDs matching these names are executed first                  |
-| `roadmapScanner`      | object   | (see below)                     | Roadmap scanner configuration                                 |
-| `templatesDir`        | string   | `".night-watch/templates"`      | Directory for custom template overrides                       |
-| `boardProvider`       | object   | (see below)                     | Board provider configuration for PRD tracking                 |
-| `jobProviders`        | object   | `{}`                            | Per-job provider configuration                                |
-| `autoMerge`           | boolean  | `false`                         | Enable automatic merging of PRs that pass CI and review       |
-| `autoMergeMethod`     | string   | `"squash"`                      | Git merge method for auto-merge (`squash`, `merge`, `rebase`) |
-| `qa`                  | object   | (see below)                     | QA process configuration                                      |
-| `audit`               | object   | (see below)                     | Code audit configuration                                      |
+| Field                 | Type         | Default                         | Description                                                     |
+| --------------------- | ------------ | ------------------------------- | --------------------------------------------------------------- |
+| `defaultBranch`       | string       | `""` (auto-detect)              | Default branch name (e.g. `main`)                               |
+| `provider`            | string       | `"claude"`                      | AI provider (`claude` or `codex`)                               |
+| `executorEnabled`     | boolean      | `true`                          | Enable the PRD executor                                         |
+| `reviewerEnabled`     | boolean      | `true`                          | Enable the PR reviewer                                          |
+| `prdDir`              | string       | `"docs/prds"`                   | Directory containing PRD files                                  |
+| `maxRuntime`          | number       | `7200`                          | Max runtime in seconds for PRD execution                        |
+| `reviewerMaxRuntime`  | number       | `3600`                          | Max runtime in seconds for PR reviewer                          |
+| `branchPrefix`        | string       | `"night-watch"`                 | Prefix for created branches                                     |
+| `branchPatterns`      | string[]     | `["feat/", "night-watch/"]`     | Branch patterns for PR reviewer                                 |
+| `minReviewScore`      | number       | `80`                            | Min review score (out of 100)                                   |
+| `maxLogSize`          | number       | `524288`                        | Max log file size in bytes (512 KB)                             |
+| `cronSchedule`        | string       | `"0 0-21 * * *"`                | Cron schedule for executor                                      |
+| `reviewerSchedule`    | string       | `"0 0,3,6,9,12,15,18,21 * * *"` | Cron schedule for reviewer                                      |
+| `scheduleBundleId`    | string\|null | `null`                          | Persisted schedule template id from Settings (e.g. `always-on`) |
+| `cronScheduleOffset`  | number       | `0`                             | Minute offset (0-59) applied to cron schedules during install   |
+| `maxRetries`          | number       | `3`                             | Retry attempts for rate-limited API calls                       |
+| `providerEnv`         | object       | `{}`                            | Custom env vars passed to the provider CLI                      |
+| `fallbackOnRateLimit` | boolean      | `false`                         | Fall back to native Claude when proxy returns 429               |
+| `claudeModel`         | string       | `"sonnet"`                      | Claude model for native execution (`"sonnet"` or `"opus"`)      |
+| `notifications`       | object       | `{ webhooks: [] }`              | Notification webhook configuration (see below)                  |
+| `prdPriority`         | string[]     | `[]`                            | PRDs matching these names are executed first                    |
+| `roadmapScanner`      | object       | (see below)                     | Roadmap scanner configuration                                   |
+| `templatesDir`        | string       | `".night-watch/templates"`      | Directory for custom template overrides                         |
+| `boardProvider`       | object       | (see below)                     | Board provider configuration for PRD tracking                   |
+| `jobProviders`        | object       | `{}`                            | Per-job provider configuration                                  |
+| `autoMerge`           | boolean      | `false`                         | Enable automatic merging of PRs that pass CI and review         |
+| `autoMergeMethod`     | string       | `"squash"`                      | Git merge method for auto-merge (`squash`, `merge`, `rebase`)   |
+| `qa`                  | object       | (see below)                     | QA process configuration                                        |
+| `audit`               | object       | (see below)                     | Code audit configuration                                        |
 
 ---
 
