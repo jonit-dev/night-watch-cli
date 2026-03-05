@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_GLOBAL_SPEC, parseProjectDirs } from "@/cli/commands/update.js";
+import { DEFAULT_GLOBAL_SPEC, parseProjectDirs, shouldInstallGlobal } from "@/cli/commands/update.js";
 
 describe("update command helpers", () => {
   it("should expose default global spec", () => {
@@ -26,5 +26,13 @@ describe("update command helpers", () => {
     const dirs = parseProjectDirs(".,./,./", cwd);
     expect(dirs).toEqual(["/workspace/base"]);
   });
-});
 
+  it("should install global package by default", () => {
+    expect(shouldInstallGlobal({})).toBe(true);
+    expect(shouldInstallGlobal({ global: true })).toBe(true);
+  });
+
+  it("should skip global install when --no-global is provided", () => {
+    expect(shouldInstallGlobal({ global: false })).toBe(false);
+  });
+});

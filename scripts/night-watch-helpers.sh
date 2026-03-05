@@ -112,6 +112,8 @@ prefer_bundled_prompt_if_legacy_command() {
   local script_dir=""
   local bundled_prompt_path=""
   local rel_path=""
+  local first_content_line=""
+  local looks_like_wrapper=1
 
   if [ -n "${SCRIPT_DIR:-}" ]; then
     script_dir="${SCRIPT_DIR}"
@@ -121,15 +123,27 @@ prefer_bundled_prompt_if_legacy_command() {
 
   bundled_prompt_path="${script_dir}/../templates/${bundled_prompt_name}"
 
-  # Legacy .claude command prompt files often contain slash-command wrappers
-  # rather than the full automation prompt. Prefer bundled templates in that case.
-  if [[ "${resolved_prompt_path}" == "${project_root}/.claude/commands/"* ]] && [ -f "${bundled_prompt_path}" ]; then
-    rel_path="${resolved_prompt_path#${project_root}/}"
-    if grep -Eqi '^[[:space:]]*/[a-z0-9._/-]+' "${resolved_prompt_path}" 2>/dev/null; then
-      log "WARN: Prompt ${rel_path} looks like a slash-command wrapper; using bundled template ${bundled_prompt_name}"
-      printf "%s" "${bundled_prompt_path}"
-      return 0
+  # Some instruction files only contain slash-command wrappers (e.g. "/night-watch-qa")
+  # rather than the full automation prompt. If detected, force bundled templates.
+  if [ -f "${bundled_prompt_path}" ] && [ -f "${resolved_prompt_path}" ]; then
+    first_content_line=$(
+      awk 'NF {print; exit}' "${resolved_prompt_path}" 2>/dev/null \
+        | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+    )
+    if printf '%s' "${first_content_line}" | grep -Eqi '^/[a-z0-9._/-]+'; then
+      looks_like_wrapper=0
     fi
+  fi
+
+  if [ "${looks_like_wrapper}" -eq 0 ]; then
+    if [[ "${resolved_prompt_path}" == "${project_root}/"* ]]; then
+      rel_path="${resolved_prompt_path#${project_root}/}"
+    else
+      rel_path="${resolved_prompt_path}"
+    fi
+    log "WARN: Prompt ${rel_path} looks like a slash-command wrapper; using bundled template ${bundled_prompt_name}"
+    printf "%s" "${bundled_prompt_path}"
+    return 0
   fi
 
   printf "%s" "${resolved_prompt_path}"

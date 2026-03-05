@@ -73,14 +73,14 @@ describe('Settings Page - PRD Coverage Verification', () => {
       const defaults = {
         prdDir: 'docs/prds',
         providerLabel: '',
-        fallbackOnRateLimit: false,
+        fallbackOnRateLimit: true,
         claudeModel: 'sonnet',
-        cronSchedule: '0 0-21 * * *',
-        reviewerSchedule: '0 0,3,6,9,12,15,18,21 * * *',
+        cronSchedule: '5 */3 * * *',
+        reviewerSchedule: '25 */6 * * *',
         cronScheduleOffset: 0,
         qa: {
           enabled: true,
-          schedule: '30 1,7,13,19 * * *',
+          schedule: '45 2,14 * * *',
           maxRuntime: 3600,
           branchPatterns: [],
           artifacts: 'both',
@@ -89,7 +89,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
         },
         audit: {
           enabled: true,
-          schedule: '0 3 * * *',
+          schedule: '50 3 * * 1',
           maxRuntime: 1800,
         },
       };
@@ -97,7 +97,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
       // These defaults match the toFormState() function in Settings.tsx
       expect(defaults.prdDir).toBe('docs/prds');
       expect(defaults.providerLabel).toBe('');
-      expect(defaults.fallbackOnRateLimit).toBe(false);
+      expect(defaults.fallbackOnRateLimit).toBe(true);
       expect(defaults.claudeModel).toBe('sonnet');
       expect(defaults.qa.artifacts).toBe('both');
       expect(defaults.audit.maxRuntime).toBe(1800);

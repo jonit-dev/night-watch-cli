@@ -514,14 +514,19 @@ Action: generating QA tests and evidence."
   fi
 
   log "QA: Checking out PR #${pr_num} in worktree"
-  if ! (cd "${QA_WORKTREE_DIR}" && gh pr checkout "${pr_num}" >> "${LOG_FILE}" 2>&1); then
-    log "WARN: Failed to checkout PR #${pr_num}, skipping"
-    FAILED_AUTOMATION_PRS_CSV=$(append_csv "${FAILED_AUTOMATION_PRS_CSV}" "#${pr_num}")
-    FAILED_PR="#${pr_num}"
-    FAILED_REASON="checkout_failed"
-    EXIT_CODE=1
-    cleanup_worktrees "${PROJECT_DIR}"
-    continue
+  # Prefer detached checkout to avoid "branch already used by worktree" failures
+  # when the same branch is already checked out in another local worktree.
+  if ! (cd "${QA_WORKTREE_DIR}" && gh pr checkout "${pr_num}" --detach >> "${LOG_FILE}" 2>&1); then
+    log "WARN: Detached checkout failed for PR #${pr_num}; retrying with standard checkout"
+    if ! (cd "${QA_WORKTREE_DIR}" && gh pr checkout "${pr_num}" >> "${LOG_FILE}" 2>&1); then
+      log "WARN: Failed to checkout PR #${pr_num}, skipping"
+      FAILED_AUTOMATION_PRS_CSV=$(append_csv "${FAILED_AUTOMATION_PRS_CSV}" "#${pr_num}")
+      FAILED_PR="#${pr_num}"
+      FAILED_REASON="checkout_failed"
+      EXIT_CODE=1
+      cleanup_worktrees "${PROJECT_DIR}"
+      continue
+    fi
   fi
 
   QA_PROMPT_PATH=$(resolve_instruction_path_with_fallback "${QA_WORKTREE_DIR}" "qa.md" "night-watch-qa.md" || true)
