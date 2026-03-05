@@ -4,7 +4,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawn } from 'child_process';
+import { execSync, spawn } from 'child_process';
 
 import { Request, Response, Router } from 'express';
 
@@ -128,6 +128,44 @@ function spawnAction(
   }
 }
 
+/**
+ * Build a concise, user-facing message from a failed execSync invocation.
+ */
+function formatCommandError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+
+  const withStreams = error as Error & {
+    stderr?: Buffer | string;
+    stdout?: Buffer | string;
+  };
+
+  const stderr =
+    typeof withStreams.stderr === 'string'
+      ? withStreams.stderr
+      : withStreams.stderr?.toString('utf-8') ?? '';
+  const stdout =
+    typeof withStreams.stdout === 'string'
+      ? withStreams.stdout
+      : withStreams.stdout?.toString('utf-8') ?? '';
+
+  const output = stderr.trim() || stdout.trim();
+  return output || error.message;
+}
+
+/**
+ * Execute a short-lived night-watch CLI command and throw on failure.
+ */
+function runCliCommand(projectDir: string, args: string[]): void {
+  execSync(`night-watch ${args.join(' ')}`, {
+    cwd: projectDir,
+    encoding: 'utf-8',
+    stdio: 'pipe',
+    env: process.env,
+  });
+}
+
 // ==================== Context interface ====================
 
 interface IActionRouteContext {
@@ -167,11 +205,26 @@ function createActionRouteHandlers(ctx: IActionRouteContext): Router {
   });
 
   router.post(`/${p}install-cron`, (req: Request, res: Response): void => {
-    spawnAction(ctx.getProjectDir(req), ['install'], req, res);
+    const projectDir = ctx.getProjectDir(req);
+    try {
+      // Reinstall deterministically so toggles/schedule edits always apply.
+      runCliCommand(projectDir, ['uninstall', '--keep-logs']);
+      runCliCommand(projectDir, ['install']);
+      res.json({ started: true });
+    } catch (error) {
+      res.status(500).json({ error: formatCommandError(error) });
+    }
   });
 
   router.post(`/${p}uninstall-cron`, (req: Request, res: Response): void => {
-    spawnAction(ctx.getProjectDir(req), ['uninstall'], req, res);
+    const projectDir = ctx.getProjectDir(req);
+    try {
+      // Keep logs when pausing schedules from the UI/API.
+      runCliCommand(projectDir, ['uninstall', '--keep-logs']);
+      res.json({ started: true });
+    } catch (error) {
+      res.status(500).json({ error: formatCommandError(error) });
+    }
   });
 
   router.post(`/${p}cancel`, async (req: Request, res: Response): Promise<void> => {

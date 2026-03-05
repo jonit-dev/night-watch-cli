@@ -193,6 +193,9 @@ const Scheduling: React.FC = () => {
         });
       }
 
+      // Reinstall cron so the entry is added/removed immediately
+      await triggerInstallCron();
+
       addToast({
         title: 'Job Updated',
         message: `${job[0].toUpperCase() + job.slice(1)} ${enabled ? 'enabled' : 'disabled'}.`,
