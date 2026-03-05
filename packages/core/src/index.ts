@@ -26,12 +26,8 @@ export * from './utils/git-utils.js';
 export * from './utils/github.js';
 export * from './utils/log-utils.js';
 export * from './utils/notify.js';
-export {
-  findEligiblePrd,
-  findEligibleBoardIssue,
-  sortPrdsByPriority,
-} from './utils/prd-discovery.js';
-export type { IFindEligiblePrdOptions, IEligibleBoardIssue } from './utils/prd-discovery.js';
+export { findEligibleBoardIssue } from './utils/prd-discovery.js';
+export type { IEligibleBoardIssue } from './utils/prd-discovery.js';
 export * from './utils/prd-states.js';
 export * from './utils/prd-utils.js';
 export * from './utils/registry.js';

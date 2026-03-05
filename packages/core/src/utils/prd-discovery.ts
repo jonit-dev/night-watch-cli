@@ -15,59 +15,6 @@ export interface IEligibleBoardIssue {
 }
 
 /**
- * Options for findEligiblePrd (legacy filesystem mode - now deprecated)
- * @deprecated Board mode is the only supported mode
- */
-export interface IFindEligiblePrdOptions {
-  prdDir: string;
-  projectDir: string;
-  maxRuntime: number;
-  prdPriority?: string;
-}
-
-/**
- * Sort PRD files by priority order.
- * Files matching priority names come first, others follow in original order.
- * @deprecated Kept for backward compatibility but not used in board mode
- */
-export function sortPrdsByPriority(files: string[], priorityList: string[]): string[] {
-  if (!priorityList.length) {
-    return files;
-  }
-
-  const prioritySet = new Set(priorityList);
-  const prioritized: string[] = [];
-  const remaining: string[] = [];
-
-  // Add files in priority order
-  for (const priorityName of priorityList) {
-    const match = files.find((f) => f === `${priorityName}.md`);
-    if (match) {
-      prioritized.push(match);
-    }
-  }
-
-  // Add remaining files not in priority list
-  for (const file of files) {
-    if (!prioritySet.has(file.replace(/\.md$/, ''))) {
-      remaining.push(file);
-    }
-  }
-
-  return [...prioritized, ...remaining];
-}
-
-/**
- * Find an eligible PRD file for execution.
- * @deprecated Filesystem mode is no longer supported. Use board mode instead.
- * This function always returns null now.
- */
-export function findEligiblePrd(_options: IFindEligiblePrdOptions): string | null {
-  // Filesystem mode removed - board mode is the only execution mode
-  return null;
-}
-
-/**
  * Find an eligible board issue for the roadmap slicer.
  * Returns issue info or null if none eligible.
  * Board mode uses GitHub Projects for state tracking instead of claim files.

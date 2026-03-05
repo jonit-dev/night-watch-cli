@@ -8,14 +8,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { execFileSync } from 'child_process';
-import {
-  findEligibleBoardIssue,
-  findEligiblePrd,
-  sortPrdsByPriority,
-} from '../../utils/prd-discovery.js';
+import { findEligibleBoardIssue } from '../../utils/prd-discovery.js';
 
 let tmpDir: string;
-let prdDir: string;
 let projectDir: string;
 
 // Mock child_process for gh commands
@@ -38,82 +33,11 @@ vi.mock('child_process', async (importOriginal) => {
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nw-prd-discovery-test-'));
   projectDir = path.join(tmpDir, 'project');
-  prdDir = path.join(projectDir, 'docs', 'prds');
-  fs.mkdirSync(prdDir, { recursive: true });
-  fs.mkdirSync(path.join(prdDir, 'done'), { recursive: true });
+  fs.mkdirSync(projectDir, { recursive: true });
 });
 
 afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
-});
-
-describe('sortPrdsByPriority', () => {
-  it('should return files in original order when no priority list', () => {
-    const files = ['a.md', 'b.md', 'c.md'];
-    expect(sortPrdsByPriority(files, [])).toEqual(files);
-  });
-
-  it('should prioritize files matching priority list', () => {
-    const files = ['c.md', 'a.md', 'b.md'];
-    const priority = ['a', 'b'];
-    expect(sortPrdsByPriority(files, priority)).toEqual(['a.md', 'b.md', 'c.md']);
-  });
-
-  it('should handle priority items not in files', () => {
-    const files = ['a.md', 'c.md'];
-    const priority = ['b', 'a'];
-    expect(sortPrdsByPriority(files, priority)).toEqual(['a.md', 'c.md']);
-  });
-
-  it('should preserve order of non-priority files', () => {
-    const files = ['z.md', 'a.md', 'm.md'];
-    const priority = ['a'];
-    expect(sortPrdsByPriority(files, priority)).toEqual(['a.md', 'z.md', 'm.md']);
-  });
-});
-
-describe('findEligiblePrd', () => {
-  // Filesystem mode is deprecated - function always returns null
-  it('should return null (filesystem mode deprecated)', () => {
-    fs.writeFileSync(path.join(prdDir, 'phase1.md'), '# Phase 1');
-
-    const result = findEligiblePrd({
-      prdDir,
-      projectDir,
-      maxRuntime: 7200,
-    });
-
-    // Filesystem mode removed - always returns null
-    expect(result).toBeNull();
-  });
-
-  it('should return null even with priority ordering (deprecated)', () => {
-    fs.writeFileSync(path.join(prdDir, 'phase1.md'), '# Phase 1');
-    fs.writeFileSync(path.join(prdDir, 'phase2.md'), '# Phase 2');
-    fs.writeFileSync(path.join(prdDir, 'phase3.md'), '# Phase 3');
-
-    const result = findEligiblePrd({
-      prdDir,
-      projectDir,
-      maxRuntime: 7200,
-      prdPriority: 'phase3:phase2:phase1',
-    });
-
-    // Filesystem mode removed - always returns null
-    expect(result).toBeNull();
-  });
-
-  it('should return null when PRD dir does not exist', () => {
-    fs.rmSync(prdDir, { recursive: true, force: true });
-
-    const result = findEligiblePrd({
-      prdDir,
-      projectDir,
-      maxRuntime: 7200,
-    });
-
-    expect(result).toBeNull();
-  });
 });
 
 describe('findEligibleBoardIssue', () => {
