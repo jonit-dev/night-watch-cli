@@ -10,18 +10,15 @@ export { LocalKanbanProvider } from './board/providers/local-kanban.js';
 export * from './board/roadmap-mapping.js';
 export * from './storage/repositories/interfaces.js';
 export * from './storage/repositories/index.js';
-export { SqliteAgentPersonaRepository } from './storage/repositories/sqlite/agent-persona.repository.js';
 export { SqliteKanbanIssueRepository } from './storage/repositories/sqlite/kanban-issue.repository.js';
 export * from './storage/sqlite/client.js';
 export * from './storage/sqlite/migrations.js';
 export * from './storage/json-state-migrator.js';
 export * from './di/container.js';
-export * from './agents/soul-compiler.js';
 export * from './utils/avatar-generator.js';
 export * from './utils/logger.js';
 export * from './utils/cancel.js';
 export * from './utils/checks.js';
-export * from './utils/claim-manager.js';
 export * from './utils/config-writer.js';
 export * from './utils/crontab.js';
 export * from './utils/execution-history.js';
@@ -52,13 +49,4 @@ export * from './templates/prd-template.js';
 export * from './templates/slicer-prompt.js';
 // Note: shared/types are re-exported selectively through types.ts to avoid duplicates.
 // Import directly from '@night-watch/core/shared/types.js' if you need the full shared API contract.
-export type {
-  IAgentPersona,
-  IAgentModelConfig,
-  IAgentSoul,
-  IAgentStyle,
-  IAgentSkill,
-  CreateAgentPersonaInput,
-  UpdateAgentPersonaInput,
-  IRoadmapContextOptions,
-} from './shared/types.js';
+export type { IRoadmapContextOptions } from './shared/types.js';

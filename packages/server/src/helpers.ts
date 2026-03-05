@@ -2,7 +2,7 @@
  * Shared helpers for server route modules.
  */
 
-import { IAgentPersona, INightWatchConfig, createBoardProvider } from '@night-watch/core';
+import { INightWatchConfig, createBoardProvider } from '@night-watch/core';
 
 // ==================== Validation ====================
 
@@ -11,23 +11,6 @@ import { IAgentPersona, INightWatchConfig, createBoardProvider } from '@night-wa
  */
 export function validatePrdName(name: string): boolean {
   return /^[a-zA-Z0-9_-]+(\.md)?$/.test(name) && !name.includes('..');
-}
-
-/**
- * Mask persona model env var values before returning API payloads.
- */
-export function maskPersonaSecrets(persona: IAgentPersona): IAgentPersona {
-  const modelConfig = persona.modelConfig;
-  const envVars = modelConfig?.envVars;
-  if (!modelConfig || !envVars) return persona;
-
-  return {
-    ...persona,
-    modelConfig: {
-      ...modelConfig,
-      envVars: Object.fromEntries(Object.keys(envVars).map((key) => [key, '***'])),
-    },
-  };
 }
 
 // ==================== Board Cache ====================

@@ -13,9 +13,7 @@ import cors from 'cors';
 import express, { Express, NextFunction, Request, Response } from 'express';
 
 import {
-  SqliteAgentPersonaRepository,
   collectPrInfo,
-  container,
   getDbPath,
   getRoadmapStatus,
   initContainer,
@@ -30,7 +28,6 @@ import { resolveProject } from './middleware/project-resolver.middleware.js';
 import { SseClientSet, startSseStatusWatcher } from './middleware/sse.middleware.js';
 
 import { createActionRoutes, createProjectActionRoutes } from './routes/action.routes.js';
-import { createAgentRoutes } from './routes/agent.routes.js';
 import { createBoardRoutes, createProjectBoardRoutes } from './routes/board.routes.js';
 import { createConfigRoutes, createProjectConfigRoutes } from './routes/config.routes.js';
 import { createDoctorRoutes, createProjectDoctorRoutes } from './routes/doctor.routes.js';
@@ -115,7 +112,6 @@ export function createApp(projectDir: string): Express {
   app.use('/api/prds', createPrdRoutes({ projectDir, getConfig: () => config }));
   app.use('/api/config', createConfigRoutes({ projectDir, getConfig: () => config, reloadConfig }));
   app.use('/api/board', createBoardRoutes({ projectDir, getConfig: () => config }));
-  app.use('/api/agents', createAgentRoutes());
   app.use('/api/actions', createActionRoutes({ projectDir, getConfig: () => config, sseClients }));
   app.use(
     '/api/roadmap',
@@ -171,7 +167,6 @@ function createProjectRouter() {
   router.use(createProjectDoctorRoutes());
   router.use(createProjectLogRoutes());
   router.use(createProjectBoardRoutes());
-  router.use('/agents', createAgentRoutes());
   router.use(createProjectActionRoutes({ projectSseClients }));
   router.use(createProjectRoadmapRoutes());
 
@@ -214,14 +209,11 @@ export function createGlobalApp(): Express {
 // ==================== Server Startup ====================
 
 /**
- * Initialize the DI container with the global state database and seed default personas.
+ * Initialize the DI container with the global state database.
  * Idempotent — safe to call multiple times.
  */
 function bootContainer(): void {
   initContainer(path.dirname(getDbPath()));
-  const personaRepo = container.resolve(SqliteAgentPersonaRepository);
-  personaRepo.seedDefaultsOnFirstRun();
-  personaRepo.patchDefaultAvatarUrls();
 }
 
 export function startServer(projectDir: string, port: number): void {
