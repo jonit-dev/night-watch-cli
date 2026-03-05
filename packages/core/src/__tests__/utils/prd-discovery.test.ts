@@ -1,5 +1,6 @@
 /**
  * Tests for PRD discovery utilities
+ * Board mode only - filesystem mode has been removed
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -72,17 +73,8 @@ describe('sortPrdsByPriority', () => {
 });
 
 describe('findEligiblePrd', () => {
-  it('should return null when no PRD files exist', () => {
-    expect(
-      findEligiblePrd({
-        prdDir,
-        projectDir,
-        maxRuntime: 7200,
-      }),
-    ).toBeNull();
-  });
-
-  it('should return the first eligible PRD', () => {
+  // Filesystem mode is deprecated - function always returns null
+  it('should return null (filesystem mode deprecated)', () => {
     fs.writeFileSync(path.join(prdDir, 'phase1.md'), '# Phase 1');
 
     const result = findEligiblePrd({
@@ -91,39 +83,11 @@ describe('findEligiblePrd', () => {
       maxRuntime: 7200,
     });
 
-    expect(result).toBe('phase1.md');
+    // Filesystem mode removed - always returns null
+    expect(result).toBeNull();
   });
 
-  it('should skip PRD with unmet dependencies', () => {
-    fs.writeFileSync(path.join(prdDir, 'phase1.md'), '# Phase 1');
-    fs.writeFileSync(path.join(prdDir, 'phase2.md'), 'Depends on: `phase1`');
-
-    const result = findEligiblePrd({
-      prdDir,
-      projectDir,
-      maxRuntime: 7200,
-    });
-
-    // phase2 depends on phase1 which is not done, so phase1 should be returned
-    expect(result).toBe('phase1.md');
-  });
-
-  it('should return PRD with met dependencies', () => {
-    // phase1 is done
-    fs.writeFileSync(path.join(prdDir, 'done', 'phase1.md'), '# Phase 1');
-    // phase2 depends on phase1
-    fs.writeFileSync(path.join(prdDir, 'phase2.md'), 'Depends on: `phase1`');
-
-    const result = findEligiblePrd({
-      prdDir,
-      projectDir,
-      maxRuntime: 7200,
-    });
-
-    expect(result).toBe('phase2.md');
-  });
-
-  it('should respect priority ordering', () => {
+  it('should return null even with priority ordering (deprecated)', () => {
     fs.writeFileSync(path.join(prdDir, 'phase1.md'), '# Phase 1');
     fs.writeFileSync(path.join(prdDir, 'phase2.md'), '# Phase 2');
     fs.writeFileSync(path.join(prdDir, 'phase3.md'), '# Phase 3');
@@ -135,23 +99,7 @@ describe('findEligiblePrd', () => {
       prdPriority: 'phase3:phase2:phase1',
     });
 
-    expect(result).toBe('phase3.md');
-  });
-
-  it('should skip PRD if claimed', () => {
-    fs.writeFileSync(path.join(prdDir, 'phase1.md'), '# Phase 1');
-    // Create a claim file
-    fs.writeFileSync(
-      path.join(prdDir, 'phase1.md.claim'),
-      JSON.stringify({ timestamp: Math.floor(Date.now() / 1000), hostname: 'test', pid: 12345 }),
-    );
-
-    const result = findEligiblePrd({
-      prdDir,
-      projectDir,
-      maxRuntime: 7200,
-    });
-
+    // Filesystem mode removed - always returns null
     expect(result).toBeNull();
   });
 
@@ -201,7 +149,7 @@ describe('findEligibleBoardIssue', () => {
       return '';
     });
 
-    const result = findEligibleBoardIssue({ projectDir, maxRuntime: 7200 });
+    const result = findEligibleBoardIssue({ projectDir });
     expect(result).toBeNull();
   });
 
@@ -213,11 +161,11 @@ describe('findEligibleBoardIssue', () => {
       return '';
     });
 
-    const result = findEligibleBoardIssue({ projectDir, maxRuntime: 7200 });
+    const result = findEligibleBoardIssue({ projectDir });
     expect(result).toBeNull();
   });
 
-  it('returns the first unclaimed issue', () => {
+  it('returns the first issue when available', () => {
     vi.mocked(execFileSync).mockImplementation((cmd: string, args: string[]) => {
       if (cmd === 'gh' && (args as string[]).includes('issue')) {
         return '{"number":1,"title":"Do X","body":"details"}';
@@ -225,11 +173,11 @@ describe('findEligibleBoardIssue', () => {
       return '';
     });
 
-    const result = findEligibleBoardIssue({ projectDir, maxRuntime: 7200 });
+    const result = findEligibleBoardIssue({ projectDir });
     expect(result).toEqual({ number: 1, title: 'Do X', body: 'details' });
   });
 
-  it('skips claimed issues and returns next unclaimed', () => {
+  it('returns first issue when multiple issues available', () => {
     vi.mocked(execFileSync).mockImplementation((cmd: string, args: string[]) => {
       if (cmd === 'gh' && (args as string[]).includes('issue')) {
         return [
@@ -240,42 +188,12 @@ describe('findEligibleBoardIssue', () => {
       return '';
     });
 
-    // Claim issue 1 by writing a claim file at projectDir/issue-1.claim
-    const claimData = JSON.stringify({
-      timestamp: Math.floor(Date.now() / 1000),
-      hostname: 'test-host',
-      pid: 99999,
-    });
-    fs.writeFileSync(path.join(projectDir, 'issue-1.claim'), claimData, 'utf-8');
-
-    const result = findEligibleBoardIssue({ projectDir, maxRuntime: 7200 });
-    expect(result).toEqual({ number: 2, title: 'Issue Two', body: 'second' });
+    const result = findEligibleBoardIssue({ projectDir });
+    // Returns the first issue in the list
+    expect(result).toEqual({ number: 1, title: 'Issue One', body: 'first' });
   });
 
-  it('returns null when all issues are claimed', () => {
-    vi.mocked(execFileSync).mockImplementation((cmd: string, args: string[]) => {
-      if (cmd === 'gh' && (args as string[]).includes('issue')) {
-        return [
-          '{"number":1,"title":"Issue One","body":"first"}',
-          '{"number":2,"title":"Issue Two","body":"second"}',
-        ].join('\n');
-      }
-      return '';
-    });
-
-    const claimData = JSON.stringify({
-      timestamp: Math.floor(Date.now() / 1000),
-      hostname: 'test-host',
-      pid: 99999,
-    });
-    fs.writeFileSync(path.join(projectDir, 'issue-1.claim'), claimData, 'utf-8');
-    fs.writeFileSync(path.join(projectDir, 'issue-2.claim'), claimData, 'utf-8');
-
-    const result = findEligibleBoardIssue({ projectDir, maxRuntime: 7200 });
-    expect(result).toBeNull();
-  });
-
-  it('skips malformed JSON lines', () => {
+  it('skips malformed JSON lines and returns first valid issue', () => {
     vi.mocked(execFileSync).mockImplementation((cmd: string, args: string[]) => {
       if (cmd === 'gh' && (args as string[]).includes('issue')) {
         return ['not valid json {{{', '{"number":3,"title":"Valid Issue","body":"body text"}'].join(
@@ -285,7 +203,7 @@ describe('findEligibleBoardIssue', () => {
       return '';
     });
 
-    const result = findEligibleBoardIssue({ projectDir, maxRuntime: 7200 });
+    const result = findEligibleBoardIssue({ projectDir });
     expect(result).toEqual({ number: 3, title: 'Valid Issue', body: 'body text' });
   });
 });

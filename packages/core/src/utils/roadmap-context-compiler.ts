@@ -4,12 +4,8 @@
  * Produces agent-visible context from an IRoadmapStatus by combining:
  * - The raw ROADMAP.md content (so agents can reference exact sections/wording)
  * - A progress overlay showing which items are done vs pending
- *
- * Role detection uses case-insensitive substring matching so any custom
- * persona role string is handled without enum changes.
  */
 
-import type { IAgentPersona } from '../shared/types.js';
 import type { IRoadmapContextOptions } from '../shared/types.js';
 import type { IRoadmapStatus } from './roadmap-scanner.js';
 
@@ -19,18 +15,6 @@ const RAW_CONTENT_MAX = 6000;
 /** Max chars for the progress overlay. */
 const PROGRESS_MAX_FULL = 2000;
 const PROGRESS_MAX_SUMMARY = 600;
-
-/** Keywords that identify a "lead" persona who gets the full roadmap digest. */
-const LEAD_KEYWORDS = ['lead', 'architect', 'product', 'manager', 'pm', 'director'] as const;
-
-/**
- * Returns true if the persona role string indicates a lead / decision-making role.
- * Matching is case-insensitive and substring-based so free-form role names work.
- */
-export function isLeadRole(role: string): boolean {
-  const lower = role.toLowerCase();
-  return LEAD_KEYWORDS.some((kw) => lower.includes(kw));
-}
 
 /**
  * Compile an IRoadmapStatus into a string suitable for injection into agent prompts.
@@ -62,15 +46,6 @@ export function compileRoadmapContext(
   }
 
   return parts.join('\n\n');
-}
-
-/**
- * Convenience wrapper: picks mode based on the persona's role string.
- * Lead roles get the full digest; all others get the smart summary.
- */
-export function compileRoadmapForPersona(persona: IAgentPersona, status: IRoadmapStatus): string {
-  const mode = isLeadRole(persona.role) ? 'full' : 'summary';
-  return compileRoadmapContext(status, { mode });
 }
 
 // ---------------------------------------------------------------------------

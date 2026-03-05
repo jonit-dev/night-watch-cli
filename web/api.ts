@@ -18,13 +18,6 @@ import type {
   IStatusSnapshot,
   IRoadmapItem,
   IRoadmapStatus,
-  IAgentPersona,
-  IAgentSoul,
-  IAgentStyle,
-  IAgentSkill,
-  IAgentModelConfig,
-  CreateAgentPersonaInput,
-  UpdateAgentPersonaInput,
   MergeMethod,
   IJobProviders,
   ClaudeModel,
@@ -47,13 +40,6 @@ export type {
   IStatusSnapshot,
   IRoadmapItem,
   IRoadmapStatus,
-  IAgentPersona,
-  IAgentSoul,
-  IAgentStyle,
-  IAgentSkill,
-  IAgentModelConfig,
-  CreateAgentPersonaInput,
-  UpdateAgentPersonaInput,
   MergeMethod,
   IJobProviders,
   ClaudeModel,
@@ -282,49 +268,6 @@ export function triggerCancel(type: 'run' | 'review' | 'all' = 'all'): Promise<C
     method: 'POST',
     body: JSON.stringify({ type }),
   });
-}
-
-// ==================== Agents ====================
-
-export function fetchAgents(): Promise<IAgentPersona[]> {
-  return apiFetch<IAgentPersona[]>(apiPath('/api/agents'));
-}
-
-export function createAgent(input: CreateAgentPersonaInput): Promise<IAgentPersona> {
-  return apiFetch<IAgentPersona>(apiPath('/api/agents'), {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
-}
-
-export function updateAgent(id: string, input: UpdateAgentPersonaInput): Promise<IAgentPersona> {
-  return apiFetch<IAgentPersona>(apiPath(`/api/agents/${encodeURIComponent(id)}`), {
-    method: 'PUT',
-    body: JSON.stringify(input),
-  });
-}
-
-export function fetchAgentPrompt(id: string): Promise<{ prompt: string }> {
-  return apiFetch<{ prompt: string }>(apiPath(`/api/agents/${encodeURIComponent(id)}/prompt`));
-}
-
-export function seedDefaultAgents(): Promise<{ message: string }> {
-  return apiFetch<{ message: string }>(apiPath('/api/agents/seed-defaults'), {
-    method: 'POST',
-  });
-}
-
-export async function deleteAgent(id: string): Promise<void> {
-  const url = `${API_BASE}${apiPath(`/api/agents/${encodeURIComponent(id)}`)}`;
-  const response = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    method: 'DELETE',
-  });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
-  }
-  // 204 No Content — do not parse response body
 }
 
 // ==================== Board ====================

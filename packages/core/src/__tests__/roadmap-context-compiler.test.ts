@@ -4,11 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { IRoadmapStatus } from '../utils/roadmap-scanner.js';
-import {
-  compileRoadmapContext,
-  compileRoadmapForPersona,
-  isLeadRole,
-} from '../utils/roadmap-context-compiler.js';
+import { compileRoadmapContext } from '../utils/roadmap-context-compiler.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -50,48 +46,6 @@ function buildStatus(
     ...overrides,
   };
 }
-
-function buildPersona(role: string) {
-  return { id: 'p1', name: 'Test', role } as any;
-}
-
-// ---------------------------------------------------------------------------
-// isLeadRole
-// ---------------------------------------------------------------------------
-
-describe('isLeadRole', () => {
-  it('matches Tech Lead', () => {
-    expect(isLeadRole('Tech Lead')).toBe(true);
-  });
-
-  it('matches PM (exact)', () => {
-    expect(isLeadRole('PM')).toBe(true);
-  });
-
-  it('matches Product Manager', () => {
-    expect(isLeadRole('Product Manager')).toBe(true);
-  });
-
-  it('matches Director of Engineering', () => {
-    expect(isLeadRole('Director of Engineering')).toBe(true);
-  });
-
-  it('matches architect (case-insensitive)', () => {
-    expect(isLeadRole('Senior Architect')).toBe(true);
-  });
-
-  it('returns false for QA Engineer', () => {
-    expect(isLeadRole('QA Engineer')).toBe(false);
-  });
-
-  it('returns false for Implementer', () => {
-    expect(isLeadRole('Implementer')).toBe(false);
-  });
-
-  it('returns false for Security Reviewer', () => {
-    expect(isLeadRole('Security Reviewer')).toBe(false);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // compileRoadmapContext — edge cases
@@ -221,41 +175,5 @@ describe('smart summary', () => {
     ]);
     const result = compileRoadmapContext(status, { mode: 'summary' });
     expect(result).toContain('1/2 items done');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// compileRoadmapForPersona
-// ---------------------------------------------------------------------------
-
-describe('compileRoadmapForPersona', () => {
-  it('picks full mode for lead persona', () => {
-    const status = buildStatus(
-      [{ title: 'Task A', section: 'Short Term', description: 'With description' }],
-      { rawContent: '## Short Term\n- [ ] Task A\n  With description' },
-    );
-    const result = compileRoadmapForPersona(buildPersona('Tech Lead'), status);
-    // Full mode includes raw content with descriptions
-    expect(result).toContain('With description');
-  });
-
-  it('picks summary mode for non-lead persona', () => {
-    const status = buildStatus([
-      { title: 'Task A', section: 'Short Term', description: 'With description' },
-    ]);
-    const result = compileRoadmapForPersona(buildPersona('QA Engineer'), status);
-    expect(result).toContain('Task A');
-  });
-
-  it('includes raw content for all persona types when available', () => {
-    const raw = '# Roadmap\n## Short Term\n- [ ] Task A';
-    const status = buildStatus(
-      [{ title: 'Task A', section: 'Short Term' }],
-      { rawContent: raw },
-    );
-    const qaResult = compileRoadmapForPersona(buildPersona('QA Engineer'), status);
-    const leadResult = compileRoadmapForPersona(buildPersona('Tech Lead'), status);
-    expect(qaResult).toContain('# Roadmap');
-    expect(leadResult).toContain('# Roadmap');
   });
 });
