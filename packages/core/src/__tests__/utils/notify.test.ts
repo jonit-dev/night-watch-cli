@@ -195,6 +195,24 @@ describe('notification utilities', () => {
       expect(payload.text).toContain('Attempts: 3');
       expect(payload.text).toContain('final score: 92/100');
     });
+
+    it('should include QA screenshot links when present', () => {
+      const payload = formatTelegramPayload({
+        ...baseCtx,
+        event: 'qa_completed',
+        prUrl: 'https://github.com/user/repo/pull/42',
+        prTitle: 'qa: checkout flow',
+        prNumber: 42,
+        qaScreenshotUrls: [
+          'https://github.com/user/repo/blob/feat/checkout/qa-artifacts/home.png',
+          'https://github.com/user/repo/blob/feat/checkout/qa-artifacts/cart.png',
+        ],
+      });
+
+      expect(payload.text).toContain('Screenshots');
+      expect(payload.text).toContain('home\\.png');
+      expect(payload.text).toContain('cart\\.png');
+    });
   });
 
   describe('buildDescription', () => {
@@ -227,6 +245,25 @@ describe('notification utilities', () => {
       );
       expect(text).toContain(
         'Recommendation: Avoid huge PRDs; slice large work into smaller PRDs/phases.',
+      );
+    });
+
+    it('should include QA screenshot summary for qa_completed events', () => {
+      const text = buildDescription({
+        ...baseCtx,
+        event: 'qa_completed',
+        qaScreenshotUrls: [
+          'https://github.com/user/repo/blob/feat/checkout/qa-artifacts/home.png',
+          'https://github.com/user/repo/blob/feat/checkout/qa-artifacts/cart.png',
+        ],
+      });
+
+      expect(text).toContain('QA screenshots: 2');
+      expect(text).toContain(
+        'Screenshot 1: https://github.com/user/repo/blob/feat/checkout/qa-artifacts/home.png',
+      );
+      expect(text).toContain(
+        'Screenshot 2: https://github.com/user/repo/blob/feat/checkout/qa-artifacts/cart.png',
       );
     });
   });

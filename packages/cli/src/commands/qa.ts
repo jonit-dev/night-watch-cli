@@ -12,6 +12,7 @@ import {
   dim,
   executeScriptWithOutput,
   fetchPrDetailsByNumber,
+  fetchQaScreenshotUrlsForPr,
   getScriptPath,
   header,
   info,
@@ -64,6 +65,15 @@ export function parseQaPrNumbers(prsRaw?: string): number[] {
     numbers.push(parsed);
   }
   return numbers;
+}
+
+function parseRepoFromPrUrl(prUrl?: string): string | undefined {
+  if (!prUrl) {
+    return undefined;
+  }
+
+  const match = prUrl.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/\d+/i);
+  return match?.[1];
 }
 
 /**
@@ -230,11 +240,15 @@ export function qaCommand(program: Command): void {
             const qaPrNumbers = parseQaPrNumbers(scriptResult?.data.prs);
             const primaryQaPr = qaPrNumbers[0];
             const prDetails = primaryQaPr ? fetchPrDetailsByNumber(primaryQaPr, projectDir) : null;
-            const repo = scriptResult?.data.repo;
+            const repo = scriptResult?.data.repo ?? parseRepoFromPrUrl(prDetails?.url);
             const fallbackPrUrl =
               !prDetails?.url && primaryQaPr && repo
                 ? `https://github.com/${repo}/pull/${primaryQaPr}`
                 : undefined;
+            const qaScreenshotUrls =
+              primaryQaPr !== undefined
+                ? fetchQaScreenshotUrlsForPr(primaryQaPr, projectDir, repo)
+                : [];
 
             const _qaCtx = {
               event: 'qa_completed' as const,
@@ -248,6 +262,7 @@ export function qaCommand(program: Command): void {
               filesChanged: prDetails?.changedFiles,
               additions: prDetails?.additions,
               deletions: prDetails?.deletions,
+              qaScreenshotUrls,
             };
             await sendNotifications(config, _qaCtx);
           }
