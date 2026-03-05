@@ -306,9 +306,9 @@ The audit process runs automated code quality and security audits.
 
 ---
 
-## Roadmap Scanner (`roadmapScanner`)
+## Planner (`roadmapScanner`)
 
-The roadmap scanner automatically scans `ROADMAP.md` and generates PRDs for unchecked items. The Slicer uses AI to generate detailed PRDs from roadmap items.
+The planner generates one PRD per run. It prioritizes `ROADMAP.md` items by default, and falls back to audit findings from `logs/audit-report.md` when roadmap items are exhausted.
 
 ```json
 {
@@ -316,21 +316,25 @@ The roadmap scanner automatically scans `ROADMAP.md` and generates PRDs for unch
     "enabled": false,
     "roadmapPath": "ROADMAP.md",
     "autoScanInterval": 300,
-    "slicerSchedule": "0 2,8,14,20 * * *",
-    "slicerMaxRuntime": 600
+    "slicerSchedule": "0 */6 * * *",
+    "slicerMaxRuntime": 600,
+    "priorityMode": "roadmap-first",
+    "issueColumn": "Draft"
   }
 }
 ```
 
-### Roadmap Scanner Fields
+### Planner Fields
 
-| Field              | Type    | Default               | Description                                          |
-| ------------------ | ------- | --------------------- | ---------------------------------------------------- |
-| `enabled`          | boolean | `false`               | Enable the roadmap scanner                           |
-| `roadmapPath`      | string  | `"ROADMAP.md"`        | Path to ROADMAP.md file (relative to project root)   |
-| `autoScanInterval` | number  | `300`                 | Interval in seconds between automatic scans (min 30) |
-| `slicerSchedule`   | string  | `"0 2,8,14,20 * * *"` | Cron schedule for the slicer                         |
-| `slicerMaxRuntime` | number  | `600`                 | Maximum runtime in seconds for the slicer            |
+| Field              | Type    | Default           | Description                                             |
+| ------------------ | ------- | ----------------- | ------------------------------------------------------- |
+| `enabled`          | boolean | `true`            | Enable planner runs                                     |
+| `roadmapPath`      | string  | `"ROADMAP.md"`    | Path to ROADMAP.md file (relative to project root)      |
+| `autoScanInterval` | number  | `300`             | Interval in seconds between automatic scans (min 30)    |
+| `slicerSchedule`   | string  | `"0 */6 * * *"`   | Cron schedule for planner                               |
+| `slicerMaxRuntime` | number  | `600`             | Maximum runtime in seconds for planner                  |
+| `priorityMode`     | string  | `"roadmap-first"` | Source priority: `roadmap-first` or `audit-first`       |
+| `issueColumn`      | string  | `"Draft"`         | Column for auto-created planner issues: `Draft`/`Ready` |
 
 ---
 

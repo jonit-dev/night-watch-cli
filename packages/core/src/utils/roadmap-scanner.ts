@@ -527,8 +527,11 @@ export async function sliceNextItem(
     return undefined;
   };
 
-  // Planner priority: pending roadmap items first, then actionable audit findings.
-  const targetItem = pickEligibleItem(roadmapItems) ?? pickEligibleItem(auditItems);
+  const roadmapFirst = config.roadmapScanner.priorityMode !== 'audit-first';
+  // Planner priority is configurable: roadmap-first (default) or audit-first.
+  const targetItem = roadmapFirst
+    ? (pickEligibleItem(roadmapItems) ?? pickEligibleItem(auditItems))
+    : (pickEligibleItem(auditItems) ?? pickEligibleItem(roadmapItems));
 
   if (!targetItem) {
     return {

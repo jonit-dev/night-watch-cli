@@ -243,6 +243,12 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   // Roadmap Scanner
   const rawRoadmapScanner = readObject(rawConfig.roadmapScanner);
   if (rawRoadmapScanner) {
+    const priorityModeRaw = readString(rawRoadmapScanner.priorityMode);
+    const priorityMode =
+      priorityModeRaw === 'roadmap-first' || priorityModeRaw === 'audit-first'
+        ? priorityModeRaw
+        : DEFAULT_ROADMAP_SCANNER.priorityMode;
+
     const issueColumnRaw = readString(rawRoadmapScanner.issueColumn);
     const issueColumn =
       issueColumnRaw === 'Draft' || issueColumnRaw === 'Ready'
@@ -258,6 +264,7 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
         readString(rawRoadmapScanner.slicerSchedule) ?? DEFAULT_ROADMAP_SCANNER.slicerSchedule,
       slicerMaxRuntime:
         readNumber(rawRoadmapScanner.slicerMaxRuntime) ?? DEFAULT_ROADMAP_SCANNER.slicerMaxRuntime,
+      priorityMode,
       issueColumn,
     };
     // Validate autoScanInterval has minimum of 30 seconds
@@ -662,6 +669,17 @@ export function loadConfig(projectDir: string): INightWatchConfig {
       envConfig.roadmapScanner = {
         ...(envConfig.roadmapScanner ?? DEFAULT_ROADMAP_SCANNER),
         issueColumn,
+      };
+    }
+  }
+
+  // NW_PLANNER_PRIORITY_MODE environment variable
+  if (process.env.NW_PLANNER_PRIORITY_MODE) {
+    const priorityMode = process.env.NW_PLANNER_PRIORITY_MODE;
+    if (priorityMode === 'roadmap-first' || priorityMode === 'audit-first') {
+      envConfig.roadmapScanner = {
+        ...(envConfig.roadmapScanner ?? DEFAULT_ROADMAP_SCANNER),
+        priorityMode,
       };
     }
   }

@@ -823,6 +823,18 @@ describe('config', () => {
       expect(config.roadmapScanner.slicerMaxRuntime).toBe(600);
     });
 
+    it('should default planner issueColumn to Draft', () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.roadmapScanner.issueColumn).toBe('Draft');
+    });
+
+    it('should default planner priorityMode to roadmap-first', () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.roadmapScanner.priorityMode).toBe('roadmap-first');
+    });
+
     it('should override slicerSchedule from env', () => {
       const configPath = path.join(tempDir, 'night-watch.config.json');
       fs.writeFileSync(
@@ -841,6 +853,22 @@ describe('config', () => {
       const config = loadConfig(tempDir);
 
       expect(config.roadmapScanner.slicerSchedule).toBe(envValue);
+    });
+
+    it('should override planner issueColumn from env', () => {
+      process.env.NW_PLANNER_ISSUE_COLUMN = 'Ready';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.roadmapScanner.issueColumn).toBe('Ready');
+    });
+
+    it('should override planner priorityMode from env', () => {
+      process.env.NW_PLANNER_PRIORITY_MODE = 'audit-first';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.roadmapScanner.priorityMode).toBe('audit-first');
     });
   });
 
@@ -1511,6 +1539,8 @@ describe('config', () => {
       // normalizeConfig fills missing fields from DEFAULT_ROADMAP_SCANNER
       expect(config.roadmapScanner.autoScanInterval).toBe(300);
       expect(config.roadmapScanner.roadmapPath).toBe('ROADMAP.md');
+      expect(config.roadmapScanner.priorityMode).toBe('roadmap-first');
+      expect(config.roadmapScanner.issueColumn).toBe('Draft');
     });
 
     it('jobProviders from file replaces default (replace semantics)', () => {

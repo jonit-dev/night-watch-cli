@@ -24,7 +24,12 @@ const mockExit = vi.spyOn(process, 'exit').mockImplementation((code) => {
 const mockCwd = vi.spyOn(process, 'cwd');
 
 // Import after setting up mocks
-import { buildEnvVars, applyCliOverrides, ISliceOptions } from '@/cli/commands/slice.js';
+import {
+  buildEnvVars,
+  applyCliOverrides,
+  createPlannerIssue,
+  ISliceOptions,
+} from '@/cli/commands/slice.js';
 import { INightWatchConfig, IRoadmapScannerConfig } from '@night-watch/core/types.js';
 
 // Helper to create a valid config with roadmap scanner settings
@@ -35,6 +40,8 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
     autoScanInterval: 300,
     slicerSchedule: '0 */6 * * *',
     slicerMaxRuntime: 600,
+    priorityMode: 'roadmap-first',
+    issueColumn: 'Draft',
   };
 
   return {
@@ -55,6 +62,28 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
     providerEnv: {},
     notifications: { webhooks: [] },
     jobProviders: {},
+    boardProvider: { enabled: true, provider: 'github' },
+    templatesDir: '.night-watch/templates',
+    fallbackOnRateLimit: false,
+    claudeModel: 'sonnet',
+    reviewerMaxRetries: 2,
+    reviewerRetryDelay: 30,
+    autoMerge: false,
+    autoMergeMethod: 'squash',
+    qa: {
+      enabled: true,
+      schedule: '30 1,7,13,19 * * *',
+      maxRuntime: 3600,
+      branchPatterns: [],
+      artifacts: 'both',
+      skipLabel: 'skip-qa',
+      autoInstallPlaywright: true,
+    },
+    audit: {
+      enabled: true,
+      schedule: '0 3 * * *',
+      maxRuntime: 1800,
+    },
     roadmapScanner: defaultRoadmapScanner,
     defaultBranch: '',
     ...overrides,
@@ -261,6 +290,29 @@ describe('slice command', () => {
 
       // Should not override when parsing fails
       expect(overridden.roadmapScanner.slicerMaxRuntime).toBe(600);
+    });
+  });
+
+  describe('createPlannerIssue', () => {
+    it('should skip issue creation when board provider is disabled', async () => {
+      const config = createTestConfig({
+        boardProvider: { enabled: false, provider: 'github' },
+      });
+
+      const result = await createPlannerIssue(tempDir, config, {
+        sliced: true,
+        file: '01-test.md',
+        item: {
+          hash: 'abc12345',
+          title: 'Test planner item',
+          description: 'Generated for test',
+          checked: false,
+          section: 'Test',
+        },
+      });
+
+      expect(result.created).toBe(false);
+      expect(result.skippedReason).toBe('board-disabled');
     });
   });
 
