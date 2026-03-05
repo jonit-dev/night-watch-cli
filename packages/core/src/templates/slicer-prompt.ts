@@ -2,7 +2,7 @@
  * Slicer Prompt Template
  *
  * Provides functionality to render the AI prompt for generating PRDs from roadmap items.
- * The template is loaded from templates/night-watch-slicer.md and interpolated with
+ * The template is loaded from templates/slicer.md and interpolated with
  * runtime values from the roadmap item being processed.
  */
 
@@ -128,8 +128,8 @@ export function loadSlicerTemplate(templateDir?: string): string {
 
   // Determine the template file path
   const templatePath = templateDir
-    ? path.join(templateDir, 'night-watch-slicer.md')
-    : path.resolve(__dirname, '..', '..', 'templates', 'night-watch-slicer.md');
+    ? path.join(templateDir, 'slicer.md')
+    : path.resolve(__dirname, '..', '..', 'templates', 'slicer.md');
 
   try {
     cachedTemplate = fs.readFileSync(templatePath, 'utf-8');
