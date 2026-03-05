@@ -127,10 +127,10 @@ describe("Package Files", () => {
     expect(fs.existsSync(templatesDir)).toBe(true);
 
     // Check for required templates
-    expect(fs.existsSync(path.join(templatesDir, "night-watch.md"))).toBe(true);
+    expect(fs.existsSync(path.join(templatesDir, "executor.md"))).toBe(true);
     expect(fs.existsSync(path.join(templatesDir, "prd-executor.md"))).toBe(true);
-    expect(fs.existsSync(path.join(templatesDir, "night-watch-pr-reviewer.md"))).toBe(true);
-    expect(fs.existsSync(path.join(templatesDir, "night-watch-audit.md"))).toBe(true);
+    expect(fs.existsSync(path.join(templatesDir, "pr-reviewer.md"))).toBe(true);
+    expect(fs.existsSync(path.join(templatesDir, "audit.md"))).toBe(true);
     expect(fs.existsSync(path.join(templatesDir, "night-watch.config.json"))).toBe(true);
   });
 
@@ -155,7 +155,7 @@ describe("Package Files", () => {
   });
 
   it("should have night-watch template referencing prd-executor", () => {
-    const templatePath = path.join(packageRoot, "templates", "night-watch.md");
+    const templatePath = path.join(packageRoot, "templates", "executor.md");
     const content = fs.readFileSync(templatePath, "utf-8");
 
     expect(content).toContain("prd-executor.md");
@@ -230,10 +230,10 @@ describe("npm pack verification", () => {
 
       // Check that templates are included
       expect(output).toMatch(/templates\//);
-      expect(output).toMatch(/night-watch\.md/);
+      expect(output).toMatch(/executor\.md/);
       expect(output).toMatch(/prd-executor\.md/);
-      expect(output).toMatch(/night-watch-pr-reviewer\.md/);
-      expect(output).toMatch(/night-watch-audit\.md/);
+      expect(output).toMatch(/pr-reviewer\.md/);
+      expect(output).toMatch(/audit\.md/);
       expect(output).toMatch(/night-watch\.config\.json/);
     } catch (error) {
       console.warn("npm pack --dry-run failed, skipping pack verification");

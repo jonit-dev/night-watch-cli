@@ -513,17 +513,17 @@ export function initCommand(program: Command): void {
       // Track template sources for summary
       const templateSources: { name: string; source: 'custom' | 'bundled' }[] = [];
 
-      // Copy night-watch.md template
-      const nwResolution = resolveTemplatePath('night-watch.md', customTemplatesDir, TEMPLATES_DIR);
+      // Copy executor.md template
+      const nwResolution = resolveTemplatePath('executor.md', customTemplatesDir, TEMPLATES_DIR);
       const nwResult = processTemplate(
-        'night-watch.md',
-        path.join(instructionsDir, 'night-watch.md'),
+        'executor.md',
+        path.join(instructionsDir, 'executor.md'),
         replacements,
         force,
         nwResolution.path,
         nwResolution.source,
       );
-      templateSources.push({ name: 'night-watch.md', source: nwResult.source });
+      templateSources.push({ name: 'executor.md', source: nwResult.source });
 
       // Copy prd-executor.md template
       const peResolution = resolveTemplatePath(
@@ -541,53 +541,53 @@ export function initCommand(program: Command): void {
       );
       templateSources.push({ name: 'prd-executor.md', source: peResult.source });
 
-      // Copy night-watch-pr-reviewer.md template
+      // Copy pr-reviewer.md template
       const prResolution = resolveTemplatePath(
-        'night-watch-pr-reviewer.md',
+        'pr-reviewer.md',
         customTemplatesDir,
         TEMPLATES_DIR,
       );
       const prResult = processTemplate(
-        'night-watch-pr-reviewer.md',
-        path.join(instructionsDir, 'night-watch-pr-reviewer.md'),
+        'pr-reviewer.md',
+        path.join(instructionsDir, 'pr-reviewer.md'),
         replacements,
         force,
         prResolution.path,
         prResolution.source,
       );
-      templateSources.push({ name: 'night-watch-pr-reviewer.md', source: prResult.source });
+      templateSources.push({ name: 'pr-reviewer.md', source: prResult.source });
 
-      // Copy night-watch-qa.md template
+      // Copy qa.md template
       const qaResolution = resolveTemplatePath(
-        'night-watch-qa.md',
+        'qa.md',
         customTemplatesDir,
         TEMPLATES_DIR,
       );
       const qaResult = processTemplate(
-        'night-watch-qa.md',
-        path.join(instructionsDir, 'night-watch-qa.md'),
+        'qa.md',
+        path.join(instructionsDir, 'qa.md'),
         replacements,
         force,
         qaResolution.path,
         qaResolution.source,
       );
-      templateSources.push({ name: 'night-watch-qa.md', source: qaResult.source });
+      templateSources.push({ name: 'qa.md', source: qaResult.source });
 
-      // Copy night-watch-audit.md template
+      // Copy audit.md template
       const auditResolution = resolveTemplatePath(
-        'night-watch-audit.md',
+        'audit.md',
         customTemplatesDir,
         TEMPLATES_DIR,
       );
       const auditResult = processTemplate(
-        'night-watch-audit.md',
-        path.join(instructionsDir, 'night-watch-audit.md'),
+        'audit.md',
+        path.join(instructionsDir, 'audit.md'),
         replacements,
         force,
         auditResolution.path,
         auditResolution.source,
       );
-      templateSources.push({ name: 'night-watch-audit.md', source: auditResult.source });
+      templateSources.push({ name: 'audit.md', source: auditResult.source });
 
       // Step 8: Create config file
       step(8, totalSteps, 'Creating configuration file...');
@@ -703,15 +703,12 @@ export function initCommand(program: Command): void {
       filesTable.push(['Logs Directory', `${LOG_DIR}/`]);
       filesTable.push([
         'Instructions',
-        `instructions/night-watch.md (${templateSources[0].source})`,
+        `instructions/executor.md (${templateSources[0].source})`,
       ]);
       filesTable.push(['', `instructions/prd-executor.md (${templateSources[1].source})`]);
-      filesTable.push([
-        '',
-        `instructions/night-watch-pr-reviewer.md (${templateSources[2].source})`,
-      ]);
-      filesTable.push(['', `instructions/night-watch-qa.md (${templateSources[3].source})`]);
-      filesTable.push(['', `instructions/night-watch-audit.md (${templateSources[4].source})`]);
+      filesTable.push(['', `instructions/pr-reviewer.md (${templateSources[2].source})`]);
+      filesTable.push(['', `instructions/qa.md (${templateSources[3].source})`]);
+      filesTable.push(['', `instructions/audit.md (${templateSources[4].source})`]);
       filesTable.push(['Config File', CONFIG_FILE_NAME]);
       filesTable.push(['Global Registry', '~/.night-watch/projects.json']);
       console.log(filesTable.toString());

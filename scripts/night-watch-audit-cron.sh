@@ -32,7 +32,7 @@ source "${SCRIPT_DIR}/night-watch-helpers.sh"
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 # NOTE: Lock file path must match auditLockPath() in src/utils/status-data.ts
 LOCK_FILE="/tmp/night-watch-audit-${PROJECT_RUNTIME_KEY}.lock"
-AUDIT_PROMPT_TEMPLATE="${SCRIPT_DIR}/../templates/night-watch-audit.md"
+AUDIT_PROMPT_TEMPLATE="${SCRIPT_DIR}/../templates/audit.md"
 
 emit_result() {
   local status="${1:?status required}"
