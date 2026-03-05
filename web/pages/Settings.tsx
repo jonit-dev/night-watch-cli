@@ -21,6 +21,7 @@ import {
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import CronScheduleInput from '../components/ui/CronScheduleInput';
+import { detectTemplate, IScheduleTemplate, SCHEDULE_TEMPLATES } from '../utils/cron.js';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Switch from '../components/ui/Switch';
@@ -615,6 +616,9 @@ const Settings: React.FC = () => {
   const [form, setForm] = React.useState<ConfigForm | null>(null);
   // Prevents refetchConfig from overwriting the form after a save (form was already set from PUT response)
   const skipNextFormResetRef = React.useRef(false);
+  const [scheduleMode, setScheduleMode] = React.useState<'template' | 'custom'>('template');
+  const [selectedTemplateId, setSelectedTemplateId] = React.useState<string>('always-on');
+  const scheduleModeInitialized = React.useRef(false);
 
   const {
     data: config,
@@ -630,7 +634,25 @@ const Settings: React.FC = () => {
       if (skipNextFormResetRef.current) {
         skipNextFormResetRef.current = false;
       } else {
-        setForm(toFormState(config));
+        const newForm = toFormState(config);
+        setForm(newForm);
+        if (!scheduleModeInitialized.current) {
+          const detected = detectTemplate(
+            newForm.cronSchedule,
+            newForm.reviewerSchedule,
+            newForm.qa.schedule,
+            newForm.audit.schedule,
+            newForm.roadmapScanner.slicerSchedule ?? '0 */6 * * *',
+          );
+          if (detected) {
+            setScheduleMode('template');
+            setSelectedTemplateId(detected.id);
+          } else {
+            setScheduleMode('custom');
+            setSelectedTemplateId('');
+          }
+          scheduleModeInitialized.current = true;
+        }
       }
     }
   }, [config]);
@@ -641,6 +663,21 @@ const Settings: React.FC = () => {
         return prev;
       }
       return { ...prev, [key]: value };
+    });
+  };
+
+  const applyTemplate = (tpl: IScheduleTemplate) => {
+    setSelectedTemplateId(tpl.id);
+    setForm((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        cronSchedule: tpl.schedules.executor,
+        reviewerSchedule: tpl.schedules.reviewer,
+        qa: { ...prev.qa, schedule: tpl.schedules.qa },
+        audit: { ...prev.audit, schedule: tpl.schedules.audit },
+        roadmapScanner: { ...prev.roadmapScanner, slicerSchedule: tpl.schedules.slicer },
+      };
     });
   };
 
@@ -1023,56 +1060,124 @@ const Settings: React.FC = () => {
       label: 'Schedules',
       content: (
         <Card className="p-6 space-y-6">
-          <div>
-            <h3 className="text-lg font-medium text-slate-200 mb-2">Job Schedules</h3>
-            <p className="text-sm text-slate-400 mb-4">
-              Configure when automated jobs run using cron expressions or presets
-            </p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-medium text-slate-200 mb-1">Job Schedules</h3>
+              <p className="text-sm text-slate-400">
+                Configure when automated jobs run using a preset template or custom cron expressions
+              </p>
+            </div>
+            <div className="flex rounded-lg border border-slate-700 overflow-hidden shrink-0">
+              <button
+                type="button"
+                className={`px-4 py-1.5 text-sm font-medium transition-colors ${
+                  scheduleMode === 'template'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+                onClick={() => setScheduleMode('template')}
+              >
+                Template
+              </button>
+              <button
+                type="button"
+                className={`px-4 py-1.5 text-sm font-medium transition-colors ${
+                  scheduleMode === 'custom'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+                onClick={() => setScheduleMode('custom')}
+              >
+                Custom
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <CronScheduleInput
-              label="PRD Execution Schedule"
-              value={form.cronSchedule}
-              onChange={(val) => updateField('cronSchedule', val)}
-            />
-            <CronScheduleInput
-              label="PR Review Schedule"
-              value={form.reviewerSchedule}
-              onChange={(val) => updateField('reviewerSchedule', val)}
-            />
-            <CronScheduleInput
-              label="QA Schedule"
-              value={form.qa.schedule}
-              onChange={(val) =>
-                updateField('qa', {
-                  ...form.qa,
-                  schedule: val,
-                })
-              }
-            />
-            <CronScheduleInput
-              label="Audit Schedule"
-              value={form.audit.schedule}
-              onChange={(val) =>
-                updateField('audit', {
-                  ...form.audit,
-                  schedule: val,
-                })
-              }
-            />
-            {form.roadmapScanner.enabled && (
+          {scheduleMode === 'template' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {SCHEDULE_TEMPLATES.map((tpl) => {
+                const active = selectedTemplateId === tpl.id;
+                return (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => applyTemplate(tpl)}
+                    className={`text-left p-4 rounded-lg border transition-colors ${
+                      active
+                        ? 'border-indigo-500 bg-indigo-950/40'
+                        : 'border-slate-700 bg-slate-800/30 hover:border-slate-600'
+                    }`}
+                  >
+                    <div className="font-medium text-slate-200 mb-1">{tpl.label}</div>
+                    <p className="text-xs text-slate-400 mb-3">{tpl.description}</p>
+                    <div className="space-y-0.5">
+                      {(
+                        [
+                          ['Executor', tpl.hints.executor],
+                          ['Reviewer', tpl.hints.reviewer],
+                          ['QA', tpl.hints.qa],
+                          ['Audit', tpl.hints.audit],
+                          ['Slicer', tpl.hints.slicer],
+                        ] as [string, string][]
+                      ).map(([name, hint]) => (
+                        <div key={name} className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500 w-16 shrink-0">{name}</span>
+                          <span className="text-xs text-slate-400">{hint}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <CronScheduleInput
-                label="Planner Schedule"
-                value={form.roadmapScanner.slicerSchedule || '0 */6 * * *'}
+                label="PRD Execution Schedule"
+                value={form.cronSchedule}
+                onChange={(val) => updateField('cronSchedule', val)}
+              />
+              <CronScheduleInput
+                label="PR Review Schedule"
+                value={form.reviewerSchedule}
+                onChange={(val) => updateField('reviewerSchedule', val)}
+              />
+              <CronScheduleInput
+                label="QA Schedule"
+                value={form.qa.schedule}
                 onChange={(val) =>
-                  updateField('roadmapScanner', {
-                    ...form.roadmapScanner,
-                    slicerSchedule: val,
+                  updateField('qa', {
+                    ...form.qa,
+                    schedule: val,
                   })
                 }
               />
-            )}
+              <CronScheduleInput
+                label="Audit Schedule"
+                value={form.audit.schedule}
+                onChange={(val) =>
+                  updateField('audit', {
+                    ...form.audit,
+                    schedule: val,
+                  })
+                }
+              />
+              {form.roadmapScanner.enabled && (
+                <CronScheduleInput
+                  label="Planner Schedule"
+                  value={form.roadmapScanner.slicerSchedule || '0 */6 * * *'}
+                  onChange={(val) =>
+                    updateField('roadmapScanner', {
+                      ...form.roadmapScanner,
+                      slicerSchedule: val,
+                    })
+                  }
+                />
+              )}
+            </div>
+          )}
+
+          <div className="pt-4 border-t border-slate-800">
             <Input
               label="Cron Schedule Offset"
               type="number"

@@ -61,6 +61,122 @@ export const CRON_PRESETS: CronPreset[] = [
   },
 ];
 
+export interface IScheduleTemplate {
+  id: string;
+  label: string;
+  description: string;
+  schedules: {
+    executor: string;
+    reviewer: string;
+    qa: string;
+    audit: string;
+    slicer: string;
+  };
+  hints: {
+    executor: string;
+    reviewer: string;
+    qa: string;
+    audit: string;
+    slicer: string;
+  };
+}
+
+export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
+  {
+    id: 'night-surge',
+    label: 'Night Surge',
+    description: 'Heavy overnight (9pm–8am), silent during the day. Review PRs in the morning.',
+    schedules: {
+      executor: '0 21,22,23,0,1,2,3,4,5,6,7,8 * * *',
+      reviewer: '0 9,17 * * *',
+      qa: '30 22 * * *',
+      audit: '0 4 * * 1',
+      slicer: '0 20 * * *',
+    },
+    hints: {
+      executor: 'Hourly 9pm–8am',
+      reviewer: '9am & 5pm',
+      qa: '10:30pm',
+      audit: 'Mon 4am',
+      slicer: '8pm kickoff',
+    },
+  },
+  {
+    id: 'always-on',
+    label: 'Always On',
+    description: 'Steady 24/7 with safe 2-hour gaps. Continuous progress without rate-limit bursts.',
+    schedules: {
+      executor: '0 */2 * * *',
+      reviewer: '0 */4 * * *',
+      qa: '30 8,20 * * *',
+      audit: '0 3 * * 1',
+      slicer: '0 */8 * * *',
+    },
+    hints: {
+      executor: 'Every 2 hours',
+      reviewer: 'Every 4 hours',
+      qa: '8:30am & 8:30pm',
+      audit: 'Mon 3am',
+      slicer: 'Every 8 hours',
+    },
+  },
+  {
+    id: 'day-shift',
+    label: 'Day Shift',
+    description: 'Weekdays 9am–6pm only. Good for team workflows where PRs are reviewed during business hours.',
+    schedules: {
+      executor: '0 9-18 * * 1-5',
+      reviewer: '0 12,18 * * 1-5',
+      qa: '30 11,17 * * 1-5',
+      audit: '0 9 * * 1',
+      slicer: '0 8 * * 1',
+    },
+    hints: {
+      executor: 'Hourly 9am–6pm, weekdays',
+      reviewer: 'Noon & 6pm, weekdays',
+      qa: '11:30am & 5:30pm, weekdays',
+      audit: 'Mon 9am',
+      slicer: 'Mon 8am',
+    },
+  },
+  {
+    id: 'minimal',
+    label: 'Minimal',
+    description: 'One run per job per day (or weekly for heavy jobs). Lowest API usage.',
+    schedules: {
+      executor: '0 2 * * *',
+      reviewer: '0 8 * * *',
+      qa: '0 3 * * 0',
+      audit: '0 4 * * 0',
+      slicer: '0 1 * * 1',
+    },
+    hints: {
+      executor: 'Daily 2am',
+      reviewer: 'Daily 8am',
+      qa: 'Sunday 3am',
+      audit: 'Sunday 4am',
+      slicer: 'Monday 1am',
+    },
+  },
+];
+
+export function detectTemplate(
+  executor: string,
+  reviewer: string,
+  qa: string,
+  audit: string,
+  slicer: string,
+): IScheduleTemplate | undefined {
+  return SCHEDULE_TEMPLATES.find(
+    (t) =>
+      t.schedules.executor === executor &&
+      t.schedules.reviewer === reviewer &&
+      t.schedules.qa === qa &&
+      t.schedules.audit === audit &&
+      t.schedules.slicer === slicer,
+  );
+}
+
 /**
  * Convert cron expression to human-readable format
  */
