@@ -64,6 +64,8 @@ export interface IRoadmapScannerConfig {
   autoScanInterval: number;
   slicerSchedule?: string;
   slicerMaxRuntime?: number;
+  priorityMode?: 'roadmap-first' | 'audit-first';
+  issueColumn?: 'Draft' | 'Ready';
 }
 
 // ==================== QA Config ====================

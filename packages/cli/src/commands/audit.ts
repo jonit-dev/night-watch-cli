@@ -4,8 +4,8 @@
 
 import { Command } from 'commander';
 import {
+  CLAUDE_MODEL_IDS,
   INightWatchConfig,
-  IWebhookConfig,
   PROVIDER_COMMANDS,
   createSpinner,
   createTable,
@@ -18,6 +18,7 @@ import {
   parseScriptResult,
   resolveJobProvider,
 } from '@night-watch/core';
+import { buildBaseEnvVars, getTelegramStatusWebhooks } from './shared/env-builder.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -27,21 +28,6 @@ export interface IAuditOptions {
   provider?: string;
 }
 
-function getTelegramStatusWebhooks(
-  config: INightWatchConfig,
-): Array<{ botToken: string; chatId: string }> {
-  return (config.notifications?.webhooks ?? [])
-    .filter(
-      (wh): wh is IWebhookConfig & { botToken: string; chatId: string } =>
-        wh.type === 'telegram' &&
-        typeof wh.botToken === 'string' &&
-        wh.botToken.trim().length > 0 &&
-        typeof wh.chatId === 'string' &&
-        wh.chatId.trim().length > 0,
-    )
-    .map((wh) => ({ botToken: wh.botToken, chatId: wh.chatId }));
-}
-
 /**
  * Build environment variables map from config and CLI options for audit
  */
@@ -49,20 +35,12 @@ export function buildEnvVars(
   config: INightWatchConfig,
   options: IAuditOptions,
 ): Record<string, string> {
-  const env: Record<string, string> = {};
+  // Start with base env vars shared by all job types
+  const env = buildBaseEnvVars(config, 'audit', options.dryRun);
 
-  // Provider command - the actual CLI binary to call (use job-specific provider for audit)
-  const auditProvider = resolveJobProvider(config, 'audit');
-  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[auditProvider];
+  // Audit-specific settings
   env.NW_AUDIT_MAX_RUNTIME = String(config.audit.maxRuntime);
-
-  if (config.defaultBranch) {
-    env.NW_DEFAULT_BRANCH = config.defaultBranch;
-  }
-
-  if (config.providerEnv) {
-    Object.assign(env, config.providerEnv);
-  }
+  env.NW_CLAUDE_MODEL_ID = CLAUDE_MODEL_IDS[config.claudeModel ?? 'sonnet'];
 
   // Telegram status messages from bash scripts (start/progress/final status)
   const telegramWebhooks = getTelegramStatusWebhooks(config);
@@ -71,12 +49,6 @@ export function buildEnvVars(
     env.NW_TELEGRAM_BOT_TOKEN = telegramWebhooks[0].botToken;
     env.NW_TELEGRAM_CHAT_ID = telegramWebhooks[0].chatId;
   }
-
-  if (options.dryRun) {
-    env.NW_DRY_RUN = '1';
-  }
-
-  env.NW_EXECUTION_CONTEXT = 'agent';
 
   return env;
 }

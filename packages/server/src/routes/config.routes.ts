@@ -358,6 +358,14 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
     ) {
       return 'roadmapScanner.slicerMaxRuntime must be a number >= 60';
     }
+
+    if (
+      rs.issueColumn !== undefined &&
+      rs.issueColumn !== 'Draft' &&
+      rs.issueColumn !== 'Ready'
+    ) {
+      return 'roadmapScanner.issueColumn must be one of: Draft, Ready';
+    }
   }
 
   // boardProvider.enabled validation

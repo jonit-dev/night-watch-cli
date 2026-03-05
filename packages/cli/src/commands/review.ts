@@ -4,6 +4,7 @@
 
 import { Command } from 'commander';
 import {
+  CLAUDE_MODEL_IDS,
   INightWatchConfig,
   PROVIDER_COMMANDS,
   createSpinner,
@@ -21,7 +22,7 @@ import {
   sendNotifications,
   error as uiError,
 } from '@night-watch/core';
-import { buildBaseEnvVars } from './shared/env-builder.js';
+import { buildBaseEnvVars, formatProviderDisplay } from './shared/env-builder.js';
 import type { IPrDetails } from '@night-watch/core';
 import { execFileSync } from 'child_process';
 import * as path from 'path';
@@ -126,6 +127,7 @@ export function buildEnvVars(
   env.NW_MIN_REVIEW_SCORE = String(config.minReviewScore);
   env.NW_BRANCH_PATTERNS = config.branchPatterns.join(',');
   env.NW_PRD_DIR = config.prdDir;
+  env.NW_CLAUDE_MODEL_ID = CLAUDE_MODEL_IDS[config.claudeModel ?? 'sonnet'];
 
   // Auto-merge configuration
   if (config.autoMerge) {
@@ -440,7 +442,7 @@ export function reviewCommand(program: Command): void {
               event: 'review_completed' as const,
               projectName: path.basename(projectDir),
               exitCode,
-              provider: config.provider,
+              provider: formatProviderDisplay(envVars.NW_PROVIDER_CMD, envVars.NW_PROVIDER_LABEL),
               prUrl: prDetails?.url,
               prTitle: prDetails?.title,
               prBody: prDetails?.body,
@@ -462,7 +464,7 @@ export function reviewCommand(program: Command): void {
               event: 'pr_auto_merged' as const,
               projectName: path.basename(projectDir),
               exitCode,
-              provider: config.provider,
+              provider: formatProviderDisplay(envVars.NW_PROVIDER_CMD, envVars.NW_PROVIDER_LABEL),
               prNumber: autoMergedPrDetails?.number ?? autoMergedPrNumber,
               prUrl: autoMergedPrDetails?.url,
               prTitle: autoMergedPrDetails?.title,

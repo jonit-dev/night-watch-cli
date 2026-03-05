@@ -243,6 +243,12 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   // Roadmap Scanner
   const rawRoadmapScanner = readObject(rawConfig.roadmapScanner);
   if (rawRoadmapScanner) {
+    const issueColumnRaw = readString(rawRoadmapScanner.issueColumn);
+    const issueColumn =
+      issueColumnRaw === 'Draft' || issueColumnRaw === 'Ready'
+        ? issueColumnRaw
+        : DEFAULT_ROADMAP_SCANNER.issueColumn;
+
     const roadmapScanner: IRoadmapScannerConfig = {
       enabled: readBoolean(rawRoadmapScanner.enabled) ?? DEFAULT_ROADMAP_SCANNER.enabled,
       roadmapPath: readString(rawRoadmapScanner.roadmapPath) ?? DEFAULT_ROADMAP_SCANNER.roadmapPath,
@@ -252,6 +258,7 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
         readString(rawRoadmapScanner.slicerSchedule) ?? DEFAULT_ROADMAP_SCANNER.slicerSchedule,
       slicerMaxRuntime:
         readNumber(rawRoadmapScanner.slicerMaxRuntime) ?? DEFAULT_ROADMAP_SCANNER.slicerMaxRuntime,
+      issueColumn,
     };
     // Validate autoScanInterval has minimum of 30 seconds
     if (roadmapScanner.autoScanInterval < 30) {
@@ -644,6 +651,17 @@ export function loadConfig(projectDir: string): INightWatchConfig {
       envConfig.roadmapScanner = {
         ...(envConfig.roadmapScanner ?? DEFAULT_ROADMAP_SCANNER),
         slicerMaxRuntime,
+      };
+    }
+  }
+
+  // NW_PLANNER_ISSUE_COLUMN environment variable
+  if (process.env.NW_PLANNER_ISSUE_COLUMN) {
+    const issueColumn = process.env.NW_PLANNER_ISSUE_COLUMN;
+    if (issueColumn === 'Draft' || issueColumn === 'Ready') {
+      envConfig.roadmapScanner = {
+        ...(envConfig.roadmapScanner ?? DEFAULT_ROADMAP_SCANNER),
+        issueColumn,
       };
     }
   }

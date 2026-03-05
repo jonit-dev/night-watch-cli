@@ -527,8 +527,8 @@ export async function sliceNextItem(
     return undefined;
   };
 
-  // Planner priority: actionable audit findings first, then pending roadmap items.
-  const targetItem = pickEligibleItem(auditItems) ?? pickEligibleItem(roadmapItems);
+  // Planner priority: pending roadmap items first, then actionable audit findings.
+  const targetItem = pickEligibleItem(roadmapItems) ?? pickEligibleItem(auditItems);
 
   if (!targetItem) {
     return {

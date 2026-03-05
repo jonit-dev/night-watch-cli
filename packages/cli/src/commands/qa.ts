@@ -4,6 +4,7 @@
 
 import { Command } from 'commander';
 import {
+  CLAUDE_MODEL_IDS,
   INightWatchConfig,
   PROVIDER_COMMANDS,
   createSpinner,
@@ -20,7 +21,11 @@ import {
   sendNotifications,
   error as uiError,
 } from '@night-watch/core';
-import { buildBaseEnvVars, getTelegramStatusWebhooks } from './shared/env-builder.js';
+import {
+  buildBaseEnvVars,
+  formatProviderDisplay,
+  getTelegramStatusWebhooks,
+} from './shared/env-builder.js';
 import * as path from 'path';
 
 /**
@@ -83,6 +88,7 @@ export function buildEnvVars(
   env.NW_QA_SKIP_LABEL = config.qa.skipLabel;
   env.NW_QA_ARTIFACTS = config.qa.artifacts;
   env.NW_QA_AUTO_INSTALL_PLAYWRIGHT = config.qa.autoInstallPlaywright ? '1' : '0';
+  env.NW_CLAUDE_MODEL_ID = CLAUDE_MODEL_IDS[config.claudeModel ?? 'sonnet'];
 
   // Telegram status messages from bash scripts (start/progress/final status)
   const telegramWebhooks = getTelegramStatusWebhooks(config);
@@ -234,7 +240,7 @@ export function qaCommand(program: Command): void {
               event: 'qa_completed' as const,
               projectName: path.basename(projectDir),
               exitCode,
-              provider: config.provider,
+              provider: formatProviderDisplay(envVars.NW_PROVIDER_CMD, envVars.NW_PROVIDER_LABEL),
               prNumber: prDetails?.number ?? primaryQaPr,
               prUrl: prDetails?.url ?? fallbackPrUrl,
               prTitle: prDetails?.title,
