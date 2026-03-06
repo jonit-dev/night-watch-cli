@@ -23,7 +23,8 @@
     "build": "tsc --build tsconfig.json && tsc-alias -p tsconfig.json && node build.mjs",
     "verify": "tsc --build tsconfig.json --dry",
     "test": "vitest run",
-    "prepublishOnly": "yarn build && yarn test"
+    "prepublishOnly": "yarn build && yarn test",
+    "deploy": "bash scripts/publish.sh"
   },
   "keywords": [
     "claude",
