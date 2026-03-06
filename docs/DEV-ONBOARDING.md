@@ -6,7 +6,9 @@ Welcome to Night Watch CLI. This guide will get you from zero to productive.
 
 ## What is Night Watch?
 
-Night Watch is an autonomous PRD executor. It reads markdown PRD files, hands them to an AI provider CLI (Claude or Codex), opens pull requests, reviews them, and fixes CI failures — all on a cron schedule. A web dashboard and REST API provide visibility and control. Webhook notifications go to Slack, Telegram, or Discord.
+Night Watch is an async PRD executor for AI-native developers and small teams. It reads markdown PRD files or queued board items, hands them to an AI provider CLI (Claude or Codex), opens pull requests, reviews them, and fixes CI failures on a cron schedule. A web dashboard and REST API provide visibility and control. Webhook notifications go to Slack, Telegram, or Discord.
+
+Think of it as a repo night shift, not a general-purpose coding assistant. It is strongest on well-scoped, reviewable work that can be queued during the day and executed overnight.
 
 ```mermaid
 graph LR

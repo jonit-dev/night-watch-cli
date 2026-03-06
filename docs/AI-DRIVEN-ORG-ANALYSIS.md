@@ -1,14 +1,20 @@
-# Night Watch CLI: An AI-Driven Org Playbook Analysis
+# Night Watch CLI: An Async AI Workflow Analysis
 
 ## What is Night Watch?
 
-Night Watch is an **autonomous PRD execution platform** — a CLI + web UI that takes
-Product Requirements Documents, feeds them to an AI coding agent (Claude CLI or Codex),
-and produces Pull Requests while developers sleep. It runs on cron schedules,
-reviews its own PRs, generates tests, and even decomposes roadmap items into new PRDs.
+Night Watch is an **async PRD execution platform** — a CLI + web UI that takes
+Product Requirements Documents or queued board items, feeds them to an AI coding agent
+(Claude CLI or Codex), and produces pull requests while developers are offline. It runs
+on cron schedules, reviews its own PRs, generates tests, and can decompose roadmap items
+into new PRDs.
 
-It is, in effect, a **software factory** where the unit of work is a specification
-and the output is a shipped Pull Request.
+It is best understood as a **repo night shift** where the unit of work is a specification
+and the output is a reviewed pull request. That is a narrower and more credible claim
+than "fully autonomous software engineering," especially for the current product stage.
+
+The wedge today is AI-native solo developers, maintainers, and small teams that already
+work from specs. The long-term org-level vision only matters if this narrower workflow
+becomes a trusted habit first.
 
 ---
 
@@ -48,7 +54,7 @@ The spec-writer becomes the most important role.
 
 ---
 
-### 2. The Autonomous Execution Loop
+### 2. The Async Execution Loop
 
 Night Watch implements a full autonomous development loop via four cron-scheduled agents:
 
@@ -73,7 +79,7 @@ Merged code
 ROADMAP.md
 ```
 
-**Playbook principle:** Autonomous AI agents need to be decomposed into
+**Playbook principle:** Async AI agents need to be decomposed into
 single-responsibility loops with clear inputs/outputs, not monolithic "do everything"
 agents. Each loop should be independently schedulable, observable, and killable.
 
@@ -141,8 +147,8 @@ notes, shared history), role-based auth, and config presets.
 GitHub Actions integration.
 
 This is a textbook **bottom-up adoption pattern** — a developer tool that grows into
-a team tool that grows into an org platform. The fact that it starts as a CLI that
-installs into your crontab (zero infrastructure) is the wedge.
+a team tool and only later earns the right to become an org platform. The fact that it
+starts as a CLI that installs into your crontab (zero infrastructure) is the wedge.
 
 **Playbook principle:** AI tooling should start with zero-infrastructure adoption for
 a single developer, then scale up. Don't build the platform first.
@@ -211,15 +217,15 @@ Night Watch has implemented dozens of features autonomously — the tool is lite
 - `19-state-repository-sqlite.md` → `done`
 - `20-core-ux-reliability.md` → `done`
 
-This is the strongest validation of the concept. If your AI development platform can't
-build itself, it probably can't build your product either.
+This is strong validation of the concept. But the lesson is not "replace the org."
+It is that a queue-based overnight workflow can produce real output on scoped work.
 
 **Playbook principle:** Dogfooding is non-negotiable for AI development tools.
 The first customer should always be the tool itself.
 
 ---
 
-## Strengths as an AI-Driven Org Tool
+## Strengths as an Async AI Workflow Tool
 
 1. **Zero-infrastructure start** — No servers, no cloud accounts. Just `npm install -g`
    and a Claude API key.
@@ -229,10 +235,10 @@ The first customer should always be the tool itself.
    process engineering.
 
 3. **Full lifecycle coverage** — From roadmap scanning to code generation to review to
-   merge. No manual handoffs required (though they're supported).
+   merge. The useful part is the loop around execution, not just the model call.
 
 4. **Trust is configurable** — Auto-merge thresholds, dry-run modes, review scores.
-   Organizations can start conservative and open up gradually.
+   Teams can start conservative and open up gradually.
 
 5. **Provider-agnostic** — Claude, Codex, and (soon) Gemini. Not locked into one
    AI vendor.
