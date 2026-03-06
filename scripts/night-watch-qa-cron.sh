@@ -42,7 +42,21 @@ source "${SCRIPT_DIR}/night-watch-helpers.sh"
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 # NOTE: Lock file path must match qaLockPath() in src/utils/status-data.ts
 LOCK_FILE="/tmp/night-watch-qa-${PROJECT_RUNTIME_KEY}.lock"
+SCRIPT_TYPE="qa"
 
+# ── Global Job Queue Gate ────────────────────────────────────────────────────
+# Acquire global gate before per-project lock to serialize jobs across projects.
+# When gate is busy, enqueue the job and exit cleanly.
+if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
+  if acquire_global_gate; then
+    arm_global_queue_cleanup
+  else
+    enqueue_job "${SCRIPT_TYPE}" "${PROJECT_DIR}"
+    emit_result "queued"
+    exit 0
+  fi
+fi
+# ──────────────────────────────────────────────────────────────────────────────
 emit_result() {
   local status="${1:?status required}"
   local details="${2:-}"
@@ -306,5 +320,4 @@ Processed PRs: ${PRS_NEEDING_QA_CSV}"
     emit_result "failure" "prs=${PRS_NEEDING_QA_CSV}"
   fi
 fi
-
 exit "${EXIT_CODE}"

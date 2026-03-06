@@ -39,6 +39,7 @@ import {
   createScheduleInfoRoutes,
   createStatusRoutes,
 } from './routes/status.routes.js';
+import { createQueueRoutes } from './routes/queue.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -119,6 +120,7 @@ export function createApp(projectDir: string): Express {
   );
   app.use('/api/logs', createLogRoutes({ projectDir }));
   app.use('/api/doctor', createDoctorRoutes({ projectDir, getConfig: () => config }));
+  app.use('/api/queue', createQueueRoutes({ getConfig: () => config }));
 
   app.get('/api/prs', async (_req: Request, res: Response): Promise<void> => {
     try {

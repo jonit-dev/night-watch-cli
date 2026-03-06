@@ -79,6 +79,10 @@ export function shouldAttemptCrossProjectFallback(
   if (process.env.NW_CROSS_PROJECT_FALLBACK_ACTIVE === '1') {
     return false;
   }
+  // Don't attempt cross-project fallback when job was queued — queue handles ordering
+  if (scriptStatus === 'queued') {
+    return false;
+  }
   return scriptStatus === 'skip_no_eligible_prd';
 }
 
@@ -564,7 +568,9 @@ export function runCommand(program: Command): void {
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
 
         if (exitCode === 0) {
-          if (scriptResult?.status?.startsWith('skip_')) {
+          if (scriptResult?.status === 'queued') {
+            spinner.succeed('PRD executor queued — another job is currently running');
+          } else if (scriptResult?.status?.startsWith('skip_')) {
             spinner.succeed('PRD executor completed (no eligible work)');
           } else if (scriptResult?.status === 'success_already_merged') {
             spinner.succeed('PRD executor completed (PRD already merged)');

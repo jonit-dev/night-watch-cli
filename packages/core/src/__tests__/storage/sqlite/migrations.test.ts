@@ -13,6 +13,7 @@ import { runMigrations } from '../../../storage/sqlite/migrations.js';
 const EXPECTED_TABLES = [
   'agent_personas',
   'execution_history',
+  'job_queue',
   'kanban_comments',
   'kanban_issues',
   'prd_states',

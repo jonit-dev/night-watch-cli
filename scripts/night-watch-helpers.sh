@@ -146,9 +146,23 @@ acquire_lock() {
     rm -f "${lock_file}"
   fi
 
-  trap "rm -f '${lock_file}'" EXIT
+  local quoted_lock_file=""
+  printf -v quoted_lock_file '%q' "${lock_file}"
+  append_exit_trap "rm -f -- ${quoted_lock_file}"
   echo $$ > "${lock_file}"
   return 0
+}
+
+append_exit_trap() {
+  local command="${1:?command required}"
+  local existing=""
+
+  existing=$(trap -p EXIT | sed -n "s/^trap -- '\\(.*\\)' EXIT$/\\1/p")
+  if [ -n "${existing}" ]; then
+    trap "${existing}; ${command}" EXIT
+  else
+    trap "${command}" EXIT
+  fi
 }
 
 # ── Detect default branch ───────────────────────────────────────────────────
@@ -635,4 +649,144 @@ find_eligible_board_issue() {
   done
 
   return 1
+}
+
+# ── Global Job Queue Gate ─────────────────────────────────────────────────────
+
+# Get the path to the queue lock file
+get_queue_lock_path() {
+  printf "%s/%s" "${HOME}/.night-watch" "queue.lock"
+}
+
+# Try to acquire the global queue gate using flock.
+# Uses a shared lock file (~/.night-watch/queue.lock).
+# Returns 0 if acquired (gate is free), 1 if busy.
+# Holds the lock fd open for the caller via GLOBAL_GATE_FD variable.
+acquire_global_gate() {
+  local lock_path
+  lock_path=$(get_queue_lock_path)
+
+  # Ensure the .night-watch directory exists
+  mkdir -p "$(dirname "${lock_path}")"
+
+  # Open the lock file as fd 200
+  exec 200>"${lock_path}"
+
+  # Try non-blocking flock
+  if flock --nonblock 200; then
+    GLOBAL_GATE_FD=200
+    return 0
+  else
+    GLOBAL_GATE_FD=""
+    return 1
+  fi
+}
+
+# Release the global queue gate
+release_global_gate() {
+  if [ -n "${GLOBAL_GATE_FD:-}" ]; then
+    flock --unlock "${GLOBAL_GATE_FD}" 2>/dev/null || true
+    exec 200>&-
+    GLOBAL_GATE_FD=""
+  fi
+}
+
+__night_watch_queue_cleanup() {
+  local exit_code="${1:-0}"
+
+  if [ "${NW_QUEUE_CLEANUP_ARMED:-0}" = "1" ]; then
+    NW_QUEUE_CLEANUP_ARMED=0
+    complete_queued_job
+    release_global_gate
+    dispatch_next_queued_job
+  fi
+
+  return "${exit_code}"
+}
+
+arm_global_queue_cleanup() {
+  if [ "${NW_QUEUE_CLEANUP_ARMED:-0}" = "1" ]; then
+    return 0
+  fi
+
+  NW_QUEUE_CLEANUP_ARMED=1
+  append_exit_trap "__night_watch_queue_cleanup \$?"
+}
+
+# Enqueue the current job to the SQLite queue.
+# Usage: enqueue_job <job_type> <project_dir>
+# Stores project path/name, job type, and relevant NW_* env vars for later dispatch.
+enqueue_job() {
+  local job_type="${1:?job_type required}"
+  local project_dir="${2:?project_dir required}"
+  local project_name
+  project_name=$(basename "${project_dir}")
+
+  local cli_bin
+  cli_bin=$(resolve_night_watch_cli) || {
+    log "ERROR: Cannot resolve night-watch CLI for enqueue"
+    return 1
+  }
+
+  # Serialize relevant NW_* env vars to JSON for re-invocation
+  local env_json="{}"
+  if command -v jq >/dev/null 2>&1; then
+    env_json=$(
+      env | grep -E '^NW_' | jq -Rs 'split("\n") | map(select(length > 0) | split("=") | {(.[0]): (.[1:] | join("="))}) | add // {}' 2>/dev/null || echo '{}'
+    )
+  fi
+
+  log "QUEUE: Enqueueing ${job_type} for ${project_name} (gate busy)"
+
+  "${cli_bin}" queue enqueue "${job_type}" "${project_dir}" --env "${env_json}" >> "${LOG_FILE:-/dev/null}" 2>&1 || {
+    log "WARN: Failed to enqueue job"
+    return 1
+  }
+
+  return 0
+}
+
+# Dispatch the next queued job after the current job completes.
+# Picks highest-priority pending job, marks it dispatched, and spawns it.
+dispatch_next_queued_job() {
+  # Skip if queue is disabled
+  if [ "${NW_QUEUE_ENABLED:-0}" = "0" ]; then
+    return 0
+  fi
+
+  local cli_bin
+  cli_bin=$(resolve_night_watch_cli) || {
+    log "WARN: Cannot resolve night-watch CLI for dispatch"
+    return 1
+  }
+
+  log "QUEUE: Checking for pending jobs to dispatch"
+
+  # Call CLI to dispatch next job (this handles priority, expiration, and spawning)
+  "${cli_bin}" queue dispatch --log "${LOG_FILE:-/dev/null}" 2>/dev/null || true
+}
+
+complete_queued_job() {
+  local queue_entry_id="${NW_QUEUE_ENTRY_ID:-}"
+  if [ -z "${queue_entry_id}" ]; then
+    return 0
+  fi
+
+  local cli_bin
+  cli_bin=$(resolve_night_watch_cli) || {
+    log "WARN: Cannot resolve night-watch CLI for queue completion"
+    return 1
+  }
+
+  "${cli_bin}" queue complete "${queue_entry_id}" 2>/dev/null || true
+}
+
+# Expire stale queued jobs older than maxWaitTime.
+# Called by the CLI dispatch command, but also available for manual cleanup.
+expire_stale_jobs() {
+  local max_wait_time="${1:-7200}"
+  local cli_bin
+  cli_bin=$(resolve_night_watch_cli) || return 1
+
+  "${cli_bin}" queue expire --max-wait "${max_wait_time}" 2>/dev/null || true
 }

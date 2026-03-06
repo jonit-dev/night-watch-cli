@@ -19,6 +19,7 @@ REPORT_FILE="${PROJECT_DIR}/logs/audit-report.md"
 MAX_RUNTIME="${NW_AUDIT_MAX_RUNTIME:-1800}"  # 30 minutes
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
+SCRIPT_TYPE="audit"
 
 # Ensure NVM / Node / Claude are on PATH
 export NVM_DIR="${HOME}/.nvm"
@@ -49,6 +50,18 @@ if ! validate_provider "${PROVIDER_CMD}"; then
   echo "ERROR: Unknown provider: ${PROVIDER_CMD}" >&2
   emit_result "failure" "reason=unknown_provider"
   exit 1
+fi
+
+# Global gate: if queue is enabled and we can't acquire the global lock,
+# enqueue the job and exit. The dispatcher will run it later.
+if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
+  if acquire_global_gate; then
+    arm_global_queue_cleanup
+  else
+    enqueue_job "${SCRIPT_TYPE}" "${PROJECT_DIR}"
+    emit_result "queued"
+    exit 0
+  fi
 fi
 
 rotate_log

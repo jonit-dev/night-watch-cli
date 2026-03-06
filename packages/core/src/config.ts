@@ -14,6 +14,7 @@ import {
   INightWatchConfig,
   INotificationConfig,
   IQaConfig,
+  IQueueConfig,
   IRoadmapScannerConfig,
   IWebhookConfig,
   JobType,
@@ -48,6 +49,7 @@ import {
   DEFAULT_PROVIDER,
   DEFAULT_PROVIDER_ENV,
   DEFAULT_QA,
+  DEFAULT_QUEUE,
   DEFAULT_REVIEWER_ENABLED,
   DEFAULT_REVIEWER_MAX_RETRIES,
   DEFAULT_REVIEWER_MAX_RUNTIME,
@@ -123,6 +125,9 @@ export function getDefaultConfig(): INightWatchConfig {
 
     // Job providers
     jobProviders: { ...DEFAULT_JOB_PROVIDERS },
+
+    // Global job queue
+    queue: { ...DEFAULT_QUEUE },
   };
 }
 
@@ -338,6 +343,34 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     }
   }
 
+  // Queue Configuration
+  const rawQueue = readObject(rawConfig.queue);
+  if (rawQueue) {
+    const queue: IQueueConfig = {
+      enabled: readBoolean(rawQueue.enabled) ?? DEFAULT_QUEUE.enabled,
+      maxConcurrency: readNumber(rawQueue.maxConcurrency) ?? DEFAULT_QUEUE.maxConcurrency,
+      maxWaitTime: readNumber(rawQueue.maxWaitTime) ?? DEFAULT_QUEUE.maxWaitTime,
+      priority: { ...DEFAULT_QUEUE.priority },
+    };
+
+    // Load custom priorities if provided
+    const rawPriority = readObject(rawQueue.priority);
+    if (rawPriority) {
+      for (const jobType of VALID_JOB_TYPES) {
+        const prio = readNumber(rawPriority[jobType]);
+        if (prio !== undefined) {
+          queue.priority[jobType] = prio;
+        }
+      }
+    }
+
+    // Clamp values to valid ranges
+    queue.maxConcurrency = Math.max(1, Math.min(10, queue.maxConcurrency));
+    queue.maxWaitTime = Math.max(300, Math.min(14400, queue.maxWaitTime));
+
+    normalized.queue = queue;
+  }
+
   return normalized;
 }
 
@@ -422,7 +455,7 @@ function mergeConfigLayer(base: INightWatchConfig, layer: Partial<INightWatchCon
     if (value === undefined) continue;
 
     // Keys needing special (shallow) merge semantics with base
-    if (_key === 'providerEnv' || _key === 'boardProvider' || _key === 'qa' || _key === 'audit') {
+    if (_key === 'providerEnv' || _key === 'boardProvider' || _key === 'qa' || _key === 'audit' || _key === 'queue') {
       (base as unknown as Record<string, unknown>)[_key] = {
         ...(base[_key] as object),
         ...(value as object),
@@ -778,6 +811,49 @@ export function loadConfig(projectDir: string): INightWatchConfig {
   }
   if (Object.keys(jobProvidersEnv).length > 0) {
     envConfig.jobProviders = jobProvidersEnv;
+  }
+
+  // Queue configuration from env vars
+  const queueBaseConfig = (): IQueueConfig =>
+    envConfig.queue ?? fileConfig?.queue ?? DEFAULT_QUEUE;
+
+  if (process.env.NW_QUEUE_ENABLED) {
+    const queueEnabled = parseBoolean(process.env.NW_QUEUE_ENABLED);
+    if (queueEnabled !== null) {
+      envConfig.queue = { ...queueBaseConfig(), enabled: queueEnabled };
+    }
+  }
+
+  if (process.env.NW_QUEUE_MAX_CONCURRENCY) {
+    const maxConcurrency = parseInt(process.env.NW_QUEUE_MAX_CONCURRENCY, 10);
+    if (!isNaN(maxConcurrency) && maxConcurrency >= 1) {
+      envConfig.queue = { ...queueBaseConfig(), maxConcurrency: Math.min(10, maxConcurrency) };
+    }
+  }
+
+  if (process.env.NW_QUEUE_MAX_WAIT_TIME) {
+    const maxWaitTime = parseInt(process.env.NW_QUEUE_MAX_WAIT_TIME, 10);
+    if (!isNaN(maxWaitTime) && maxWaitTime >= 300) {
+      envConfig.queue = { ...queueBaseConfig(), maxWaitTime: Math.min(14400, maxWaitTime) };
+    }
+  }
+
+  // NW_QUEUE_PRIORITY_JSON for custom priorities
+  if (process.env.NW_QUEUE_PRIORITY_JSON) {
+    try {
+      const parsed = JSON.parse(process.env.NW_QUEUE_PRIORITY_JSON);
+      if (parsed && typeof parsed === 'object') {
+        const priority: Record<string, number> = { ...queueBaseConfig().priority };
+        for (const jobType of VALID_JOB_TYPES) {
+          if (typeof parsed[jobType] === 'number') {
+            priority[jobType] = parsed[jobType];
+          }
+        }
+        envConfig.queue = { ...queueBaseConfig(), priority };
+      }
+    } catch {
+      // Invalid JSON, ignore
+    }
   }
 
   // Merge all configs
