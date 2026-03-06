@@ -2,10 +2,10 @@
  * esbuild bundling step for the Night Watch CLI.
  *
  * Runs AFTER `tsc --build && tsc-alias` have already compiled all workspace
- * packages to their respective `dist/` directories.  This script takes the
- * compiled `dist/cli.js` entry-point and bundles it into a single self-
- * contained file, inlining all workspace packages (@night-watch/core, /slack,
- * /server) as well as every pure-JS npm dependency.
+ * packages to their respective `dist/` directories. This script bundles the
+ * TypeScript CLI entry-point into a single self-contained file, inlining all
+ * workspace packages (@night-watch/core, /slack, /server) as well as every
+ * pure-JS npm dependency.
  *
  * Only `better-sqlite3` is kept external because it ships a native .node
  * binary that cannot be bundled.
@@ -44,7 +44,11 @@ const workspacePlugin = {
 };
 
 await esbuild.build({
-  entryPoints: [resolve(__dirname, 'dist/cli.js')],
+  // Bundle from source instead of the previously-bundled dist file.
+  // Bundling dist/cli.js back onto itself interacts badly with TypeScript
+  // incremental builds, which may leave a stale bundle in place when the
+  // entry module did not change directly.
+  entryPoints: [resolve(__dirname, 'src/cli.ts')],
   bundle: true,
   platform: 'node',
   format: 'esm',

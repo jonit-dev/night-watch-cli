@@ -4,48 +4,32 @@
  * Supports both single-project and global (multi-project) modes
  */
 
-import { DependencyList, useEffect, useRef, useState } from 'react';
 import type {
-  INightWatchConfig,
-  INotificationConfig,
-  IWebhookConfig,
-  IBoardProviderConfig,
-  IPrdInfo,
-  IProcessInfo,
-  IPrInfo,
-  ILogInfo,
-  IRoadmapScannerConfig,
-  IStatusSnapshot,
-  IRoadmapItem,
-  IRoadmapStatus,
-  MergeMethod,
-  IJobProviders,
-  ClaudeModel,
-  IQaConfig,
-  IAuditConfig,
-  QaArtifacts,
+    ClaudeModel,
+    IAuditConfig,
+    IBoardProviderConfig,
+    IJobProviders,
+    ILogInfo,
+    INightWatchConfig,
+    INotificationConfig,
+    IPrdInfo,
+    IPrInfo,
+    IProcessInfo,
+    IQaConfig,
+    IRoadmapItem,
+    IRoadmapScannerConfig,
+    IRoadmapStatus,
+    IStatusSnapshot,
+    IWebhookConfig,
+    MergeMethod,
+    QaArtifacts,
 } from '@shared/types';
+import { DependencyList, useEffect, useRef, useState } from 'react';
 
 // Re-export shared types so consumers can import from either place
 export type {
-  INightWatchConfig,
-  INotificationConfig,
-  IWebhookConfig,
-  IBoardProviderConfig,
-  IPrdInfo,
-  IProcessInfo,
-  IPrInfo,
-  ILogInfo,
-  IRoadmapScannerConfig,
-  IStatusSnapshot,
-  IRoadmapItem,
-  IRoadmapStatus,
-  MergeMethod,
-  IJobProviders,
-  ClaudeModel,
-  IQaConfig,
-  IAuditConfig,
-  QaArtifacts,
+    ClaudeModel, IAuditConfig, IBoardProviderConfig, IJobProviders, ILogInfo, INightWatchConfig,
+    INotificationConfig, IPrdInfo, IPrInfo, IProcessInfo, IQaConfig, IRoadmapItem, IRoadmapScannerConfig, IRoadmapStatus, IStatusSnapshot, IWebhookConfig, MergeMethod, QaArtifacts
 };
 
 export type PrdWithContent = IPrdInfo & { content: string };
@@ -105,6 +89,14 @@ export interface ProjectInfo {
   name: string;
   path: string;
   valid: boolean;
+}
+
+export interface ServerModeInfo {
+  globalMode: boolean;
+}
+
+export function fetchServerMode(): Promise<ServerModeInfo> {
+  return apiFetch<ServerModeInfo>('/api/mode');
 }
 
 export function fetchProjects(): Promise<ProjectInfo[]> {
@@ -230,6 +222,29 @@ export function fetchLogs(name: string, lines?: number): Promise<LogResponse> {
 
 export function fetchConfig(): Promise<INightWatchConfig> {
   return apiFetch<INightWatchConfig>(apiPath('/api/config'));
+}
+
+export async function fetchAllConfigs(): Promise<Array<{ projectId: string; config: INightWatchConfig }>> {
+  if (isGlobalMode()) {
+    const projects = await fetchProjects();
+    const validProjects = projects.filter(p => p.valid);
+    
+    const configs = await Promise.all(
+      validProjects.map(async (p) => {
+        try {
+          const res = await apiFetch<INightWatchConfig>(`/api/projects/${encodeProjectId(p.name)}/config`);
+          return { projectId: p.name, config: res };
+        } catch (e) {
+          console.error(`Failed to fetch config for project ${p.name}`, e);
+          return null;
+        }
+      })
+    );
+    return configs.filter(c => c !== null) as Array<{ projectId: string; config: INightWatchConfig }>;
+  } else {
+    const config = await fetchConfig();
+    return [{ projectId: currentProjectId || 'current', config }];
+  }
 }
 
 export function updateConfig(changes: Partial<INightWatchConfig>): Promise<INightWatchConfig> {
@@ -402,6 +417,74 @@ export function useStatusStream(
     };
     // deps intentionally excludes onChange - we don't want to re-subscribe on every render
   }, [enabled, ...deps]);
+}
+
+// ==================== Queue Status ====================
+
+export interface IQueueStatusEntry {
+  id: number;
+  projectPath: string;
+  projectName: string;
+  jobType: string;
+  priority: number;
+  status: string;
+  enqueuedAt: number;
+  dispatchedAt: number | null;
+  providerKey?: string;
+  aiPressure?: number;
+  runtimePressure?: number;
+}
+
+export interface IQueueStatus {
+  enabled: boolean;
+  running: IQueueStatusEntry | null;
+  pending: {
+    total: number;
+    byType: Record<string, number>;
+    byProviderBucket: Record<string, number>;
+  };
+  items: IQueueStatusEntry[];
+  pressureByBucket: Record<string, {
+    aiPressure: number;
+    runtimePressure: number;
+    count: number;
+  }>;
+  averageWaitSeconds: number | null;
+  oldestPendingAge: number | null;
+}
+
+export function fetchQueueStatus(): Promise<IQueueStatus> {
+  return apiFetch<IQueueStatus>('/api/queue/status');
+}
+
+// ==================== Queue Analytics ====================
+
+export interface IQueueAnalytics {
+  recentRuns: Array<{
+    id: number;
+    projectPath: string;
+    jobType: string;
+    providerKey: string;
+    status: string;
+    startedAt: number;
+    finishedAt: number | null;
+    waitSeconds: number | null;
+    durationSeconds: number | null;
+    throttledCount: number;
+  }>;
+  byProviderBucket: Record<string, {
+    running: number;
+    pending: number;
+    totalAiPressure: number;
+    totalRuntimePressure: number;
+  }>;
+  averageWaitSeconds: number | null;
+  oldestPendingAge: number | null;
+}
+
+export function fetchQueueAnalytics(windowHours?: number): Promise<IQueueAnalytics> {
+  const query = windowHours !== undefined ? `?window=${encodeURIComponent(windowHours)}` : '';
+  return apiFetch<IQueueAnalytics>(`/api/queue/analytics${query}`);
 }
 
 // ==================== Roadmap Scanner ====================

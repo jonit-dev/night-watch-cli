@@ -210,6 +210,15 @@ describe('server API', () => {
     });
   });
 
+  describe('GET /api/mode', () => {
+    it('reports single-project mode', async () => {
+      const response = await request(app).get('/api/mode');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ globalMode: false });
+    });
+  });
+
   describe('GET /api/schedule-info', () => {
     it('returns installed status and next run for each scheduled job', async () => {
       vi.mocked(getEntries).mockReturnValue([

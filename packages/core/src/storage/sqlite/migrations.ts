@@ -91,23 +91,59 @@ export function runMigrations(db: Database.Database): void {
     );
 
     CREATE TABLE IF NOT EXISTS job_queue (
-      id            INTEGER PRIMARY KEY AUTOINCREMENT,
-      project_path  TEXT    NOT NULL,
-      project_name  TEXT    NOT NULL,
-      job_type      TEXT    NOT NULL,
-      priority      INTEGER NOT NULL DEFAULT 0,
-      status        TEXT    NOT NULL DEFAULT 'pending',
-      env_json      TEXT    NOT NULL DEFAULT '{}',
-      enqueued_at   INTEGER NOT NULL,
-      dispatched_at INTEGER,
-      expired_at    INTEGER
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_path     TEXT    NOT NULL,
+      project_name     TEXT    NOT NULL,
+      job_type         TEXT    NOT NULL,
+      priority         INTEGER NOT NULL DEFAULT 0,
+      status           TEXT    NOT NULL DEFAULT 'pending',
+      env_json         TEXT    NOT NULL DEFAULT '{}',
+      enqueued_at      INTEGER NOT NULL,
+      dispatched_at    INTEGER,
+      expired_at       INTEGER,
+      provider_key     TEXT,
+      ai_pressure      REAL,
+      runtime_pressure REAL
     );
     CREATE INDEX IF NOT EXISTS idx_queue_pending
       ON job_queue(status, priority DESC, enqueued_at ASC);
+
+    CREATE TABLE IF NOT EXISTS job_runs (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_path      TEXT    NOT NULL,
+      job_type          TEXT    NOT NULL,
+      provider_key      TEXT    NOT NULL,
+      queue_entry_id    INTEGER,
+      status            TEXT    NOT NULL,
+      queued_at         INTEGER,
+      started_at        INTEGER NOT NULL,
+      finished_at       INTEGER,
+      wait_seconds      INTEGER,
+      duration_seconds  INTEGER,
+      throttled_count   INTEGER NOT NULL DEFAULT 0,
+      metadata_json     TEXT    NOT NULL DEFAULT '{}'
+    );
+    CREATE INDEX IF NOT EXISTS idx_job_runs_lookup
+      ON job_runs(project_path, started_at DESC, job_type, provider_key);
   `);
 
   // Phase 2 cleanup: drop slack_discussions table (multi-agent deliberation removed)
   db.exec(`DROP TABLE IF EXISTS slack_discussions`);
+
+  // Phase 2 provider-aware scheduler: add pressure/bucket columns to job_queue if absent.
+  // SQLite does not error on ADD COLUMN for columns that already exist when using IF NOT EXISTS
+  // (supported since SQLite 3.37). We guard with a try/catch for older SQLite versions.
+  for (const ddl of [
+    `ALTER TABLE job_queue ADD COLUMN provider_key TEXT`,
+    `ALTER TABLE job_queue ADD COLUMN ai_pressure REAL`,
+    `ALTER TABLE job_queue ADD COLUMN runtime_pressure REAL`,
+  ]) {
+    try {
+      db.exec(ddl);
+    } catch {
+      // Column already exists — safe to ignore
+    }
+  }
 
   // Phase 2 cleanup: drop slack_channel_id column from projects (no longer needed)
   // SQLite does not support DROP COLUMN before version 3.35.0; use a safe recreate approach.

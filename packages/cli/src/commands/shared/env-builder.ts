@@ -6,9 +6,11 @@
 import {
   DEFAULT_QUEUE,
   INightWatchConfig,
+  IQueueEntry,
   IWebhookConfig,
   PROVIDER_COMMANDS,
   getSchedulingPlan,
+  loadConfig,
   resolveJobProvider,
 } from '@night-watch/core';
 import type { JobType } from '@night-watch/core';
@@ -115,6 +117,16 @@ export function formatProviderDisplay(providerCmd?: string, providerLabel?: stri
   if (!label) return cmd;
   if (label.toLowerCase() === cmd.toLowerCase()) return cmd;
   return `${cmd} (${label})`;
+}
+
+/**
+ * Rebuild environment variables for a queued job from the job's own project config.
+ * This ensures provider-specific env (ANTHROPIC_BASE_URL, API keys, model ids)
+ * always comes from the queued job's own project config, not the dispatcher process env.
+ */
+export function buildQueuedJobEnv(entry: IQueueEntry): Record<string, string> {
+  const config = loadConfig(entry.projectPath);
+  return buildBaseEnvVars(config, entry.jobType, false);
 }
 
 /**

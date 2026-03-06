@@ -1,7 +1,9 @@
 import { Activity, AlertCircle, Check, Edit2, Eye, EyeOff, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react';
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   ClaudeModel,
+  fetchAllConfigs,
   fetchConfig,
   fetchDoctor,
   IAuditConfig,
@@ -14,20 +16,21 @@ import {
   IWebhookConfig,
   MergeMethod,
   QaArtifacts,
-  triggerInstallCron,
   toggleRoadmapScanner,
+  triggerInstallCron,
   updateConfig,
-  useApi,
+  useApi
 } from '../api';
+import ScheduleTimeline from '../components/scheduling/ScheduleTimeline';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import CronScheduleInput from '../components/ui/CronScheduleInput';
-import { IScheduleTemplate, SCHEDULE_TEMPLATES, resolveActiveTemplate } from '../utils/cron.js';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Switch from '../components/ui/Switch';
 import Tabs from '../components/ui/Tabs';
 import { useStore } from '../store/useStore';
+import { IScheduleTemplate, resolveActiveTemplate, SCHEDULE_TEMPLATES } from '../utils/cron.js';
 
 type ConfigForm = {
   provider: INightWatchConfig['provider'];
@@ -467,8 +470,8 @@ const WebhookEditor: React.FC<{
               type="button"
               onClick={() => onChange({ ...webhook, events: toggleEvent(webhook.events, opt.value) })}
               className={`px-3 py-1.5 rounded-md text-sm transition-colors ${webhook.events.includes(opt.value)
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                 }`}
             >
               {opt.label}
@@ -658,6 +661,8 @@ const Settings: React.FC = () => {
   const skipNextFormResetRef = React.useRef(false);
   const [scheduleMode, setScheduleMode] = React.useState<'template' | 'custom'>('template');
   const [selectedTemplateId, setSelectedTemplateId] = React.useState<string>('always-on');
+  const [activeSettingsTab, setActiveSettingsTab] = React.useState<string>('general');
+  const location = useLocation();
 
   const {
     data: config,
@@ -667,6 +672,29 @@ const Settings: React.FC = () => {
   } = useApi(fetchConfig, [selectedProjectId], { enabled: !globalModeLoading });
   const { data: doctorChecksData, loading: doctorLoading, refetch: refetchDoctor } = useApi(fetchDoctor, [selectedProjectId], { enabled: !globalModeLoading });
   const doctorChecks = doctorChecksData ?? [];
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get('tab');
+    const mode = params.get('mode');
+
+    if (tab) {
+      setActiveSettingsTab(tab);
+    }
+    if (mode === 'custom') {
+      setScheduleMode('custom');
+    } else if (mode === 'template') {
+      setScheduleMode('template');
+    }
+
+    const jobTypeParam = params.get('jobType');
+    if (jobTypeParam && tab === 'schedules') {
+      // Small delay to ensure the tab and mode have settled
+      setTimeout(() => {
+        handleEditJob('current', jobTypeParam);
+      }, 300);
+    }
+  }, [location.search, config]); // config dependency ensures we wait for data before trying to scroll
 
   const applyScheduleUiState = React.useCallback((formState: ConfigForm) => {
     const scheduleUiState = resolveScheduleUiState(formState);
@@ -685,6 +713,45 @@ const Settings: React.FC = () => {
       }
     }
   }, [config, applyScheduleUiState]);
+
+  const [allProjectConfigs, setAllProjectConfigs] = React.useState<Array<{ projectId: string; config: INightWatchConfig }>>([]);
+
+  React.useEffect(() => {
+    fetchAllConfigs().then(setAllProjectConfigs).catch(console.error);
+  }, [config]);
+
+  const handleEditJob = (projectId: string, jobType: string) => {
+    // If it's the current project, scroll to the custom mode tab and focus the input
+    if (projectId === projectName || projectId === 'current') {
+      if (scheduleMode !== 'custom') {
+        switchToCustomMode();
+      }
+
+      // Give it a tick to render custom mode if needed
+      setTimeout(() => {
+        const idMap: Record<string, string> = {
+          executor: 'job-schedule-executor',
+          reviewer: 'job-schedule-reviewer',
+          qa: 'job-schedule-qa',
+          audit: 'job-schedule-audit',
+          slicer: 'job-schedule-slicer',
+        };
+        const el = document.getElementById(idMap[jobType] || '');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-2', 'ring-indigo-500', 'ring-offset-2', 'ring-offset-slate-900', 'rounded-lg');
+          setTimeout(() => el.classList.remove('ring-2', 'ring-indigo-500', 'ring-offset-2', 'ring-offset-slate-900'), 2000);
+        }
+      }, 50);
+    } else {
+      // In global mode, maybe we'd want to navigate to that project's settings?
+      addToast({
+        title: 'Project Switch Required',
+        message: `To edit ${projectId}, please switch to that project in the sidebar.`,
+        type: 'info',
+      });
+    }
+  };
 
   const updateField = <K extends keyof ConfigForm>(key: K, value: ConfigForm[K]) => {
     setForm((prev) => {
@@ -750,7 +817,7 @@ const Settings: React.FC = () => {
       form.audit.schedule !== config?.audit.schedule ||
       form.roadmapScanner.enabled !== (config?.roadmapScanner?.enabled ?? true) ||
       (form.roadmapScanner.slicerSchedule || '35 */12 * * *') !==
-        (config?.roadmapScanner?.slicerSchedule || '35 */12 * * *');
+      (config?.roadmapScanner?.slicerSchedule || '35 */12 * * *');
 
     // Filter out empty/undefined job provider values
     const cleanedJobProviders: IJobProviders = {};
@@ -874,15 +941,15 @@ const Settings: React.FC = () => {
       addToast(
         cronInstallFailedMessage
           ? {
-              title: 'Planner Saved (Cron Reinstall Failed)',
-              message: cronInstallFailedMessage,
-              type: 'warning',
-            }
+            title: 'Planner Saved (Cron Reinstall Failed)',
+            message: cronInstallFailedMessage,
+            type: 'warning',
+          }
           : {
-              title: enabled ? 'Roadmap Scanner Enabled' : 'Roadmap Scanner Disabled',
-              message: `Roadmap scanner has been ${enabled ? 'enabled' : 'disabled'}.`,
-              type: 'success',
-            },
+            title: enabled ? 'Roadmap Scanner Enabled' : 'Roadmap Scanner Disabled',
+            message: `Roadmap scanner has been ${enabled ? 'enabled' : 'disabled'}.`,
+            type: 'success',
+          },
       );
     } catch (err) {
       addToast({
@@ -1180,28 +1247,32 @@ const Settings: React.FC = () => {
             <div className="flex rounded-lg border border-slate-700 overflow-hidden shrink-0">
               <button
                 type="button"
-                className={`px-4 py-1.5 text-sm font-medium transition-colors ${
-                  scheduleMode === 'template'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-4 py-1.5 text-sm font-medium transition-colors ${scheduleMode === 'template'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
                 onClick={switchToTemplateMode}
               >
                 Template
               </button>
               <button
                 type="button"
-                className={`px-4 py-1.5 text-sm font-medium transition-colors ${
-                  scheduleMode === 'custom'
-                    ? 'bg-indigo-600 text-white'
-                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-4 py-1.5 text-sm font-medium transition-colors ${scheduleMode === 'custom'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
                 onClick={switchToCustomMode}
               >
                 Custom
               </button>
             </div>
           </div>
+
+          <ScheduleTimeline
+            configs={allProjectConfigs}
+            currentProjectId={selectedProjectId}
+            onEditJob={handleEditJob}
+          />
 
           {scheduleMode === 'template' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1212,11 +1283,10 @@ const Settings: React.FC = () => {
                     key={tpl.id}
                     type="button"
                     onClick={() => applyTemplate(tpl)}
-                    className={`text-left p-4 rounded-lg border transition-colors ${
-                      active
-                        ? 'border-indigo-500 bg-indigo-950/40'
-                        : 'border-slate-700 bg-slate-800/30 hover:border-slate-600'
-                    }`}
+                    className={`text-left p-4 rounded-lg border transition-colors ${active
+                      ? 'border-indigo-500 bg-indigo-950/40'
+                      : 'border-slate-700 bg-slate-800/30 hover:border-slate-600'
+                      }`}
                   >
                     <div className="font-medium text-slate-200 mb-1">{tpl.label}</div>
                     <p className="text-xs text-slate-400 mb-3">{tpl.description}</p>
@@ -1242,47 +1312,57 @@ const Settings: React.FC = () => {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <CronScheduleInput
-                label="PRD Execution Schedule"
-                value={form.cronSchedule}
-                onChange={(val) => updateField('cronSchedule', val)}
-              />
-              <CronScheduleInput
-                label="PR Review Schedule"
-                value={form.reviewerSchedule}
-                onChange={(val) => updateField('reviewerSchedule', val)}
-              />
-              <CronScheduleInput
-                label="QA Schedule"
-                value={form.qa.schedule}
-                onChange={(val) =>
-                  updateField('qa', {
-                    ...form.qa,
-                    schedule: val,
-                  })
-                }
-              />
-              <CronScheduleInput
-                label="Audit Schedule"
-                value={form.audit.schedule}
-                onChange={(val) =>
-                  updateField('audit', {
-                    ...form.audit,
-                    schedule: val,
-                  })
-                }
-              />
-              {form.roadmapScanner.enabled && (
+              <div id="job-schedule-executor">
                 <CronScheduleInput
-                  label="Planner Schedule"
-                  value={form.roadmapScanner.slicerSchedule || '35 */12 * * *'}
+                  label="PRD Execution Schedule"
+                  value={form.cronSchedule}
+                  onChange={(val) => updateField('cronSchedule', val)}
+                />
+              </div>
+              <div id="job-schedule-reviewer">
+                <CronScheduleInput
+                  label="PR Review Schedule"
+                  value={form.reviewerSchedule}
+                  onChange={(val) => updateField('reviewerSchedule', val)}
+                />
+              </div>
+              <div id="job-schedule-qa">
+                <CronScheduleInput
+                  label="QA Schedule"
+                  value={form.qa.schedule}
                   onChange={(val) =>
-                    updateField('roadmapScanner', {
-                      ...form.roadmapScanner,
-                      slicerSchedule: val,
+                    updateField('qa', {
+                      ...form.qa,
+                      schedule: val,
                     })
                   }
                 />
+              </div>
+              <div id="job-schedule-audit">
+                <CronScheduleInput
+                  label="Audit Schedule"
+                  value={form.audit.schedule}
+                  onChange={(val) =>
+                    updateField('audit', {
+                      ...form.audit,
+                      schedule: val,
+                    })
+                  }
+                />
+              </div>
+              {form.roadmapScanner.enabled && (
+                <div id="job-schedule-slicer">
+                  <CronScheduleInput
+                    label="Planner Schedule"
+                    value={form.roadmapScanner.slicerSchedule || '35 */12 * * *'}
+                    onChange={(val) =>
+                      updateField('roadmapScanner', {
+                        ...form.roadmapScanner,
+                        slicerSchedule: val,
+                      })
+                    }
+                  />
+                </div>
               )}
             </div>
           )}
@@ -1724,7 +1804,7 @@ const Settings: React.FC = () => {
     <div className="max-w-4xl mx-auto pb-10">
       <h2 className="text-2xl font-bold text-slate-100 mb-6">Settings</h2>
 
-      <Tabs tabs={tabs} />
+      <Tabs tabs={tabs} activeTab={activeSettingsTab} onChange={setActiveSettingsTab} />
 
       <div className="flex items-center justify-end space-x-4 pt-6 mt-6 border-t border-slate-800">
         <Button variant="ghost" className="text-slate-400 hover:text-slate-300" onClick={handleReset}>

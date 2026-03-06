@@ -1,9 +1,16 @@
 /**
  * Structured logger for Night Watch agent actions and server events.
  *
- * Writes timestamped lines to stdout/stderr so they appear in server logs.
+ * Writes timestamped lines to stdout/stderr and appends plain-text lines to
+ * ~/.night-watch/logs/night-watch.log (ANSI codes stripped for the file).
  * Format: ISO_TIMESTAMP [LEVEL] [context] message key=value ...
  */
+
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
+import { GLOBAL_CONFIG_DIR } from '../constants.js';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 type LogMeta = Record<string, unknown>;
@@ -23,6 +30,12 @@ const NO_COLOR = process.env.NO_COLOR !== undefined || process.env.TERM === 'dum
 
 function colorize(color: string, text: string): string {
   return NO_COLOR ? text : `${color}${text}${ANSI.reset}`;
+}
+
+// Strip ANSI escape codes for plain-text file output
+const ANSI_STRIP_RE = /\x1b\[[0-9;]*m/g;
+function stripAnsi(text: string): string {
+  return text.replace(ANSI_STRIP_RE, '');
 }
 
 function serializeValue(v: unknown): string {
@@ -51,6 +64,30 @@ const LEVEL_STYLES: Record<LogLevel, ILevelStyle> = {
   error: { label: 'ERROR', color: ANSI.red },
 };
 
+// Lazily initialised write stream shared across all Logger instances
+let _logStream: fs.WriteStream | null = null;
+let _logStreamFailed = false;
+
+function getLogStream(): fs.WriteStream | null {
+  if (_logStreamFailed) return null;
+  if (_logStream) return _logStream;
+
+  try {
+    const logsDir = path.join(
+      process.env.NIGHT_WATCH_HOME ?? path.join(os.homedir(), GLOBAL_CONFIG_DIR),
+      'logs',
+    );
+    fs.mkdirSync(logsDir, { recursive: true });
+    const logFile = path.join(logsDir, 'night-watch.log');
+    _logStream = fs.createWriteStream(logFile, { flags: 'a' });
+    _logStream.on('error', () => { _logStreamFailed = true; _logStream = null; });
+  } catch {
+    _logStreamFailed = true;
+  }
+
+  return _logStream;
+}
+
 export class Logger {
   constructor(private readonly context: string) {}
 
@@ -62,6 +99,7 @@ export class Logger {
     const msg = level === 'error' ? colorize(color, message) : message;
     const metaStr = meta ? formatMeta(meta) : '';
     const line = `${ts} ${lvl} ${ctx} ${msg}${metaStr}`;
+
     if (level === 'error') {
       console.error(line);
     } else if (level === 'warn') {
@@ -69,6 +107,8 @@ export class Logger {
     } else {
       console.log(line);
     }
+
+    getLogStream()?.write(stripAnsi(line) + '\n');
   }
 
   debug(message: string, meta?: LogMeta): void {

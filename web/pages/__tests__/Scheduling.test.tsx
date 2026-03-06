@@ -1,14 +1,22 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { INightWatchConfig, IScheduleInfo } from '../../api';
+import { MemoryRouter } from 'react-router-dom';
+import type { INightWatchConfig, IQueueAnalytics, IQueueStatus, IScheduleInfo } from '../../api';
 import Scheduling from '../Scheduling';
+
+function renderScheduling() {
+  return render(<MemoryRouter><Scheduling /></MemoryRouter>);
+}
 
 const apiMocks = vi.hoisted(() => ({
   fetchConfig: vi.fn(),
   fetchScheduleInfo: vi.fn(),
+  fetchAllConfigs: vi.fn(),
   updateConfig: vi.fn(),
   triggerInstallCron: vi.fn(),
   triggerUninstallCron: vi.fn(),
+  fetchQueueStatus: vi.fn(),
+  fetchQueueAnalytics: vi.fn(),
   refetchConfig: vi.fn(),
   refetchSchedule: vi.fn(),
 }));
@@ -76,6 +84,7 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     },
     queue: {
       enabled: true,
+      mode: 'conservative',
       maxConcurrency: 1,
       maxWaitTime: 7200,
       priority: {
@@ -85,6 +94,14 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
         qa: 20,
         audit: 10,
       },
+      jobWeights: {
+        executor: { aiPressure: 5, runtimePressure: 4 },
+        reviewer: { aiPressure: 2, runtimePressure: 2 },
+        qa: { aiPressure: 1, runtimePressure: 4 },
+        audit: { aiPressure: 4, runtimePressure: 3 },
+        slicer: { aiPressure: 4, runtimePressure: 2 },
+      },
+      providerBuckets: {},
     },
   };
 
@@ -159,9 +176,12 @@ function makeScheduleInfo(overrides: Partial<IScheduleInfo> = {}): IScheduleInfo
 vi.mock('../../api', () => ({
   fetchConfig: apiMocks.fetchConfig,
   fetchScheduleInfo: apiMocks.fetchScheduleInfo,
+  fetchAllConfigs: apiMocks.fetchAllConfigs,
   updateConfig: apiMocks.updateConfig,
   triggerInstallCron: apiMocks.triggerInstallCron,
   triggerUninstallCron: apiMocks.triggerUninstallCron,
+  fetchQueueStatus: apiMocks.fetchQueueStatus,
+  fetchQueueAnalytics: apiMocks.fetchQueueAnalytics,
   useApi: (fetchFn: unknown) => {
     if (fetchFn === apiMocks.fetchConfig) {
       return {
@@ -196,6 +216,29 @@ vi.mock('../../store/useStore', () => ({
   }),
 }));
 
+function makeQueueStatus(overrides: Partial<IQueueStatus> = {}): IQueueStatus {
+  const base: IQueueStatus = {
+    enabled: true,
+    running: null,
+    pending: { total: 0, byType: {}, byProviderBucket: {} },
+    items: [],
+    pressureByBucket: {},
+    averageWaitSeconds: null,
+    oldestPendingAge: null,
+  };
+  return { ...base, ...overrides };
+}
+
+function makeQueueAnalytics(overrides: Partial<IQueueAnalytics> = {}): IQueueAnalytics {
+  const base: IQueueAnalytics = {
+    recentRuns: [],
+    byProviderBucket: {},
+    averageWaitSeconds: null,
+    oldestPendingAge: null,
+  };
+  return { ...base, ...overrides };
+}
+
 describe('Scheduling page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -204,10 +247,13 @@ describe('Scheduling page', () => {
     apiMocks.updateConfig.mockResolvedValue(currentConfig);
     apiMocks.triggerInstallCron.mockResolvedValue({ started: true });
     apiMocks.triggerUninstallCron.mockResolvedValue({ started: true });
+    apiMocks.fetchAllConfigs.mockResolvedValue([]);
+    apiMocks.fetchQueueStatus.mockResolvedValue(makeQueueStatus());
+    apiMocks.fetchQueueAnalytics.mockResolvedValue(makeQueueAnalytics());
   });
 
   it('shows schedule bundle and bundle-aware labels when template matches', () => {
-    render(<Scheduling />);
+    renderScheduling();
 
     expect(screen.getByText('Schedule Bundle')).toBeInTheDocument();
     expect(screen.getByText('Always On (Recommended)')).toBeInTheDocument();
@@ -226,7 +272,7 @@ describe('Scheduling page', () => {
       },
     });
 
-    render(<Scheduling />);
+    renderScheduling();
 
     expect(screen.queryByText('Schedule Bundle')).not.toBeInTheDocument();
     expect(screen.getByText('Balanced (recommended)')).toBeInTheDocument();
@@ -264,14 +310,14 @@ describe('Scheduling page', () => {
       },
     });
 
-    render(<Scheduling />);
+    renderScheduling();
 
     expect(screen.getByText('Schedule Bundle')).toBeInTheDocument();
     expect(screen.getByText('Always On (Recommended) • Every 3h at :05')).toBeInTheDocument();
   });
 
   it('saves edited schedules and reinstalls cron', async () => {
-    render(<Scheduling />);
+    renderScheduling();
 
     fireEvent.click(screen.getByRole('button', { name: /edit/i }));
 
@@ -336,7 +382,7 @@ describe('Scheduling page', () => {
       },
     });
 
-    render(<Scheduling />);
+    renderScheduling();
 
     expect(screen.getAllByText(/Delayed after cron fire:/)).not.toHaveLength(0);
     expect(screen.getAllByText(/manual \+30m/)).not.toHaveLength(0);
@@ -347,7 +393,7 @@ describe('Scheduling page', () => {
   it('warns and refetches when cron reinstall fails after saving schedules', async () => {
     apiMocks.triggerInstallCron.mockRejectedValue(new Error('cron install failed'));
 
-    render(<Scheduling />);
+    renderScheduling();
 
     fireEvent.click(screen.getByRole('button', { name: /edit/i }));
     fireEvent.change(screen.getByLabelText('Executor Preset'), {
@@ -373,7 +419,7 @@ describe('Scheduling page', () => {
   it('warns and refetches when a job toggle saves but cron reinstall fails', async () => {
     apiMocks.triggerInstallCron.mockRejectedValue(new Error('cron install failed'));
 
-    render(<Scheduling />);
+    renderScheduling();
 
     fireEvent.click(screen.getByLabelText('Toggle planner automation'));
 
@@ -392,5 +438,136 @@ describe('Scheduling page', () => {
         type: 'warning',
       });
     });
+  });
+
+  it('renders provider lanes from queue status', async () => {
+    apiMocks.fetchQueueStatus.mockResolvedValue(
+      makeQueueStatus({
+        running: {
+          id: 1,
+          projectPath: '/home/user/project-a',
+          projectName: 'project-a',
+          jobType: 'executor',
+          priority: 50,
+          status: 'running',
+          enqueuedAt: Date.now() / 1000,
+          dispatchedAt: Date.now() / 1000,
+          providerKey: 'claude-native',
+        },
+        pending: {
+          total: 1,
+          byType: { reviewer: 1 },
+          byProviderBucket: { 'claude-native': 1 },
+        },
+        items: [
+          {
+            id: 2,
+            projectPath: '/home/user/project-b',
+            projectName: 'project-b',
+            jobType: 'reviewer',
+            priority: 40,
+            status: 'queued',
+            enqueuedAt: Date.now() / 1000,
+            dispatchedAt: null,
+            providerKey: 'claude-native',
+          },
+        ],
+      }),
+    );
+
+    renderScheduling();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('provider-execution-timeline')).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('provider-execution-lane-claude-native')).toBeInTheDocument();
+  });
+
+  it('renders recent provider runs inside the execution timeline', async () => {
+    apiMocks.fetchQueueAnalytics.mockResolvedValue(
+      makeQueueAnalytics({
+        recentRuns: [
+          {
+            id: 9,
+            projectPath: '/home/user/project-a',
+            jobType: 'executor',
+            providerKey: 'claude-native',
+            status: 'success',
+            startedAt: Math.floor(Date.now() / 1000) - 1800,
+            finishedAt: Math.floor(Date.now() / 1000) - 900,
+            waitSeconds: 12,
+            durationSeconds: 900,
+            throttledCount: 1,
+          },
+        ],
+      }),
+    );
+
+    renderScheduling();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('provider-execution-timeline')).toBeInTheDocument();
+    });
+
+    const executionRuns = screen.getAllByTestId('provider-execution-run');
+    expect(executionRuns.length).toBeGreaterThan(0);
+  });
+
+  it('renders pending queue pressure summary', async () => {
+    apiMocks.fetchQueueAnalytics.mockResolvedValue(
+      makeQueueAnalytics({
+        byProviderBucket: {
+          'claude-native': {
+            running: 1,
+            pending: 2,
+            totalAiPressure: 3.5,
+            totalRuntimePressure: 1.2,
+          },
+          codex: {
+            running: 0,
+            pending: 1,
+            totalAiPressure: 1.0,
+            totalRuntimePressure: 0.5,
+          },
+        },
+        averageWaitSeconds: 45,
+        recentRuns: [],
+      }),
+    );
+
+    renderScheduling();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('queue-pressure-bars')).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('pressure-bucket-claude-native')).toBeInTheDocument();
+    expect(screen.getByTestId('pressure-bucket-codex')).toBeInTheDocument();
+    // Multiple buckets each render AI + runtime pressure bars
+    const aiPressureBars = screen.getAllByTestId('pressure-bar-ai-pressure');
+    expect(aiPressureBars.length).toBeGreaterThanOrEqual(2);
+    const runtimePressureBars = screen.getAllByTestId('pressure-bar-runtime-pressure');
+    expect(runtimePressureBars.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('keeps cron controls available after dashboard refresh', async () => {
+    renderScheduling();
+
+    // Cron controls exist
+    expect(screen.getByText('Executor Schedule')).toBeInTheDocument();
+    expect(screen.getByText('Reviewer Schedule')).toBeInTheDocument();
+    expect(screen.getByText('Job Enablement')).toBeInTheDocument();
+
+    // Trigger a simulated dashboard refresh
+    await waitFor(() => {
+      expect(apiMocks.fetchQueueStatus).toHaveBeenCalled();
+      expect(apiMocks.fetchQueueAnalytics).toHaveBeenCalled();
+    });
+
+    // Cron controls still present after data loads
+    expect(screen.getByText('Executor Schedule')).toBeInTheDocument();
+    expect(screen.getByText('Job Enablement')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /edit/i })).toBeInTheDocument();
   });
 });

@@ -39,7 +39,7 @@ import {
   createScheduleInfoRoutes,
   createStatusRoutes,
 } from './routes/status.routes.js';
-import { createQueueRoutes } from './routes/queue.routes.js';
+import { createGlobalQueueRoutes, createQueueRoutes } from './routes/queue.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -107,6 +107,10 @@ export function createApp(projectDir: string): Express {
   const sseClients: SseClientSet = new Set();
 
   startSseStatusWatcher(sseClients, projectDir, () => config);
+
+  app.get('/api/mode', (_req: Request, res: Response): void => {
+    res.json({ globalMode: false });
+  });
 
   app.use('/api/status', createStatusRoutes({ projectDir, getConfig: () => config, sseClients }));
   app.use('/api/schedule-info', createScheduleInfoRoutes({ projectDir, getConfig: () => config }));
@@ -188,6 +192,10 @@ export function createGlobalApp(): Express {
   app.use(cors());
   app.use(express.json());
 
+  app.get('/api/mode', (_req: Request, res: Response): void => {
+    res.json({ globalMode: true });
+  });
+
   app.get('/api/projects', (_req: Request, res: Response): void => {
     try {
       const entries = loadRegistry();
@@ -200,6 +208,9 @@ export function createGlobalApp(): Express {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
   });
+
+  // Global queue routes (not project-scoped — reads the shared state DB)
+  app.use('/api/queue', createGlobalQueueRoutes());
 
   app.use('/api/projects/:projectId', resolveProject, createProjectRouter());
 

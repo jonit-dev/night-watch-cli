@@ -1,20 +1,24 @@
 import { useEffect } from 'react';
-import { fetchProjects } from '../api';
+import { fetchProjects, fetchServerMode } from '../api';
 import { useStore } from '../store/useStore';
 
 /**
- * Detects whether the server is running in global mode by probing /api/projects.
- * If the endpoint exists, enables global mode and populates the project list.
- * If it 404s, stays in single-project mode (no-op).
+ * Detects whether the server is running in global mode without relying on a
+ * failing /api/projects probe in single-project mode.
  */
 export function useGlobalMode(): void {
   const { setGlobalMode, setGlobalModeLoading, setProjects, selectProject, selectedProjectId } = useStore();
 
   useEffect(() => {
     setGlobalModeLoading(true);
-    fetchProjects()
-      .then((projects) => {
-        setGlobalMode(true);
+    fetchServerMode()
+      .then(async ({ globalMode }) => {
+        setGlobalMode(globalMode);
+        if (!globalMode) {
+          return;
+        }
+
+        const projects = await fetchProjects();
         setProjects(projects);
 
         const validProjects = projects.filter((p) => p.valid);
@@ -27,7 +31,6 @@ export function useGlobalMode(): void {
         }
       })
       .catch(() => {
-        // /api/projects doesn't exist — single-project mode
         setGlobalMode(false);
       })
       .finally(() => {
