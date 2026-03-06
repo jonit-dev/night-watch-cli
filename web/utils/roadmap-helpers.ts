@@ -5,6 +5,14 @@
  * for the Roadmap page's horizon-based planning view.
  */
 
+import React from 'react';
+import {
+  Clock,
+  FileText,
+  LayoutGrid,
+  Zap,
+  CheckCircle2,
+} from 'lucide-react';
 import type { IRoadmapItem } from '../api';
 import type { IBoardIssue, BoardColumnName } from '../api';
 
@@ -62,12 +70,19 @@ export const HORIZON_LABELS: Record<HorizonLabel, string> = {
 
 export const PIPELINE_STAGES: PipelineStage[] = ['pending', 'sliced', 'on-board', 'active', 'done'];
 
-export const PIPELINE_STAGE_CONFIG: Record<PipelineStage, { label: string; color: string }> = {
-  pending:  { label: 'Pending',      color: 'text-slate-500'   },
-  sliced:   { label: 'PRD Created',  color: 'text-indigo-400'  },
-  'on-board': { label: 'On Board',   color: 'text-blue-400'    },
-  active:   { label: 'Active',       color: 'text-amber-400'   },
-  done:     { label: 'Done',         color: 'text-emerald-400' },
+export type BadgeVariant = 'default' | 'success' | 'warning' | 'error' | 'neutral' | 'info';
+
+export const PIPELINE_STAGE_CONFIG: Record<PipelineStage, {
+  label: string;
+  color: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badge: BadgeVariant;
+}> = {
+  pending:  { label: 'Pending',      color: 'text-slate-500',   icon: Clock,       badge: 'neutral' },
+  sliced:   { label: 'PRD Created',  color: 'text-indigo-400',  icon: FileText,    badge: 'info'    },
+  'on-board': { label: 'On Board',   color: 'text-blue-400',    icon: LayoutGrid,  badge: 'default' },
+  active:   { label: 'Active',       color: 'text-amber-400',   icon: Zap,         badge: 'warning' },
+  done:     { label: 'Done',         color: 'text-emerald-400', icon: CheckCircle2, badge: 'success' },
 };
 
 // ==================== Section to Horizon/Category Mapping ====================

@@ -5,16 +5,8 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
-  FileText,
-  Minus,
-  Circle,
-  FileCheck,
-  LayoutGrid,
-  Zap,
-  CheckCircle2,
   ExternalLink,
   Filter,
-  X,
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
