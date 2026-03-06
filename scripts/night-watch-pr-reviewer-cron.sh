@@ -38,6 +38,7 @@ fi
 # Retry configuration
 REVIEWER_MAX_RETRIES="${NW_REVIEWER_MAX_RETRIES:-2}"
 REVIEWER_RETRY_DELAY="${NW_REVIEWER_RETRY_DELAY:-30}"
+SCRIPT_START_TIME=$(date +%s)
 
 # Normalize retry settings to safe numeric ranges
 if ! [[ "${REVIEWER_MAX_RETRIES}" =~ ^[0-9]+$ ]]; then
@@ -507,6 +508,9 @@ if ! validate_provider "${PROVIDER_CMD}"; then
 fi
 
 rotate_log
+log_separator
+log "RUN-START: reviewer invoked project=${PROJECT_DIR} provider=${PROVIDER_CMD} worker=${WORKER_MODE} target_pr=${TARGET_PR:-all} parallel=${PARALLEL_ENABLED}"
+log "CONFIG: max_runtime=${MAX_RUNTIME}s min_review_score=${MIN_REVIEW_SCORE} auto_merge=${AUTO_MERGE} branch_patterns=${BRANCH_PATTERNS_RAW}"
 
 if ! acquire_lock "${LOCK_FILE}"; then
   emit_result "skip_locked"
@@ -1024,8 +1028,9 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
     fi
   fi
 
-  log "RETRY: Starting attempt ${ATTEMPT}/${TOTAL_ATTEMPTS} (timeout: ${ATTEMPT_TIMEOUT}s)"
+  log "RETRY: Starting attempt ${ATTEMPT}/${TOTAL_ATTEMPTS} (timeout: ${ATTEMPT_TIMEOUT}s) pr=${TARGET_PR:-all}"
   LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
+  REVIEWER_ATTEMPT_START=$(date +%s)
   REVIEWER_PROMPT="${REVIEWER_PROMPT_BASE}${TARGET_SCOPE_PROMPT}${PRD_CONTEXT_PROMPT}"
 
   case "${PROVIDER_CMD}" in
@@ -1059,6 +1064,9 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
       exit 1
       ;;
   esac
+
+  REVIEWER_ATTEMPT_ELAPSED=$(( $(date +%s) - REVIEWER_ATTEMPT_START ))
+  log "RETRY: Attempt ${ATTEMPT}/${TOTAL_ATTEMPTS} finished exit_code=${EXIT_CODE} elapsed=${REVIEWER_ATTEMPT_ELAPSED}s pr=${TARGET_PR:-all}"
 
   # If provider failed (non-zero exit), check for rate limit before giving up
   if [ "${EXIT_CODE}" -ne 0 ]; then
@@ -1214,4 +1222,6 @@ if [ "${AUTO_MERGE}" = "1" ] && [ ${EXIT_CODE} -eq 0 ]; then
   done < <(gh pr list --state open --json number,headRefName --jq '.[] | [.number, .headRefName] | @tsv' 2>/dev/null || true)
 fi
 
+REVIEWER_TOTAL_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
+log "OUTCOME: exit_code=${EXIT_CODE} total_elapsed=${REVIEWER_TOTAL_ELAPSED}s prs=${PRS_NEEDING_WORK_CSV:-none} attempts=${ATTEMPTS_MADE}"
 emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${ATTEMPTS_MADE}" "${FINAL_SCORE}"

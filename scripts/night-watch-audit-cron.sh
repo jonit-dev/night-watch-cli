@@ -20,6 +20,7 @@ MAX_RUNTIME="${NW_AUDIT_MAX_RUNTIME:-1800}"  # 30 minutes
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 PROVIDER_LABEL="${NW_PROVIDER_LABEL:-}"
+SCRIPT_START_TIME=$(date +%s)
 
 # Ensure NVM / Node / Claude are on PATH
 export NVM_DIR="${HOME}/.nvm"
@@ -54,6 +55,9 @@ if ! validate_provider "${PROVIDER_CMD}"; then
 fi
 
 rotate_log
+log_separator
+log "RUN-START: audit invoked project=${PROJECT_DIR} provider=${PROVIDER_CMD} dry_run=${NW_DRY_RUN:-0}"
+log "CONFIG: max_runtime=${MAX_RUNTIME}s max_retries=${NW_AUDIT_MAX_RETRIES:-3} retry_delay=${NW_AUDIT_RETRY_DELAY:-120}s"
 
 if ! acquire_lock "${LOCK_FILE}"; then
   emit_result "skip_locked"
@@ -121,7 +125,8 @@ EXIT_CODE=0
 
 for AUDIT_ATTEMPT in $(seq 1 "${AUDIT_MAX_RETRIES}"); do
   LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
-  log "AUDIT: Attempt ${AUDIT_ATTEMPT}/${AUDIT_MAX_RETRIES}"
+  AUDIT_ATTEMPT_START=$(date +%s)
+  log "AUDIT: Attempt ${AUDIT_ATTEMPT}/${AUDIT_MAX_RETRIES} starting provider=${PROVIDER_CMD} timeout=${MAX_RUNTIME}s"
 
   case "${PROVIDER_CMD}" in
     claude)
@@ -156,6 +161,9 @@ for AUDIT_ATTEMPT in $(seq 1 "${AUDIT_MAX_RETRIES}"); do
       ;;
   esac
 
+  AUDIT_ATTEMPT_ELAPSED=$(( $(date +%s) - AUDIT_ATTEMPT_START ))
+  log "AUDIT: Attempt ${AUDIT_ATTEMPT}/${AUDIT_MAX_RETRIES} finished exit_code=${EXIT_CODE} elapsed=${AUDIT_ATTEMPT_ELAPSED}s"
+
   # Success or timeout — don't retry
   if [ "${EXIT_CODE}" -eq 0 ] || [ "${EXIT_CODE}" -eq 124 ]; then
     break
@@ -180,6 +188,9 @@ if [ -f "${WORKTREE_REPORT}" ]; then
 fi
 
 cleanup_worktrees "${PROJECT_DIR}" "${AUDIT_WORKTREE_BASENAME}"
+
+AUDIT_TOTAL_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
+log "OUTCOME: exit_code=${EXIT_CODE} total_elapsed=${AUDIT_TOTAL_ELAPSED}s project=${PROJECT_NAME}"
 
 if [ "${EXIT_CODE}" -eq 0 ]; then
   if [ ! -f "${REPORT_FILE}" ]; then

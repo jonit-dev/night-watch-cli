@@ -27,6 +27,7 @@ BRANCH_PATTERNS_RAW="${NW_BRANCH_PATTERNS:-feat/,night-watch/}"
 SKIP_LABEL="${NW_QA_SKIP_LABEL:-skip-qa}"
 QA_ARTIFACTS="${NW_QA_ARTIFACTS:-both}"
 QA_AUTO_INSTALL_PLAYWRIGHT="${NW_QA_AUTO_INSTALL_PLAYWRIGHT:-1}"
+SCRIPT_START_TIME=$(date +%s)
 
 # Ensure NVM / Node / Claude are on PATH
 export NVM_DIR="${HOME}/.nvm"
@@ -341,6 +342,9 @@ if ! validate_provider "${PROVIDER_CMD}"; then
 fi
 
 rotate_log
+log_separator
+log "RUN-START: qa invoked project=${PROJECT_DIR} provider=${PROVIDER_CMD} dry_run=${NW_DRY_RUN:-0}"
+log "CONFIG: max_runtime=${MAX_RUNTIME}s artifacts=${QA_ARTIFACTS} skip_label=${SKIP_LABEL} branch_patterns=${BRANCH_PATTERNS_RAW}"
 
 if ! acquire_lock "${LOCK_FILE}"; then
   emit_result "skip_locked"
@@ -552,6 +556,8 @@ Action: generating QA tests and evidence."
   QA_PROMPT="${QA_PROMPT}"$'\n\n'"## QA Attribution (Required)"$'\n'"At the very end of each QA result comment you post, add this footer on its own line:"$'\n'"> 🧪 QA run by ${QA_PROVIDER_LABEL}"
 
   LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
+  QA_ATTEMPT_START=$(date +%s)
+  log "QA: PR #${pr_num} — starting provider=${PROVIDER_CMD} timeout=${MAX_RUNTIME}s"
   PROVIDER_OK=0
   case "${PROVIDER_CMD}" in
     claude)
@@ -564,7 +570,8 @@ Action: generating QA tests and evidence."
         PROVIDER_OK=1
       else
         local_exit=$?
-        log "QA: PR #${pr_num} — provider exited with code ${local_exit}"
+        QA_ATTEMPT_ELAPSED=$(( $(date +%s) - QA_ATTEMPT_START ))
+        log "QA: PR #${pr_num} — provider exited with code ${local_exit} elapsed=${QA_ATTEMPT_ELAPSED}s"
         if [ ${local_exit} -eq 124 ]; then
           FAILED_AUTOMATION_PRS_CSV=$(append_csv "${FAILED_AUTOMATION_PRS_CSV}" "#${pr_num}")
           FAILED_PR="#${pr_num}"
@@ -589,7 +596,8 @@ Action: generating QA tests and evidence."
         PROVIDER_OK=1
       else
         local_exit=$?
-        log "QA: PR #${pr_num} — provider exited with code ${local_exit}"
+        QA_ATTEMPT_ELAPSED=$(( $(date +%s) - QA_ATTEMPT_START ))
+        log "QA: PR #${pr_num} — provider exited with code ${local_exit} elapsed=${QA_ATTEMPT_ELAPSED}s"
         if [ ${local_exit} -eq 124 ]; then
           FAILED_AUTOMATION_PRS_CSV=$(append_csv "${FAILED_AUTOMATION_PRS_CSV}" "#${pr_num}")
           FAILED_PR="#${pr_num}"
@@ -610,6 +618,8 @@ Action: generating QA tests and evidence."
   esac
 
   if [ "${PROVIDER_OK}" -eq 1 ]; then
+    QA_ATTEMPT_ELAPSED=$(( $(date +%s) - QA_ATTEMPT_START ))
+    log "QA: PR #${pr_num} — provider completed exit_code=0 elapsed=${QA_ATTEMPT_ELAPSED}s"
     if provider_output_looks_invalid "${LOG_LINE_BEFORE}"; then
       log "FAIL-QA-EVIDENCE: PR #${pr_num} provider output indicates an invalid automation run"
       FAILED_AUTOMATION_PRS_CSV=$(append_csv "${FAILED_AUTOMATION_PRS_CSV}" "#${pr_num}")
@@ -659,6 +669,9 @@ NO_TESTS_PRS_SUMMARY=$(csv_or_none "${NO_TESTS_PRS_CSV}")
 UNCLASSIFIED_PRS_SUMMARY=$(csv_or_none "${UNCLASSIFIED_PRS_CSV}")
 FAILED_AUTOMATION_PRS_SUMMARY=$(csv_or_none "${FAILED_AUTOMATION_PRS_CSV}")
 FAILED_PR_SUMMARY=$(csv_or_none "${FAILED_PR}")
+
+QA_TOTAL_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
+log "OUTCOME: exit_code=${EXIT_CODE} total_elapsed=${QA_TOTAL_ELAPSED}s processed_prs=${FINAL_PROCESSED_PRS_CSV:-none}"
 
 if [ ${EXIT_CODE} -eq 0 ]; then
   log "DONE: QA runner completed successfully"
