@@ -14,6 +14,7 @@ const EXPECTED_TABLES = [
   'agent_personas',
   'execution_history',
   'job_queue',
+  'job_runs',
   'kanban_comments',
   'kanban_issues',
   'prd_states',
@@ -91,5 +92,61 @@ describe('runMigrations', () => {
       | undefined;
 
     expect(row?.value).toBe('1');
+  });
+
+  it('creates job_runs table with correct columns', () => {
+    runMigrations(db);
+
+    const columns = db
+      .prepare(`PRAGMA table_info(job_runs)`)
+      .all() as Array<{ name: string; type: string; notnull: number; dflt_value: string | null }>;
+
+    const colNames = columns.map((c) => c.name);
+    expect(colNames).toEqual(
+      expect.arrayContaining([
+        'id',
+        'project_path',
+        'job_type',
+        'provider_key',
+        'queue_entry_id',
+        'status',
+        'queued_at',
+        'started_at',
+        'finished_at',
+        'wait_seconds',
+        'duration_seconds',
+        'throttled_count',
+        'metadata_json',
+      ]),
+    );
+
+    // Verify NOT NULL constraints
+    const notNullCols = columns.filter((c) => c.notnull === 1).map((c) => c.name);
+    expect(notNullCols).toEqual(
+      expect.arrayContaining(['project_path', 'job_type', 'provider_key', 'status', 'started_at']),
+    );
+  });
+
+  it('job_queue table has provider_key, ai_pressure, runtime_pressure columns', () => {
+    runMigrations(db);
+
+    const columns = db
+      .prepare(`PRAGMA table_info(job_queue)`)
+      .all() as Array<{ name: string }>;
+
+    const colNames = columns.map((c) => c.name);
+    expect(colNames).toEqual(
+      expect.arrayContaining(['provider_key', 'ai_pressure', 'runtime_pressure']),
+    );
+  });
+
+  it('idx_job_runs_lookup index is created', () => {
+    runMigrations(db);
+
+    const indexes = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='job_runs'`)
+      .all() as Array<{ name: string }>;
+
+    expect(indexes.map((i) => i.name)).toContain('idx_job_runs_lookup');
   });
 });

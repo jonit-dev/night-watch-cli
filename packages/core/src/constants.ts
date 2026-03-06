@@ -7,7 +7,9 @@ import {
   ClaudeModel,
   IAuditConfig,
   IJobProviders,
+  IJobWeight,
   INotificationConfig,
+  IProviderBucketConfig,
   IQaConfig,
   IQueueConfig,
   IRoadmapScannerConfig,
@@ -15,6 +17,7 @@ import {
   MergeMethod,
   Provider,
   QaArtifacts,
+  QueueMode,
 } from './types.js';
 
 // Branch Configuration (default branch)
@@ -189,6 +192,7 @@ export const MAX_HISTORY_RECORDS_PER_PRD = 10;
 
 // Global Job Queue Configuration
 export const DEFAULT_QUEUE_ENABLED = true;
+export const DEFAULT_QUEUE_MODE: QueueMode = 'conservative';
 export const DEFAULT_QUEUE_MAX_CONCURRENCY = 1;
 export const DEFAULT_QUEUE_MAX_WAIT_TIME = 7200; // 2 hours in seconds
 export const DEFAULT_QUEUE_PRIORITY: Record<string, number> = {
@@ -199,15 +203,59 @@ export const DEFAULT_QUEUE_PRIORITY: Record<string, number> = {
   audit: 10,
 };
 
+/**
+ * Default per-job-type pressure weights for provider-aware scheduling.
+ * aiPressure: relative load on the AI provider API (0–10).
+ * runtimePressure: relative local CPU/wall-clock cost (0–10).
+ */
+export const DEFAULT_JOB_WEIGHTS: Record<string, IJobWeight> = {
+  executor: { aiPressure: 5, runtimePressure: 4 },
+  reviewer: { aiPressure: 2, runtimePressure: 2 },
+  qa: { aiPressure: 1, runtimePressure: 4 },
+  audit: { aiPressure: 4, runtimePressure: 3 },
+  slicer: { aiPressure: 4, runtimePressure: 2 },
+};
+
+/** Default provider bucket configs (empty — no per-bucket limits unless user configures them). */
+export const DEFAULT_PROVIDER_BUCKETS: Record<string, IProviderBucketConfig> = {};
+
 export const DEFAULT_QUEUE: IQueueConfig = {
   enabled: DEFAULT_QUEUE_ENABLED,
+  mode: DEFAULT_QUEUE_MODE,
   maxConcurrency: DEFAULT_QUEUE_MAX_CONCURRENCY,
   maxWaitTime: DEFAULT_QUEUE_MAX_WAIT_TIME,
   priority: { ...DEFAULT_QUEUE_PRIORITY },
+  jobWeights: { ...DEFAULT_JOB_WEIGHTS },
+  providerBuckets: {},
 };
 
 // Cross-project scheduling priority (higher = earlier slot / stronger queue tie-breaker)
 export const DEFAULT_SCHEDULING_PRIORITY = 3;
+
+/**
+ * Resolve a canonical provider bucket key from a provider name and optional providerEnv.
+ *
+ * Examples:
+ *   resolveProviderBucketKey('codex')                                  → 'codex'
+ *   resolveProviderBucketKey('claude', {})                             → 'claude-native'
+ *   resolveProviderBucketKey('claude', { ANTHROPIC_BASE_URL: 'https://api.z.ai/...' }) → 'claude-proxy:api.z.ai'
+ *
+ * The key is used to group in-flight jobs into provider buckets for capacity checks.
+ */
+export function resolveProviderBucketKey(
+  provider: Provider,
+  providerEnv?: Record<string, string>,
+): string {
+  if (provider === 'codex') return 'codex';
+  const baseUrl = providerEnv?.ANTHROPIC_BASE_URL;
+  if (!baseUrl) return 'claude-native';
+  try {
+    const host = new URL(baseUrl).hostname;
+    return `claude-proxy:${host}`;
+  } catch {
+    return `claude-proxy:${baseUrl}`;
+  }
+}
 
 // Queue lock file path (relative to global config dir)
 export const QUEUE_LOCK_FILE_NAME = 'queue.lock';

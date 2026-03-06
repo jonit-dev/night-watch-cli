@@ -25,6 +25,7 @@ import {
 } from '@night-watch/core';
 import type { IQueueEntry, JobType } from '@night-watch/core';
 import { createLogger } from '@night-watch/core';
+import { buildQueuedJobEnv } from './shared/env-builder.js';
 
 const logger = createLogger('queue');
 
@@ -215,10 +216,22 @@ export function createQueueCommand(): Command {
         return;
       }
 
-      // Build environment with stored vars
+      // Rebuild env from queued project's config (not from dispatcher process.env)
+      // This ensures provider-specific env (ANTHROPIC_BASE_URL, API keys, model ids)
+      // always comes from the queued job's own project config.
+      let projectEnv: Record<string, string> = {};
+      try {
+        projectEnv = buildQueuedJobEnv(entry);
+      } catch {
+        // If config load fails, fall back to process env
+        projectEnv = {};
+      }
       const env = {
         ...process.env,
-        ...entry.envJson,
+        ...projectEnv,
+        // Overlay persisted runtime-only NW_* queue markers from the queue entry
+        // (These are queue-specific flags, not provider identity)
+        ...filterQueueMarkers(entry.envJson),
         NW_QUEUE_DISPATCHED: '1',
         NW_QUEUE_ENTRY_ID: String(entry.id),
       };
@@ -299,6 +312,32 @@ export function createQueueCommand(): Command {
     });
 
   return queue;
+}
+
+/**
+ * NW_* env keys that are legitimate queue/runtime markers (not provider identity keys).
+ * Only these keys from a queued entry's envJson are forwarded at dispatch time.
+ * Provider identity (ANTHROPIC_BASE_URL, API keys, model ids) is always recomputed
+ * from the queued job's own project config via buildQueuedJobEnv.
+ */
+const QUEUE_MARKER_KEYS = new Set([
+  'NW_DRY_RUN',
+  'NW_CRON_TRIGGER',
+  'NW_DEFAULT_BRANCH',
+]);
+
+/**
+ * Filter envJson to only pass through legitimate queue/runtime markers.
+ * Drops any provider identity keys that may have been persisted in the queue entry.
+ */
+function filterQueueMarkers(envJson: Record<string, string>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(envJson)) {
+    if (QUEUE_MARKER_KEYS.has(key)) {
+      result[key] = value;
+    }
+  }
+  return result;
 }
 
 function getScriptNameForJobType(jobType: JobType): string | null {

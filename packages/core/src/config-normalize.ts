@@ -1,0 +1,325 @@
+/**
+ * Config normalization: converts raw JSON config to the INightWatchConfig shape.
+ * Handles legacy nested keys and validates field values.
+ */
+
+import { BoardProviderType, IBoardProviderConfig } from './board/types.js';
+import {
+  ClaudeModel,
+  IAuditConfig,
+  IJobProviders,
+  IJobWeight,
+  INightWatchConfig,
+  INotificationConfig,
+  IProviderBucketConfig,
+  IQaConfig,
+  IQueueConfig,
+  IRoadmapScannerConfig,
+  IWebhookConfig,
+  JobType,
+  MergeMethod,
+  NotificationEvent,
+  Provider,
+  QaArtifacts,
+  QueueMode,
+  WebhookType,
+} from './types.js';
+import {
+  DEFAULT_AUDIT,
+  DEFAULT_BOARD_PROVIDER,
+  DEFAULT_JOB_WEIGHTS,
+  DEFAULT_QA,
+  DEFAULT_QUEUE,
+  DEFAULT_ROADMAP_SCANNER,
+  VALID_CLAUDE_MODELS,
+  VALID_JOB_TYPES,
+  VALID_MERGE_METHODS,
+  VALID_PROVIDERS,
+} from './constants.js';
+
+export function validateProvider(value: string): Provider | null {
+  if (VALID_PROVIDERS.includes(value as Provider)) {
+    return value as Provider;
+  }
+  return null;
+}
+
+/**
+ * Convert legacy/nested config formats to the flat INightWatchConfig shape.
+ * Flat keys take precedence over nested aliases when both are present.
+ */
+export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatchConfig> {
+  const normalized: Partial<INightWatchConfig> = {};
+
+  const readString = (value: unknown): string | undefined =>
+    typeof value === 'string' ? value : undefined;
+  const readNumber = (value: unknown): number | undefined =>
+    typeof value === 'number' && !Number.isNaN(value) ? value : undefined;
+  const readBoolean = (value: unknown): boolean | undefined =>
+    typeof value === 'boolean' ? value : undefined;
+  const readStringArray = (value: unknown): string[] | undefined =>
+    Array.isArray(value) && value.every((v) => typeof v === 'string')
+      ? (value as string[])
+      : undefined;
+  const readObject = (value: unknown): Record<string, unknown> | undefined =>
+    value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+
+  const cron = readObject(rawConfig.cron);
+  const review = readObject(rawConfig.review);
+  const logging = readObject(rawConfig.logging);
+
+  normalized.defaultBranch = readString(rawConfig.defaultBranch);
+  normalized.prdDir = readString(rawConfig.prdDir) ?? readString(rawConfig.prdDirectory);
+  normalized.maxRuntime = readNumber(rawConfig.maxRuntime);
+  normalized.reviewerMaxRuntime = readNumber(rawConfig.reviewerMaxRuntime);
+  normalized.branchPrefix = readString(rawConfig.branchPrefix);
+  normalized.branchPatterns =
+    readStringArray(rawConfig.branchPatterns) ?? readStringArray(review?.branchPatterns);
+  normalized.minReviewScore = readNumber(rawConfig.minReviewScore) ?? readNumber(review?.minScore);
+  normalized.maxLogSize = readNumber(rawConfig.maxLogSize) ?? readNumber(logging?.maxLogSize);
+  normalized.cronSchedule =
+    readString(rawConfig.cronSchedule) ?? readString(cron?.executorSchedule);
+  normalized.reviewerSchedule =
+    readString(rawConfig.reviewerSchedule) ?? readString(cron?.reviewerSchedule);
+  const rawScheduleBundleId = rawConfig.scheduleBundleId;
+  if (typeof rawScheduleBundleId === 'string') {
+    const trimmed = rawScheduleBundleId.trim();
+    normalized.scheduleBundleId = trimmed.length > 0 ? trimmed : null;
+  } else if (rawScheduleBundleId === null) {
+    normalized.scheduleBundleId = null;
+  }
+  normalized.cronScheduleOffset = readNumber(rawConfig.cronScheduleOffset);
+  normalized.schedulingPriority = readNumber(rawConfig.schedulingPriority);
+  normalized.maxRetries = readNumber(rawConfig.maxRetries);
+  normalized.reviewerMaxRetries = readNumber(rawConfig.reviewerMaxRetries);
+  normalized.reviewerRetryDelay = readNumber(rawConfig.reviewerRetryDelay);
+  normalized.provider = validateProvider(String(rawConfig.provider ?? '')) ?? undefined;
+  normalized.executorEnabled = readBoolean(rawConfig.executorEnabled);
+  normalized.reviewerEnabled = readBoolean(rawConfig.reviewerEnabled);
+
+  const providerLabelVal = readString(rawConfig.providerLabel);
+  if (providerLabelVal) {
+    normalized.providerLabel = providerLabelVal;
+  }
+
+  const rawProviderEnv = readObject(rawConfig.providerEnv);
+  if (rawProviderEnv) {
+    const env: Record<string, string> = {};
+    for (const [key, value] of Object.entries(rawProviderEnv)) {
+      if (typeof value === 'string') {
+        env[key] = value;
+      }
+    }
+    if (Object.keys(env).length > 0) {
+      normalized.providerEnv = env;
+    }
+  }
+
+  const rawNotifications = readObject(rawConfig.notifications);
+  if (rawNotifications) {
+    const rawWebhooks = Array.isArray(rawNotifications.webhooks) ? rawNotifications.webhooks : [];
+    const webhooks: IWebhookConfig[] = [];
+    for (const wh of rawWebhooks) {
+      if (wh && typeof wh === 'object' && 'type' in wh && 'events' in wh) {
+        const whObj = wh as Record<string, unknown>;
+        webhooks.push({
+          type: String(whObj.type) as WebhookType,
+          url: typeof whObj.url === 'string' ? whObj.url : undefined,
+          botToken: typeof whObj.botToken === 'string' ? whObj.botToken : undefined,
+          chatId: typeof whObj.chatId === 'string' ? whObj.chatId : undefined,
+          events: Array.isArray(whObj.events)
+            ? (whObj.events.filter((e: unknown) => typeof e === 'string') as NotificationEvent[])
+            : [],
+        });
+      }
+    }
+    normalized.notifications = { webhooks };
+  }
+
+  normalized.prdPriority = readStringArray(rawConfig.prdPriority);
+
+  const rawRoadmapScanner = readObject(rawConfig.roadmapScanner);
+  if (rawRoadmapScanner) {
+    const priorityModeRaw = readString(rawRoadmapScanner.priorityMode);
+    const priorityMode =
+      priorityModeRaw === 'roadmap-first' || priorityModeRaw === 'audit-first'
+        ? priorityModeRaw
+        : DEFAULT_ROADMAP_SCANNER.priorityMode;
+
+    const issueColumnRaw = readString(rawRoadmapScanner.issueColumn);
+    const issueColumn =
+      issueColumnRaw === 'Draft' || issueColumnRaw === 'Ready'
+        ? issueColumnRaw
+        : DEFAULT_ROADMAP_SCANNER.issueColumn;
+
+    const roadmapScanner: IRoadmapScannerConfig = {
+      enabled: readBoolean(rawRoadmapScanner.enabled) ?? DEFAULT_ROADMAP_SCANNER.enabled,
+      roadmapPath: readString(rawRoadmapScanner.roadmapPath) ?? DEFAULT_ROADMAP_SCANNER.roadmapPath,
+      autoScanInterval:
+        readNumber(rawRoadmapScanner.autoScanInterval) ?? DEFAULT_ROADMAP_SCANNER.autoScanInterval,
+      slicerSchedule:
+        readString(rawRoadmapScanner.slicerSchedule) ?? DEFAULT_ROADMAP_SCANNER.slicerSchedule,
+      slicerMaxRuntime:
+        readNumber(rawRoadmapScanner.slicerMaxRuntime) ?? DEFAULT_ROADMAP_SCANNER.slicerMaxRuntime,
+      priorityMode,
+      issueColumn,
+    };
+    if (roadmapScanner.autoScanInterval < 30) {
+      roadmapScanner.autoScanInterval = 30;
+    }
+    normalized.roadmapScanner = roadmapScanner;
+  }
+
+  normalized.templatesDir = readString(rawConfig.templatesDir);
+
+  const rawBoardProvider = readObject(rawConfig.boardProvider);
+  if (rawBoardProvider) {
+    const bp: IBoardProviderConfig = {
+      enabled: readBoolean(rawBoardProvider.enabled) ?? DEFAULT_BOARD_PROVIDER.enabled,
+      provider:
+        (readString(rawBoardProvider.provider) as BoardProviderType) ??
+        DEFAULT_BOARD_PROVIDER.provider,
+    };
+    if (typeof rawBoardProvider.projectNumber === 'number') {
+      bp.projectNumber = rawBoardProvider.projectNumber;
+    }
+    if (typeof rawBoardProvider.repo === 'string') {
+      bp.repo = rawBoardProvider.repo;
+    }
+    normalized.boardProvider = bp;
+  }
+
+  normalized.fallbackOnRateLimit = readBoolean(rawConfig.fallbackOnRateLimit);
+  const claudeModelRaw = readString(rawConfig.claudeModel);
+  if (claudeModelRaw && VALID_CLAUDE_MODELS.includes(claudeModelRaw as ClaudeModel)) {
+    normalized.claudeModel = claudeModelRaw as ClaudeModel;
+  }
+
+  normalized.autoMerge = readBoolean(rawConfig.autoMerge);
+  const mergeMethod = readString(rawConfig.autoMergeMethod);
+  if (mergeMethod && VALID_MERGE_METHODS.includes(mergeMethod as MergeMethod)) {
+    normalized.autoMergeMethod = mergeMethod as MergeMethod;
+  }
+
+  const rawQa = readObject(rawConfig.qa);
+  if (rawQa) {
+    const artifactsValue = readString(rawQa.artifacts);
+    const artifacts =
+      artifactsValue && ['screenshot', 'video', 'both'].includes(artifactsValue)
+        ? (artifactsValue as QaArtifacts)
+        : DEFAULT_QA.artifacts;
+
+    const qa: IQaConfig = {
+      enabled: readBoolean(rawQa.enabled) ?? DEFAULT_QA.enabled,
+      schedule: readString(rawQa.schedule) ?? DEFAULT_QA.schedule,
+      maxRuntime: readNumber(rawQa.maxRuntime) ?? DEFAULT_QA.maxRuntime,
+      branchPatterns: readStringArray(rawQa.branchPatterns) ?? DEFAULT_QA.branchPatterns,
+      artifacts,
+      skipLabel: readString(rawQa.skipLabel) ?? DEFAULT_QA.skipLabel,
+      autoInstallPlaywright:
+        readBoolean(rawQa.autoInstallPlaywright) ?? DEFAULT_QA.autoInstallPlaywright,
+    };
+    normalized.qa = qa;
+  }
+
+  const rawAudit = readObject(rawConfig.audit);
+  if (rawAudit) {
+    const audit: IAuditConfig = {
+      enabled: readBoolean(rawAudit.enabled) ?? DEFAULT_AUDIT.enabled,
+      schedule: readString(rawAudit.schedule) ?? DEFAULT_AUDIT.schedule,
+      maxRuntime: readNumber(rawAudit.maxRuntime) ?? DEFAULT_AUDIT.maxRuntime,
+    };
+    normalized.audit = audit;
+  }
+
+  const rawJobProviders = readObject(rawConfig.jobProviders);
+  if (rawJobProviders) {
+    const jobProviders: IJobProviders = {};
+    for (const jobType of VALID_JOB_TYPES) {
+      const providerValue = readString(rawJobProviders[jobType]);
+      if (providerValue && VALID_PROVIDERS.includes(providerValue as Provider)) {
+        (jobProviders as Record<JobType, Provider | undefined>)[jobType as JobType] =
+          providerValue as Provider;
+      }
+    }
+    if (Object.keys(jobProviders).length > 0) {
+      normalized.jobProviders = jobProviders;
+    }
+  }
+
+  const rawQueue = readObject(rawConfig.queue);
+  if (rawQueue) {
+    const rawMode = readString(rawQueue.mode);
+    const mode: QueueMode =
+      rawMode === 'conservative' || rawMode === 'provider-aware'
+        ? rawMode
+        : DEFAULT_QUEUE.mode;
+
+    const queue: IQueueConfig = {
+      enabled: readBoolean(rawQueue.enabled) ?? DEFAULT_QUEUE.enabled,
+      mode,
+      maxConcurrency: DEFAULT_QUEUE.maxConcurrency,
+      maxWaitTime: readNumber(rawQueue.maxWaitTime) ?? DEFAULT_QUEUE.maxWaitTime,
+      priority: { ...DEFAULT_QUEUE.priority },
+      jobWeights: { ...DEFAULT_JOB_WEIGHTS },
+      providerBuckets: {},
+    };
+
+    const rawPriority = readObject(rawQueue.priority);
+    if (rawPriority) {
+      for (const jobType of VALID_JOB_TYPES) {
+        const prio = readNumber(rawPriority[jobType]);
+        if (prio !== undefined) {
+          queue.priority[jobType] = prio;
+        }
+      }
+    }
+
+    const rawJobWeights = readObject(rawQueue.jobWeights);
+    if (rawJobWeights) {
+      for (const jobType of VALID_JOB_TYPES) {
+        const rawWeight = readObject(rawJobWeights[jobType]);
+        if (rawWeight) {
+          const aiPressure = readNumber(rawWeight.aiPressure);
+          const runtimePressure = readNumber(rawWeight.runtimePressure);
+          const existing = queue.jobWeights[jobType] ?? DEFAULT_JOB_WEIGHTS[jobType];
+          const merged: IJobWeight = {
+            aiPressure: aiPressure ?? existing?.aiPressure ?? 0,
+            runtimePressure: runtimePressure ?? existing?.runtimePressure ?? 0,
+          };
+          queue.jobWeights[jobType] = merged;
+        }
+      }
+    }
+
+    const rawProviderBuckets = readObject(rawQueue.providerBuckets);
+    if (rawProviderBuckets) {
+      for (const [bucketKey, bucketVal] of Object.entries(rawProviderBuckets)) {
+        const rawBucket = readObject(bucketVal);
+        if (rawBucket) {
+          const maxConcurrency = readNumber(rawBucket.maxConcurrency);
+          const aiCapacity = readNumber(rawBucket.aiCapacity);
+          const runtimeCapacity = readNumber(rawBucket.runtimeCapacity);
+          if (
+            maxConcurrency !== undefined &&
+            aiCapacity !== undefined &&
+            runtimeCapacity !== undefined
+          ) {
+            const bucketConfig: IProviderBucketConfig = { maxConcurrency, aiCapacity, runtimeCapacity };
+            queue.providerBuckets[bucketKey] = bucketConfig;
+          }
+        }
+      }
+    }
+
+    queue.maxConcurrency = DEFAULT_QUEUE.maxConcurrency;
+    queue.maxWaitTime = Math.max(300, Math.min(14400, queue.maxWaitTime));
+    normalized.queue = queue;
+  }
+
+  if (normalized.schedulingPriority !== undefined) {
+    normalized.schedulingPriority = Math.max(1, Math.min(5, normalized.schedulingPriority));
+  }
+
+  return normalized;
+}

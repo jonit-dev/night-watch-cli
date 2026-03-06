@@ -276,3 +276,120 @@ describe('getQueueStatus', () => {
     expect(status.pending.total).toBe(1); // reviewer still pending
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 2: Provider-Aware Weighted Scheduler tests
+// ---------------------------------------------------------------------------
+
+const conservativeConfig = {
+  enabled: true,
+  mode: 'conservative' as const,
+  maxConcurrency: 1,
+  maxWaitTime: 3600,
+  priority: { executor: 50, reviewer: 40, slicer: 30, qa: 20, audit: 10 },
+  jobWeights: {},
+  providerBuckets: {},
+};
+
+describe('provider-aware scheduler: conservative mode', () => {
+  it('preserves serial dispatch semantics — blocks after first job', () => {
+    enqueueJob('/p/a', 'a', 'executor', {}, conservativeConfig);
+    enqueueJob('/p/b', 'b', 'executor', {}, conservativeConfig);
+
+    const first = dispatchNextJob(conservativeConfig);
+    expect(first).not.toBeNull();
+
+    // Mark running to trigger concurrency check
+    markJobRunning(first!.id);
+
+    const second = dispatchNextJob(conservativeConfig);
+    expect(second).toBeNull();
+  });
+});
+
+describe('provider-aware scheduler: same-bucket heavy jobs do not dispatch in parallel', () => {
+  it('blocks second executor for the same bucket when bucket maxConcurrency=1 is exhausted', () => {
+    const config = {
+      enabled: true,
+      mode: 'provider-aware' as const,
+      maxConcurrency: 2, // global allows 2, but bucket allows only 1
+      maxWaitTime: 3600,
+      priority: { executor: 50, reviewer: 40, slicer: 30, qa: 20, audit: 10 },
+      jobWeights: {},
+      providerBuckets: {
+        'claude-native': { maxConcurrency: 1, aiCapacity: 6, runtimeCapacity: 6 },
+      },
+    };
+
+    // Enqueue first executor for claude-native, dispatch and mark running
+    const id1 = enqueueJob(
+      '/p/a',
+      'a',
+      'executor',
+      {},
+      config,
+      'claude-native',
+      5,
+      4,
+    );
+    const first = dispatchNextJob(config);
+    expect(first?.id).toBe(id1);
+    markJobRunning(first!.id);
+
+    // Enqueue second executor for the same claude-native bucket
+    enqueueJob('/p/b', 'b', 'executor', {}, config, 'claude-native', 5, 4);
+
+    // Second dispatch must be blocked — bucket concurrency exhausted
+    const second = dispatchNextJob(config);
+    expect(second).toBeNull();
+  });
+});
+
+describe('provider-aware scheduler: cross-bucket jobs can dispatch in parallel', () => {
+  it('allows a codex job to start while a claude-native job is running', () => {
+    const config = {
+      enabled: true,
+      mode: 'provider-aware' as const,
+      maxConcurrency: 2,
+      maxWaitTime: 3600,
+      priority: { executor: 50, reviewer: 40, slicer: 30, qa: 20, audit: 10 },
+      jobWeights: {},
+      providerBuckets: {
+        'claude-native': { maxConcurrency: 1, aiCapacity: 6, runtimeCapacity: 6 },
+        codex: { maxConcurrency: 1, aiCapacity: 6, runtimeCapacity: 6 },
+      },
+    };
+
+    // Enqueue and mark an executor for claude-native as running
+    const id1 = enqueueJob('/p/a', 'a', 'executor', {}, config, 'claude-native', 5, 4);
+    const first = dispatchNextJob(config);
+    expect(first?.id).toBe(id1);
+    markJobRunning(first!.id);
+
+    // Enqueue a reviewer for codex — different bucket
+    enqueueJob('/p/b', 'b', 'reviewer', {}, config, 'codex', 2, 2);
+
+    // Second dispatch should succeed (cross-bucket, global concurrency=2 not exhausted)
+    const second = dispatchNextJob(config);
+    expect(second).not.toBeNull();
+    expect(second?.providerKey).toBe('codex');
+  });
+});
+
+describe('enqueueJob with provider metadata', () => {
+  it('stores and returns providerKey, aiPressure, runtimePressure', () => {
+    const id = enqueueJob('/p/a', 'a', 'executor', {}, undefined, 'claude-native', 5, 4);
+    const entry = getQueueEntry(id);
+    expect(entry?.providerKey).toBe('claude-native');
+    expect(entry?.aiPressure).toBe(5);
+    expect(entry?.runtimePressure).toBe(4);
+  });
+
+  it('stores null when no provider metadata is given', () => {
+    const id = enqueueJob('/p/a', 'a', 'reviewer', {});
+    const entry = getQueueEntry(id);
+    expect(entry?.providerKey).toBeUndefined();
+    expect(entry?.aiPressure).toBeUndefined();
+    expect(entry?.runtimePressure).toBeUndefined();
+  });
+});

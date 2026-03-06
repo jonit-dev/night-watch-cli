@@ -1,16 +1,35 @@
-import React, { useEffect, useState } from 'react';
 import {
-  Pause,
-  Play,
-  Clock,
-  Edit,
-  Check,
+  Activity,
   AlertCircle,
   Calendar,
-  TestTube2,
-  Search,
+  Check,
   ClipboardList,
+  Clock,
+  Edit,
+  Hourglass,
+  ListOrdered,
+  Pause,
+  Play,
+  Search,
+  TestTube2,
+  Zap,
 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import type { INightWatchConfig, IQueueAnalytics, IQueueStatus } from '../api';
+import {
+  fetchAllConfigs,
+  fetchConfig,
+  fetchQueueAnalytics,
+  fetchQueueStatus,
+  fetchScheduleInfo,
+  triggerInstallCron,
+  triggerUninstallCron,
+  updateConfig,
+  useApi,
+} from '../api';
+import QueuePressureBars from '../components/scheduling/QueuePressureBars';
+import ScheduleTimeline from '../components/scheduling/ScheduleTimeline';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
@@ -18,22 +37,14 @@ import Select from '../components/ui/Select';
 import Switch from '../components/ui/Switch';
 import { useStore } from '../store/useStore';
 import {
-  fetchScheduleInfo,
-  fetchConfig,
-  updateConfig,
-  triggerInstallCron,
-  triggerUninstallCron,
-  useApi,
-} from '../api';
-import {
   CRON_PRESETS,
   cronToHuman,
+  formatAbsoluteTime,
+  formatRelativeTime,
   getPresetValue,
   isCronEquivalent,
-  resolveActiveTemplate,
-  formatRelativeTime,
-  formatAbsoluteTime,
   isWithin30Minutes,
+  resolveActiveTemplate,
 } from '../utils/cron';
 
 interface ScheduleEditState {
@@ -44,14 +55,37 @@ interface ScheduleEditState {
 
 const Scheduling: React.FC = () => {
   const { addToast, selectedProjectId, globalModeLoading } = useStore();
+  const navigate = useNavigate();
   const [toggling, setToggling] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [allProjectConfigs, setAllProjectConfigs] = useState<Array<{ projectId: string; config: INightWatchConfig }>>([]);
+
+  useEffect(() => {
+    if (globalModeLoading) return;
+    fetchAllConfigs().then(setAllProjectConfigs).catch(console.error);
+  }, [selectedProjectId, globalModeLoading]);
+
+  const handleEditJobOnTimeline = (projectId: string, jobType: string) => {
+    if (projectId === selectedProjectId || projectId === 'current') {
+      navigate(`/settings?tab=schedules&mode=custom&jobType=${jobType}`);
+    } else {
+      addToast({
+        title: 'Project Switch Required',
+        message: `To edit ${projectId}, please switch to that project in the sidebar.`,
+        type: 'info',
+      });
+    }
+  };
   const [updatingJob, setUpdatingJob] = useState<string | null>(null);
   const [editState, setEditState] = useState<ScheduleEditState>({
     executorSchedule: '',
     reviewerSchedule: '',
     isEditing: false,
   });
+
+  // Dashboard: queue status and analytics state
+  const [queueStatus, setQueueStatus] = useState<IQueueStatus | null>(null);
+  const [queueAnalytics, setQueueAnalytics] = useState<IQueueAnalytics | null>(null);
 
   const {
     data: scheduleInfo,
@@ -73,6 +107,24 @@ const Scheduling: React.FC = () => {
     }, 30000);
     return () => clearInterval(interval);
   }, [refetchSchedule]);
+
+  // Fetch queue status and analytics on mount, then refresh every 30 seconds
+  useEffect(() => {
+    if (globalModeLoading) return;
+
+    const fetchDashboard = () => {
+      fetchQueueStatus()
+        .then(setQueueStatus)
+        .catch(() => { /* silently ignore — queue may not be enabled */ });
+      fetchQueueAnalytics(24)
+        .then(setQueueAnalytics)
+        .catch(() => { /* silently ignore */ });
+    };
+
+    fetchDashboard();
+    const interval = setInterval(fetchDashboard, 30000);
+    return () => clearInterval(interval);
+  }, [globalModeLoading, selectedProjectId]);
 
   // Initialize edit state when data loads
   useEffect(() => {
@@ -173,15 +225,15 @@ const Scheduling: React.FC = () => {
       addToast(
         cronInstallFailedMessage
           ? {
-              title: 'Schedules Saved (Cron Reinstall Failed)',
-              message: cronInstallFailedMessage,
-              type: 'warning',
-            }
+            title: 'Schedules Saved (Cron Reinstall Failed)',
+            message: cronInstallFailedMessage,
+            type: 'warning',
+          }
           : {
-              title: 'Schedule Updated',
-              message: 'Cron schedules have been saved and installed.',
-              type: 'success',
-            },
+            title: 'Schedule Updated',
+            message: 'Cron schedules have been saved and installed.',
+            type: 'success',
+          },
       );
     } catch (error) {
       addToast({
@@ -231,15 +283,15 @@ const Scheduling: React.FC = () => {
       addToast(
         cronInstallFailedMessage
           ? {
-              title: 'Job Saved (Cron Reinstall Failed)',
-              message: cronInstallFailedMessage,
-              type: 'warning',
-            }
+            title: 'Job Saved (Cron Reinstall Failed)',
+            message: cronInstallFailedMessage,
+            type: 'warning',
+          }
           : {
-              title: 'Job Updated',
-              message: `${job[0].toUpperCase() + job.slice(1)} ${enabled ? 'enabled' : 'disabled'}.`,
-              type: 'success',
-            },
+            title: 'Job Updated',
+            message: `${job[0].toUpperCase() + job.slice(1)} ${enabled ? 'enabled' : 'disabled'}.`,
+            type: 'success',
+          },
       );
     } catch (error) {
       addToast({
@@ -319,10 +371,10 @@ const Scheduling: React.FC = () => {
   const renderDelayNote = (
     jobInfo:
       | {
-          delayMinutes: number;
-          manualDelayMinutes: number;
-          balancedDelayMinutes: number;
-        }
+        delayMinutes: number;
+        manualDelayMinutes: number;
+        balancedDelayMinutes: number;
+      }
       | undefined,
   ) => {
     if (!jobInfo || jobInfo.delayMinutes <= 0) {
@@ -392,6 +444,20 @@ const Scheduling: React.FC = () => {
     return `${activeTemplate.label} • ${activeTemplate.hints[job]}`;
   };
 
+  // Compute dashboard summary values
+  const runningCount = queueStatus?.running ? 1 : 0;
+  const pendingTotal = queueStatus?.pending.total ?? 0;
+  const avgWaitSecs = queueAnalytics?.averageWaitSeconds ?? null;
+  const throttledCount = queueAnalytics
+    ? queueAnalytics.recentRuns.filter((r) => r.throttledCount > 0).length
+    : null;
+
+  const formatWait = (secs: number | null) => {
+    if (secs === null) return '—';
+    if (secs < 60) return `${Math.round(secs)}s`;
+    return `${Math.floor(secs / 60)}m ${Math.round(secs % 60)}s`;
+  };
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between">
@@ -406,6 +472,81 @@ const Scheduling: React.FC = () => {
           </div>
         )}
       </div>
+
+      <div className="mb-6">
+        <ScheduleTimeline
+          configs={allProjectConfigs}
+          currentProjectId={selectedProjectId}
+          onEditJob={handleEditJobOnTimeline}
+          queueStatus={queueStatus}
+          queueAnalytics={queueAnalytics}
+        />
+      </div>
+
+      {/* 1. Queue Overview Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="queue-overview-cards">
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <Activity className="h-5 w-5 text-green-400 shrink-0" />
+            <div>
+              <div className="text-xs text-slate-500 uppercase tracking-wide">Running</div>
+              <div className="text-2xl font-bold text-slate-100" data-testid="overview-running">
+                {queueStatus ? runningCount : '—'}
+              </div>
+              {queueStatus?.running && (
+                <div className="text-[11px] text-slate-400 truncate mt-0.5">
+                  {queueStatus.running.jobType} · {queueStatus.running.projectName}
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <ListOrdered className="h-5 w-5 text-indigo-400 shrink-0" />
+            <div>
+              <div className="text-xs text-slate-500 uppercase tracking-wide">Pending</div>
+              <div className="text-2xl font-bold text-slate-100" data-testid="overview-pending">
+                {queueStatus ? pendingTotal : '—'}
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <Hourglass className="h-5 w-5 text-amber-400 shrink-0" />
+            <div>
+              <div className="text-xs text-slate-500 uppercase tracking-wide">Avg Wait</div>
+              <div className="text-2xl font-bold text-slate-100" data-testid="overview-avg-wait">
+                {formatWait(avgWaitSecs)}
+              </div>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <Zap className="h-5 w-5 text-yellow-400 shrink-0" />
+            <div>
+              <div className="text-xs text-slate-500 uppercase tracking-wide">Throttled</div>
+              <div className={`text-2xl font-bold ${throttledCount && throttledCount > 0 ? 'text-yellow-300' : 'text-slate-100'}`} data-testid="overview-throttled">
+                {throttledCount !== null ? throttledCount : '—'}
+              </div>
+              <div className="text-[11px] text-slate-500 mt-0.5">in last 24h</div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* 2. Queue Pressure */}
+      {queueAnalytics && (
+        <Card className="p-6">
+          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide mb-4">Queue Pressure</h3>
+          <QueuePressureBars analytics={queueAnalytics} />
+        </Card>
+      )}
 
       {/* A. Status Banner */}
       <Card className={`p-6 border-2 ${statusColor}`}>

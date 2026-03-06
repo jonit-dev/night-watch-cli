@@ -1,11 +1,17 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import type { INightWatchConfig } from '../../api';
 import Settings from '../Settings';
+
+function renderSettings() {
+  return render(<MemoryRouter><Settings /></MemoryRouter>);
+}
 
 const apiMocks = vi.hoisted(() => ({
   fetchConfig: vi.fn(),
   fetchDoctor: vi.fn(),
+  fetchAllConfigs: vi.fn(),
   updateConfig: vi.fn(),
   triggerInstallCron: vi.fn(),
   toggleRoadmapScanner: vi.fn(),
@@ -75,6 +81,7 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     },
     queue: {
       enabled: true,
+      mode: 'conservative',
       maxConcurrency: 1,
       maxWaitTime: 7200,
       priority: {
@@ -84,6 +91,14 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
         qa: 20,
         audit: 10,
       },
+      jobWeights: {
+        executor: { aiPressure: 5, runtimePressure: 4 },
+        reviewer: { aiPressure: 2, runtimePressure: 2 },
+        qa: { aiPressure: 1, runtimePressure: 4 },
+        audit: { aiPressure: 4, runtimePressure: 3 },
+        slicer: { aiPressure: 4, runtimePressure: 2 },
+      },
+      providerBuckets: {},
     },
   };
 
@@ -108,6 +123,7 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
 vi.mock('../../api', () => ({
   fetchConfig: apiMocks.fetchConfig,
   fetchDoctor: apiMocks.fetchDoctor,
+  fetchAllConfigs: apiMocks.fetchAllConfigs,
   updateConfig: apiMocks.updateConfig,
   triggerInstallCron: apiMocks.triggerInstallCron,
   toggleRoadmapScanner: apiMocks.toggleRoadmapScanner,
@@ -153,10 +169,11 @@ describe('Settings schedules mode sync', () => {
     apiMocks.updateConfig.mockResolvedValue(currentConfig);
     apiMocks.triggerInstallCron.mockResolvedValue({ started: true });
     apiMocks.toggleRoadmapScanner.mockResolvedValue(currentConfig);
+    apiMocks.fetchAllConfigs.mockResolvedValue([]);
   });
 
   it('initializes schedule tab in template mode for a known bundle', async () => {
-    render(<Settings />);
+    renderSettings();
 
     fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
 
@@ -167,7 +184,7 @@ describe('Settings schedules mode sync', () => {
   });
 
   it('switches to custom mode when config reload no longer matches a template', async () => {
-    const { rerender } = render(<Settings />);
+    const { rerender } = renderSettings();
     fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
 
     await waitFor(() => {
@@ -177,7 +194,7 @@ describe('Settings schedules mode sync', () => {
     currentConfig = makeConfig({
       reviewerSchedule: '0 * * * *',
     });
-    rerender(<Settings />);
+    rerender(<MemoryRouter><Settings /></MemoryRouter>);
 
     await waitFor(() => {
       expect(screen.getByText('PRD Execution Schedule')).toBeInTheDocument();
@@ -186,7 +203,7 @@ describe('Settings schedules mode sync', () => {
   });
 
   it('persists scheduleBundleId when saving in template mode', async () => {
-    render(<Settings />);
+    renderSettings();
 
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
@@ -200,7 +217,7 @@ describe('Settings schedules mode sync', () => {
   });
 
   it('clears scheduleBundleId when switching to custom mode and saving', async () => {
-    render(<Settings />);
+    renderSettings();
 
     fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
     fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
@@ -216,7 +233,7 @@ describe('Settings schedules mode sync', () => {
   });
 
   it('recomputes template mode after reset', async () => {
-    render(<Settings />);
+    renderSettings();
 
     fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
     fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
@@ -234,7 +251,7 @@ describe('Settings schedules mode sync', () => {
   });
 
   it('rebinds scheduleBundleId when switching back to template mode', async () => {
-    render(<Settings />);
+    renderSettings();
 
     fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
     fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
@@ -258,7 +275,7 @@ describe('Settings schedules mode sync', () => {
     });
     apiMocks.toggleRoadmapScanner.mockResolvedValue(disabledConfig);
 
-    render(<Settings />);
+    renderSettings();
 
     fireEvent.click(screen.getByRole('button', { name: 'Planner' }));
     fireEvent.click(screen.getByLabelText('Enable planner'));
@@ -283,7 +300,7 @@ describe('Settings schedules mode sync', () => {
     apiMocks.toggleRoadmapScanner.mockResolvedValue(disabledConfig);
     apiMocks.triggerInstallCron.mockRejectedValue(new Error('cron install failed'));
 
-    render(<Settings />);
+    renderSettings();
 
     fireEvent.click(screen.getByRole('button', { name: 'Planner' }));
     fireEvent.click(screen.getByLabelText('Enable planner'));

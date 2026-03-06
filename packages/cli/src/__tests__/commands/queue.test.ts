@@ -27,9 +27,14 @@ vi.mock('@night-watch/core', () => ({
   removeJob: vi.fn(),
 }));
 
+vi.mock('@/cli/commands/shared/env-builder.js', () => ({
+  buildQueuedJobEnv: vi.fn(),
+}));
+
 import { spawn } from 'child_process';
 import { queueCommand } from '@/cli/commands/queue.js';
 import { dispatchNextJob, getScriptPath, loadConfig, markJobRunning } from '@night-watch/core';
+import { buildQueuedJobEnv } from '@/cli/commands/shared/env-builder.js';
 
 function buildProgram(): Command {
   const program = new Command();
@@ -70,6 +75,7 @@ describe('queue command', () => {
       pid: 4321,
       unref: vi.fn(),
     } as never);
+    vi.mocked(buildQueuedJobEnv).mockReturnValue({});
   });
 
   afterEach(() => {
@@ -84,9 +90,7 @@ describe('queue command', () => {
       jobType: 'reviewer',
       priority: 4,
       status: 'dispatched',
-      envJson: {
-        FOO: 'bar',
-      },
+      envJson: {},
       enqueuedAt: 100,
       dispatchedAt: 110,
       expiredAt: null,
@@ -105,7 +109,6 @@ describe('queue command', () => {
         detached: true,
         stdio: 'ignore',
         env: expect.objectContaining({
-          FOO: 'bar',
           NW_QUEUE_DISPATCHED: '1',
           NW_QUEUE_ENTRY_ID: '42',
         }),
@@ -122,5 +125,84 @@ describe('queue command', () => {
     expect(spawn).not.toHaveBeenCalled();
     expect(getScriptPath).not.toHaveBeenCalled();
     expect(markJobRunning).not.toHaveBeenCalled();
+  });
+
+  it('dispatch rebuilds env from queued project config', async () => {
+    vi.mocked(buildQueuedJobEnv).mockReturnValue({
+      ANTHROPIC_BASE_URL: 'https://project-a-proxy.com',
+      NW_PROVIDER_CMD: 'claude',
+      NW_PROVIDER_LABEL: 'Claude (proxy)',
+    });
+
+    vi.mocked(dispatchNextJob).mockReturnValue({
+      id: 7,
+      projectPath: '/projects/project-a',
+      projectName: 'project-a',
+      jobType: 'reviewer',
+      priority: 4,
+      status: 'dispatched',
+      envJson: {
+        ANTHROPIC_BASE_URL: 'https://dispatcher-proxy.com',
+      },
+      enqueuedAt: 200,
+      dispatchedAt: 210,
+      expiredAt: null,
+    } as never);
+
+    vi.mocked(getScriptPath).mockReturnValue('/pkg/dist/scripts/night-watch-pr-reviewer-cron.sh');
+
+    await runQueue(['dispatch']);
+
+    expect(buildQueuedJobEnv).toHaveBeenCalledWith(
+      expect.objectContaining({ projectPath: '/projects/project-a', jobType: 'reviewer' }),
+    );
+
+    const spawnCall = vi.mocked(spawn).mock.calls[0];
+    const spawnEnv = (spawnCall[2] as { env: Record<string, string> }).env;
+
+    // Provider env comes from the queued project's config (via buildQueuedJobEnv), not envJson
+    expect(spawnEnv.ANTHROPIC_BASE_URL).toBe('https://project-a-proxy.com');
+    expect(spawnEnv.NW_PROVIDER_CMD).toBe('claude');
+  });
+
+  it('dispatch preserves persisted NW queue markers', async () => {
+    vi.mocked(buildQueuedJobEnv).mockReturnValue({
+      NW_PROVIDER_CMD: 'claude',
+    });
+
+    vi.mocked(dispatchNextJob).mockReturnValue({
+      id: 99,
+      projectPath: '/projects/project-b',
+      projectName: 'project-b',
+      jobType: 'executor',
+      priority: 5,
+      status: 'dispatched',
+      envJson: {
+        NW_DRY_RUN: '1',
+        NW_CRON_TRIGGER: '1',
+        ANTHROPIC_BASE_URL: 'https://wrong-proxy.com',
+      },
+      enqueuedAt: 300,
+      dispatchedAt: 310,
+      expiredAt: null,
+    } as never);
+
+    vi.mocked(getScriptPath).mockReturnValue('/pkg/dist/scripts/night-watch-cron.sh');
+
+    await runQueue(['dispatch']);
+
+    const spawnCall = vi.mocked(spawn).mock.calls[0];
+    const spawnEnv = (spawnCall[2] as { env: Record<string, string> }).env;
+
+    // Queue dispatch markers are always present
+    expect(spawnEnv.NW_QUEUE_DISPATCHED).toBe('1');
+    expect(spawnEnv.NW_QUEUE_ENTRY_ID).toBe('99');
+
+    // Legitimate queue markers from envJson are preserved
+    expect(spawnEnv.NW_DRY_RUN).toBe('1');
+    expect(spawnEnv.NW_CRON_TRIGGER).toBe('1');
+
+    // Non-queue-marker keys from envJson are dropped (provider identity must come from config)
+    expect(spawnEnv.ANTHROPIC_BASE_URL).not.toBe('https://wrong-proxy.com');
   });
 });

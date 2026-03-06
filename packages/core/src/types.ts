@@ -262,6 +262,34 @@ export interface IRoadmapScannerConfig {
 export type QueueEntryStatus = 'pending' | 'running' | 'expired' | 'dispatched';
 
 /**
+ * Queue dispatch mode
+ */
+export type QueueMode = 'conservative' | 'provider-aware';
+
+/**
+ * Per-job AI and runtime pressure weights used for provider-aware scheduling.
+ * Higher values mean the job is heavier on that resource.
+ */
+export interface IJobWeight {
+  /** AI API throughput pressure (0–10 scale) */
+  aiPressure: number;
+  /** Local runtime/CPU pressure (0–10 scale) */
+  runtimePressure: number;
+}
+
+/**
+ * Per-provider-bucket capacity limits for provider-aware scheduling.
+ */
+export interface IProviderBucketConfig {
+  /** Maximum number of concurrent in-flight jobs for this bucket */
+  maxConcurrency: number;
+  /** Maximum total aiPressure of all in-flight jobs for this bucket */
+  aiCapacity: number;
+  /** Maximum total runtimePressure of all in-flight jobs for this bucket */
+  runtimeCapacity: number;
+}
+
+/**
  * Queue entry for job_queue table
  */
 export interface IQueueEntry {
@@ -275,6 +303,12 @@ export interface IQueueEntry {
   enqueuedAt: number;
   dispatchedAt: number | null;
   expiredAt: number | null;
+  /** Provider bucket key (e.g. 'claude-native', 'codex', 'claude-proxy:api.z.ai') */
+  providerKey?: string;
+  /** AI API pressure weight for this job */
+  aiPressure?: number;
+  /** Runtime/CPU pressure weight for this job */
+  runtimePressure?: number;
 }
 
 /**
@@ -286,8 +320,72 @@ export interface IQueueStatus {
   pending: {
     total: number;
     byType: Record<string, number>;
+    byProviderBucket: Record<string, number>;
   };
   items: IQueueEntry[];
+  pressureByBucket: Record<string, {
+    aiPressure: number;
+    runtimePressure: number;
+    count: number;
+  }>;
+  averageWaitSeconds: number | null;
+  oldestPendingAge: number | null;
+}
+
+/**
+ * Status values for a completed or in-flight job run record
+ */
+export type JobRunStatus =
+  | 'queued'
+  | 'running'
+  | 'success'
+  | 'failure'
+  | 'timeout'
+  | 'rate_limited'
+  | 'skipped';
+
+/**
+ * A record of a single job execution stored in the job_runs table
+ */
+export interface IJobRunRecord {
+  projectPath: string;
+  jobType: JobType;
+  providerKey: string;
+  queueEntryId?: number;
+  status: JobRunStatus;
+  queuedAt?: number;
+  startedAt: number;
+  finishedAt?: number;
+  waitSeconds?: number;
+  durationSeconds?: number;
+  throttledCount?: number;
+  metadataJson?: string;
+}
+
+/**
+ * Analytics payload returned by getJobRunsAnalytics / GET /api/queue/analytics
+ */
+export interface IJobRunAnalytics {
+  recentRuns: Array<{
+    id: number;
+    projectPath: string;
+    jobType: string;
+    providerKey: string;
+    status: string;
+    startedAt: number;
+    finishedAt: number | null;
+    waitSeconds: number | null;
+    durationSeconds: number | null;
+    throttledCount: number;
+  }>;
+  byProviderBucket: Record<string, {
+    running: number;
+    pending: number;
+    totalAiPressure: number;
+    totalRuntimePressure: number;
+  }>;
+  averageWaitSeconds: number | null;
+  oldestPendingAge: number | null;
 }
 
 /**
@@ -297,7 +395,14 @@ export interface IQueueConfig {
   /** Whether the global queue is enabled */
   enabled: boolean;
 
-  /** Maximum concurrent jobs. Current runtime uses serial execution only. */
+  /**
+   * Dispatch mode.
+   * - 'conservative' (default): strict serial dispatch, one job at a time regardless of provider.
+   * - 'provider-aware': allows cross-provider parallelism subject to per-bucket capacity checks.
+   */
+  mode: QueueMode;
+
+  /** Maximum concurrent jobs across all providers. */
   maxConcurrency: number;
 
   /** Maximum wait time in seconds before a queued job expires (default: 7200 = 2 hours) */
@@ -305,4 +410,17 @@ export interface IQueueConfig {
 
   /** Priority mapping: job_type → priority (higher = first). Default has executor highest. */
   priority: Record<string, number>;
+
+  /**
+   * Per-job-type weight definitions used by the provider-aware scheduler.
+   * Keyed by JobType string (e.g. 'executor', 'reviewer').
+   */
+  jobWeights: Record<string, IJobWeight>;
+
+  /**
+   * Per-provider-bucket capacity configuration for provider-aware mode.
+   * Key format: 'claude-native' | 'codex' | 'claude-proxy:<hostname>'
+   * Buckets not listed here fall back to the global maxConcurrency check only.
+   */
+  providerBuckets: Record<string, IProviderBucketConfig>;
 }
