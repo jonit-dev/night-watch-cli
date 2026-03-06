@@ -1049,9 +1049,9 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
     codex)
       if (
         cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" \
-          codex --quiet \
+          codex exec \
             --yolo \
-            --prompt "${REVIEWER_PROMPT}" \
+            "${REVIEWER_PROMPT}" \
             >> "${LOG_FILE}" 2>&1
       ); then
         EXIT_CODE=0

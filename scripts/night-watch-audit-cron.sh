@@ -144,9 +144,9 @@ for AUDIT_ATTEMPT in $(seq 1 "${AUDIT_MAX_RETRIES}"); do
     codex)
       if (
         cd "${AUDIT_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
-          codex --quiet \
+          codex exec \
             --yolo \
-            --prompt "${AUDIT_PROMPT}" \
+            "${AUDIT_PROMPT}" \
             >> "${LOG_FILE}" 2>&1
       ); then
         EXIT_CODE=0

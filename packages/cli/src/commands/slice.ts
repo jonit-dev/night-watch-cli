@@ -323,9 +323,11 @@ export function sliceCommand(program: Command): void {
 
         // Provider invocation command
         header('Provider Invocation');
-        const providerCmd = PROVIDER_COMMANDS[slicerProvider];
-        const autoFlag = slicerProvider === 'claude' ? '--dangerously-skip-permissions' : '--yolo';
-        dim(`  ${providerCmd} ${autoFlag} -p "/night-watch-slicer"`);
+        if (slicerProvider === 'claude') {
+          dim('  claude -p "/night-watch-slicer" --dangerously-skip-permissions');
+        } else {
+          dim('  codex exec --yolo "/night-watch-slicer"');
+        }
 
         // Environment variables
         header('Environment Variables');

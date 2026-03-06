@@ -464,9 +464,9 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
     codex)
       if (
         cd "${WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
-          codex --quiet \
+          codex exec \
             --yolo \
-            --prompt "${PROMPT}" \
+            "${PROMPT}" \
             >> "${LOG_FILE}" 2>&1
       ); then
         EXIT_CODE=0

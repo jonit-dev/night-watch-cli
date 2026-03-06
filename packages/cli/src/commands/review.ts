@@ -347,10 +347,11 @@ export function reviewCommand(program: Command): void {
 
         // Provider invocation command
         header('Provider Invocation');
-        const providerCmd = PROVIDER_COMMANDS[reviewerProvider];
-        const autoFlag =
-          reviewerProvider === 'claude' ? '--dangerously-skip-permissions' : '--yolo';
-        dim(`  ${providerCmd} ${autoFlag} -p "/night-watch-pr-reviewer"`);
+        if (reviewerProvider === 'claude') {
+          dim('  claude -p "/night-watch-pr-reviewer" --dangerously-skip-permissions');
+        } else {
+          dim('  codex exec --yolo "/night-watch-pr-reviewer"');
+        }
 
         // Environment variables
         header('Environment Variables');
