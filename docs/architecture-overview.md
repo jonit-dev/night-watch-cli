@@ -2,7 +2,7 @@
 
 > Related: [DEV-ONBOARDING](DEV-ONBOARDING.md) | [Core Package](core-package.md) | [CLI Package](cli-package.md) | [Server API](server-api.md) | [Build Pipeline](build-pipeline.md) | [Persona & Memory](persona-memory-system.md)
 
-Night Watch CLI is an autonomous PRD executor that uses AI provider CLIs (Claude, Codex) combined with cron scheduling to automatically implement PRD tickets, open pull requests, and fix CI failures.
+Night Watch CLI is a cron-driven PRD execution system for well-scoped engineering work. It uses AI provider CLIs (Claude, Codex) plus scheduled automation to implement queued work, open pull requests, and close the loop with review, QA, and audit workflows.
 
 ---
 

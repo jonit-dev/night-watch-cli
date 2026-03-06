@@ -1,12 +1,21 @@
 # Night Watch CLI — Roadmap
 
-> **Vision:** A fully autonomous software engineering organization — from product strategy to shipped, tested, deployed code — driven by specialized AI agents working in concert.
+> **Vision:** An async AI execution layer for software teams: specs and queued work turn into reviewed pull requests with clear trust controls and human override.
 
 ---
 
 ## Where We Are Today (v1.7)
 
-Night Watch is a **cron-driven autonomous PRD execution system**. It picks up work from a GitHub Projects board, implements it in isolated git worktrees, opens PRs, reviews them, runs QA, audits code, and auto-merges — all without human intervention.
+Night Watch is a **cron-driven overnight execution system** for well-scoped engineering work. It picks up work from a GitHub Projects board, implements it in isolated git worktrees, opens PRs, reviews them, runs QA, audits code, and can auto-merge when trust is high enough.
+
+The current product wedge is not "fully autonomous software engineering." It is "your repo's night shift" for AI-native solo developers, maintainers, and small teams that already work from specs or queue-based workflows.
+
+### Product Positioning
+
+- **Primary users:** solo founders, maintainers, and small engineering teams that already trust AI on bounded work
+- **Best jobs-to-be-done:** backlog chores, review fixes, QA/test generation, maintenance work, and well-scoped feature PRDs
+- **Core promise:** define work during the day, let Night Watch execute overnight, review the output in the morning
+- **Not the current promise:** replacing real-time collaboration, product strategy, or all engineering judgment
 
 ### Current Capabilities
 
@@ -139,6 +148,8 @@ Night Watch is a **cron-driven autonomous PRD execution system**. It picks up wo
 - Documentation agent — auto-generate and maintain API/architecture docs
 - Backlog grooming agent — detect stale/redundant PRDs, suggest merges and re-prioritizations
 - Human-in-the-loop controls — configurable approval gates, escalation rules, audit log
+
+These remain long-term explorations. They should not dilute the near-term positioning around safe, overnight execution for scoped work.
 
 ---
 
