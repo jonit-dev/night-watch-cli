@@ -825,7 +825,8 @@ find_eligible_board_issue() {
 
 # Get the path to the queue lock file
 get_queue_lock_path() {
-  printf "%s/%s" "${HOME}/.night-watch" "queue.lock"
+  local queue_home="${NIGHT_WATCH_HOME:-${HOME}/.night-watch}"
+  printf "%s/%s" "${queue_home}" "queue.lock"
 }
 
 # Try to acquire the global queue gate using flock.

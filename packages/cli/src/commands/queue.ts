@@ -3,7 +3,6 @@
  * Provides subcommands for viewing, clearing, and dispatching queued jobs.
  */
 
-import * as os from 'os';
 import * as path from 'path';
 import { spawn } from 'child_process';
 
@@ -12,12 +11,13 @@ import { Command } from 'commander';
 
 import {
   DEFAULT_QUEUE_MAX_WAIT_TIME,
-  GLOBAL_CONFIG_DIR,
   clearQueue,
   dispatchNextJob,
   enqueueJob,
   expireStaleJobs,
   getQueueStatus,
+  getScriptPath,
+  loadConfig,
   markJobRunning,
   removeJob,
 } from '@night-watch/core';
@@ -196,7 +196,7 @@ export function createQueueCommand(): Command {
     .description('Dispatch the next pending job (used by cron scripts)')
     .option('--log <file>', 'Log file to write dispatch output')
     .action((_opts: { log?: string }) => {
-      const entry = dispatchNextJob();
+      const entry = dispatchNextJob(loadConfig(process.cwd()).queue);
 
       if (!entry) {
         logger.info('No pending jobs to dispatch');
@@ -220,10 +220,8 @@ export function createQueueCommand(): Command {
         NW_QUEUE_ENTRY_ID: String(entry.id),
       };
 
-      // Find the script path
-      const nightWatchHome =
-        process.env.NIGHT_WATCH_HOME || path.join(os.homedir(), GLOBAL_CONFIG_DIR);
-      const scriptPath = path.join(nightWatchHome, '..', 'scripts', scriptName);
+      // Resolve the bundled script path for the current install context.
+      const scriptPath = getScriptPath(scriptName);
 
       logger.info(`Spawning: ${scriptPath} ${entry.projectPath}`);
 
