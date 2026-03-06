@@ -65,12 +65,13 @@ export function createQueueRoutes(deps: IQueueRoutesDeps): Router {
     }
   });
 
-  // POST /api/queue/clear - Clear pending jobs from queue
+  // POST /api/queue/clear - Clear pending (and optionally running/dispatched) jobs from queue
   router.post('/clear', async (req: Request, res: Response): Promise<void> => {
     try {
-      const body = req.body as { type?: string } | undefined;
+      const body = req.body as { type?: string; force?: boolean } | undefined;
       const type = body?.type;
-      const count = clearQueue(type as JobType | undefined);
+      const force = body?.force === true;
+      const count = clearQueue(type as JobType | undefined, force);
       res.json({ cleared: count });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });

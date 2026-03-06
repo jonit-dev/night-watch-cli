@@ -46,6 +46,16 @@ PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 LOCK_FILE="/tmp/night-watch-qa-${PROJECT_RUNTIME_KEY}.lock"
 SCRIPT_TYPE="qa"
 
+emit_result() {
+  local status="${1:?status required}"
+  local details="${2:-}"
+  if [ -n "${details}" ]; then
+    echo "NIGHT_WATCH_RESULT:${status}|${details}"
+  else
+    echo "NIGHT_WATCH_RESULT:${status}"
+  fi
+}
+
 # ── Global Job Queue Gate ────────────────────────────────────────────────────
 # Acquire global gate before per-project lock to serialize jobs across projects.
 # When gate is busy, enqueue the job and exit cleanly.
@@ -68,15 +78,6 @@ if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
   fi
 fi
 # ──────────────────────────────────────────────────────────────────────────────
-emit_result() {
-  local status="${1:?status required}"
-  local details="${2:-}"
-  if [ -n "${details}" ]; then
-    echo "NIGHT_WATCH_RESULT:${status}|${details}"
-  else
-    echo "NIGHT_WATCH_RESULT:${status}"
-  fi
-}
 
 decode_base64_value() {
   local value="${1:-}"

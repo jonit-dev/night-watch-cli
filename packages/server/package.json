@@ -17,6 +17,7 @@
   },
   "scripts": {
     "build": "tsc --build tsconfig.json && tsc-alias -p tsconfig.json",
+    "build:watch": "tsc --build tsconfig.json --watch",
     "verify": "tsc --build tsconfig.json --dry",
     "test": "vitest run"
   },

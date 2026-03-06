@@ -101,7 +101,7 @@ function buildPlannerIssueBody(
   const absolutePrdPath = path.join(projectDir, config.prdDir, result.file ?? '');
   const sourceItem = result.item;
 
-  let prdContent = '';
+  let prdContent: string;
   try {
     prdContent = fs.readFileSync(absolutePrdPath, 'utf-8');
   } catch {

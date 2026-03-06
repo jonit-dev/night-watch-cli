@@ -86,7 +86,11 @@ function spawnAction(
 
     const prdName = command[0] === 'run' ? (req.body?.prdName as string | undefined) : undefined;
 
-    const extraEnv: NodeJS.ProcessEnv = {};
+    const extraEnv: NodeJS.ProcessEnv = {
+      // Manual UI triggers bypass the global queue gate — per-project lock file
+      // already prevents duplicate runs for the same project.
+      NW_QUEUE_ENABLED: '0',
+    };
     if (prdName) {
       extraEnv.NW_PRD_PRIORITY = prdName;
     }

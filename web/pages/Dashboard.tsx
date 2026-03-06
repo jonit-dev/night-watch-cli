@@ -8,14 +8,16 @@ import {
   AlertCircle,
   Calendar,
   XCircle,
+  Play,
   TestTube2,
   Search,
   ClipboardList,
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { useApi, fetchStatus, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, useStatusStream, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
+import { useApi, fetchStatus, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, triggerRun, triggerReview, triggerQa, triggerAudit, triggerPlanner, useStatusStream, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
 import { useStore } from '../store/useStore';
+import { pickLatestSnapshot } from '../utils/status';
 import type { IStatusSnapshot } from '@shared/types';
 
 const BOARD_COLUMN_COLORS: Record<BoardColumnName, string> = {
@@ -30,6 +32,7 @@ const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [cancellingProcess, setCancellingProcess] = useState<'run' | 'review' | null>(null);
   const [clearingLock, setClearingLock] = useState(false);
+  const [startingProcess, setStartingProcess] = useState<string | null>(null);
   const [streamedStatus, setStreamedStatus] = useState<IStatusSnapshot | null>(null);
   const { setProjectName, addToast, selectedProjectId, globalModeLoading } = useStore();
   const { data: status, loading, error, refetch } = useApi(fetchStatus, [selectedProjectId], { enabled: !globalModeLoading });
@@ -45,8 +48,8 @@ const Dashboard: React.FC = () => {
     setStreamedStatus(snapshot);
   }, [selectedProjectId, globalModeLoading], { enabled: !globalModeLoading });
 
-  // Use streamed status when available, fall back to polled status
-  const currentStatus = streamedStatus || status;
+  // Prefer the newest snapshot so polling can recover from a stale SSE payload.
+  const currentStatus = pickLatestSnapshot(streamedStatus, status);
 
   // Update project name when status loads
   React.useEffect(() => {
@@ -146,6 +149,23 @@ const Dashboard: React.FC = () => {
       });
     } finally {
       setClearingLock(false);
+    }
+  };
+
+  const handleStartProcess = async (name: string, trigger: () => Promise<unknown>) => {
+    setStartingProcess(name);
+    try {
+      await trigger();
+      addToast({ title: `${name} Started`, message: `${name} is now running`, type: 'success' });
+      refetch();
+    } catch (err) {
+      addToast({
+        title: 'Start Failed',
+        message: err instanceof Error ? err.message : `Failed to start ${name}`,
+        type: 'error',
+      });
+    } finally {
+      setStartingProcess(null);
     }
   };
 
@@ -284,6 +304,12 @@ const Dashboard: React.FC = () => {
                       {clearingLock ? 'Clearing...' : 'Force Clear'}
                     </Button>
                   )}
+                  {!executorProcess?.running && !currentStatus.activePrd && (
+                    <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('Executor', triggerRun)} disabled={startingProcess === 'Executor'}>
+                      <Play className="h-4 w-4 mr-1" />
+                      {startingProcess === 'Executor' ? 'Starting...' : 'Run'}
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>
                 </div>
              </div>
@@ -307,6 +333,12 @@ const Dashboard: React.FC = () => {
                       {cancellingProcess === 'review' ? 'Stopping...' : 'Stop'}
                     </Button>
                   )}
+                  {!reviewerProcess?.running && (
+                    <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('Reviewer', triggerReview)} disabled={startingProcess === 'Reviewer'}>
+                      <Play className="h-4 w-4 mr-1" />
+                      {startingProcess === 'Reviewer' ? 'Starting...' : 'Run'}
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" onClick={() => navigate('/logs')} disabled={!reviewerProcess?.running}>View Log</Button>
                 </div>
              </div>
@@ -324,6 +356,12 @@ const Dashboard: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
+                  {!qaProcess?.running && (
+                    <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('QA', triggerQa)} disabled={startingProcess === 'QA'}>
+                      <Play className="h-4 w-4 mr-1" />
+                      {startingProcess === 'QA' ? 'Starting...' : 'Run'}
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>
                 </div>
              </div>
@@ -341,6 +379,12 @@ const Dashboard: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
+                  {!auditProcess?.running && (
+                    <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('Auditor', triggerAudit)} disabled={startingProcess === 'Auditor'}>
+                      <Play className="h-4 w-4 mr-1" />
+                      {startingProcess === 'Auditor' ? 'Starting...' : 'Run'}
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>
                 </div>
              </div>
@@ -358,6 +402,12 @@ const Dashboard: React.FC = () => {
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
+                  {!plannerProcess?.running && (
+                    <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('Planner', triggerPlanner)} disabled={startingProcess === 'Planner'}>
+                      <Play className="h-4 w-4 mr-1" />
+                      {startingProcess === 'Planner' ? 'Starting...' : 'Run'}
+                    </Button>
+                  )}
                   <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>
                 </div>
              </div>

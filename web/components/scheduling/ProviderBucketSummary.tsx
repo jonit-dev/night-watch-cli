@@ -6,7 +6,7 @@ interface IProviderBucketSummaryProps {
 }
 
 const ProviderBucketSummary: React.FC<IProviderBucketSummaryProps> = ({ analytics }) => {
-  const buckets = Object.entries(analytics.byProviderBucket);
+  const buckets = Object.entries(analytics.byProviderBucket).filter(([bucket]) => bucket !== '__unassigned__');
 
   if (buckets.length === 0) {
     return (
