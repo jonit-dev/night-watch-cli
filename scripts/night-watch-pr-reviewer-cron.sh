@@ -67,6 +67,21 @@ else
   LOCK_FILE="${GLOBAL_LOCK_FILE}"
 fi
 
+# ── Global Job Queue Gate ────────────────────────────────────────────────────
+# Acquire global gate before per-project lock to serialize jobs across projects.
+# When gate is busy, enqueue the job and exit cleanly.
+SCRIPT_TYPE="reviewer"
+if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
+  if acquire_global_gate; then
+    arm_global_queue_cleanup
+  else
+    enqueue_job "${SCRIPT_TYPE}" "${PROJECT_DIR}"
+    emit_result "queued"
+    exit 0
+  fi
+fi
+# ──────────────────────────────────────────────────────────────────────────────
+
 emit_result() {
   local status="${1:?status required}"
   local details="${2:-}"

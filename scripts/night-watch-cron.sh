@@ -43,6 +43,21 @@ source "${SCRIPT_DIR}/night-watch-helpers.sh"
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 # NOTE: Lock file path must match executorLockPath() in src/utils/status-data.ts
 LOCK_FILE="/tmp/night-watch-${PROJECT_RUNTIME_KEY}.lock"
+SCRIPT_TYPE="executor"
+
+# ── Global Job Queue Gate ────────────────────────────────────────────────────
+# Acquire global gate before per-project lock to serialize jobs across projects.
+# When gate is busy, enqueue the job and exit cleanly.
+if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
+  if acquire_global_gate; then
+    arm_global_queue_cleanup
+  else
+    enqueue_job "${SCRIPT_TYPE}" "${PROJECT_DIR}"
+    emit_result "queued"
+    exit 0
+  fi
+fi
+# ──────────────────────────────────────────────────────────────────────────────
 
 emit_result() {
   local status="${1:?status required}"
@@ -592,7 +607,7 @@ else
     "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
       --body "Execution failed with exit code ${EXIT_CODE}. Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
   fi
-  night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code "${EXIT_CODE}" 2>/dev/null || true
+  night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code "${EXIT_CODE}" 1>/dev/null || true
   emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
 fi
 

@@ -81,6 +81,18 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
       schedule: '0 2 * * *',
       maxRuntime: 3600,
     },
+    queue: {
+      enabled: false,
+      maxConcurrency: 1,
+      maxWaitTime: 7200,
+      priority: {
+        executor: 50,
+        reviewer: 40,
+        slicer: 30,
+        qa: 20,
+        audit: 10,
+      },
+    },
     ...overrides,
   };
 }
@@ -90,6 +102,7 @@ describe('install command', () => {
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'night-watch-install-test-'));
+    process.env.NIGHT_WATCH_HOME = tempDir;
     vi.mocked(execSync).mockImplementation(((command: string) => {
       if (command === 'npm bin -g') {
         throw new Error('npm bin unavailable');
@@ -106,6 +119,7 @@ describe('install command', () => {
   });
 
   afterEach(() => {
+    delete process.env.NIGHT_WATCH_HOME;
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 

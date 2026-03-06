@@ -504,6 +504,7 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_AUTO_MERGE: '0',
       NW_REVIEWER_WORKER_MODE: '1',
       NW_REVIEWER_PARALLEL: '0',
+      NW_QUEUE_ENABLED: '0', // Disable global queue for this test
     };
 
     const [worker25, worker26] = await Promise.all([
@@ -1218,6 +1219,7 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_REVIEWER_PARALLEL: '1', // Enable parallel mode
       NW_REVIEWER_WORKER_STAGGER: '0', // No stagger delay in tests
       NW_AUTO_MERGE: '0',
+      NW_QUEUE_ENABLED: '0', // Disable global queue for this test
     });
 
     // Note: Parallel mode calls `exit 0` at line 378 regardless of worker results

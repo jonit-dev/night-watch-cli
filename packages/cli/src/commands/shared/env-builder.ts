@@ -4,6 +4,7 @@
  */
 
 import {
+  DEFAULT_QUEUE,
   INightWatchConfig,
   IWebhookConfig,
   PROVIDER_COMMANDS,
@@ -13,10 +14,11 @@ import type { JobType } from '@night-watch/core';
 
 /**
  * Build the base environment variables shared by all job types.
- * Sets exactly these 5 fields:
+ * Sets provider, queue, execution-context, and optional dry-run/default-branch env vars.
  * - NW_PROVIDER_CMD: the CLI binary for the resolved provider
  * - NW_DEFAULT_BRANCH: optional default branch
  * - providerEnv: merged into env
+ * - NW_QUEUE_*: queue configuration for bash scripts
  * - NW_DRY_RUN: '1' when isDryRun is true
  * - NW_EXECUTION_CONTEXT: always 'agent'
  */
@@ -39,6 +41,13 @@ export function buildBaseEnvVars(
   if (config.providerEnv) {
     Object.assign(env, config.providerEnv);
   }
+
+  // Queue configuration
+  const queueConfig = config.queue ?? DEFAULT_QUEUE;
+  env.NW_QUEUE_ENABLED = queueConfig.enabled ? '1' : '0';
+  env.NW_QUEUE_MAX_CONCURRENCY = String(queueConfig.maxConcurrency);
+  env.NW_QUEUE_MAX_WAIT_TIME = String(queueConfig.maxWaitTime);
+  env.NW_QUEUE_PRIORITY_JSON = JSON.stringify(queueConfig.priority);
 
   // Dry run flag
   if (isDryRun) {
