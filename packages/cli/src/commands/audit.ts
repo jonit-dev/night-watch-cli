@@ -18,9 +18,9 @@ import {
   parseScriptResult,
   resolveJobProvider,
 } from '@night-watch/core';
-import { buildBaseEnvVars, getTelegramStatusWebhooks } from './shared/env-builder.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import { buildBaseEnvVars, getTelegramStatusWebhooks } from './shared/env-builder.js';
 
 export interface IAuditOptions {
   dryRun: boolean;

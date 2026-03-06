@@ -32,6 +32,7 @@ import { INightWatchConfig } from '@night-watch/core/types.js';
 // Helper to create a valid config with audit settings
 function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConfig {
   return {
+    defaultBranch: '',
     prdDir: 'docs/PRDs/night-watch',
     maxRuntime: 7200,
     reviewerMaxRuntime: 3600,
@@ -41,13 +42,55 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
     maxLogSize: 524288,
     cronSchedule: '0 0-21 * * *',
     reviewerSchedule: '0 0,3,6,9,12,15,18,21 * * *',
+    cronScheduleOffset: 0,
     provider: 'claude',
+    executorEnabled: true,
     reviewerEnabled: true,
     maxRetries: 3,
+    reviewerMaxRetries: 2,
+    reviewerRetryDelay: 30,
+    providerEnv: {},
+    fallbackOnRateLimit: false,
+    claudeModel: 'sonnet',
+    notifications: { webhooks: [] },
     prdPriority: [],
+    roadmapScanner: {
+      enabled: false,
+      roadmapPath: 'ROADMAP.md',
+      autoScanInterval: 300,
+      slicerSchedule: '0 */6 * * *',
+      slicerMaxRuntime: 600,
+    },
+    templatesDir: '.night-watch/templates',
+    boardProvider: { enabled: true, provider: 'github' as const },
+    autoMerge: false,
+    autoMergeMethod: 'squash',
+    qa: {
+      enabled: false,
+      schedule: '30 1,7,13,19 * * *',
+      maxRuntime: 3600,
+      branchPatterns: [],
+      artifacts: 'both',
+      skipLabel: 'skip-qa',
+      autoInstallPlaywright: true,
+    },
     jobProviders: {},
     audit: {
+      enabled: true,
+      schedule: '0 2 * * *',
       maxRuntime: 1800,
+    },
+    queue: {
+      enabled: false,
+      maxConcurrency: 1,
+      maxWaitTime: 7200,
+      priority: {
+        executor: 50,
+        reviewer: 40,
+        slicer: 30,
+        qa: 20,
+        audit: 10,
+      },
     },
     ...overrides,
   };
@@ -223,6 +266,38 @@ describe('audit command', () => {
 
       // Audit command uses NW_AUDIT_MAX_RUNTIME, not NW_MAX_RUNTIME
       expect(env.NW_MAX_RUNTIME).toBeUndefined();
+    });
+
+    it('should include queue environment variables from shared base env', () => {
+      const config = createTestConfig({
+        queue: {
+          enabled: true,
+          maxConcurrency: 3,
+          maxWaitTime: 1800,
+          priority: {
+            executor: 5,
+            reviewer: 4,
+            slicer: 3,
+            qa: 2,
+            audit: 9,
+          },
+        },
+      });
+
+      const env = buildEnvVars(config, { dryRun: false });
+
+      expect(env.NW_QUEUE_ENABLED).toBe('1');
+      expect(env.NW_QUEUE_MAX_CONCURRENCY).toBe('3');
+      expect(env.NW_QUEUE_MAX_WAIT_TIME).toBe('1800');
+      expect(env.NW_QUEUE_PRIORITY_JSON).toBe(
+        JSON.stringify({
+          executor: 5,
+          reviewer: 4,
+          slicer: 3,
+          qa: 2,
+          audit: 9,
+        }),
+      );
     });
   });
 
