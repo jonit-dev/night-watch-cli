@@ -186,7 +186,7 @@ export const STATE_DB_FILE_NAME = 'state.db';
 export const MAX_HISTORY_RECORDS_PER_PRD = 10;
 
 // Global Job Queue Configuration
-export const DEFAULT_QUEUE_ENABLED = true;
+export const DEFAULT_QUEUE_ENABLED = false;
 export const DEFAULT_QUEUE_MAX_CONCURRENCY = 1;
 export const DEFAULT_QUEUE_MAX_WAIT_TIME = 7200; // 2 hours in seconds
 export const DEFAULT_QUEUE_PRIORITY: Record<string, number> = {

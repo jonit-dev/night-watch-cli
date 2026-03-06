@@ -33,7 +33,8 @@ function getStateDbPath(): string {
  * Get the path to the queue lock file
  */
 export function getQueueLockPath(): string {
-  return path.join(os.homedir(), GLOBAL_CONFIG_DIR, QUEUE_LOCK_FILE_NAME);
+  const base = process.env.NIGHT_WATCH_HOME || path.join(os.homedir(), GLOBAL_CONFIG_DIR);
+  return path.join(base, QUEUE_LOCK_FILE_NAME);
 }
 
 /**

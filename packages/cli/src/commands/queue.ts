@@ -19,6 +19,7 @@ import {
   expireStaleJobs,
   getQueueStatus,
   markJobRunning,
+  removeJob,
 } from '@night-watch/core';
 import type { IQueueEntry, JobType } from '@night-watch/core';
 import { createLogger } from '@night-watch/core';
@@ -216,6 +217,7 @@ export function createQueueCommand(): Command {
         ...process.env,
         ...entry.envJson,
         NW_QUEUE_DISPATCHED: '1',
+        NW_QUEUE_ENTRY_ID: String(entry.id),
       };
 
       // Find the script path
@@ -238,6 +240,19 @@ export function createQueueCommand(): Command {
 
       // Mark as running now that the process is launched
       markJobRunning(entry.id);
+    });
+
+  queue
+    .command('complete <id>')
+    .description('Remove a completed queue entry (used by cron scripts)')
+    .action((id: string) => {
+      const queueId = parseInt(id, 10);
+      if (isNaN(queueId) || queueId < 1) {
+        console.error(chalk.red('Queue entry id must be a positive integer'));
+        process.exit(1);
+      }
+
+      removeJob(queueId);
     });
 
   // night-watch queue expire

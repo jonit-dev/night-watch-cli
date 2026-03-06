@@ -146,9 +146,23 @@ acquire_lock() {
     rm -f "${lock_file}"
   fi
 
-  trap "rm -f '${lock_file}'" EXIT
+  local quoted_lock_file=""
+  printf -v quoted_lock_file '%q' "${lock_file}"
+  append_exit_trap "rm -f -- ${quoted_lock_file}"
   echo $$ > "${lock_file}"
   return 0
+}
+
+append_exit_trap() {
+  local command="${1:?command required}"
+  local existing=""
+
+  existing=$(trap -p EXIT | sed -n "s/^trap -- '\\(.*\\)' EXIT$/\\1/p")
+  if [ -n "${existing}" ]; then
+    trap "${existing}; ${command}" EXIT
+  else
+    trap "${command}" EXIT
+  fi
 }
 
 # ── Detect default branch ───────────────────────────────────────────────────
@@ -677,6 +691,28 @@ release_global_gate() {
   fi
 }
 
+__night_watch_queue_cleanup() {
+  local exit_code="${1:-0}"
+
+  if [ "${NW_QUEUE_CLEANUP_ARMED:-0}" = "1" ]; then
+    NW_QUEUE_CLEANUP_ARMED=0
+    complete_queued_job
+    release_global_gate
+    dispatch_next_queued_job
+  fi
+
+  return "${exit_code}"
+}
+
+arm_global_queue_cleanup() {
+  if [ "${NW_QUEUE_CLEANUP_ARMED:-0}" = "1" ]; then
+    return 0
+  fi
+
+  NW_QUEUE_CLEANUP_ARMED=1
+  append_exit_trap "__night_watch_queue_cleanup \$?"
+}
+
 # Enqueue the current job to the SQLite queue.
 # Usage: enqueue_job <job_type> <project_dir>
 # Stores project path/name, job type, and relevant NW_* env vars for later dispatch.
@@ -714,7 +750,7 @@ enqueue_job() {
 # Picks highest-priority pending job, marks it dispatched, and spawns it.
 dispatch_next_queued_job() {
   # Skip if queue is disabled
-  if [ "${NW_QUEUE_ENABLED:-1}" = "0" ]; then
+  if [ "${NW_QUEUE_ENABLED:-0}" = "0" ]; then
     return 0
   fi
 
@@ -728,6 +764,21 @@ dispatch_next_queued_job() {
 
   # Call CLI to dispatch next job (this handles priority, expiration, and spawning)
   "${cli_bin}" queue dispatch --log "${LOG_FILE:-/dev/null}" 2>/dev/null || true
+}
+
+complete_queued_job() {
+  local queue_entry_id="${NW_QUEUE_ENTRY_ID:-}"
+  if [ -z "${queue_entry_id}" ]; then
+    return 0
+  fi
+
+  local cli_bin
+  cli_bin=$(resolve_night_watch_cli) || {
+    log "WARN: Cannot resolve night-watch CLI for queue completion"
+    return 1
+  }
+
+  "${cli_bin}" queue complete "${queue_entry_id}" 2>/dev/null || true
 }
 
 # Expire stale queued jobs older than maxWaitTime.
