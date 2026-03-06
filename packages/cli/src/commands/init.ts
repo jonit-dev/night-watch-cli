@@ -10,6 +10,7 @@ import * as readline from 'readline';
 import {
   CONFIG_FILE_NAME,
   DEFAULT_PRD_DIR,
+  INightWatchConfig,
   LOG_DIR,
   Provider,
   VALID_PROVIDERS,
@@ -18,6 +19,7 @@ import {
   createBoardProvider,
   createTable,
   detectProviders,
+  getDefaultConfig,
   getProjectName,
   header,
   info,
@@ -53,6 +55,12 @@ interface IInitOptions {
   prdDir?: string;
   provider?: string;
   reviewer?: boolean;
+}
+
+interface IGeneratedInitConfig extends Omit<INightWatchConfig, '_cliProviderOverride'> {
+  $schema: string;
+  projectName: string;
+  providerLabel: string;
 }
 
 function hasPlaywrightDependency(cwd: string): boolean {
@@ -259,6 +267,64 @@ function ensureDir(dirPath: string): void {
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true });
   }
+}
+
+export function buildInitConfig(params: {
+  projectName: string;
+  defaultBranch: string;
+  provider: Provider;
+  reviewerEnabled: boolean;
+  prdDir: string;
+}): IGeneratedInitConfig {
+  const defaults = getDefaultConfig();
+
+  return {
+    $schema: 'https://json-schema.org/schema',
+    projectName: params.projectName,
+    defaultBranch: params.defaultBranch,
+    prdDir: params.prdDir,
+    maxRuntime: defaults.maxRuntime,
+    reviewerMaxRuntime: defaults.reviewerMaxRuntime,
+    branchPrefix: defaults.branchPrefix,
+    branchPatterns: [...defaults.branchPatterns],
+    minReviewScore: defaults.minReviewScore,
+    maxLogSize: defaults.maxLogSize,
+    cronSchedule: defaults.cronSchedule,
+    reviewerSchedule: defaults.reviewerSchedule,
+    scheduleBundleId: defaults.scheduleBundleId ?? null,
+    cronScheduleOffset: defaults.cronScheduleOffset,
+    schedulingPriority: defaults.schedulingPriority,
+    maxRetries: defaults.maxRetries,
+    reviewerMaxRetries: defaults.reviewerMaxRetries,
+    reviewerRetryDelay: defaults.reviewerRetryDelay,
+    provider: params.provider,
+    providerLabel: '',
+    executorEnabled: defaults.executorEnabled ?? true,
+    reviewerEnabled: params.reviewerEnabled,
+    providerEnv: { ...defaults.providerEnv },
+    notifications: {
+      ...defaults.notifications,
+      webhooks: [...(defaults.notifications?.webhooks ?? [])],
+    },
+    prdPriority: [...defaults.prdPriority],
+    roadmapScanner: { ...defaults.roadmapScanner },
+    templatesDir: defaults.templatesDir,
+    boardProvider: { ...defaults.boardProvider },
+    autoMerge: defaults.autoMerge,
+    autoMergeMethod: defaults.autoMergeMethod,
+    fallbackOnRateLimit: defaults.fallbackOnRateLimit,
+    claudeModel: defaults.claudeModel,
+    qa: {
+      ...defaults.qa,
+      branchPatterns: [...defaults.qa.branchPatterns],
+    },
+    audit: { ...defaults.audit },
+    jobProviders: { ...defaults.jobProviders },
+    queue: {
+      ...defaults.queue,
+      priority: { ...defaults.queue.priority },
+    },
+  };
 }
 
 /**
@@ -584,35 +650,14 @@ export function initCommand(program: Command): void {
       if (fs.existsSync(configPath) && !force) {
         console.log(`  Skipped (exists): ${configPath}`);
       } else {
-        // Read and process config template
-        let configContent = fs.readFileSync(
-          join(TEMPLATES_DIR, 'night-watch.config.json'),
-          'utf-8',
-        );
-
-        // Replace placeholders with project values
-        configContent = configContent.replace(
-          '"projectName": ""',
-          `"projectName": "${projectName}"`,
-        );
-        configContent = configContent.replace(
-          '"defaultBranch": ""',
-          `"defaultBranch": "${defaultBranch}"`,
-        );
-
-        // Set provider in config
-        configContent = configContent.replace(
-          /"provider":\s*"[^"]*"/,
-          `"provider": "${selectedProvider}"`,
-        );
-
-        // Set reviewerEnabled in config
-        configContent = configContent.replace(
-          /"reviewerEnabled":\s*(true|false)/,
-          `"reviewerEnabled": ${reviewerEnabled}`,
-        );
-
-        fs.writeFileSync(configPath, configContent);
+        const config = buildInitConfig({
+          projectName,
+          defaultBranch,
+          provider: selectedProvider,
+          reviewerEnabled,
+          prdDir,
+        });
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
         success(`Created ${configPath}`);
       }
 

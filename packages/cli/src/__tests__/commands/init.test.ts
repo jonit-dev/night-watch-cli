@@ -4,7 +4,8 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
-import { resolveTemplatePath } from '../../commands/init.js';
+import { getDefaultConfig } from '@night-watch/core';
+import { buildInitConfig, resolveTemplatePath } from '../../commands/init.js';
 
 // Get project root directory (4 levels up from this test file)
 const __filename = fileURLToPath(import.meta.url);
@@ -78,7 +79,7 @@ describe('init command', () => {
   });
 
   describe('should create PRD directory structure', () => {
-    it('should create docs/PRDs/night-watch/done/ directories', () => {
+    it('should create docs/prds/done/ directories', () => {
       // Initialize git repo
       execSync('git init', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
@@ -93,7 +94,7 @@ describe('init command', () => {
       });
 
       // Even if gh auth fails, directories should be created
-      const prdDir = path.join(tempDir, 'docs', 'PRDs', 'night-watch');
+      const prdDir = path.join(tempDir, 'docs', 'prds');
       const doneDir = path.join(prdDir, 'done');
 
       // Check if directories were created before the gh auth check failed
@@ -264,9 +265,42 @@ describe('init command', () => {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       expect(config.projectName).toBe(path.basename(tempDir));
       expect(config.defaultBranch).toBeDefined();
+      expect(config.prdDir).toBe('docs/prds');
       // Verify no budget fields in config
       expect(config.maxBudget).toBeUndefined();
       expect(config.reviewerMaxBudget).toBeUndefined();
+    });
+  });
+
+  describe('buildInitConfig', () => {
+    it('should generate the full current config shape with init overrides', () => {
+      const defaults = getDefaultConfig();
+
+      const config = buildInitConfig({
+        projectName: 'demo-project',
+        defaultBranch: 'main',
+        provider: 'codex',
+        reviewerEnabled: false,
+        prdDir: 'custom/prds',
+      });
+
+      expect(config.$schema).toBe('https://json-schema.org/schema');
+      expect(config.projectName).toBe('demo-project');
+      expect(config.defaultBranch).toBe('main');
+      expect(config.provider).toBe('codex');
+      expect(config.reviewerEnabled).toBe(false);
+      expect(config.prdDir).toBe('custom/prds');
+      expect(config.scheduleBundleId).toBeNull();
+      expect(config.providerLabel).toBe('');
+      expect(config.fallbackOnRateLimit).toBe(defaults.fallbackOnRateLimit);
+      expect(config.cronSchedule).toBe(defaults.cronSchedule);
+      expect(config.reviewerSchedule).toBe(defaults.reviewerSchedule);
+      expect(config.roadmapScanner).toEqual(defaults.roadmapScanner);
+      expect(config.qa).toEqual(defaults.qa);
+      expect(config.audit).toEqual(defaults.audit);
+      expect(config.queue).toEqual(defaults.queue);
+      expect(config.boardProvider).toEqual(defaults.boardProvider);
+      expect(config.jobProviders).toEqual(defaults.jobProviders);
     });
   });
 
