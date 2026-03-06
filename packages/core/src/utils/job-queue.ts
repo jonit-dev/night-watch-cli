@@ -25,6 +25,14 @@ import type {
 } from '../types.js';
 import { createLogger } from './logger.js';
 import { normalizeSchedulingPriority } from './scheduling.js';
+import {
+  auditLockPath,
+  checkLockFile,
+  executorLockPath,
+  plannerLockPath,
+  qaLockPath,
+  reviewerLockPath,
+} from './status-data.js';
 
 const logger = createLogger('job-queue');
 
@@ -73,6 +81,70 @@ function rowToEntry(row: Record<string, unknown>): IQueueEntry {
   };
 }
 
+function getLockPathForJob(projectPath: string, jobType: JobType): string {
+  switch (jobType) {
+    case 'executor':
+      return executorLockPath(projectPath);
+    case 'reviewer':
+      return reviewerLockPath(projectPath);
+    case 'qa':
+      return qaLockPath(projectPath);
+    case 'audit':
+      return auditLockPath(projectPath);
+    case 'slicer':
+      return plannerLockPath(projectPath);
+  }
+}
+
+/**
+ * Expire queue rows that still claim to be running after their backing process is gone.
+ *
+ * Queue completion normally happens via cron-script EXIT traps. If that cleanup path fails,
+ * stale running rows would otherwise linger until maxWaitTime and mislead both the scheduler
+ * and the Scheduling UI.
+ */
+function reconcileStaleRunningJobs(db: Database.Database): number {
+  const runningRows = db
+    .prepare(`SELECT * FROM job_queue WHERE status = 'running'`)
+    .all() as Array<Record<string, unknown>>;
+
+  if (runningRows.length === 0) {
+    return 0;
+  }
+
+  const staleIds: number[] = [];
+  const now = Math.floor(Date.now() / 1000);
+
+  for (const row of runningRows) {
+    const entry = rowToEntry(row);
+    const lockInfo = checkLockFile(getLockPathForJob(entry.projectPath, entry.jobType));
+
+    if (!lockInfo.running) {
+      staleIds.push(entry.id);
+      logger.warn('Expiring stale running queue entry', {
+        id: entry.id,
+        jobType: entry.jobType,
+        project: entry.projectName,
+        lockPid: lockInfo.pid,
+      });
+    }
+  }
+
+  if (staleIds.length === 0) {
+    return 0;
+  }
+
+  const expire = db.prepare(`UPDATE job_queue SET status = 'expired', expired_at = ? WHERE id = ?`);
+  const expireTransaction = db.transaction((ids: number[]) => {
+    for (const id of ids) {
+      expire.run(now, id);
+    }
+  });
+  expireTransaction(staleIds);
+
+  return staleIds.length;
+}
+
 function getProjectSchedulingPriority(
   projectPath: string,
   cache: Map<string, number>,
@@ -81,7 +153,7 @@ function getProjectSchedulingPriority(
     return cache.get(projectPath)!;
   }
 
-  let priority = 3;
+  let priority: number;
   try {
     priority = normalizeSchedulingPriority(loadConfig(projectPath).schedulingPriority);
   } catch {
@@ -213,6 +285,7 @@ export function enqueueJob(
 export function getRunningJob(): IQueueEntry | null {
   const db = openDb();
   try {
+    reconcileStaleRunningJobs(db);
     const row = db.prepare(`SELECT * FROM job_queue WHERE status = 'running' LIMIT 1`).get() as
       | Record<string, unknown>
       | undefined;
@@ -263,6 +336,7 @@ export function getNextPendingJob(): IQueueEntry | null {
 export function getInFlightCount(): number {
   const db = openDb();
   try {
+    reconcileStaleRunningJobs(db);
     const running = db
       .prepare(`SELECT COUNT(*) as count FROM job_queue WHERE status IN ('running', 'dispatched')`)
       .get() as { count: number } | undefined;
@@ -274,6 +348,9 @@ export function getInFlightCount(): number {
 
 export function canStartJob(config?: IQueueConfig): boolean {
   const maxConcurrency = config?.maxConcurrency ?? 1;
+  // Expire stale running/dispatched jobs before checking the slot count.
+  // This prevents a crashed or orphaned job from blocking the queue indefinitely.
+  expireStaleJobs(config?.maxWaitTime ?? DEFAULT_QUEUE_MAX_WAIT_TIME);
   return getInFlightCount() < maxConcurrency;
 }
 
@@ -368,6 +445,7 @@ export function dispatchNextJob(config?: IQueueConfig): IQueueEntry | null {
 
   const db = openDb();
   try {
+    reconcileStaleRunningJobs(db);
     const maxConcurrency = config?.maxConcurrency ?? 1;
     const mode = config?.mode ?? 'conservative';
 
@@ -453,6 +531,7 @@ export function dispatchNextJob(config?: IQueueConfig): IQueueEntry | null {
 export function getQueueStatus(): IQueueStatus {
   const db = openDb();
   try {
+    reconcileStaleRunningJobs(db);
     // Get running job
     const runningRow = db
       .prepare(`SELECT * FROM job_queue WHERE status = 'running' LIMIT 1`)
@@ -528,18 +607,21 @@ export function getQueueStatus(): IQueueStatus {
  * @param filter Optional job type filter
  * @returns Number of cleared entries
  */
-export function clearQueue(filter?: JobType): number {
+export function clearQueue(filter?: JobType, force?: boolean): number {
   const db = openDb();
   try {
+    const statuses = force
+      ? `('pending', 'running', 'dispatched')`
+      : `('pending')`;
     let result;
     if (filter) {
       result = db
-        .prepare(`DELETE FROM job_queue WHERE status = 'pending' AND job_type = ?`)
+        .prepare(`DELETE FROM job_queue WHERE status IN ${statuses} AND job_type = ?`)
         .run(filter);
     } else {
-      result = db.prepare(`DELETE FROM job_queue WHERE status = 'pending'`).run();
+      result = db.prepare(`DELETE FROM job_queue WHERE status IN ${statuses}`).run();
     }
-    logger.info('Queue cleared', { count: result.changes, filter: filter ?? 'all' });
+    logger.info('Queue cleared', { count: result.changes, filter: filter ?? 'all', force: force ?? false });
     return result.changes;
   } finally {
     db.close();
@@ -659,6 +741,7 @@ export function recordJobRun(record: IJobRunRecord): number {
 export function getJobRunsAnalytics(windowHours = 24): IJobRunAnalytics {
   const db = openDb();
   try {
+    reconcileStaleRunningJobs(db);
     const now = Math.floor(Date.now() / 1000);
     const windowStart = now - windowHours * 3600;
 

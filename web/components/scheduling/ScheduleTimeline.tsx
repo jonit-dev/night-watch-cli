@@ -515,10 +515,14 @@ const ScheduleTimeline: React.FC<ScheduleTimelineProps> = ({
                         const left = getExecutionPosition(run.startedAt);
                         const right = getExecutionPosition(run.finishedAt);
                         const width = Math.max(right - left, 8);
+                        const isRunning = run.status === 'running';
+                        const isError = run.status === 'error' || run.status === 'failed' || run.status === 'errored';
+                        const colorBg = isRunning ? 'bg-green-500' : isError ? 'bg-red-500' : jt.color.bg;
+                        const colorBorder = isRunning ? 'border-green-400/60' : isError ? 'border-red-400/60' : jt.color.border;
                         return (
                           <div
                             key={`${providerKey}-${run.id}-${run.startedAt.getTime()}`}
-                            className={`absolute top-1/2 -translate-y-1/2 h-8 rounded border ${jt.color.bg} ${jt.color.border} opacity-85 shadow-lg`}
+                            className={`absolute top-1/2 -translate-y-1/2 h-8 rounded border ${colorBg} ${colorBorder} opacity-85 shadow-lg ${isRunning ? 'animate-pulse' : ''}`}
                             style={{ left, width }}
                             title={`${providerKey} • ${jt.label} • ${format(run.startedAt, 'MMM d HH:mm')} • ${run.status}`}
                             data-testid="provider-execution-run"

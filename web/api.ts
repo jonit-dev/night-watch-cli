@@ -478,6 +478,13 @@ export function fetchQueueAnalytics(windowHours?: number): Promise<IQueueAnalyti
   return apiFetch<IQueueAnalytics>(`/api/queue/analytics${query}`);
 }
 
+export function triggerClearQueue(force?: boolean): Promise<{ cleared: number }> {
+  return apiFetch<{ cleared: number }>('/api/queue/clear', {
+    method: 'POST',
+    body: JSON.stringify({ force: force ?? false }),
+  });
+}
+
 // ==================== Roadmap Scanner ====================
 // RoadmapItem and RoadmapStatus are imported from @night-watch/types above.
 

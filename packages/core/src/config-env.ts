@@ -24,7 +24,6 @@ import {
   VALID_CLAUDE_MODELS,
   VALID_JOB_TYPES,
   VALID_MERGE_METHODS,
-  VALID_PROVIDERS,
 } from './constants.js';
 import { validateProvider } from './config-normalize.js';
 

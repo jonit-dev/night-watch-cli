@@ -14,6 +14,7 @@ import {
   dispatchNextJob,
   enqueueJob,
   expireStaleJobs,
+  getJobRunsAnalytics,
   getNextPendingJob,
   getQueueEntry,
   getQueueStatus,
@@ -21,11 +22,42 @@ import {
   markJobRunning,
   removeJob,
 } from '../../utils/job-queue.js';
+import {
+  auditLockPath,
+  executorLockPath,
+  plannerLockPath,
+  qaLockPath,
+  reviewerLockPath,
+} from '../../utils/status-data.js';
+import type { JobType } from '../../types.js';
 
 let tmpDir: string;
+let createdLockPaths: string[] = [];
+
+function getLockPath(projectPath: string, jobType: JobType): string {
+  switch (jobType) {
+    case 'executor':
+      return executorLockPath(projectPath);
+    case 'reviewer':
+      return reviewerLockPath(projectPath);
+    case 'qa':
+      return qaLockPath(projectPath);
+    case 'audit':
+      return auditLockPath(projectPath);
+    case 'slicer':
+      return plannerLockPath(projectPath);
+  }
+}
+
+function createLiveLock(projectPath: string, jobType: JobType = 'executor'): void {
+  const lockPath = getLockPath(projectPath, jobType);
+  fs.writeFileSync(lockPath, String(process.pid));
+  createdLockPaths.push(lockPath);
+}
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nw-queue-test-'));
+  createdLockPaths = [];
   // job-queue.ts reads NIGHT_WATCH_HOME to locate state.db
   process.env.NIGHT_WATCH_HOME = tmpDir;
 
@@ -36,6 +68,13 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  for (const lockPath of createdLockPaths) {
+    try {
+      fs.unlinkSync(lockPath);
+    } catch {
+      // Ignore locks already removed by the test subject.
+    }
+  }
   delete process.env.NIGHT_WATCH_HOME;
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
@@ -112,7 +151,8 @@ describe('dispatchNextJob', () => {
   });
 
   it('respects maxConcurrency — blocks dispatch when at limit', () => {
-    enqueueJob('/projects/a', 'a', 'executor', {});
+    const projectA = '/projects/a';
+    enqueueJob(projectA, 'a', 'executor', {});
     enqueueJob('/projects/b', 'b', 'executor', {});
 
     // Dispatch first job
@@ -124,6 +164,7 @@ describe('dispatchNextJob', () => {
     expect(first).not.toBeNull();
 
     // Mark it running to trigger concurrency check
+    createLiveLock(projectA);
     markJobRunning(first!.id);
 
     // Second dispatch should be blocked
@@ -166,8 +207,10 @@ describe('markJobRunning', () => {
   });
 
   it('causes getRunningJob to return the job', () => {
-    const id = enqueueJob('/projects/foo', 'foo', 'executor', {});
+    const projectPath = '/projects/foo';
+    const id = enqueueJob(projectPath, 'foo', 'executor', {});
     dispatchNextJob();
+    createLiveLock(projectPath);
     markJobRunning(id);
 
     const running = getRunningJob();
@@ -201,8 +244,10 @@ describe('clearQueue', () => {
   });
 
   it('does not remove dispatched or running jobs', () => {
-    const id = enqueueJob('/p/a', 'a', 'executor', {});
+    const projectPath = '/p/a';
+    const id = enqueueJob(projectPath, 'a', 'executor', {});
     dispatchNextJob();
+    createLiveLock(projectPath);
     markJobRunning(id);
 
     const count = clearQueue();
@@ -265,15 +310,41 @@ describe('getQueueStatus', () => {
 
   it('reflects enqueued and running jobs', () => {
     // executor has priority 50, reviewer has priority 40 — executor gets dispatched first
-    const id1 = enqueueJob('/p/a', 'a', 'executor', {});
+    const projectPath = '/p/a';
+    const id1 = enqueueJob(projectPath, 'a', 'executor', {});
     enqueueJob('/p/b', 'b', 'reviewer', {});
     const dispatched = dispatchNextJob();
     expect(dispatched?.id).toBe(id1);
+    createLiveLock(projectPath);
     markJobRunning(id1);
 
     const status = getQueueStatus();
     expect(status.running).not.toBeNull();
     expect(status.pending.total).toBe(1); // reviewer still pending
+  });
+
+  it('expires stale running entries before reporting queue status', () => {
+    const projectPath = '/p/stale';
+    const id = enqueueJob(projectPath, 'stale', 'executor', {});
+    dispatchNextJob();
+    markJobRunning(id);
+
+    const status = getQueueStatus();
+    expect(status.running).toBeNull();
+    expect(status.items).toHaveLength(0);
+    expect(getQueueEntry(id)?.status).toBe('expired');
+  });
+});
+
+describe('getJobRunsAnalytics', () => {
+  it('does not count stale running queue rows in provider bucket totals', () => {
+    const id = enqueueJob('/p/stale', 'stale', 'executor', {}, undefined, 'claude-native');
+    dispatchNextJob();
+    markJobRunning(id);
+
+    const analytics = getJobRunsAnalytics();
+    expect(analytics.byProviderBucket['claude-native']).toBeUndefined();
+    expect(getQueueEntry(id)?.status).toBe('expired');
   });
 });
 
@@ -293,13 +364,15 @@ const conservativeConfig = {
 
 describe('provider-aware scheduler: conservative mode', () => {
   it('preserves serial dispatch semantics — blocks after first job', () => {
-    enqueueJob('/p/a', 'a', 'executor', {}, conservativeConfig);
+    const projectPath = '/p/a';
+    enqueueJob(projectPath, 'a', 'executor', {}, conservativeConfig);
     enqueueJob('/p/b', 'b', 'executor', {}, conservativeConfig);
 
     const first = dispatchNextJob(conservativeConfig);
     expect(first).not.toBeNull();
 
     // Mark running to trigger concurrency check
+    createLiveLock(projectPath);
     markJobRunning(first!.id);
 
     const second = dispatchNextJob(conservativeConfig);
@@ -322,9 +395,11 @@ describe('provider-aware scheduler: same-bucket jobs blocked when bucket maxConc
     };
 
     // Enqueue first executor for claude-native, dispatch and mark running
-    const id1 = enqueueJob('/p/a', 'a', 'executor', {}, config, 'claude-native');
+    const projectPath = '/p/a';
+    const id1 = enqueueJob(projectPath, 'a', 'executor', {}, config, 'claude-native');
     const first = dispatchNextJob(config);
     expect(first?.id).toBe(id1);
+    createLiveLock(projectPath);
     markJobRunning(first!.id);
 
     // Enqueue second executor for the same claude-native bucket
@@ -352,9 +427,11 @@ describe('provider-aware scheduler: cross-bucket jobs can dispatch in parallel',
     };
 
     // Enqueue and mark an executor for claude-native as running
-    const id1 = enqueueJob('/p/a', 'a', 'executor', {}, config, 'claude-native');
+    const projectPath = '/p/a';
+    const id1 = enqueueJob(projectPath, 'a', 'executor', {}, config, 'claude-native');
     const first = dispatchNextJob(config);
     expect(first?.id).toBe(id1);
+    createLiveLock(projectPath);
     markJobRunning(first!.id);
 
     // Enqueue a reviewer for codex — different bucket
@@ -364,6 +441,30 @@ describe('provider-aware scheduler: cross-bucket jobs can dispatch in parallel',
     const second = dispatchNextJob(config);
     expect(second).not.toBeNull();
     expect(second?.providerKey).toBe('codex');
+  });
+
+  it('ignores stale running rows when deciding whether another job can start', () => {
+    const config = {
+      enabled: true,
+      mode: 'provider-aware' as const,
+      maxConcurrency: 1,
+      maxWaitTime: 3600,
+      priority: { executor: 50, reviewer: 40, slicer: 30, qa: 20, audit: 10 },
+      jobWeights: {},
+      providerBuckets: {
+        'claude-native': { maxConcurrency: 1 },
+      },
+    };
+
+    const staleId = enqueueJob('/p/stale', 'stale', 'executor', {}, config, 'claude-native');
+    dispatchNextJob(config);
+    markJobRunning(staleId);
+
+    const nextId = enqueueJob('/p/next', 'next', 'executor', {}, config, 'claude-native');
+    const next = dispatchNextJob(config);
+
+    expect(next?.id).toBe(nextId);
+    expect(getQueueEntry(staleId)?.status).toBe('expired');
   });
 });
 

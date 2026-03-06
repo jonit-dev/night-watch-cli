@@ -9,7 +9,6 @@ import {
   IAuditConfig,
   IJobProviders,
   INightWatchConfig,
-  INotificationConfig,
   IProviderBucketConfig,
   IQaConfig,
   IQueueConfig,

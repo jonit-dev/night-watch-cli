@@ -104,7 +104,7 @@ export async function maybeApplyCronSchedulingDelay(
     await new Promise((resolve) => setTimeout(resolve, plan.totalDelayMinutes * 60_000));
   }
 
-  return plan;
+  return getSchedulingPlan(projectDir, config, jobType);
 }
 
 /**

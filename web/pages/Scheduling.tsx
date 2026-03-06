@@ -23,6 +23,7 @@ import {
   fetchQueueAnalytics,
   fetchQueueStatus,
   fetchScheduleInfo,
+  triggerClearQueue,
   triggerInstallCron,
   triggerUninstallCron,
   updateConfig,
@@ -35,6 +36,7 @@ import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Switch from '../components/ui/Switch';
+import Tabs from '../components/ui/Tabs';
 import { useStore } from '../store/useStore';
 import {
   CRON_PRESETS,
@@ -86,6 +88,7 @@ const Scheduling: React.FC = () => {
   // Dashboard: queue status and analytics state
   const [queueStatus, setQueueStatus] = useState<IQueueStatus | null>(null);
   const [queueAnalytics, setQueueAnalytics] = useState<IQueueAnalytics | null>(null);
+  const [clearingQueue, setClearingQueue] = useState(false);
 
   const {
     data: scheduleInfo,
@@ -243,6 +246,28 @@ const Scheduling: React.FC = () => {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleForceClearQueue = async () => {
+    setClearingQueue(true);
+    try {
+      const result = await triggerClearQueue(true);
+      setQueueStatus(null);
+      fetchQueueStatus().then(setQueueStatus).catch(() => {});
+      addToast({
+        title: 'Queue Cleared',
+        message: `Removed ${result.cleared} stale job${result.cleared !== 1 ? 's' : ''} from the queue.`,
+        type: 'success',
+      });
+    } catch (error) {
+      addToast({
+        title: 'Clear Failed',
+        message: error instanceof Error ? error.message : 'Failed to clear queue',
+        type: 'error',
+      });
+    } finally {
+      setClearingQueue(false);
     }
   };
 
@@ -458,37 +483,13 @@ const Scheduling: React.FC = () => {
     return `${Math.floor(secs / 60)}m ${Math.round(secs % 60)}s`;
   };
 
-  return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-slate-100">Scheduling</h1>
-        {activeTemplate && (
-          <div className="text-right">
-            <div className="text-xs uppercase tracking-wide text-slate-500">Schedule Bundle</div>
-            <div className="text-sm font-medium text-indigo-300">{activeTemplate.label}</div>
-            <div className="text-xs text-slate-500">
-              Priority {scheduleInfo.schedulingPriority}/5 across registered projects
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="mb-6">
-        <ScheduleTimeline
-          configs={allProjectConfigs}
-          currentProjectId={selectedProjectId}
-          onEditJob={handleEditJobOnTimeline}
-          queueStatus={queueStatus}
-          queueAnalytics={queueAnalytics}
-        />
-      </div>
-
-      {/* 1. Queue Overview Cards */}
+  const overviewTab = (
+    <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="queue-overview-cards">
         <Card className="p-4">
           <div className="flex items-center gap-3">
             <Activity className="h-5 w-5 text-green-400 shrink-0" />
-            <div>
+            <div className="flex-1 min-w-0">
               <div className="text-xs text-slate-500 uppercase tracking-wide">Running</div>
               <div className="text-2xl font-bold text-slate-100" data-testid="overview-running">
                 {queueStatus ? runningCount : '—'}
@@ -499,6 +500,18 @@ const Scheduling: React.FC = () => {
                 </div>
               )}
             </div>
+            {(runningCount > 0 || pendingTotal > 0) && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-red-400 hover:text-red-300 shrink-0"
+                onClick={handleForceClearQueue}
+                loading={clearingQueue}
+                title="Force clear all stale running and pending queue entries"
+              >
+                Clear
+              </Button>
+            )}
           </div>
         </Card>
 
@@ -540,15 +553,26 @@ const Scheduling: React.FC = () => {
         </Card>
       </div>
 
-      {/* 2. Provider Buckets */}
+      <ScheduleTimeline
+        configs={allProjectConfigs}
+        currentProjectId={selectedProjectId}
+        onEditJob={handleEditJobOnTimeline}
+        queueStatus={queueStatus}
+        queueAnalytics={queueAnalytics}
+      />
+
       {queueAnalytics && (
         <Card className="p-6">
           <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide mb-4">Provider Buckets</h3>
           <ProviderBucketSummary analytics={queueAnalytics} />
         </Card>
       )}
+    </div>
+  );
 
-      {/* A. Status Banner */}
+  const schedulesTab = (
+    <div className="space-y-6">
+      {/* Status Banner */}
       <Card className={`p-6 border-2 ${statusColor}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
@@ -582,12 +606,11 @@ const Scheduling: React.FC = () => {
         </div>
       </Card>
 
-      {/* B. Schedule Cards */}
+      {/* Executor & Reviewer */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Executor Schedule */}
         <Card className={`p-6 ${config.executorEnabled === false ? 'opacity-50' : ''}`}>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-200">Executor Schedule</h3>
+            <h3 className="text-lg font-semibold text-slate-200">Executor</h3>
             {config.executorEnabled === false ? (
               <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">Disabled</span>
             ) : !editState.isEditing && (
@@ -603,50 +626,39 @@ const Scheduling: React.FC = () => {
               'Executor',
               editState.executorSchedule,
               (val) => setEditState(prev => ({ ...prev, executorSchedule: val })),
-              config.executorEnabled === false
+              config.executorEnabled === false,
             )
           ) : (
-            <>
-              <div className="space-y-4">
-                {config.executorEnabled !== false ? (
-                  <>
-                    <div>
-                      <div className="text-sm text-slate-400 mb-1">Schedule</div>
-                      <div className="text-lg text-slate-200 font-medium">
-                        {formatScheduleLabel(
-                          'executor',
-                          config.cronSchedule,
-                          scheduleInfo.executor.schedule,
-                        )}
-                      </div>
-                      <div className="text-xs text-slate-500 font-mono mt-1">
-                        {scheduleInfo.executor.schedule}
-                      </div>
-                      {renderDelayNote(scheduleInfo.executor)}
+            <div className="space-y-4">
+              {config.executorEnabled !== false ? (
+                <>
+                  <div>
+                    <div className="text-sm text-slate-400 mb-1">Schedule</div>
+                    <div className="text-lg text-slate-200 font-medium">
+                      {formatScheduleLabel('executor', config.cronSchedule, scheduleInfo.executor.schedule)}
                     </div>
-                    <div>
-                      <div className="text-sm text-slate-400 mb-1">Next Run</div>
-                      {renderNextRun(scheduleInfo.executor.nextRun)}
-                    </div>
-                    <div className={`flex items-center space-x-2 text-sm ${scheduleInfo.executor.installed ? 'text-green-400' : 'text-amber-400'}`}>
-                      <Check className="h-4 w-4" />
-                      <span>{scheduleInfo.executor.installed ? 'Installed' : 'Not installed'}</span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-slate-500 text-sm">
-                    Executor is disabled in settings.
+                    <div className="text-xs text-slate-500 font-mono mt-1">{scheduleInfo.executor.schedule}</div>
+                    {renderDelayNote(scheduleInfo.executor)}
                   </div>
-                )}
-              </div>
-            </>
+                  <div>
+                    <div className="text-sm text-slate-400 mb-1">Next Run</div>
+                    {renderNextRun(scheduleInfo.executor.nextRun)}
+                  </div>
+                  <div className={`flex items-center space-x-2 text-sm ${scheduleInfo.executor.installed ? 'text-green-400' : 'text-amber-400'}`}>
+                    <Check className="h-4 w-4" />
+                    <span>{scheduleInfo.executor.installed ? 'Installed' : 'Not installed'}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="text-slate-500 text-sm">Executor is disabled in settings.</div>
+              )}
+            </div>
           )}
         </Card>
 
-        {/* Reviewer Schedule */}
         <Card className={`p-6 ${!config.reviewerEnabled ? 'opacity-50' : ''}`}>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-200">Reviewer Schedule</h3>
+            <h3 className="text-lg font-semibold text-slate-200">Reviewer</h3>
             {!config.reviewerEnabled && (
               <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">Disabled</span>
             )}
@@ -657,115 +669,40 @@ const Scheduling: React.FC = () => {
               'Reviewer',
               editState.reviewerSchedule,
               (val) => setEditState(prev => ({ ...prev, reviewerSchedule: val })),
-              !config.reviewerEnabled
+              !config.reviewerEnabled,
             )
           ) : (
-            <>
-              <div className="space-y-4">
-                {config.reviewerEnabled ? (
-                  <>
-                    <div>
-                      <div className="text-sm text-slate-400 mb-1">Schedule</div>
-                      <div className="text-lg text-slate-200 font-medium">
-                        {formatScheduleLabel(
-                          'reviewer',
-                          config.reviewerSchedule,
-                          scheduleInfo.reviewer.schedule,
-                        )}
-                      </div>
-                      <div className="text-xs text-slate-500 font-mono mt-1">
-                        {scheduleInfo.reviewer.schedule}
-                      </div>
-                      {renderDelayNote(scheduleInfo.reviewer)}
+            <div className="space-y-4">
+              {config.reviewerEnabled ? (
+                <>
+                  <div>
+                    <div className="text-sm text-slate-400 mb-1">Schedule</div>
+                    <div className="text-lg text-slate-200 font-medium">
+                      {formatScheduleLabel('reviewer', config.reviewerSchedule, scheduleInfo.reviewer.schedule)}
                     </div>
-                    <div>
-                      <div className="text-sm text-slate-400 mb-1">Next Run</div>
-                      {renderNextRun(scheduleInfo.reviewer.nextRun)}
-                    </div>
-                    <div className={`flex items-center space-x-2 text-sm ${scheduleInfo.reviewer.installed ? 'text-green-400' : 'text-amber-400'}`}>
-                      <Check className="h-4 w-4" />
-                      <span>{scheduleInfo.reviewer.installed ? 'Installed' : 'Not installed'}</span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-slate-500 text-sm">
-                    Automated reviews are disabled. Enable them in Settings to configure the reviewer schedule.
+                    <div className="text-xs text-slate-500 font-mono mt-1">{scheduleInfo.reviewer.schedule}</div>
+                    {renderDelayNote(scheduleInfo.reviewer)}
                   </div>
-                )}
-              </div>
-            </>
+                  <div>
+                    <div className="text-sm text-slate-400 mb-1">Next Run</div>
+                    {renderNextRun(scheduleInfo.reviewer.nextRun)}
+                  </div>
+                  <div className={`flex items-center space-x-2 text-sm ${scheduleInfo.reviewer.installed ? 'text-green-400' : 'text-amber-400'}`}>
+                    <Check className="h-4 w-4" />
+                    <span>{scheduleInfo.reviewer.installed ? 'Installed' : 'Not installed'}</span>
+                  </div>
+                </>
+              ) : (
+                <div className="text-slate-500 text-sm">
+                  Automated reviews are disabled. Enable them in Settings to configure the reviewer schedule.
+                </div>
+              )}
+            </div>
           )}
         </Card>
       </div>
 
-      {/* C. Per-Job Enablement */}
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold text-slate-200 mb-4">Job Enablement</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
-            <div>
-              <div className="text-sm font-medium text-slate-200">Executor</div>
-              <div className="text-xs text-slate-500">Creates implementation PRs from PRDs</div>
-            </div>
-            <Switch
-              checked={config.executorEnabled !== false}
-              disabled={updatingJob !== null}
-              aria-label="Toggle executor automation"
-              onChange={(checked) => handleJobToggle('executor', checked)}
-            />
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
-            <div>
-              <div className="text-sm font-medium text-slate-200">Reviewer</div>
-              <div className="text-xs text-slate-500">Reviews PRs and manages merge readiness</div>
-            </div>
-            <Switch
-              checked={config.reviewerEnabled}
-              disabled={updatingJob !== null}
-              aria-label="Toggle reviewer automation"
-              onChange={(checked) => handleJobToggle('reviewer', checked)}
-            />
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
-            <div>
-              <div className="text-sm font-medium text-slate-200">QA</div>
-              <div className="text-xs text-slate-500">Generates and runs quality checks on PRs</div>
-            </div>
-            <Switch
-              checked={config.qa.enabled}
-              disabled={updatingJob !== null}
-              aria-label="Toggle QA automation"
-              onChange={(checked) => handleJobToggle('qa', checked)}
-            />
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
-            <div>
-              <div className="text-sm font-medium text-slate-200">Auditor</div>
-              <div className="text-xs text-slate-500">Runs automated audit reports</div>
-            </div>
-            <Switch
-              checked={config.audit.enabled}
-              disabled={updatingJob !== null}
-              aria-label="Toggle audit automation"
-              onChange={(checked) => handleJobToggle('audit', checked)}
-            />
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40 md:col-span-2">
-            <div>
-              <div className="text-sm font-medium text-slate-200">Planner</div>
-              <div className="text-xs text-slate-500">Creates PRDs from audit findings and pending roadmap items</div>
-            </div>
-            <Switch
-              checked={config.roadmapScanner.enabled}
-              disabled={updatingJob !== null}
-              aria-label="Toggle planner automation"
-              onChange={(checked) => handleJobToggle('planner', checked)}
-            />
-          </div>
-        </div>
-      </Card>
-
-      {/* D. Background Jobs */}
+      {/* QA, Auditor, Planner */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className={`p-6 ${!config.qa.enabled ? 'opacity-50' : ''}`}>
           <div className="flex items-center justify-between mb-4">
@@ -814,11 +751,7 @@ const Scheduling: React.FC = () => {
               <div>
                 <div className="text-sm text-slate-400 mb-1">Schedule</div>
                 <div className="text-lg text-slate-200 font-medium">
-                  {formatScheduleLabel(
-                    'audit',
-                    config.audit.schedule,
-                    scheduleInfo.audit?.schedule ?? config.audit.schedule,
-                  )}
+                  {formatScheduleLabel('audit', config.audit.schedule, scheduleInfo.audit?.schedule ?? config.audit.schedule)}
                 </div>
                 <div className="text-xs text-slate-500 font-mono mt-1">
                   {scheduleInfo.audit?.schedule ?? config.audit.schedule}
@@ -850,11 +783,7 @@ const Scheduling: React.FC = () => {
               <div>
                 <div className="text-sm text-slate-400 mb-1">Schedule</div>
                 <div className="text-lg text-slate-200 font-medium">
-                  {formatScheduleLabel(
-                    'slicer',
-                    config.roadmapScanner.slicerSchedule,
-                    scheduleInfo.planner?.schedule ?? config.roadmapScanner.slicerSchedule,
-                  )}
+                  {formatScheduleLabel('slicer', config.roadmapScanner.slicerSchedule, scheduleInfo.planner?.schedule ?? config.roadmapScanner.slicerSchedule)}
                 </div>
                 <div className="text-xs text-slate-500 font-mono mt-1">
                   {scheduleInfo.planner?.schedule ?? config.roadmapScanner.slicerSchedule}
@@ -872,7 +801,7 @@ const Scheduling: React.FC = () => {
         </Card>
       </div>
 
-      {/* E. Active Crontab Entries */}
+      {/* Active Crontab Entries */}
       <Card className="p-6">
         <div className="flex items-center space-x-2 mb-4">
           <Calendar className="h-5 w-5 text-slate-400" />
@@ -891,18 +820,108 @@ const Scheduling: React.FC = () => {
         )}
       </Card>
 
-      {/* F. Save & Install Button */}
       {editState.isEditing && (
         <div className="flex items-center justify-end space-x-4 pt-4 border-t border-slate-800">
-          <Button variant="ghost" onClick={handleCancelEdit}>
-            Cancel
-          </Button>
+          <Button variant="ghost" onClick={handleCancelEdit}>Cancel</Button>
           <Button onClick={handleSaveAndInstall} loading={saving}>
             <Check className="h-4 w-4 mr-2" />
             Save & Install
           </Button>
         </div>
       )}
+    </div>
+  );
+
+  const jobsTab = (
+    <Card className="p-6">
+      <h3 className="text-lg font-semibold text-slate-200 mb-4">Job Enablement</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
+          <div>
+            <div className="text-sm font-medium text-slate-200">Executor</div>
+            <div className="text-xs text-slate-500">Creates implementation PRs from PRDs</div>
+          </div>
+          <Switch
+            checked={config.executorEnabled !== false}
+            disabled={updatingJob !== null}
+            aria-label="Toggle executor automation"
+            onChange={(checked) => handleJobToggle('executor', checked)}
+          />
+        </div>
+        <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
+          <div>
+            <div className="text-sm font-medium text-slate-200">Reviewer</div>
+            <div className="text-xs text-slate-500">Reviews PRs and manages merge readiness</div>
+          </div>
+          <Switch
+            checked={config.reviewerEnabled}
+            disabled={updatingJob !== null}
+            aria-label="Toggle reviewer automation"
+            onChange={(checked) => handleJobToggle('reviewer', checked)}
+          />
+        </div>
+        <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
+          <div>
+            <div className="text-sm font-medium text-slate-200">QA</div>
+            <div className="text-xs text-slate-500">Generates and runs quality checks on PRs</div>
+          </div>
+          <Switch
+            checked={config.qa.enabled}
+            disabled={updatingJob !== null}
+            aria-label="Toggle QA automation"
+            onChange={(checked) => handleJobToggle('qa', checked)}
+          />
+        </div>
+        <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
+          <div>
+            <div className="text-sm font-medium text-slate-200">Auditor</div>
+            <div className="text-xs text-slate-500">Runs automated audit reports</div>
+          </div>
+          <Switch
+            checked={config.audit.enabled}
+            disabled={updatingJob !== null}
+            aria-label="Toggle audit automation"
+            onChange={(checked) => handleJobToggle('audit', checked)}
+          />
+        </div>
+        <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40 md:col-span-2">
+          <div>
+            <div className="text-sm font-medium text-slate-200">Planner</div>
+            <div className="text-xs text-slate-500">Creates PRDs from audit findings and pending roadmap items</div>
+          </div>
+          <Switch
+            checked={config.roadmapScanner.enabled}
+            disabled={updatingJob !== null}
+            aria-label="Toggle planner automation"
+            onChange={(checked) => handleJobToggle('planner', checked)}
+          />
+        </div>
+      </div>
+    </Card>
+  );
+
+  return (
+    <div className="space-y-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-slate-100">Scheduling</h1>
+        {activeTemplate && (
+          <div className="text-right">
+            <div className="text-xs uppercase tracking-wide text-slate-500">Schedule Bundle</div>
+            <div className="text-sm font-medium text-indigo-300">{activeTemplate.label}</div>
+            <div className="text-xs text-slate-500">
+              Priority {scheduleInfo.schedulingPriority}/5 across registered projects
+            </div>
+          </div>
+        )}
+      </div>
+
+      <Tabs
+        tabs={[
+          { id: 'overview', label: 'Overview', content: overviewTab },
+          { id: 'schedules', label: 'Schedules', content: schedulesTab },
+          { id: 'jobs', label: 'Jobs', content: jobsTab },
+        ]}
+      />
     </div>
   );
 };

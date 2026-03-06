@@ -33,6 +33,7 @@ function colorize(color: string, text: string): string {
 }
 
 // Strip ANSI escape codes for plain-text file output
+// eslint-disable-next-line no-control-regex
 const ANSI_STRIP_RE = /\x1b\[[0-9;]*m/g;
 function stripAnsi(text: string): string {
   return text.replace(ANSI_STRIP_RE, '');

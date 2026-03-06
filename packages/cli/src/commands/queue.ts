@@ -219,7 +219,7 @@ export function createQueueCommand(): Command {
       // Rebuild env from queued project's config (not from dispatcher process.env)
       // This ensures provider-specific env (ANTHROPIC_BASE_URL, API keys, model ids)
       // always comes from the queued job's own project config.
-      let projectEnv: Record<string, string> = {};
+      let projectEnv: Record<string, string>;
       try {
         projectEnv = buildQueuedJobEnv(entry);
       } catch {

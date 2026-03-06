@@ -80,6 +80,20 @@ fi
 # Acquire global gate before per-project lock to serialize jobs across projects.
 # When gate is busy, enqueue the job and exit cleanly.
 SCRIPT_TYPE="reviewer"
+
+emit_result() {
+  local status="${1:?status required}"
+  local details="${2:-}"
+  if [ -n "${details}" ]; then
+    echo "NIGHT_WATCH_RESULT:${status}|${details}"
+  else
+    echo "NIGHT_WATCH_RESULT:${status}"
+  fi
+}
+
+# ── Global Job Queue Gate ────────────────────────────────────────────────────
+# Acquire global gate before per-project lock to serialize jobs across projects.
+# When gate is busy, enqueue the job and exit cleanly.
 if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
   if [ "${NW_QUEUE_DISPATCHED:-0}" = "1" ]; then
     arm_global_queue_cleanup
@@ -99,16 +113,6 @@ if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
   fi
 fi
 # ──────────────────────────────────────────────────────────────────────────────
-
-emit_result() {
-  local status="${1:?status required}"
-  local details="${2:-}"
-  if [ -n "${details}" ]; then
-    echo "NIGHT_WATCH_RESULT:${status}|${details}"
-  else
-    echo "NIGHT_WATCH_RESULT:${status}"
-  fi
-}
 
 emit_final_status() {
   local exit_code="${1:?exit code required}"
