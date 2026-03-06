@@ -11,13 +11,14 @@ import chalk from 'chalk';
 import { Command } from 'commander';
 
 import {
-  clearQueue,
   DEFAULT_QUEUE_MAX_WAIT_TIME,
+  GLOBAL_CONFIG_DIR,
+  clearQueue,
   dispatchNextJob,
   enqueueJob,
   expireStaleJobs,
   getQueueStatus,
-  GLOBAL_CONFIG_DIR,
+  markJobRunning,
 } from '@night-watch/core';
 import type { IQueueEntry, JobType } from '@night-watch/core';
 import { createLogger } from '@night-watch/core';
@@ -41,8 +42,12 @@ function formatDuration(unixTs: number): string {
 }
 
 function printQueueEntry(entry: IQueueEntry, indent = ''): void {
-  console.log(`${indent}${chalk.bold(`[${entry.id}]`)} ${chalk.cyan(entry.jobType)} for ${chalk.dim(entry.projectName)}`);
-  console.log(`${indent}  Status: ${entry.status} | Priority: ${entry.priority} | Enqueued: ${formatDuration(entry.enqueuedAt)}`);
+  console.log(
+    `${indent}${chalk.bold(`[${entry.id}]`)} ${chalk.cyan(entry.jobType)} for ${chalk.dim(entry.projectName)}`,
+  );
+  console.log(
+    `${indent}  Status: ${entry.status} | Priority: ${entry.priority} | Enqueued: ${formatDuration(entry.enqueuedAt)}`,
+  );
   if (entry.dispatchedAt) {
     console.log(`${indent}  Dispatched: ${formatTimestamp(entry.dispatchedAt)}`);
   }
@@ -189,7 +194,7 @@ export function createQueueCommand(): Command {
     .command('dispatch')
     .description('Dispatch the next pending job (used by cron scripts)')
     .option('--log <file>', 'Log file to write dispatch output')
-    .action((opts: { log?: string }) => {
+    .action((_opts: { log?: string }) => {
       const entry = dispatchNextJob();
 
       if (!entry) {
@@ -230,13 +235,20 @@ export function createQueueCommand(): Command {
 
       child.unref();
       logger.info(`Spawned PID: ${child.pid}`);
+
+      // Mark as running now that the process is launched
+      markJobRunning(entry.id);
     });
 
   // night-watch queue expire
   queue
     .command('expire')
     .description('Expire stale queued jobs')
-    .option('--max-wait <seconds>', 'Maximum wait time in seconds', String(DEFAULT_QUEUE_MAX_WAIT_TIME))
+    .option(
+      '--max-wait <seconds>',
+      'Maximum wait time in seconds',
+      String(DEFAULT_QUEUE_MAX_WAIT_TIME),
+    )
     .action((opts: { maxWait: string }) => {
       const maxWait = parseInt(opts.maxWait, 10);
       if (isNaN(maxWait) || maxWait < 60) {
