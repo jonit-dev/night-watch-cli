@@ -13,13 +13,20 @@ import {
   QUEUE_LOCK_FILE_NAME,
   STATE_DB_FILE_NAME,
 } from '../constants.js';
-import type { IQueueConfig, IQueueEntry, IQueueStatus, JobType, QueueEntryStatus } from '../types.js';
+import type {
+  IQueueConfig,
+  IQueueEntry,
+  IQueueStatus,
+  JobType,
+  QueueEntryStatus,
+} from '../types.js';
 
 /**
- * Get the path to the state database
+ * Get the path to the state database (respects NIGHT_WATCH_HOME override for tests)
  */
 function getStateDbPath(): string {
-  return path.join(os.homedir(), GLOBAL_CONFIG_DIR, STATE_DB_FILE_NAME);
+  const base = process.env.NIGHT_WATCH_HOME || path.join(os.homedir(), GLOBAL_CONFIG_DIR);
+  return path.join(base, STATE_DB_FILE_NAME);
 }
 
 /**
@@ -163,10 +170,10 @@ export function dispatchNextJob(config?: IQueueConfig): IQueueEntry | null {
 
   const db = openDb();
   try {
-    // Check if we're at max concurrency
-    const running = db.prepare(`SELECT COUNT(*) as count FROM job_queue WHERE status = 'running'`).get() as
-      | { count: number }
-      | undefined;
+    // Check if we're at max concurrency (count both running and dispatched jobs)
+    const running = db
+      .prepare(`SELECT COUNT(*) as count FROM job_queue WHERE status IN ('running', 'dispatched')`)
+      .get() as { count: number } | undefined;
     const runningCount = running?.count ?? 0;
     const maxConcurrency = config?.maxConcurrency ?? 1;
 
@@ -192,7 +199,10 @@ export function dispatchNextJob(config?: IQueueConfig): IQueueEntry | null {
     const now = Math.floor(Date.now() / 1000);
 
     // Mark as dispatched
-    db.prepare(`UPDATE job_queue SET status = 'dispatched', dispatched_at = ? WHERE id = ?`).run(now, entry.id);
+    db.prepare(`UPDATE job_queue SET status = 'dispatched', dispatched_at = ? WHERE id = ?`).run(
+      now,
+      entry.id,
+    );
 
     return { ...entry, status: 'dispatched', dispatchedAt: now };
   } finally {
@@ -207,14 +217,16 @@ export function getQueueStatus(): IQueueStatus {
   const db = openDb();
   try {
     // Get running job
-    const runningRow = db.prepare(`SELECT * FROM job_queue WHERE status = 'running' LIMIT 1`).get() as
-      | Record<string, unknown>
-      | undefined;
+    const runningRow = db
+      .prepare(`SELECT * FROM job_queue WHERE status = 'running' LIMIT 1`)
+      .get() as Record<string, unknown> | undefined;
     const running = runningRow ? rowToEntry(runningRow) : null;
 
     // Get pending counts
     const pendingRows = db
-      .prepare(`SELECT job_type, COUNT(*) as count FROM job_queue WHERE status = 'pending' GROUP BY job_type`)
+      .prepare(
+        `SELECT job_type, COUNT(*) as count FROM job_queue WHERE status = 'pending' GROUP BY job_type`,
+      )
       .all() as Array<{ job_type: string; count: number }>;
 
     const byType: Record<string, number> = {};
@@ -255,7 +267,9 @@ export function clearQueue(filter?: JobType): number {
   try {
     let result;
     if (filter) {
-      result = db.prepare(`DELETE FROM job_queue WHERE status = 'pending' AND job_type = ?`).run(filter);
+      result = db
+        .prepare(`DELETE FROM job_queue WHERE status = 'pending' AND job_type = ?`)
+        .run(filter);
     } else {
       result = db.prepare(`DELETE FROM job_queue WHERE status = 'pending'`).run();
     }
@@ -274,13 +288,15 @@ export function expireStaleJobs(maxWaitTime: number): number {
   try {
     const now = Math.floor(Date.now() / 1000);
     const cutoff = now - maxWaitTime;
+    // Expire pending jobs that waited too long, and dispatched/running jobs that never completed
     const result = db
       .prepare(
         `UPDATE job_queue
          SET status = 'expired', expired_at = ?
-         WHERE status = 'pending' AND enqueued_at < ?`,
+         WHERE (status = 'pending' AND enqueued_at < ?)
+            OR (status IN ('dispatched', 'running') AND dispatched_at < ?)`,
       )
-      .run(now, cutoff);
+      .run(now, cutoff, cutoff);
     return result.changes;
   } finally {
     db.close();
