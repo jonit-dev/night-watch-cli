@@ -36,6 +36,7 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     reviewerSchedule: '25 */6 * * *',
     scheduleBundleId: 'always-on',
     cronScheduleOffset: 0,
+    schedulingPriority: 3,
     maxRetries: 3,
     reviewerMaxRetries: 2,
     reviewerRetryDelay: 30,
@@ -71,6 +72,18 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
       enabled: true,
       schedule: '50 3 * * 1',
       maxRuntime: 1800,
+    },
+    queue: {
+      enabled: true,
+      maxConcurrency: 1,
+      maxWaitTime: 7200,
+      priority: {
+        executor: 50,
+        reviewer: 40,
+        slicer: 30,
+        qa: 20,
+        audit: 10,
+      },
     },
   };
 

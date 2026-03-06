@@ -316,6 +316,35 @@ const Scheduling: React.FC = () => {
     );
   };
 
+  const renderDelayNote = (
+    jobInfo:
+      | {
+          delayMinutes: number;
+          manualDelayMinutes: number;
+          balancedDelayMinutes: number;
+        }
+      | undefined,
+  ) => {
+    if (!jobInfo || jobInfo.delayMinutes <= 0) {
+      return <div className="text-xs text-slate-500 mt-2">Starts directly at the scheduled time.</div>;
+    }
+
+    const parts: string[] = [];
+    if (jobInfo.balancedDelayMinutes > 0) {
+      parts.push(`auto +${jobInfo.balancedDelayMinutes}m`);
+    }
+    if (jobInfo.manualDelayMinutes > 0) {
+      parts.push(`manual +${jobInfo.manualDelayMinutes}m`);
+    }
+
+    return (
+      <div className="text-xs text-slate-500 mt-2">
+        Delayed after cron fire:
+        <span className="text-slate-300"> {parts.join(' • ')}</span>
+      </div>
+    );
+  };
+
   if (scheduleLoading || configLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -346,19 +375,18 @@ const Scheduling: React.FC = () => {
     config.audit.schedule,
     config.roadmapScanner.slicerSchedule || '35 */12 * * *',
   );
-  const hasScheduleOffset = (config.cronScheduleOffset ?? 0) !== 0;
 
   const formatScheduleLabel = (
     job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer',
     configuredCronExpr: string,
-    effectiveCronExpr: string,
+    displayedCronExpr: string,
   ): string => {
-    if (hasScheduleOffset || !activeTemplate) {
-      return cronToHuman(effectiveCronExpr);
+    if (!activeTemplate) {
+      return cronToHuman(displayedCronExpr);
     }
 
     if (!isCronEquivalent(activeTemplate.schedules[job], configuredCronExpr)) {
-      return cronToHuman(effectiveCronExpr);
+      return cronToHuman(displayedCronExpr);
     }
 
     return `${activeTemplate.label} • ${activeTemplate.hints[job]}`;
@@ -372,9 +400,9 @@ const Scheduling: React.FC = () => {
           <div className="text-right">
             <div className="text-xs uppercase tracking-wide text-slate-500">Schedule Bundle</div>
             <div className="text-sm font-medium text-indigo-300">{activeTemplate.label}</div>
-            {hasScheduleOffset && (
-              <div className="text-xs text-slate-500">Installed with +{config.cronScheduleOffset}m offset</div>
-            )}
+            <div className="text-xs text-slate-500">
+              Priority {scheduleInfo.schedulingPriority}/5 across registered projects
+            </div>
           </div>
         )}
       </div>
@@ -387,6 +415,9 @@ const Scheduling: React.FC = () => {
             <div>
               <div className="text-sm text-slate-400">Cron Status</div>
               <div className="text-2xl font-bold">{statusText}</div>
+              <div className="text-sm text-slate-500 mt-1">
+                Automatic balancing spreads registered projects before queueing overlaps.
+              </div>
             </div>
           </div>
           <Button
@@ -450,6 +481,7 @@ const Scheduling: React.FC = () => {
                       <div className="text-xs text-slate-500 font-mono mt-1">
                         {scheduleInfo.executor.schedule}
                       </div>
+                      {renderDelayNote(scheduleInfo.executor)}
                     </div>
                     <div>
                       <div className="text-sm text-slate-400 mb-1">Next Run</div>
@@ -503,6 +535,7 @@ const Scheduling: React.FC = () => {
                       <div className="text-xs text-slate-500 font-mono mt-1">
                         {scheduleInfo.reviewer.schedule}
                       </div>
+                      {renderDelayNote(scheduleInfo.reviewer)}
                     </div>
                     <div>
                       <div className="text-sm text-slate-400 mb-1">Next Run</div>
@@ -613,6 +646,7 @@ const Scheduling: React.FC = () => {
                 <div className="text-xs text-slate-500 font-mono mt-1">
                   {scheduleInfo.qa?.schedule ?? config.qa.schedule}
                 </div>
+                {renderDelayNote(scheduleInfo.qa)}
               </div>
               <div>
                 <div className="text-sm text-slate-400 mb-1">Next Run</div>
@@ -648,6 +682,7 @@ const Scheduling: React.FC = () => {
                 <div className="text-xs text-slate-500 font-mono mt-1">
                   {scheduleInfo.audit?.schedule ?? config.audit.schedule}
                 </div>
+                {renderDelayNote(scheduleInfo.audit)}
               </div>
               <div>
                 <div className="text-sm text-slate-400 mb-1">Next Run</div>
@@ -683,6 +718,7 @@ const Scheduling: React.FC = () => {
                 <div className="text-xs text-slate-500 font-mono mt-1">
                   {scheduleInfo.planner?.schedule ?? config.roadmapScanner.slicerSchedule}
                 </div>
+                {renderDelayNote(scheduleInfo.planner)}
               </div>
               <div>
                 <div className="text-sm text-slate-400 mb-1">Next Run</div>

@@ -56,6 +56,7 @@ import {
   DEFAULT_REVIEWER_RETRY_DELAY,
   DEFAULT_REVIEWER_SCHEDULE,
   DEFAULT_ROADMAP_SCANNER,
+  DEFAULT_SCHEDULING_PRIORITY,
   DEFAULT_TEMPLATES_DIR,
   VALID_CLAUDE_MODELS,
   VALID_JOB_TYPES,
@@ -83,6 +84,7 @@ export function getDefaultConfig(): INightWatchConfig {
     reviewerSchedule: DEFAULT_REVIEWER_SCHEDULE,
     scheduleBundleId: null,
     cronScheduleOffset: DEFAULT_CRON_SCHEDULE_OFFSET,
+    schedulingPriority: DEFAULT_SCHEDULING_PRIORITY,
     maxRetries: DEFAULT_MAX_RETRIES,
 
     // Reviewer retry configuration
@@ -201,6 +203,7 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     normalized.scheduleBundleId = null;
   }
   normalized.cronScheduleOffset = readNumber(rawConfig.cronScheduleOffset);
+  normalized.schedulingPriority = readNumber(rawConfig.schedulingPriority);
   normalized.maxRetries = readNumber(rawConfig.maxRetries);
   normalized.reviewerMaxRetries = readNumber(rawConfig.reviewerMaxRetries);
   normalized.reviewerRetryDelay = readNumber(rawConfig.reviewerRetryDelay);
@@ -376,7 +379,7 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   if (rawQueue) {
     const queue: IQueueConfig = {
       enabled: readBoolean(rawQueue.enabled) ?? DEFAULT_QUEUE.enabled,
-      maxConcurrency: readNumber(rawQueue.maxConcurrency) ?? DEFAULT_QUEUE.maxConcurrency,
+      maxConcurrency: DEFAULT_QUEUE.maxConcurrency,
       maxWaitTime: readNumber(rawQueue.maxWaitTime) ?? DEFAULT_QUEUE.maxWaitTime,
       priority: { ...DEFAULT_QUEUE.priority },
     };
@@ -393,10 +396,14 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     }
 
     // Clamp values to valid ranges
-    queue.maxConcurrency = Math.max(1, Math.min(10, queue.maxConcurrency));
+    queue.maxConcurrency = DEFAULT_QUEUE.maxConcurrency;
     queue.maxWaitTime = Math.max(300, Math.min(14400, queue.maxWaitTime));
 
     normalized.queue = queue;
+  }
+
+  if (normalized.schedulingPriority !== undefined) {
+    normalized.schedulingPriority = Math.max(1, Math.min(5, normalized.schedulingPriority));
   }
 
   return normalized;
@@ -611,6 +618,13 @@ export function loadConfig(projectDir: string): INightWatchConfig {
     const offset = parseInt(process.env.NW_CRON_SCHEDULE_OFFSET, 10);
     if (!isNaN(offset) && offset >= 0 && offset <= 59) {
       envConfig.cronScheduleOffset = offset;
+    }
+  }
+
+  if (process.env.NW_SCHEDULING_PRIORITY) {
+    const priority = parseInt(process.env.NW_SCHEDULING_PRIORITY, 10);
+    if (!isNaN(priority)) {
+      envConfig.schedulingPriority = Math.max(1, Math.min(5, priority));
     }
   }
 
@@ -880,10 +894,7 @@ export function loadConfig(projectDir: string): INightWatchConfig {
   }
 
   if (process.env.NW_QUEUE_MAX_CONCURRENCY) {
-    const maxConcurrency = parseInt(process.env.NW_QUEUE_MAX_CONCURRENCY, 10);
-    if (!isNaN(maxConcurrency) && maxConcurrency >= 1) {
-      envConfig.queue = { ...queueBaseConfig(), maxConcurrency: Math.min(10, maxConcurrency) };
-    }
+    envConfig.queue = { ...queueBaseConfig(), maxConcurrency: DEFAULT_QUEUE.maxConcurrency };
   }
 
   if (process.env.NW_QUEUE_MAX_WAIT_TIME) {

@@ -119,6 +119,7 @@ export interface INightWatchConfig {
   reviewerSchedule: string;
   scheduleBundleId?: string | null;
   cronScheduleOffset: number;
+  schedulingPriority: number;
   maxRetries: number;
   reviewerMaxRetries: number;
   reviewerRetryDelay: number;
@@ -139,6 +140,14 @@ export interface INightWatchConfig {
   claudeModel: ClaudeModel;
   qa: IQaConfig;
   audit: IAuditConfig;
+  queue: IQueueConfig;
+}
+
+export interface IQueueConfig {
+  enabled: boolean;
+  maxConcurrency: number;
+  maxWaitTime: number;
+  priority: Record<string, number>;
 }
 
 // ==================== Board Provider Config ====================

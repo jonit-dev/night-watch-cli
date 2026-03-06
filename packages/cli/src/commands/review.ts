@@ -22,7 +22,11 @@ import {
   sendNotifications,
   error as uiError,
 } from '@night-watch/core';
-import { buildBaseEnvVars, formatProviderDisplay } from './shared/env-builder.js';
+import {
+  buildBaseEnvVars,
+  formatProviderDisplay,
+  maybeApplyCronSchedulingDelay,
+} from './shared/env-builder.js';
 import type { IPrDetails } from '@night-watch/core';
 import { execFileSync } from 'child_process';
 import * as path from 'path';
@@ -392,6 +396,7 @@ export function reviewCommand(program: Command): void {
       spinner.start();
 
       try {
+        await maybeApplyCronSchedulingDelay(config, 'reviewer', projectDir);
         const { exitCode, stdout, stderr } = await executeScriptWithOutput(
           scriptPath,
           [projectDir],

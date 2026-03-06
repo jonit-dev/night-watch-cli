@@ -28,7 +28,7 @@ import {
   validateRegistry,
   warn,
 } from '@night-watch/core';
-import { buildBaseEnvVars } from './shared/env-builder.js';
+import { buildBaseEnvVars, maybeApplyCronSchedulingDelay } from './shared/env-builder.js';
 import type { IPrDetails } from '@night-watch/core';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -560,6 +560,7 @@ export function runCommand(program: Command): void {
       spinner.start();
 
       try {
+        await maybeApplyCronSchedulingDelay(config, 'executor', projectDir);
         const { exitCode, stdout, stderr } = await executeScriptWithOutput(
           scriptPath,
           [projectDir],

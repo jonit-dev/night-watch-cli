@@ -307,6 +307,16 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
     return 'cronScheduleOffset must be a number between 0 and 59';
   }
 
+  if (
+    changes.schedulingPriority !== undefined &&
+    (typeof changes.schedulingPriority !== 'number' ||
+      !Number.isInteger(changes.schedulingPriority) ||
+      changes.schedulingPriority < 1 ||
+      changes.schedulingPriority > 5)
+  ) {
+    return 'schedulingPriority must be an integer between 1 and 5';
+  }
+
   // fallbackOnRateLimit validation
   if (
     changes.fallbackOnRateLimit !== undefined &&
@@ -388,6 +398,45 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
       (typeof audit.maxRuntime !== 'number' || audit.maxRuntime < 60)
     ) {
       return 'audit.maxRuntime must be a number >= 60';
+    }
+  }
+
+  if (changes.queue !== undefined) {
+    if (typeof changes.queue !== 'object' || changes.queue === null) {
+      return 'queue must be an object';
+    }
+
+    const queue = changes.queue;
+
+    if (queue.enabled !== undefined && typeof queue.enabled !== 'boolean') {
+      return 'queue.enabled must be a boolean';
+    }
+
+    if (
+      queue.maxWaitTime !== undefined &&
+      (typeof queue.maxWaitTime !== 'number' || queue.maxWaitTime < 300 || queue.maxWaitTime > 14400)
+    ) {
+      return 'queue.maxWaitTime must be a number between 300 and 14400';
+    }
+
+    if (queue.maxConcurrency !== undefined && queue.maxConcurrency !== 1) {
+      return 'queue.maxConcurrency is currently fixed at 1';
+    }
+
+    if (queue.priority !== undefined) {
+      if (typeof queue.priority !== 'object' || queue.priority === null) {
+        return 'queue.priority must be an object';
+      }
+
+      const validQueueJobs: JobType[] = ['executor', 'reviewer', 'qa', 'audit', 'slicer'];
+      for (const [jobType, value] of Object.entries(queue.priority)) {
+        if (!validQueueJobs.includes(jobType as JobType)) {
+          return `queue.priority contains invalid job type: ${jobType}`;
+        }
+        if (typeof value !== 'number' || Number.isNaN(value)) {
+          return `queue.priority.${jobType} must be a number`;
+        }
+      }
     }
   }
 

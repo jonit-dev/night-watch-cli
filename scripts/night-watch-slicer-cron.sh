@@ -38,6 +38,16 @@ PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 LOCK_FILE="/tmp/night-watch-slicer-${PROJECT_RUNTIME_KEY}.lock"
 PROVIDER_MODEL_DISPLAY=$(resolve_provider_model_display "${PROVIDER_CMD}" "${PROVIDER_LABEL}")
 
+emit_result() {
+  local status="${1:?status required}"
+  local details="${2:-}"
+  if [ -n "${details}" ]; then
+    echo "NIGHT_WATCH_RESULT:${status}|${details}"
+  else
+    echo "NIGHT_WATCH_RESULT:${status}"
+  fi
+}
+
 # Validate provider
 if ! validate_provider "${PROVIDER_CMD}"; then
   echo "ERROR: Unknown provider: ${PROVIDER_CMD}" >&2
@@ -54,8 +64,17 @@ if ! acquire_lock "${LOCK_FILE}"; then
 fi
 # ── Global Job Queue Gate ──────────────────────────────────────
 if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
-  if acquire_global_gate; then
+  if [ "${NW_QUEUE_DISPATCHED:-0}" = "1" ]; then
     arm_global_queue_cleanup
+  elif acquire_global_gate; then
+    if queue_can_start_now; then
+      arm_global_queue_cleanup
+    else
+      release_global_gate
+      enqueue_job "slicer" "${PROJECT_DIR}"
+      emit_result "queued"
+      exit 0
+    fi
   else
     enqueue_job "slicer" "${PROJECT_DIR}"
     emit_result "queued"

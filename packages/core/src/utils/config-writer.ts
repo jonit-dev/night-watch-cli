@@ -13,7 +13,7 @@ export interface ISaveConfigResult {
   error?: string;
 }
 
-const PARTIAL_MERGE_KEYS = new Set(['notifications', 'qa', 'audit', 'roadmapScanner']);
+const PARTIAL_MERGE_KEYS = new Set(['notifications', 'qa', 'audit', 'roadmapScanner', 'queue']);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);

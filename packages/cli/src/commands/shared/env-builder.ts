@@ -8,6 +8,7 @@ import {
   INightWatchConfig,
   IWebhookConfig,
   PROVIDER_COMMANDS,
+  getSchedulingPlan,
   resolveJobProvider,
 } from '@night-watch/core';
 import type { JobType } from '@night-watch/core';
@@ -65,6 +66,7 @@ export function buildBaseEnvVars(
   env.NW_QUEUE_MAX_CONCURRENCY = String(queueConfig.maxConcurrency);
   env.NW_QUEUE_MAX_WAIT_TIME = String(queueConfig.maxWaitTime);
   env.NW_QUEUE_PRIORITY_JSON = JSON.stringify(queueConfig.priority);
+  env.NW_SCHEDULING_PRIORITY = String(config.schedulingPriority ?? 3);
 
   // Dry run flag
   if (isDryRun) {
@@ -75,6 +77,32 @@ export function buildBaseEnvVars(
   env.NW_EXECUTION_CONTEXT = 'agent';
 
   return env;
+}
+
+export function getCronSchedulingPlan(
+  config: INightWatchConfig,
+  jobType: JobType,
+  projectDir: string,
+) {
+  return getSchedulingPlan(projectDir, config, jobType);
+}
+
+export async function maybeApplyCronSchedulingDelay(
+  config: INightWatchConfig,
+  jobType: JobType,
+  projectDir: string,
+): Promise<ReturnType<typeof getSchedulingPlan>> {
+  const plan = getSchedulingPlan(projectDir, config, jobType);
+
+  if (process.env.NW_CRON_TRIGGER !== '1' || process.env.NW_QUEUE_DISPATCHED === '1') {
+    return plan;
+  }
+
+  if (plan.totalDelayMinutes > 0) {
+    await new Promise((resolve) => setTimeout(resolve, plan.totalDelayMinutes * 60_000));
+  }
+
+  return plan;
 }
 
 /**

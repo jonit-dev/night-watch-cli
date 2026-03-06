@@ -11,6 +11,7 @@ import { Command } from 'commander';
 
 import {
   DEFAULT_QUEUE_MAX_WAIT_TIME,
+  canStartJob,
   clearQueue,
   dispatchNextJob,
   enqueueJob,
@@ -20,6 +21,7 @@ import {
   loadConfig,
   markJobRunning,
   removeJob,
+  updateJobStatus,
 } from '@night-watch/core';
 import type { IQueueEntry, JobType } from '@night-watch/core';
 import { createLogger } from '@night-watch/core';
@@ -185,7 +187,8 @@ export function createQueueCommand(): Command {
       }
 
       const projectName = path.basename(projectDir);
-      const id = enqueueJob(projectDir, projectName, jobType as JobType, envVars);
+      const queueConfig = loadConfig(projectDir).queue;
+      const id = enqueueJob(projectDir, projectName, jobType as JobType, envVars, queueConfig);
 
       console.log(chalk.green(`Enqueued ${jobType} for ${projectName} (ID: ${id})`));
     });
@@ -225,19 +228,29 @@ export function createQueueCommand(): Command {
 
       logger.info(`Spawning: ${scriptPath} ${entry.projectPath}`);
 
-      // Spawn as detached to let it run independently
-      const child = spawn('bash', [scriptPath, entry.projectPath], {
-        detached: true,
-        stdio: 'ignore',
-        env,
-        cwd: entry.projectPath,
-      });
+      try {
+        // Spawn as detached to let it run independently
+        const child = spawn('bash', [scriptPath, entry.projectPath], {
+          detached: true,
+          stdio: 'ignore',
+          env,
+          cwd: entry.projectPath,
+        });
 
-      child.unref();
-      logger.info(`Spawned PID: ${child.pid}`);
+        child.unref();
+        logger.info(`Spawned PID: ${child.pid}`);
 
-      // Mark as running now that the process is launched
-      markJobRunning(entry.id);
+        // Mark as running now that the process is launched
+        markJobRunning(entry.id);
+      } catch (error) {
+        updateJobStatus(entry.id, 'pending');
+        logger.error(
+          `Failed to dispatch ${entry.jobType} for ${entry.projectName}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        process.exit(1);
+      }
     });
 
   queue
@@ -251,6 +264,14 @@ export function createQueueCommand(): Command {
       }
 
       removeJob(queueId);
+    });
+
+  queue
+    .command('can-start')
+    .description('Return a zero exit status when the global queue has an available slot')
+    .action(() => {
+      const queueConfig = loadConfig(process.cwd()).queue;
+      process.exit(canStartJob(queueConfig) ? 0 : 1);
     });
 
   // night-watch queue expire

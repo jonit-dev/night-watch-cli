@@ -6,7 +6,13 @@ import { Request, Response, Router } from 'express';
 
 import { CronExpressionParser } from 'cron-parser';
 
-import { INightWatchConfig, fetchStatusSnapshot, loadConfig } from '@night-watch/core';
+import {
+  INightWatchConfig,
+  addDelayToIsoString,
+  fetchStatusSnapshot,
+  getSchedulingPlan,
+  loadConfig,
+} from '@night-watch/core';
 import { SseClientSet, broadcastSSE, startSseStatusWatcher } from '../middleware/sse.middleware.js';
 
 export interface IStatusRoutesDeps {
@@ -59,20 +65,6 @@ export interface IScheduleInfoRoutesDeps {
   getConfig: () => INightWatchConfig;
 }
 
-function applyScheduleOffset(schedule: string, offset: number): string {
-  if (offset === 0) {
-    return schedule;
-  }
-
-  const parts = schedule.trim().split(/\s+/);
-  if (parts.length < 5 || !/^\d+$/.test(parts[0])) {
-    return schedule.trim();
-  }
-
-  parts[0] = String(offset);
-  return parts.join(' ');
-}
-
 function computeNextRun(cronExpr: string): string | null {
   try {
     const interval = CronExpressionParser.parse(cronExpr);
@@ -88,16 +80,16 @@ function hasScheduledCommand(entries: string[], command: string): boolean {
 }
 
 function buildScheduleInfoResponse(
+  projectDir: string,
   config: INightWatchConfig,
   entries: string[],
   installed: boolean,
 ) {
-  const offset = config.cronScheduleOffset ?? 0;
-  const executorSchedule = applyScheduleOffset(config.cronSchedule, offset);
-  const reviewerSchedule = applyScheduleOffset(config.reviewerSchedule, offset);
-  const qaSchedule = applyScheduleOffset(config.qa.schedule, offset);
-  const auditSchedule = applyScheduleOffset(config.audit.schedule, offset);
-  const plannerSchedule = applyScheduleOffset(config.roadmapScanner.slicerSchedule, offset);
+  const executorPlan = getSchedulingPlan(projectDir, config, 'executor');
+  const reviewerPlan = getSchedulingPlan(projectDir, config, 'reviewer');
+  const qaPlan = getSchedulingPlan(projectDir, config, 'qa');
+  const auditPlan = getSchedulingPlan(projectDir, config, 'audit');
+  const plannerPlan = getSchedulingPlan(projectDir, config, 'slicer');
 
   const executorInstalled =
     installed && config.executorEnabled !== false && hasScheduledCommand(entries, 'run');
@@ -112,31 +104,60 @@ function buildScheduleInfoResponse(
 
   return {
     executor: {
-      schedule: executorSchedule,
+      schedule: config.cronSchedule,
       installed: executorInstalled,
-      nextRun: executorInstalled ? computeNextRun(executorSchedule) : null,
+      nextRun: executorInstalled
+        ? addDelayToIsoString(computeNextRun(config.cronSchedule), executorPlan.totalDelayMinutes)
+        : null,
+      delayMinutes: executorPlan.totalDelayMinutes,
+      manualDelayMinutes: executorPlan.manualDelayMinutes,
+      balancedDelayMinutes: executorPlan.balancedDelayMinutes,
     },
     reviewer: {
-      schedule: reviewerSchedule,
+      schedule: config.reviewerSchedule,
       installed: reviewerInstalled,
-      nextRun: reviewerInstalled ? computeNextRun(reviewerSchedule) : null,
+      nextRun: reviewerInstalled
+        ? addDelayToIsoString(computeNextRun(config.reviewerSchedule), reviewerPlan.totalDelayMinutes)
+        : null,
+      delayMinutes: reviewerPlan.totalDelayMinutes,
+      manualDelayMinutes: reviewerPlan.manualDelayMinutes,
+      balancedDelayMinutes: reviewerPlan.balancedDelayMinutes,
     },
     qa: {
-      schedule: qaSchedule,
+      schedule: config.qa.schedule,
       installed: qaInstalled,
-      nextRun: qaInstalled ? computeNextRun(qaSchedule) : null,
+      nextRun: qaInstalled
+        ? addDelayToIsoString(computeNextRun(config.qa.schedule), qaPlan.totalDelayMinutes)
+        : null,
+      delayMinutes: qaPlan.totalDelayMinutes,
+      manualDelayMinutes: qaPlan.manualDelayMinutes,
+      balancedDelayMinutes: qaPlan.balancedDelayMinutes,
     },
     audit: {
-      schedule: auditSchedule,
+      schedule: config.audit.schedule,
       installed: auditInstalled,
-      nextRun: auditInstalled ? computeNextRun(auditSchedule) : null,
+      nextRun: auditInstalled
+        ? addDelayToIsoString(computeNextRun(config.audit.schedule), auditPlan.totalDelayMinutes)
+        : null,
+      delayMinutes: auditPlan.totalDelayMinutes,
+      manualDelayMinutes: auditPlan.manualDelayMinutes,
+      balancedDelayMinutes: auditPlan.balancedDelayMinutes,
     },
     planner: {
-      schedule: plannerSchedule,
+      schedule: config.roadmapScanner.slicerSchedule,
       installed: plannerInstalled,
-      nextRun: plannerInstalled ? computeNextRun(plannerSchedule) : null,
+      nextRun: plannerInstalled
+        ? addDelayToIsoString(
+            computeNextRun(config.roadmapScanner.slicerSchedule),
+            plannerPlan.totalDelayMinutes,
+          )
+        : null,
+      delayMinutes: plannerPlan.totalDelayMinutes,
+      manualDelayMinutes: plannerPlan.manualDelayMinutes,
+      balancedDelayMinutes: plannerPlan.balancedDelayMinutes,
     },
     paused: !installed,
+    schedulingPriority: config.schedulingPriority,
     entries,
   };
 }
@@ -150,7 +171,7 @@ export function createScheduleInfoRoutes(deps: IScheduleInfoRoutesDeps): Router 
       const config = getConfig();
       const snapshot = await fetchStatusSnapshot(projectDir, config);
       res.json(
-        buildScheduleInfoResponse(config, snapshot.crontab.entries, snapshot.crontab.installed),
+        buildScheduleInfoResponse(projectDir, config, snapshot.crontab.entries, snapshot.crontab.installed),
       );
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
@@ -243,7 +264,7 @@ export function createProjectSseRoutes(deps: {
       const projectDir = req.projectDir!;
       const snapshot = await fetchStatusSnapshot(projectDir, config);
       res.json(
-        buildScheduleInfoResponse(config, snapshot.crontab.entries, snapshot.crontab.installed),
+        buildScheduleInfoResponse(projectDir, config, snapshot.crontab.entries, snapshot.crontab.installed),
       );
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });

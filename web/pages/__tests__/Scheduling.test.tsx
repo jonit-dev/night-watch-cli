@@ -37,6 +37,7 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     reviewerSchedule: '25 */6 * * *',
     scheduleBundleId: 'always-on',
     cronScheduleOffset: 0,
+    schedulingPriority: 3,
     maxRetries: 3,
     reviewerMaxRetries: 2,
     reviewerRetryDelay: 30,
@@ -73,6 +74,18 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
       schedule: '50 3 * * 1',
       maxRuntime: 1800,
     },
+    queue: {
+      enabled: true,
+      maxConcurrency: 1,
+      maxWaitTime: 7200,
+      priority: {
+        executor: 50,
+        reviewer: 40,
+        slicer: 30,
+        qa: 20,
+        audit: 10,
+      },
+    },
   };
 
   return {
@@ -99,28 +112,44 @@ function makeScheduleInfo(overrides: Partial<IScheduleInfo> = {}): IScheduleInfo
       schedule: '5 */3 * * *',
       installed: true,
       nextRun: '2026-03-06T00:05:00.000Z',
+      delayMinutes: 0,
+      manualDelayMinutes: 0,
+      balancedDelayMinutes: 0,
     },
     reviewer: {
       schedule: '25 */6 * * *',
       installed: true,
       nextRun: '2026-03-06T00:25:00.000Z',
+      delayMinutes: 0,
+      manualDelayMinutes: 0,
+      balancedDelayMinutes: 0,
     },
     qa: {
       schedule: '45 2,14 * * *',
       installed: true,
       nextRun: '2026-03-06T02:45:00.000Z',
+      delayMinutes: 0,
+      manualDelayMinutes: 0,
+      balancedDelayMinutes: 0,
     },
     audit: {
       schedule: '50 3 * * 1',
       installed: true,
       nextRun: '2026-03-09T03:50:00.000Z',
+      delayMinutes: 0,
+      manualDelayMinutes: 0,
+      balancedDelayMinutes: 0,
     },
     planner: {
       schedule: '35 */12 * * *',
       installed: true,
       nextRun: '2026-03-06T00:35:00.000Z',
+      delayMinutes: 0,
+      manualDelayMinutes: 0,
+      balancedDelayMinutes: 0,
     },
     paused: false,
+    schedulingPriority: 3,
     entries: ['5 */3 * * * cd /tmp && night-watch run >> /tmp/executor.log 2>&1'],
   };
 
@@ -266,37 +295,53 @@ describe('Scheduling page', () => {
     });
     currentScheduleInfo = makeScheduleInfo({
       executor: {
-        schedule: '35 */3 * * *',
+        schedule: '5 */3 * * *',
         installed: true,
         nextRun: '2026-03-06T00:35:00.000Z',
+        delayMinutes: 30,
+        manualDelayMinutes: 30,
+        balancedDelayMinutes: 0,
       },
       reviewer: {
-        schedule: '55 */6 * * *',
+        schedule: '25 */6 * * *',
         installed: true,
         nextRun: '2026-03-06T00:55:00.000Z',
+        delayMinutes: 30,
+        manualDelayMinutes: 30,
+        balancedDelayMinutes: 0,
       },
       qa: {
-        schedule: '15 3,15 * * *',
+        schedule: '45 2,14 * * *',
         installed: true,
         nextRun: '2026-03-06T03:15:00.000Z',
+        delayMinutes: 30,
+        manualDelayMinutes: 30,
+        balancedDelayMinutes: 0,
       },
       audit: {
-        schedule: '20 4 * * 1',
+        schedule: '50 3 * * 1',
         installed: true,
         nextRun: '2026-03-09T04:20:00.000Z',
+        delayMinutes: 30,
+        manualDelayMinutes: 30,
+        balancedDelayMinutes: 0,
       },
       planner: {
-        schedule: '5 */12 * * *',
+        schedule: '35 */12 * * *',
         installed: true,
         nextRun: '2026-03-06T12:05:00.000Z',
+        delayMinutes: 30,
+        manualDelayMinutes: 30,
+        balancedDelayMinutes: 0,
       },
     });
 
     render(<Scheduling />);
 
-    expect(screen.getByText('Installed with +30m offset')).toBeInTheDocument();
-    expect(screen.getByText('Every 3 hours at :35')).toBeInTheDocument();
-    expect(screen.getByText('35 */3 * * *')).toBeInTheDocument();
+    expect(screen.getAllByText(/Delayed after cron fire:/)).not.toHaveLength(0);
+    expect(screen.getAllByText(/manual \+30m/)).not.toHaveLength(0);
+    expect(screen.getByText('Always On (Recommended) • Every 3h at :05')).toBeInTheDocument();
+    expect(screen.getByText('5 */3 * * *')).toBeInTheDocument();
   });
 
   it('warns and refetches when cron reinstall fails after saving schedules', async () => {
