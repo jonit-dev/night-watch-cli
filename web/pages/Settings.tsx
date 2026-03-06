@@ -46,6 +46,7 @@ type ConfigForm = {
   reviewerSchedule: string;
   scheduleBundleId: string | null;
   cronScheduleOffset: number;
+  schedulingPriority: number;
   maxRetries: number;
   reviewerMaxRetries: number;
   reviewerRetryDelay: number;
@@ -62,6 +63,7 @@ type ConfigForm = {
   claudeModel: ClaudeModel;
   qa: IQaConfig;
   audit: IAuditConfig;
+  queue: INightWatchConfig['queue'];
 };
 
 const toFormState = (config: INightWatchConfig): ConfigForm => ({
@@ -81,6 +83,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
   scheduleBundleId: config.scheduleBundleId ?? null,
   cronScheduleOffset: config.cronScheduleOffset ?? 0,
+  schedulingPriority: config.schedulingPriority ?? 3,
   maxRetries: config.maxRetries ?? 3,
   reviewerMaxRetries: config.reviewerMaxRetries ?? 2,
   reviewerRetryDelay: config.reviewerRetryDelay ?? 30,
@@ -116,6 +119,18 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
     enabled: true,
     schedule: '50 3 * * 1',
     maxRuntime: 1800,
+  },
+  queue: config.queue || {
+    enabled: true,
+    maxConcurrency: 1,
+    maxWaitTime: 7200,
+    priority: {
+      executor: 50,
+      reviewer: 40,
+      slicer: 30,
+      qa: 20,
+      audit: 10,
+    },
   },
 });
 
@@ -725,8 +740,10 @@ const Settings: React.FC = () => {
       form.cronSchedule !== config?.cronSchedule ||
       form.reviewerSchedule !== config?.reviewerSchedule ||
       form.cronScheduleOffset !== (config?.cronScheduleOffset ?? 0) ||
+      form.schedulingPriority !== (config?.schedulingPriority ?? 3) ||
       form.executorEnabled !== (config?.executorEnabled ?? true) ||
       form.reviewerEnabled !== (config?.reviewerEnabled ?? true) ||
+      form.queue.enabled !== (config?.queue?.enabled ?? true) ||
       form.qa.enabled !== (config?.qa.enabled ?? true) ||
       form.qa.schedule !== config?.qa.schedule ||
       form.audit.enabled !== (config?.audit.enabled ?? true) ||
@@ -762,6 +779,7 @@ const Settings: React.FC = () => {
         reviewerSchedule: form.reviewerSchedule,
         scheduleBundleId: scheduleMode === 'template' ? form.scheduleBundleId : null,
         cronScheduleOffset: form.cronScheduleOffset,
+        schedulingPriority: form.schedulingPriority,
         maxRetries: form.maxRetries,
         reviewerMaxRetries: form.reviewerMaxRetries,
         reviewerRetryDelay: form.reviewerRetryDelay,
@@ -778,6 +796,7 @@ const Settings: React.FC = () => {
         claudeModel: form.claudeModel,
         qa: form.qa,
         audit: form.audit,
+        queue: form.queue,
       });
 
       // Update form directly from server response to ensure it reflects persisted values
@@ -1268,9 +1287,43 @@ const Settings: React.FC = () => {
             </div>
           )}
 
-          <div className="pt-4 border-t border-slate-800">
+          <div className="pt-4 border-t border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Select
+              label="Scheduling Priority"
+              value={String(form.schedulingPriority)}
+              onChange={(val) => updateField('schedulingPriority', Number(val))}
+              options={[
+                { label: '1 · Lowest', value: '1' },
+                { label: '2 · Low', value: '2' },
+                { label: '3 · Balanced', value: '3' },
+                { label: '4 · High', value: '4' },
+                { label: '5 · Highest', value: '5' },
+              ]}
+              helperText="Higher-priority projects get earlier balanced start slots and win queue tie-breakers first."
+            />
+
+            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm font-medium text-slate-200">Global Queue</div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Queue overlapping jobs across projects instead of letting them burst the provider API.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.queue.enabled}
+                  onChange={(enabled) =>
+                    updateField('queue', {
+                      ...form.queue,
+                      enabled,
+                    })
+                  }
+                />
+              </div>
+            </div>
+
             <Input
-              label="Cron Schedule Offset"
+              label="Extra Start Delay"
               type="number"
               min="0"
               max="59"
@@ -1279,7 +1332,7 @@ const Settings: React.FC = () => {
                 const val = Math.min(59, Math.max(0, Number(e.target.value || 0)));
                 updateField('cronScheduleOffset', val);
               }}
-              helperText="Minutes offset (0-59) applied to all cron schedules during install. Helps stagger multiple projects."
+              helperText="Manual delay in minutes added before cron jobs start. This stacks on top of automatic balancing."
             />
           </div>
         </Card>

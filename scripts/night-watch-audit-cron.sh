@@ -58,8 +58,17 @@ fi
 # Global gate: if queue is enabled and we can't acquire the global lock,
 # enqueue the job and exit. The dispatcher will run it later.
 if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
-  if acquire_global_gate; then
+  if [ "${NW_QUEUE_DISPATCHED:-0}" = "1" ]; then
     arm_global_queue_cleanup
+  elif acquire_global_gate; then
+    if queue_can_start_now; then
+      arm_global_queue_cleanup
+    else
+      release_global_gate
+      enqueue_job "${SCRIPT_TYPE}" "${PROJECT_DIR}"
+      emit_result "queued"
+      exit 0
+    fi
   else
     enqueue_job "${SCRIPT_TYPE}" "${PROJECT_DIR}"
     emit_result "queued"

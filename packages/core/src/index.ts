@@ -37,6 +37,7 @@ export * from './utils/roadmap-scanner.js';
 export * from './utils/roadmap-state.js';
 export * from './utils/script-result.js';
 export * from './utils/shell.js';
+export * from './utils/scheduling.js';
 export * from './utils/status-data.js';
 export * from './utils/ui.js';
 export * from './utils/webhook-validator.js';

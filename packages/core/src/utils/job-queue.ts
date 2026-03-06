@@ -6,6 +6,7 @@
 import * as os from 'os';
 import * as path from 'path';
 import Database from 'better-sqlite3';
+import { loadConfig } from '../config.js';
 import {
   DEFAULT_QUEUE_MAX_WAIT_TIME,
   DEFAULT_QUEUE_PRIORITY,
@@ -20,6 +21,7 @@ import type {
   JobType,
   QueueEntryStatus,
 } from '../types.js';
+import { normalizeSchedulingPriority } from './scheduling.js';
 
 /**
  * Get the path to the state database (respects NIGHT_WATCH_HOME override for tests)
@@ -63,6 +65,73 @@ function rowToEntry(row: Record<string, unknown>): IQueueEntry {
     dispatchedAt: row.dispatched_at as number | null,
     expiredAt: row.expired_at as number | null,
   };
+}
+
+function getProjectSchedulingPriority(
+  projectPath: string,
+  cache: Map<string, number>,
+): number {
+  if (cache.has(projectPath)) {
+    return cache.get(projectPath)!;
+  }
+
+  let priority = 3;
+  try {
+    priority = normalizeSchedulingPriority(loadConfig(projectPath).schedulingPriority);
+  } catch {
+    priority = 3;
+  }
+
+  cache.set(projectPath, priority);
+  return priority;
+}
+
+function selectNextPendingEntry(db: Database.Database): IQueueEntry | null {
+  const rows = db
+    .prepare(
+      `SELECT * FROM job_queue
+       WHERE status = 'pending'
+       ORDER BY priority DESC, enqueued_at ASC, id ASC`,
+    )
+    .all() as Array<Record<string, unknown>>;
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  const headByProject = new Map<string, IQueueEntry>();
+  for (const row of rows) {
+    const entry = rowToEntry(row);
+    if (!headByProject.has(entry.projectPath)) {
+      headByProject.set(entry.projectPath, entry);
+    }
+  }
+
+  const priorityCache = new Map<string, number>();
+  const candidates = Array.from(headByProject.values());
+  candidates.sort((left, right) => {
+    if (left.priority !== right.priority) {
+      return right.priority - left.priority;
+    }
+
+    const leftProjectPriority = getProjectSchedulingPriority(left.projectPath, priorityCache);
+    const rightProjectPriority = getProjectSchedulingPriority(right.projectPath, priorityCache);
+    if (leftProjectPriority !== rightProjectPriority) {
+      return rightProjectPriority - leftProjectPriority;
+    }
+
+    if (left.enqueuedAt !== right.enqueuedAt) {
+      return left.enqueuedAt - right.enqueuedAt;
+    }
+
+    if (left.projectName !== right.projectName) {
+      return left.projectName.localeCompare(right.projectName);
+    }
+
+    return left.id - right.id;
+  });
+
+  return candidates[0] ?? null;
 }
 
 /**
@@ -148,18 +217,27 @@ export function removeJob(queueId: number): void {
 export function getNextPendingJob(): IQueueEntry | null {
   const db = openDb();
   try {
-    const row = db
-      .prepare(
-        `SELECT * FROM job_queue
-         WHERE status = 'pending'
-         ORDER BY priority DESC, enqueued_at ASC
-         LIMIT 1`,
-      )
-      .get() as Record<string, unknown> | undefined;
-    return row ? rowToEntry(row) : null;
+    return selectNextPendingEntry(db);
   } finally {
     db.close();
   }
+}
+
+export function getInFlightCount(): number {
+  const db = openDb();
+  try {
+    const running = db
+      .prepare(`SELECT COUNT(*) as count FROM job_queue WHERE status IN ('running', 'dispatched')`)
+      .get() as { count: number } | undefined;
+    return running?.count ?? 0;
+  } finally {
+    db.close();
+  }
+}
+
+export function canStartJob(config?: IQueueConfig): boolean {
+  const maxConcurrency = config?.maxConcurrency ?? 1;
+  return getInFlightCount() < maxConcurrency;
 }
 
 /**
@@ -171,32 +249,21 @@ export function dispatchNextJob(config?: IQueueConfig): IQueueEntry | null {
 
   const db = openDb();
   try {
-    // Check if we're at max concurrency (count both running and dispatched jobs)
+    const maxConcurrency = config?.maxConcurrency ?? 1;
     const running = db
       .prepare(`SELECT COUNT(*) as count FROM job_queue WHERE status IN ('running', 'dispatched')`)
       .get() as { count: number } | undefined;
     const runningCount = running?.count ?? 0;
-    const maxConcurrency = config?.maxConcurrency ?? 1;
 
     if (runningCount >= maxConcurrency) {
       return null;
     }
 
-    // Get next pending job
-    const row = db
-      .prepare(
-        `SELECT * FROM job_queue
-         WHERE status = 'pending'
-         ORDER BY priority DESC, enqueued_at ASC
-         LIMIT 1`,
-      )
-      .get() as Record<string, unknown> | undefined;
-
-    if (!row) {
+    const entry = selectNextPendingEntry(db);
+    if (!entry) {
       return null;
     }
 
-    const entry = rowToEntry(row);
     const now = Math.floor(Date.now() / 1000);
 
     // Mark as dispatched

@@ -307,7 +307,7 @@ describe('server API', () => {
       expect(response.body.planner.installed).toBe(false);
     });
 
-    it('applies cronScheduleOffset to reported schedules and next runs', async () => {
+    it('reports cron-triggered delays without rewriting the configured schedule', async () => {
       vi.useFakeTimers();
       try {
         vi.setSystemTime(new Date('2026-03-05T00:00:00.000Z'));
@@ -327,13 +327,24 @@ describe('server API', () => {
         const response = await request(app).get('/api/schedule-info');
 
         expect(response.status).toBe(200);
-        expect(response.body.executor.schedule).toBe('30 */3 * * *');
-        expect(response.body.reviewer.schedule).toBe('30 */6 * * *');
+        expect(response.body.executor.schedule).toBe('0 */3 * * *');
+        expect(response.body.reviewer.schedule).toBe('0 */6 * * *');
+        expect(response.body.executor.manualDelayMinutes).toBe(30);
+        expect(response.body.executor.balancedDelayMinutes).toBeGreaterThanOrEqual(0);
+        expect(response.body.executor.delayMinutes).toBe(
+          response.body.executor.manualDelayMinutes + response.body.executor.balancedDelayMinutes,
+        );
         expect(response.body.executor.nextRun).toBe(
-          CronExpressionParser.parse('30 */3 * * *').next().toISOString(),
+          new Date(
+            CronExpressionParser.parse('0 */3 * * *').next().getTime() +
+              response.body.executor.delayMinutes * 60_000,
+          ).toISOString(),
         );
         expect(response.body.reviewer.nextRun).toBe(
-          CronExpressionParser.parse('30 */6 * * *').next().toISOString(),
+          new Date(
+            CronExpressionParser.parse('0 */6 * * *').next().getTime() +
+              response.body.reviewer.delayMinutes * 60_000,
+          ).toISOString(),
         );
       } finally {
         vi.useRealTimers();

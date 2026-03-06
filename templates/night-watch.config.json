@@ -21,6 +21,7 @@
   "cronSchedule": "0 0-21 * * *",
   "reviewerSchedule": "0 0,3,6,9,12,15,18,21 * * *",
   "cronScheduleOffset": 0,
+  "schedulingPriority": 3,
   "maxRetries": 3,
   "reviewerMaxRetries": 2,
   "reviewerRetryDelay": 30,
@@ -38,6 +39,18 @@
   "boardProvider": {
     "enabled": true,
     "provider": "github"
+  },
+  "queue": {
+    "enabled": true,
+    "maxConcurrency": 1,
+    "maxWaitTime": 7200,
+    "priority": {
+      "executor": 50,
+      "reviewer": 40,
+      "slicer": 30,
+      "qa": 20,
+      "audit": 10
+    }
   },
   "jobProviders": {},
   "autoMerge": false,

@@ -20,7 +20,11 @@ import {
 } from '@night-watch/core';
 import * as fs from 'fs';
 import * as path from 'path';
-import { buildBaseEnvVars, getTelegramStatusWebhooks } from './shared/env-builder.js';
+import {
+  buildBaseEnvVars,
+  getTelegramStatusWebhooks,
+  maybeApplyCronSchedulingDelay,
+} from './shared/env-builder.js';
 
 export interface IAuditOptions {
   dryRun: boolean;
@@ -125,6 +129,7 @@ export function auditCommand(program: Command): void {
       spinner.start();
 
       try {
+        await maybeApplyCronSchedulingDelay(config, 'audit', projectDir);
         const { exitCode, stdout, stderr } = await executeScriptWithOutput(
           scriptPath,
           [projectDir],

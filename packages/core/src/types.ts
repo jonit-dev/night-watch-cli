@@ -75,8 +75,17 @@ export interface INightWatchConfig {
    */
   scheduleBundleId?: string | null;
 
-  /** Minute offset (0-59) applied to cron schedules during install. Helps stagger multiple projects. */
+  /**
+   * Additional delay in minutes applied before cron-triggered jobs start.
+   * Stacks on top of automatic cross-project balancing.
+   */
   cronScheduleOffset: number;
+
+  /**
+   * Cross-project scheduling priority.
+   * Higher values get earlier balanced start slots and win tie-breakers under queue contention.
+   */
+  schedulingPriority: number;
 
   /** Maximum retry attempts for rate-limited API calls (default: 3) */
   maxRetries: number;
@@ -288,7 +297,7 @@ export interface IQueueConfig {
   /** Whether the global queue is enabled */
   enabled: boolean;
 
-  /** Maximum concurrent jobs (default: 1 for fully serial execution) */
+  /** Maximum concurrent jobs. Current runtime uses serial execution only. */
   maxConcurrency: number;
 
   /** Maximum wait time in seconds before a queued job expires (default: 7200 = 2 hours) */

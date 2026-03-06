@@ -25,7 +25,11 @@ import {
   error as uiError,
   warn,
 } from '@night-watch/core';
-import { buildBaseEnvVars, getTelegramStatusWebhooks } from './shared/env-builder.js';
+import {
+  buildBaseEnvVars,
+  getTelegramStatusWebhooks,
+  maybeApplyCronSchedulingDelay,
+} from './shared/env-builder.js';
 import type { ISliceResult } from '@night-watch/core';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -354,6 +358,7 @@ export function sliceCommand(program: Command): void {
       spinner.start();
 
       try {
+        await maybeApplyCronSchedulingDelay(config, 'slicer', projectDir);
         if (!options.dryRun) {
           await sendNotifications(config, {
             event: 'run_started',

@@ -141,12 +141,8 @@ export function performInstall(
   },
 ): IInstallResult {
   try {
-    const offset = config.cronScheduleOffset ?? 0;
-    const executorSchedule = applyScheduleOffset(options?.schedule || config.cronSchedule, offset);
-    const reviewerSchedule = applyScheduleOffset(
-      options?.reviewerSchedule || config.reviewerSchedule,
-      offset,
-    );
+    const executorSchedule = options?.schedule || config.cronSchedule;
+    const reviewerSchedule = options?.reviewerSchedule || config.reviewerSchedule;
     const nightWatchBin = getNightWatchBinPath();
     const projectName = getProjectName(projectDir);
     const marker = generateMarker(projectName);
@@ -178,6 +174,7 @@ export function performInstall(
     const nodeBinDir = getNodeBinDir();
     const pathPrefix = buildCronPathPrefix(nodeBinDir, nightWatchBin);
     const cliBinPrefix = `export NW_CLI_BIN=${shellQuote(nightWatchBin)} && `;
+    const cronTriggerPrefix = 'export NW_CRON_TRIGGER=1 && ';
 
     let providerEnvPrefix = '';
     if (config.providerEnv && Object.keys(config.providerEnv).length > 0) {
@@ -189,22 +186,22 @@ export function performInstall(
 
     const installExecutor = config.executorEnabled !== false;
     if (installExecutor) {
-      const executorEntry = `${executorSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
+      const executorEntry = `${executorSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
       entries.push(executorEntry);
     }
 
     const installReviewer = options?.noReviewer === true ? false : config.reviewerEnabled;
     if (installReviewer) {
-      const reviewerEntry = `${reviewerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} review >> ${shellQuote(reviewerLog)} 2>&1  ${marker}`;
+      const reviewerEntry = `${reviewerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} review >> ${shellQuote(reviewerLog)} 2>&1  ${marker}`;
       entries.push(reviewerEntry);
     }
 
     // Planner entry (uses roadmap scanner schedule; noSlicer flag kept for backward compatibility)
     const installSlicer = options?.noSlicer === true ? false : config.roadmapScanner.enabled;
     if (installSlicer) {
-      const slicerSchedule = applyScheduleOffset(config.roadmapScanner.slicerSchedule, offset);
+      const slicerSchedule = config.roadmapScanner.slicerSchedule;
       const slicerLog = path.join(logDir, 'slicer.log');
-      const slicerEntry = `${slicerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} planner >> ${shellQuote(slicerLog)} 2>&1  ${marker}`;
+      const slicerEntry = `${slicerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} planner >> ${shellQuote(slicerLog)} 2>&1  ${marker}`;
       entries.push(slicerEntry);
     }
 
@@ -212,9 +209,9 @@ export function performInstall(
     const disableQa = options?.noQa === true || options?.qa === false;
     const installQa = disableQa ? false : config.qa.enabled;
     if (installQa) {
-      const qaSchedule = applyScheduleOffset(config.qa.schedule, offset);
+      const qaSchedule = config.qa.schedule;
       const qaLog = path.join(logDir, 'qa.log');
-      const qaEntry = `${qaSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} qa >> ${shellQuote(qaLog)} 2>&1  ${marker}`;
+      const qaEntry = `${qaSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} qa >> ${shellQuote(qaLog)} 2>&1  ${marker}`;
       entries.push(qaEntry);
     }
 
@@ -222,9 +219,9 @@ export function performInstall(
     const disableAudit = options?.noAudit === true || options?.audit === false;
     const installAudit = disableAudit ? false : config.audit.enabled;
     if (installAudit) {
-      const auditSchedule = applyScheduleOffset(config.audit.schedule, offset);
+      const auditSchedule = config.audit.schedule;
       const auditLog = path.join(logDir, 'audit.log');
-      const auditEntry = `${auditSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} audit >> ${shellQuote(auditLog)} 2>&1  ${marker}`;
+      const auditEntry = `${auditSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} audit >> ${shellQuote(auditLog)} 2>&1  ${marker}`;
       entries.push(auditEntry);
     }
 
@@ -271,16 +268,9 @@ export function installCommand(program: Command): void {
         // Load configuration
         const config = loadConfig(projectDir);
 
-        // Get schedule from options or config, applying offset
-        const offset = config.cronScheduleOffset ?? 0;
-        const executorSchedule = applyScheduleOffset(
-          options.schedule || config.cronSchedule,
-          offset,
-        );
-        const reviewerSchedule = applyScheduleOffset(
-          options.reviewerSchedule || config.reviewerSchedule,
-          offset,
-        );
+        // Get schedules from options or config.
+        const executorSchedule = options.schedule || config.cronSchedule;
+        const reviewerSchedule = options.reviewerSchedule || config.reviewerSchedule;
 
         // Get paths
         const nightWatchBin = getNightWatchBinPath();
@@ -317,6 +307,7 @@ export function installCommand(program: Command): void {
         const nodeBinDir = getNodeBinDir();
         const pathPrefix = buildCronPathPrefix(nodeBinDir, nightWatchBin);
         const cliBinPrefix = `export NW_CLI_BIN=${shellQuote(nightWatchBin)} && `;
+        const cronTriggerPrefix = 'export NW_CRON_TRIGGER=1 && ';
 
         // Build providerEnv export prefix for cron entries
         let providerEnvPrefix = '';
@@ -330,7 +321,7 @@ export function installCommand(program: Command): void {
         // Executor entry (if enabled)
         const installExecutor = config.executorEnabled !== false;
         if (installExecutor) {
-          const executorEntry = `${executorSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
+          const executorEntry = `${executorSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} run >> ${shellQuote(executorLog)} 2>&1  ${marker}`;
           entries.push(executorEntry);
         }
 
@@ -340,7 +331,7 @@ export function installCommand(program: Command): void {
 
         // Reviewer entry (if enabled)
         if (installReviewer) {
-          const reviewerEntry = `${reviewerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} review >> ${shellQuote(reviewerLog)} 2>&1  ${marker}`;
+          const reviewerEntry = `${reviewerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} review >> ${shellQuote(reviewerLog)} 2>&1  ${marker}`;
           entries.push(reviewerEntry);
         }
 
@@ -352,8 +343,8 @@ export function installCommand(program: Command): void {
         let slicerLog: string | undefined;
         if (installSlicer) {
           slicerLog = path.join(logDir, 'slicer.log');
-          const slicerSchedule = applyScheduleOffset(config.roadmapScanner.slicerSchedule, offset);
-          const slicerEntry = `${slicerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} planner >> ${shellQuote(slicerLog)} 2>&1  ${marker}`;
+          const slicerSchedule = config.roadmapScanner.slicerSchedule;
+          const slicerEntry = `${slicerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} planner >> ${shellQuote(slicerLog)} 2>&1  ${marker}`;
           entries.push(slicerEntry);
         }
 
@@ -365,8 +356,8 @@ export function installCommand(program: Command): void {
         let qaLog: string | undefined;
         if (installQa) {
           qaLog = path.join(logDir, 'qa.log');
-          const qaSchedule = applyScheduleOffset(config.qa.schedule, offset);
-          const qaEntry = `${qaSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} qa >> ${shellQuote(qaLog)} 2>&1  ${marker}`;
+          const qaSchedule = config.qa.schedule;
+          const qaEntry = `${qaSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} qa >> ${shellQuote(qaLog)} 2>&1  ${marker}`;
           entries.push(qaEntry);
         }
 
@@ -378,8 +369,8 @@ export function installCommand(program: Command): void {
         let auditLog: string | undefined;
         if (installAudit) {
           auditLog = path.join(logDir, 'audit.log');
-          const auditSchedule = applyScheduleOffset(config.audit.schedule, offset);
-          const auditEntry = `${auditSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} audit >> ${shellQuote(auditLog)} 2>&1  ${marker}`;
+          const auditSchedule = config.audit.schedule;
+          const auditEntry = `${auditSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} audit >> ${shellQuote(auditLog)} 2>&1  ${marker}`;
           entries.push(auditEntry);
         }
 

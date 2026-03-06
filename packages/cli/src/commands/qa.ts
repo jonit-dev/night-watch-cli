@@ -26,6 +26,7 @@ import {
   buildBaseEnvVars,
   formatProviderDisplay,
   getTelegramStatusWebhooks,
+  maybeApplyCronSchedulingDelay,
 } from './shared/env-builder.js';
 import * as path from 'path';
 
@@ -211,6 +212,7 @@ export function qaCommand(program: Command): void {
       spinner.start();
 
       try {
+        await maybeApplyCronSchedulingDelay(config, 'qa', projectDir);
         const { exitCode, stdout, stderr } = await executeScriptWithOutput(
           scriptPath,
           [projectDir],

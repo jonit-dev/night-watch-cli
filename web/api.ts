@@ -160,12 +160,48 @@ export interface DoctorCheck {
 // ==================== Schedule Info ====================
 
 export interface IScheduleInfo {
-  executor: { schedule: string; installed: boolean; nextRun: string | null };
-  reviewer: { schedule: string; installed: boolean; nextRun: string | null };
-  qa?: { schedule: string; installed: boolean; nextRun: string | null };
-  audit?: { schedule: string; installed: boolean; nextRun: string | null };
-  planner?: { schedule: string; installed: boolean; nextRun: string | null };
+  executor: {
+    schedule: string;
+    installed: boolean;
+    nextRun: string | null;
+    delayMinutes: number;
+    manualDelayMinutes: number;
+    balancedDelayMinutes: number;
+  };
+  reviewer: {
+    schedule: string;
+    installed: boolean;
+    nextRun: string | null;
+    delayMinutes: number;
+    manualDelayMinutes: number;
+    balancedDelayMinutes: number;
+  };
+  qa?: {
+    schedule: string;
+    installed: boolean;
+    nextRun: string | null;
+    delayMinutes: number;
+    manualDelayMinutes: number;
+    balancedDelayMinutes: number;
+  };
+  audit?: {
+    schedule: string;
+    installed: boolean;
+    nextRun: string | null;
+    delayMinutes: number;
+    manualDelayMinutes: number;
+    balancedDelayMinutes: number;
+  };
+  planner?: {
+    schedule: string;
+    installed: boolean;
+    nextRun: string | null;
+    delayMinutes: number;
+    manualDelayMinutes: number;
+    balancedDelayMinutes: number;
+  };
   paused: boolean;
+  schedulingPriority: number;
   entries: string[];
 }
 

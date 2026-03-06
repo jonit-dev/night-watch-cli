@@ -868,8 +868,8 @@ __night_watch_queue_cleanup() {
   if [ "${NW_QUEUE_CLEANUP_ARMED:-0}" = "1" ]; then
     NW_QUEUE_CLEANUP_ARMED=0
     complete_queued_job
-    release_global_gate
     dispatch_next_queued_job
+    release_global_gate
   fi
 
   return "${exit_code}"
@@ -935,6 +935,16 @@ dispatch_next_queued_job() {
 
   # Call CLI to dispatch next job (this handles priority, expiration, and spawning)
   "${cli_bin}" queue dispatch --log "${LOG_FILE:-/dev/null}" 2>/dev/null || true
+}
+
+queue_can_start_now() {
+  local cli_bin
+  cli_bin=$(resolve_night_watch_cli) || {
+    log "WARN: Cannot resolve night-watch CLI for queue slot check"
+    return 0
+  }
+
+  "${cli_bin}" queue can-start >/dev/null 2>&1
 }
 
 complete_queued_job() {
