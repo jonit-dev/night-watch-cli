@@ -58,8 +58,8 @@ describe('config', () => {
       expect(config.branchPatterns).toEqual(['feat/', 'night-watch/']);
       expect(config.minReviewScore).toBe(80);
       expect(config.maxLogSize).toBe(524288);
-      expect(config.cronSchedule).toBe('5 */3 * * *');
-      expect(config.reviewerSchedule).toBe('25 */6 * * *');
+      expect(config.cronSchedule).toBe('5 */2 * * *');
+      expect(config.reviewerSchedule).toBe('25 */3 * * *');
       expect(config.scheduleBundleId).toBeNull();
     });
 
@@ -116,8 +116,8 @@ describe('config', () => {
       expect(config.branchPrefix).toBe('night-watch');
       expect(config.minReviewScore).toBe(80);
       expect(config.maxLogSize).toBe(524288);
-      expect(config.cronSchedule).toBe('5 */3 * * *');
-      expect(config.reviewerSchedule).toBe('25 */6 * * *');
+      expect(config.cronSchedule).toBe('5 */2 * * *');
+      expect(config.reviewerSchedule).toBe('25 */3 * * *');
     });
 
     it('should load scheduleBundleId from config file', () => {
@@ -1048,7 +1048,7 @@ describe('config', () => {
 
       expect(config.qa).toBeDefined();
       expect(config.qa.enabled).toBe(true);
-      expect(config.qa.schedule).toBe('45 2,14 * * *');
+      expect(config.qa.schedule).toBe('45 2,10,18 * * *');
       expect(config.qa.maxRuntime).toBe(3600);
       expect(config.qa.branchPatterns).toEqual([]);
       expect(config.qa.artifacts).toBe('both');

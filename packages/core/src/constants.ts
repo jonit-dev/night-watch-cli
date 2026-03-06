@@ -29,8 +29,8 @@ export const DEFAULT_MAX_RUNTIME = 7200;
 export const DEFAULT_REVIEWER_MAX_RUNTIME = 3600;
 
 // Cron Schedule Configuration
-export const DEFAULT_CRON_SCHEDULE = '5 */3 * * *';
-export const DEFAULT_REVIEWER_SCHEDULE = '25 */6 * * *';
+export const DEFAULT_CRON_SCHEDULE = '5 */2 * * *';
+export const DEFAULT_REVIEWER_SCHEDULE = '25 */3 * * *';
 
 // Schedule Offset
 export const DEFAULT_CRON_SCHEDULE_OFFSET = 0;
@@ -77,7 +77,7 @@ export const DEFAULT_NOTIFICATIONS: INotificationConfig = { webhooks: [] };
 export const DEFAULT_PRD_PRIORITY: string[] = [];
 
 // Roadmap Scanner Configuration
-export const DEFAULT_SLICER_SCHEDULE = '35 */12 * * *'; // every 12 hours (staggered)
+export const DEFAULT_SLICER_SCHEDULE = '35 */6 * * *'; // every 6 hours (staggered)
 export const DEFAULT_SLICER_MAX_RUNTIME = 600; // 10 minutes
 
 export const DEFAULT_ROADMAP_SCANNER: IRoadmapScannerConfig = {
@@ -108,7 +108,7 @@ export const VALID_MERGE_METHODS: MergeMethod[] = ['squash', 'merge', 'rebase'];
 
 // QA Configuration
 export const DEFAULT_QA_ENABLED = true;
-export const DEFAULT_QA_SCHEDULE = '45 2,14 * * *'; // 2x daily, staggered
+export const DEFAULT_QA_SCHEDULE = '45 2,10,18 * * *'; // 3x daily, staggered
 export const DEFAULT_QA_MAX_RUNTIME = 3600; // 1 hour
 export const DEFAULT_QA_ARTIFACTS: QaArtifacts = 'both';
 export const DEFAULT_QA_SKIP_LABEL = 'skip-qa';
