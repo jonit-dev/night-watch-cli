@@ -8,15 +8,10 @@ import { Command } from 'commander';
 import {
   acquireLock,
   checkRateLimited,
-  claimPrd,
   cleanupWorktrees,
   detectDefaultBranch,
-  findEligiblePrd,
-  isClaimed,
-  markPrdDone,
   prepareBranchWorktree,
   prepareDetachedWorktree,
-  releaseClaim,
   releaseLock,
   rotateLog,
 } from '@night-watch/core';
@@ -59,98 +54,6 @@ export function cronCommand(program: Command): void {
     .action((lockFile: string) => {
       releaseLock(lockFile);
       process.exit(0);
-    });
-
-  // find-eligible: Find an eligible PRD file
-  cron
-    .command('find-eligible <projectDir>')
-    .description('Find an eligible PRD for execution')
-    .option('--prd-dir <path>', 'PRD directory relative to project', 'docs/prds')
-    .option('--max-runtime <seconds>', 'Maximum runtime in seconds', '7200')
-    .option('--prd-priority <list>', 'Colon-separated PRD priority list')
-    .action(
-      (
-        projectDir: string,
-        options: { prdDir: string; maxRuntime: string; prdPriority?: string },
-      ) => {
-        const maxRuntime = parseInt(options.maxRuntime, 10);
-        if (isNaN(maxRuntime) || maxRuntime < 0) {
-          process.stderr.write(`Invalid max-runtime: ${options.maxRuntime}\n`);
-          process.exit(2);
-        }
-
-        const prdDir = options.prdDir;
-
-        const result = findEligiblePrd({
-          prdDir,
-          projectDir,
-          maxRuntime,
-          prdPriority: options.prdPriority,
-        });
-
-        if (result) {
-          process.stdout.write(result + '\n');
-          process.exit(0);
-        } else {
-          process.exit(1); // no eligible PRD
-        }
-      },
-    );
-
-  // claim: Claim a PRD file
-  cron
-    .command('claim <prdDir> <prdFile>')
-    .description('Claim a PRD for execution')
-    .option('--pid <n>', 'PID to write to claim file', String(process.pid))
-    .action((prdDir: string, prdFile: string, options: { pid: string }) => {
-      const pid = parseInt(options.pid, 10);
-      if (isNaN(pid)) {
-        process.stderr.write(`Invalid PID: ${options.pid}\n`);
-        process.exit(2);
-      }
-
-      claimPrd(prdDir, prdFile, pid);
-      process.exit(0);
-    });
-
-  // release-claim: Release a PRD claim
-  cron
-    .command('release-claim <prdDir> <prdFile>')
-    .description('Release a PRD claim')
-    .action((prdDir: string, prdFile: string) => {
-      releaseClaim(prdDir, prdFile);
-      process.exit(0);
-    });
-
-  // is-claimed: Check if PRD is claimed (exit 0=claimed, 1=not)
-  cron
-    .command('is-claimed <prdDir> <prdFile>')
-    .description('Check if a PRD is claimed')
-    .option('--max-runtime <seconds>', 'Maximum runtime in seconds', '7200')
-    .action((prdDir: string, prdFile: string, options: { maxRuntime: string }) => {
-      const maxRuntime = parseInt(options.maxRuntime, 10);
-      if (isNaN(maxRuntime) || maxRuntime < 0) {
-        process.stderr.write(`Invalid max-runtime: ${options.maxRuntime}\n`);
-        process.exit(2);
-      }
-
-      if (isClaimed(prdDir, prdFile, maxRuntime)) {
-        process.exit(0); // claimed
-      } else {
-        process.exit(1); // not claimed
-      }
-    });
-
-  // mark-done: Mark a PRD as done
-  cron
-    .command('mark-done <prdDir> <prdFile>')
-    .description('Mark a PRD as done by moving to done/ directory')
-    .action((prdDir: string, prdFile: string) => {
-      if (markPrdDone(prdDir, prdFile)) {
-        process.exit(0); // done
-      } else {
-        process.exit(1); // failed (file not found)
-      }
     });
 
   // prepare-worktree: Prepare a worktree for a branch

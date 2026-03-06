@@ -19,15 +19,10 @@ vi.mock('@night-watch/core', async (importOriginal) => {
     ...actual,
     acquireLock: vi.fn(),
     checkRateLimited: vi.fn(),
-    claimPrd: vi.fn(),
     cleanupWorktrees: vi.fn(),
     detectDefaultBranch: vi.fn(),
-    findEligiblePrd: vi.fn(),
-    isClaimed: vi.fn(),
-    markPrdDone: vi.fn(),
     prepareBranchWorktree: vi.fn(),
     prepareDetachedWorktree: vi.fn(),
-    releaseClaim: vi.fn(),
     releaseLock: vi.fn(),
     rotateLog: vi.fn(),
   };
@@ -41,15 +36,10 @@ import { cronCommand } from '@/cli/commands/cron.js';
 import {
   acquireLock,
   checkRateLimited,
-  claimPrd,
   cleanupWorktrees,
   detectDefaultBranch,
-  findEligiblePrd,
-  isClaimed,
-  markPrdDone,
   prepareBranchWorktree,
   prepareDetachedWorktree,
-  releaseClaim,
   releaseLock,
   rotateLog,
 } from '@night-watch/core';
@@ -162,76 +152,6 @@ describe('cron release-lock', () => {
 
     await expect(runCron(['release-lock', '/tmp/nw.lock'])).rejects.toThrow('process.exit(0)');
     expect(releaseLock).toHaveBeenCalledWith('/tmp/nw.lock');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// find-eligible
-// ---------------------------------------------------------------------------
-
-describe('cron find-eligible', () => {
-  it('writes the prd filename and exits 0 when an eligible prd is found', async () => {
-    vi.mocked(findEligiblePrd).mockReturnValue('phase1.md');
-
-    await expect(runCron(['find-eligible', '/some/project'])).rejects.toThrow('process.exit(0)');
-    expect(stdoutSpy).toHaveBeenCalledWith('phase1.md\n');
-  });
-
-  it('exits 1 when no eligible prd is found', async () => {
-    vi.mocked(findEligiblePrd).mockReturnValue(null);
-
-    await expect(runCron(['find-eligible', '/some/project'])).rejects.toThrow('process.exit(1)');
-  });
-
-  it('exits 2 when --max-runtime is not a number', async () => {
-    await expect(
-      runCron(['find-eligible', '/some/project', '--max-runtime', 'notanumber']),
-    ).rejects.toThrow('process.exit(2)');
-    expect(findEligiblePrd).not.toHaveBeenCalled();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// is-claimed
-// ---------------------------------------------------------------------------
-
-describe('cron is-claimed', () => {
-  it('exits 0 when the prd is claimed', async () => {
-    vi.mocked(isClaimed).mockReturnValue(true);
-
-    await expect(runCron(['is-claimed', '/some/prdDir', 'phase1.md'])).rejects.toThrow(
-      'process.exit(0)',
-    );
-  });
-
-  it('exits 1 when the prd is not claimed', async () => {
-    vi.mocked(isClaimed).mockReturnValue(false);
-
-    await expect(runCron(['is-claimed', '/some/prdDir', 'phase1.md'])).rejects.toThrow(
-      'process.exit(1)',
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// mark-done
-// ---------------------------------------------------------------------------
-
-describe('cron mark-done', () => {
-  it('exits 0 when markPrdDone returns true', async () => {
-    vi.mocked(markPrdDone).mockReturnValue(true);
-
-    await expect(runCron(['mark-done', '/some/prdDir', 'phase1.md'])).rejects.toThrow(
-      'process.exit(0)',
-    );
-  });
-
-  it('exits 1 when markPrdDone returns false', async () => {
-    vi.mocked(markPrdDone).mockReturnValue(false);
-
-    await expect(runCron(['mark-done', '/some/prdDir', 'phase1.md'])).rejects.toThrow(
-      'process.exit(1)',
-    );
   });
 });
 
