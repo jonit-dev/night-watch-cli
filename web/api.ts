@@ -431,8 +431,6 @@ export interface IQueueStatusEntry {
   enqueuedAt: number;
   dispatchedAt: number | null;
   providerKey?: string;
-  aiPressure?: number;
-  runtimePressure?: number;
 }
 
 export interface IQueueStatus {
@@ -444,11 +442,6 @@ export interface IQueueStatus {
     byProviderBucket: Record<string, number>;
   };
   items: IQueueStatusEntry[];
-  pressureByBucket: Record<string, {
-    aiPressure: number;
-    runtimePressure: number;
-    count: number;
-  }>;
   averageWaitSeconds: number | null;
   oldestPendingAge: number | null;
 }
@@ -475,8 +468,6 @@ export interface IQueueAnalytics {
   byProviderBucket: Record<string, {
     running: number;
     pending: number;
-    totalAiPressure: number;
-    totalRuntimePressure: number;
   }>;
   averageWaitSeconds: number | null;
   oldestPendingAge: number | null;

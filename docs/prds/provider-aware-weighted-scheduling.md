@@ -1,3 +1,5 @@
+> **Note:** The dual-pressure model (`aiPressure`/`runtimePressure`) described in this PRD was removed in favor of simple per-bucket `maxConcurrency`. See `docs/prds/simplify-scheduler-pressure-model.md`.
+
 # PRD: Provider-Aware Weighted Scheduling and Execution Insights
 
 **Complexity: 10 -> HIGH mode**

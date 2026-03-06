@@ -84,7 +84,6 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     },
     queue: {
       enabled: true,
-      mode: 'conservative',
       maxConcurrency: 1,
       maxWaitTime: 7200,
       priority: {
@@ -94,14 +93,6 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
         qa: 20,
         audit: 10,
       },
-      jobWeights: {
-        executor: { aiPressure: 5, runtimePressure: 4 },
-        reviewer: { aiPressure: 2, runtimePressure: 2 },
-        qa: { aiPressure: 1, runtimePressure: 4 },
-        audit: { aiPressure: 4, runtimePressure: 3 },
-        slicer: { aiPressure: 4, runtimePressure: 2 },
-      },
-      providerBuckets: {},
     },
   };
 
@@ -222,7 +213,6 @@ function makeQueueStatus(overrides: Partial<IQueueStatus> = {}): IQueueStatus {
     running: null,
     pending: { total: 0, byType: {}, byProviderBucket: {} },
     items: [],
-    pressureByBucket: {},
     averageWaitSeconds: null,
     oldestPendingAge: null,
   };
@@ -514,21 +504,17 @@ describe('Scheduling page', () => {
     expect(executionRuns.length).toBeGreaterThan(0);
   });
 
-  it('renders pending queue pressure summary', async () => {
+  it('renders provider bucket summary from analytics', async () => {
     apiMocks.fetchQueueAnalytics.mockResolvedValue(
       makeQueueAnalytics({
         byProviderBucket: {
           'claude-native': {
             running: 1,
             pending: 2,
-            totalAiPressure: 3.5,
-            totalRuntimePressure: 1.2,
           },
           codex: {
             running: 0,
             pending: 1,
-            totalAiPressure: 1.0,
-            totalRuntimePressure: 0.5,
           },
         },
         averageWaitSeconds: 45,
@@ -539,16 +525,16 @@ describe('Scheduling page', () => {
     renderScheduling();
 
     await waitFor(() => {
-      expect(screen.getByTestId('queue-pressure-bars')).toBeInTheDocument();
+      expect(screen.getByTestId('provider-bucket-summary')).toBeInTheDocument();
     });
 
-    expect(screen.getByTestId('pressure-bucket-claude-native')).toBeInTheDocument();
-    expect(screen.getByTestId('pressure-bucket-codex')).toBeInTheDocument();
-    // Multiple buckets each render AI + runtime pressure bars
-    const aiPressureBars = screen.getAllByTestId('pressure-bar-ai-pressure');
-    expect(aiPressureBars.length).toBeGreaterThanOrEqual(2);
-    const runtimePressureBars = screen.getAllByTestId('pressure-bar-runtime-pressure');
-    expect(runtimePressureBars.length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByTestId('provider-bucket-claude-native')).toBeInTheDocument();
+    expect(screen.getByTestId('provider-bucket-codex')).toBeInTheDocument();
+    // Verify running/pending counts appear as text
+    expect(screen.getByTestId('provider-bucket-claude-native')).toHaveTextContent('1 running');
+    expect(screen.getByTestId('provider-bucket-claude-native')).toHaveTextContent('2 pending');
+    expect(screen.getByTestId('provider-bucket-codex')).toHaveTextContent('0 running');
+    expect(screen.getByTestId('provider-bucket-codex')).toHaveTextContent('1 pending');
   });
 
   it('keeps cron controls available after dashboard refresh', async () => {

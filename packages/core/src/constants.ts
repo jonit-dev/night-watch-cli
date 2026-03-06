@@ -7,9 +7,7 @@ import {
   ClaudeModel,
   IAuditConfig,
   IJobProviders,
-  IJobWeight,
   INotificationConfig,
-  IProviderBucketConfig,
   IQaConfig,
   IQueueConfig,
   IRoadmapScannerConfig,
@@ -203,29 +201,12 @@ export const DEFAULT_QUEUE_PRIORITY: Record<string, number> = {
   audit: 10,
 };
 
-/**
- * Default per-job-type pressure weights for provider-aware scheduling.
- * aiPressure: relative load on the AI provider API (0–10).
- * runtimePressure: relative local CPU/wall-clock cost (0–10).
- */
-export const DEFAULT_JOB_WEIGHTS: Record<string, IJobWeight> = {
-  executor: { aiPressure: 5, runtimePressure: 4 },
-  reviewer: { aiPressure: 2, runtimePressure: 2 },
-  qa: { aiPressure: 1, runtimePressure: 4 },
-  audit: { aiPressure: 4, runtimePressure: 3 },
-  slicer: { aiPressure: 4, runtimePressure: 2 },
-};
-
-/** Default provider bucket configs (empty — no per-bucket limits unless user configures them). */
-export const DEFAULT_PROVIDER_BUCKETS: Record<string, IProviderBucketConfig> = {};
-
 export const DEFAULT_QUEUE: IQueueConfig = {
   enabled: DEFAULT_QUEUE_ENABLED,
   mode: DEFAULT_QUEUE_MODE,
   maxConcurrency: DEFAULT_QUEUE_MAX_CONCURRENCY,
   maxWaitTime: DEFAULT_QUEUE_MAX_WAIT_TIME,
   priority: { ...DEFAULT_QUEUE_PRIORITY },
-  jobWeights: { ...DEFAULT_JOB_WEIGHTS },
   providerBuckets: {},
 };
 

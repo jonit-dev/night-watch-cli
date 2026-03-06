@@ -307,7 +307,7 @@ describe('provider-aware scheduler: conservative mode', () => {
   });
 });
 
-describe('provider-aware scheduler: same-bucket heavy jobs do not dispatch in parallel', () => {
+describe('provider-aware scheduler: same-bucket jobs blocked when bucket maxConcurrency exhausted', () => {
   it('blocks second executor for the same bucket when bucket maxConcurrency=1 is exhausted', () => {
     const config = {
       enabled: true,
@@ -317,27 +317,18 @@ describe('provider-aware scheduler: same-bucket heavy jobs do not dispatch in pa
       priority: { executor: 50, reviewer: 40, slicer: 30, qa: 20, audit: 10 },
       jobWeights: {},
       providerBuckets: {
-        'claude-native': { maxConcurrency: 1, aiCapacity: 6, runtimeCapacity: 6 },
+        'claude-native': { maxConcurrency: 1 },
       },
     };
 
     // Enqueue first executor for claude-native, dispatch and mark running
-    const id1 = enqueueJob(
-      '/p/a',
-      'a',
-      'executor',
-      {},
-      config,
-      'claude-native',
-      5,
-      4,
-    );
+    const id1 = enqueueJob('/p/a', 'a', 'executor', {}, config, 'claude-native');
     const first = dispatchNextJob(config);
     expect(first?.id).toBe(id1);
     markJobRunning(first!.id);
 
     // Enqueue second executor for the same claude-native bucket
-    enqueueJob('/p/b', 'b', 'executor', {}, config, 'claude-native', 5, 4);
+    enqueueJob('/p/b', 'b', 'executor', {}, config, 'claude-native');
 
     // Second dispatch must be blocked — bucket concurrency exhausted
     const second = dispatchNextJob(config);
@@ -355,19 +346,19 @@ describe('provider-aware scheduler: cross-bucket jobs can dispatch in parallel',
       priority: { executor: 50, reviewer: 40, slicer: 30, qa: 20, audit: 10 },
       jobWeights: {},
       providerBuckets: {
-        'claude-native': { maxConcurrency: 1, aiCapacity: 6, runtimeCapacity: 6 },
-        codex: { maxConcurrency: 1, aiCapacity: 6, runtimeCapacity: 6 },
+        'claude-native': { maxConcurrency: 1 },
+        codex: { maxConcurrency: 1 },
       },
     };
 
     // Enqueue and mark an executor for claude-native as running
-    const id1 = enqueueJob('/p/a', 'a', 'executor', {}, config, 'claude-native', 5, 4);
+    const id1 = enqueueJob('/p/a', 'a', 'executor', {}, config, 'claude-native');
     const first = dispatchNextJob(config);
     expect(first?.id).toBe(id1);
     markJobRunning(first!.id);
 
     // Enqueue a reviewer for codex — different bucket
-    enqueueJob('/p/b', 'b', 'reviewer', {}, config, 'codex', 2, 2);
+    enqueueJob('/p/b', 'b', 'reviewer', {}, config, 'codex');
 
     // Second dispatch should succeed (cross-bucket, global concurrency=2 not exhausted)
     const second = dispatchNextJob(config);
@@ -376,20 +367,20 @@ describe('provider-aware scheduler: cross-bucket jobs can dispatch in parallel',
   });
 });
 
-describe('enqueueJob with provider metadata', () => {
-  it('stores and returns providerKey, aiPressure, runtimePressure', () => {
-    const id = enqueueJob('/p/a', 'a', 'executor', {}, undefined, 'claude-native', 5, 4);
+describe('enqueueJob stores providerKey but not pressure fields', () => {
+  it('stores providerKey and returns it on retrieval', () => {
+    const id = enqueueJob('/p/a', 'a', 'executor', {}, undefined, 'claude-native');
     const entry = getQueueEntry(id);
     expect(entry?.providerKey).toBe('claude-native');
-    expect(entry?.aiPressure).toBe(5);
-    expect(entry?.runtimePressure).toBe(4);
+    expect((entry as Record<string, unknown>)?.['aiPressure']).toBeUndefined();
+    expect((entry as Record<string, unknown>)?.['runtimePressure']).toBeUndefined();
   });
 
-  it('stores null when no provider metadata is given', () => {
+  it('stores undefined providerKey when no provider is given', () => {
     const id = enqueueJob('/p/a', 'a', 'reviewer', {});
     const entry = getQueueEntry(id);
     expect(entry?.providerKey).toBeUndefined();
-    expect(entry?.aiPressure).toBeUndefined();
-    expect(entry?.runtimePressure).toBeUndefined();
+    expect((entry as Record<string, unknown>)?.['aiPressure']).toBeUndefined();
+    expect((entry as Record<string, unknown>)?.['runtimePressure']).toBeUndefined();
   });
 });

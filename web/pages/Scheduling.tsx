@@ -28,7 +28,7 @@ import {
   updateConfig,
   useApi,
 } from '../api';
-import QueuePressureBars from '../components/scheduling/QueuePressureBars';
+import ProviderBucketSummary from '../components/scheduling/ProviderBucketSummary';
 import ScheduleTimeline from '../components/scheduling/ScheduleTimeline';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -540,11 +540,11 @@ const Scheduling: React.FC = () => {
         </Card>
       </div>
 
-      {/* 2. Queue Pressure */}
+      {/* 2. Provider Buckets */}
       {queueAnalytics && (
         <Card className="p-6">
-          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide mb-4">Queue Pressure</h3>
-          <QueuePressureBars analytics={queueAnalytics} />
+          <h3 className="text-sm font-semibold text-slate-300 uppercase tracking-wide mb-4">Provider Buckets</h3>
+          <ProviderBucketSummary analytics={queueAnalytics} />
         </Card>
       )}
 

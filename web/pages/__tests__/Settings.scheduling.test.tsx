@@ -81,7 +81,6 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     },
     queue: {
       enabled: true,
-      mode: 'conservative',
       maxConcurrency: 1,
       maxWaitTime: 7200,
       priority: {
@@ -91,14 +90,6 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
         qa: 20,
         audit: 10,
       },
-      jobWeights: {
-        executor: { aiPressure: 5, runtimePressure: 4 },
-        reviewer: { aiPressure: 2, runtimePressure: 2 },
-        qa: { aiPressure: 1, runtimePressure: 4 },
-        audit: { aiPressure: 4, runtimePressure: 3 },
-        slicer: { aiPressure: 4, runtimePressure: 2 },
-      },
-      providerBuckets: {},
     },
   };
 
