@@ -4,15 +4,20 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
-**Autonomous PRD execution using AI Provider CLIs + cron**
+**Overnight PRD execution for AI-native devs and small teams**
 
-Night Watch is a battle-tested autonomous PRD executor that uses AI provider CLIs (Claude CLI or Codex) + cron to implement PRD tickets, open PRs, and fix CI failures — all while you sleep.
+Night Watch is an async execution layer for well-scoped engineering work. It takes PRDs or queued board items, runs Claude CLI or Codex in isolated git worktrees, and opens pull requests while you're offline.
+
+Think of it as a repo night shift: you define the work during the day, Night Watch executes the queue overnight, and you wake up to PRs, review fixes, QA output, and audit results.
+
+Night Watch is built for AI-native solo developers, maintainers, and small teams that already work from specs. It is not trying to replace every engineering workflow or turn software delivery into a hands-off black box.
 
 ---
 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Who It's For](#who-its-for)
 - [Supported Providers](#supported-providers)
 - [Using GLM-5 or Custom Endpoints](#using-glm-5-or-custom-endpoints)
 - [Installation](#installation)
@@ -34,7 +39,7 @@ night-watch init
 # 3. Check provider detection
 night-watch run --dry-run
 
-# 4. Add your PRD files
+# 4. Add a well-scoped PRD
 echo "# My First PRD\n\nImplement feature X..." > docs/PRDs/night-watch/my-feature.md
 
 # 5. Run or install cron
@@ -44,12 +49,29 @@ night-watch install       # Setup automated cron
 
 ---
 
+## Who It's For
+
+Night Watch is strongest when:
+
+- You already use structured specs, PRDs, or queued board items
+- You want async execution, not another pair-programming UI
+- Your work can be broken into small, reviewable pull requests
+- You care about overnight throughput on bounded tasks like maintenance, review fixes, QA, and backlog chores
+
+Night Watch is a weaker fit when:
+
+- Work starts vague and gets clarified only during implementation
+- Your team is not comfortable reviewing AI-generated pull requests
+- You want a general-purpose AI coding assistant rather than a queue-based execution system
+
+---
+
 ## Supported Providers
 
-| Provider | CLI Command | Auto-Mode Flag | Slash Commands |
-|----------|-------------|----------------|----------------|
-| `claude` | `claude` | `--dangerously-skip-permissions` | `-p "/command-name"` |
-| `codex` | `codex` | `--yolo` | `--prompt "text"` |
+| Provider | CLI Command | Auto-Mode Flag                   | Slash Commands       |
+| -------- | ----------- | -------------------------------- | -------------------- |
+| `claude` | `claude`    | `--dangerously-skip-permissions` | `-p "/command-name"` |
+| `codex`  | `codex`     | `--yolo`                         | `--prompt "text"`    |
 
 - Default provider is `claude`
 - Change with `--provider codex` flag or `"provider": "codex"` in config
@@ -73,17 +95,18 @@ Add `providerEnv` to your `night-watch.config.json`:
 ```
 
 These variables are:
+
 - **Injected into the provider CLI process** at runtime (`night-watch run`, `night-watch review`)
 - **Exported in cron entries** when you run `night-watch install`, so automated runs also pick them up
 - **Visible in `--dry-run` output** for easy debugging
 
 ### Common Use Cases
 
-| Use Case | Environment Variables |
-|----------|----------------------|
+| Use Case                  | Environment Variables                     |
+| ------------------------- | ----------------------------------------- |
 | GLM-5 via custom endpoint | `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` |
-| Proxy / VPN routing | `HTTPS_PROXY`, `HTTP_PROXY` |
-| Custom model selection | Any provider-specific env var |
+| Proxy / VPN routing       | `HTTPS_PROXY`, `HTTP_PROXY`               |
+| Custom model selection    | Any provider-specific env var             |
 
 See [Configuration > Provider Environment](docs/configuration.md#provider-environment-providerenv) for full details.
 
@@ -115,15 +138,15 @@ npm install && npm run build && npm link
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [Commands Reference](docs/commands.md) | All CLI commands and their options |
-| [Configuration](docs/configuration.md) | Config file, environment variables, CLI flags, `providerEnv`, notifications |
-| [PRD Format](docs/prd-format.md) | How to write PRDs, dependencies, lifecycle |
-| [Architecture](docs/architecture.md) | System design, execution flows, project structure |
-| [Troubleshooting](docs/troubleshooting.md) | Common errors and how to fix them |
-| [Local Testing](docs/local-testing.md) | Test the CLI locally without publishing |
-| [Contributing](docs/contributing.md) | Development setup, building, testing, publishing |
+| Document                                   | Description                                                                 |
+| ------------------------------------------ | --------------------------------------------------------------------------- |
+| [Commands Reference](docs/commands.md)     | All CLI commands and their options                                          |
+| [Configuration](docs/configuration.md)     | Config file, environment variables, CLI flags, `providerEnv`, notifications |
+| [PRD Format](docs/prd-format.md)           | How to write PRDs, dependencies, lifecycle                                  |
+| [Architecture](docs/architecture.md)       | System design, execution flows, project structure                           |
+| [Troubleshooting](docs/troubleshooting.md) | Common errors and how to fix them                                           |
+| [Local Testing](docs/local-testing.md)     | Test the CLI locally without publishing                                     |
+| [Contributing](docs/contributing.md)       | Development setup, building, testing, publishing                            |
 
 ---
 

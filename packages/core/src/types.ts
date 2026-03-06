@@ -69,6 +69,12 @@ export interface INightWatchConfig {
   /** Cron schedule for PR reviewer */
   reviewerSchedule: string;
 
+  /**
+   * Optional persisted schedule bundle/template identifier selected in Settings UI
+   * (e.g. "always-on", "night-surge"). Null/undefined means custom schedules.
+   */
+  scheduleBundleId?: string | null;
+
   /** Minute offset (0-59) applied to cron schedules during install. Helps stagger multiple projects. */
   cronScheduleOffset: number;
 
@@ -94,6 +100,13 @@ export interface INightWatchConfig {
 
   /** Extra environment variables to pass to the provider CLI (e.g. API keys, base URLs) */
   providerEnv: Record<string, string>;
+
+  /**
+   * Optional human-friendly label for the AI provider shown in PR bodies, review comments,
+   * board comments, and commit co-authors. Auto-derived if not set.
+   * e.g. "GLM-5", "Codex", "Claude" — useful when using a proxy (ANTHROPIC_BASE_URL).
+   */
+  providerLabel?: string;
 
   /**
    * When true, automatically fall back to native Claude (OAuth / direct Anthropic API)
@@ -226,6 +239,12 @@ export interface IRoadmapScannerConfig {
 
   /** Maximum runtime in seconds for the slicer */
   slicerMaxRuntime: number;
+
+  /** Source prioritization strategy when both roadmap and audit findings are available */
+  priorityMode?: 'roadmap-first' | 'audit-first';
+
+  /** Board column used when planner auto-creates an issue after PRD generation */
+  issueColumn?: 'Draft' | 'Ready';
 }
 
 /**

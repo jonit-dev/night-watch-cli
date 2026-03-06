@@ -111,7 +111,7 @@ describe('init command', () => {
   });
 
   describeIfExternalTools('should copy slash command templates', () => {
-    it('should create instructions/night-watch.md', () => {
+    it('should create instructions/executor.md', () => {
       // Initialize git repo
       execSync('git init', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
@@ -125,25 +125,25 @@ describe('init command', () => {
       });
 
       const instructionsDir = path.join(tempDir, 'instructions');
-      const nightWatchMd = path.join(instructionsDir, 'night-watch.md');
+      const executorMd = path.join(instructionsDir, 'executor.md');
       const prdExecutorMd = path.join(instructionsDir, 'prd-executor.md');
-      const prReviewerMd = path.join(instructionsDir, 'night-watch-pr-reviewer.md');
-      const qaMd = path.join(instructionsDir, 'night-watch-qa.md');
-      const auditMd = path.join(instructionsDir, 'night-watch-audit.md');
+      const prReviewerMd = path.join(instructionsDir, 'pr-reviewer.md');
+      const qaMd = path.join(instructionsDir, 'qa.md');
+      const auditMd = path.join(instructionsDir, 'audit.md');
 
-      expect(fs.existsSync(nightWatchMd)).toBe(true);
+      expect(fs.existsSync(executorMd)).toBe(true);
       expect(fs.existsSync(prdExecutorMd)).toBe(true);
       expect(fs.existsSync(prReviewerMd)).toBe(true);
       expect(fs.existsSync(qaMd)).toBe(true);
       expect(fs.existsSync(auditMd)).toBe(true);
 
       // Verify placeholder replacement
-      const content = fs.readFileSync(nightWatchMd, 'utf-8');
+      const content = fs.readFileSync(executorMd, 'utf-8');
       expect(content).not.toContain('${PROJECT_DIR}');
       expect(content).not.toContain('${PROJECT_NAME}');
       expect(content).not.toContain('${DEFAULT_BRANCH}');
 
-      // Verify night-watch.md references prd-executor
+      // Verify executor.md references prd-executor
       expect(content).toContain('prd-executor.md');
     });
   });
@@ -291,18 +291,18 @@ describe('init command', () => {
   });
 
   describeIfExternalTools('should overwrite instructions files with --force', () => {
-    it('should overwrite existing instructions/night-watch.md with --force flag', () => {
+    it('should overwrite existing instructions/executor.md with --force flag', () => {
       // Initialize git repo
       execSync('git init', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      // Pre-create instructions/night-watch.md with stale content
+      // Pre-create instructions/executor.md with stale content
       const instructionsDir = path.join(tempDir, 'instructions');
       fs.mkdirSync(instructionsDir, { recursive: true });
-      const nightWatchMd = path.join(instructionsDir, 'night-watch.md');
+      const executorMd = path.join(instructionsDir, 'executor.md');
       const staleContent = '# STALE CONTENT - should be overwritten';
-      fs.writeFileSync(nightWatchMd, staleContent);
+      fs.writeFileSync(executorMd, staleContent);
 
       // Run with --force
       execSync(`${TSX_CMD} init --force --provider claude`, {
@@ -313,7 +313,7 @@ describe('init command', () => {
       });
 
       // File content should have changed (no longer stale)
-      const newContent = fs.readFileSync(nightWatchMd, 'utf-8');
+      const newContent = fs.readFileSync(executorMd, 'utf-8');
       expect(newContent).not.toBe(staleContent);
       expect(newContent).not.toContain('STALE CONTENT');
     });
@@ -435,11 +435,11 @@ describe('init command', () => {
       execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
       execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
 
-      // Create custom templates directory with a custom night-watch.md
+      // Create custom templates directory with a custom executor.md
       const customTemplatesDir = path.join(tempDir, '.night-watch', 'templates');
       fs.mkdirSync(customTemplatesDir, { recursive: true });
       fs.writeFileSync(
-        path.join(customTemplatesDir, 'night-watch.md'),
+        path.join(customTemplatesDir, 'executor.md'),
         '# Custom Night Watch Template\n\nThis is a custom template.\n',
       );
 
@@ -458,8 +458,8 @@ describe('init command', () => {
         timeout: 15000,
       });
 
-      const nightWatchMd = path.join(tempDir, 'instructions', 'night-watch.md');
-      const content = fs.readFileSync(nightWatchMd, 'utf-8');
+      const executorMd = path.join(tempDir, 'instructions', 'executor.md');
+      const content = fs.readFileSync(executorMd, 'utf-8');
 
       // Should contain our custom content
       expect(content).toContain('Custom Night Watch Template');

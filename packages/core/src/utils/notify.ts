@@ -29,7 +29,11 @@ export interface INotificationContext {
   // Review retry info (optional — populated when retries occurred)
   attempts?: number;
   finalScore?: number;
+  // QA screenshots extracted from the QA report comment
+  qaScreenshotUrls?: string[];
 }
+
+const MAX_QA_SCREENSHOTS_IN_NOTIFICATION = 3;
 
 /**
  * Get the emoji for a notification event
@@ -139,6 +143,22 @@ export function buildDescription(ctx: INotificationContext): string {
       lines.push(retryInfo);
     }
   }
+
+  if (ctx.event === 'qa_completed' && (ctx.qaScreenshotUrls?.length ?? 0) > 0) {
+    const screenshotUrls = ctx.qaScreenshotUrls ?? [];
+    lines.push(`QA screenshots: ${screenshotUrls.length}`);
+    for (const [index, screenshotUrl] of screenshotUrls
+      .slice(0, MAX_QA_SCREENSHOTS_IN_NOTIFICATION)
+      .entries()) {
+      lines.push(`Screenshot ${index + 1}: ${screenshotUrl}`);
+    }
+    if (screenshotUrls.length > MAX_QA_SCREENSHOTS_IN_NOTIFICATION) {
+      lines.push(
+        `Additional screenshots: ${screenshotUrls.length - MAX_QA_SCREENSHOTS_IN_NOTIFICATION}`,
+      );
+    }
+  }
+
   return lines.join('\n');
 }
 
@@ -260,6 +280,22 @@ export function formatTelegramPayload(ctx: INotificationContext): {
         );
       } else {
         lines.push(escapeMarkdownV2(`🔁 Attempts: ${ctx.attempts}`));
+      }
+    }
+
+    if (ctx.event === 'qa_completed' && (ctx.qaScreenshotUrls?.length ?? 0) > 0) {
+      const screenshotUrls = ctx.qaScreenshotUrls ?? [];
+      lines.push('');
+      lines.push(escapeMarkdownV2('🖼 Screenshots'));
+      for (const screenshotUrl of screenshotUrls.slice(0, MAX_QA_SCREENSHOTS_IN_NOTIFICATION)) {
+        lines.push(escapeMarkdownV2(screenshotUrl));
+      }
+      if (screenshotUrls.length > MAX_QA_SCREENSHOTS_IN_NOTIFICATION) {
+        lines.push(
+          escapeMarkdownV2(
+            `...and ${screenshotUrls.length - MAX_QA_SCREENSHOTS_IN_NOTIFICATION} more`,
+          ),
+        );
       }
     }
 

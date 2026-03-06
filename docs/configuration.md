@@ -41,36 +41,37 @@ Create `night-watch.config.json` in your project root:
 
 > **Note:** All configuration fields can be customized from the Settings page in the Web UI. You no longer need to edit `night-watch.config.json` directly.
 
-| Field                 | Type     | Default                         | Description                                                   |
-| --------------------- | -------- | ------------------------------- | ------------------------------------------------------------- |
-| `defaultBranch`       | string   | `""` (auto-detect)              | Default branch name (e.g. `main`)                             |
-| `provider`            | string   | `"claude"`                      | AI provider (`claude` or `codex`)                             |
-| `executorEnabled`     | boolean  | `true`                          | Enable the PRD executor                                       |
-| `reviewerEnabled`     | boolean  | `true`                          | Enable the PR reviewer                                        |
-| `prdDir`              | string   | `"docs/prds"`                   | Directory containing PRD files                                |
-| `maxRuntime`          | number   | `7200`                          | Max runtime in seconds for PRD execution                      |
-| `reviewerMaxRuntime`  | number   | `3600`                          | Max runtime in seconds for PR reviewer                        |
-| `branchPrefix`        | string   | `"night-watch"`                 | Prefix for created branches                                   |
-| `branchPatterns`      | string[] | `["feat/", "night-watch/"]`     | Branch patterns for PR reviewer                               |
-| `minReviewScore`      | number   | `80`                            | Min review score (out of 100)                                 |
-| `maxLogSize`          | number   | `524288`                        | Max log file size in bytes (512 KB)                           |
-| `cronSchedule`        | string   | `"0 0-21 * * *"`                | Cron schedule for executor                                    |
-| `reviewerSchedule`    | string   | `"0 0,3,6,9,12,15,18,21 * * *"` | Cron schedule for reviewer                                    |
-| `cronScheduleOffset`  | number   | `0`                             | Minute offset (0-59) applied to cron schedules during install |
-| `maxRetries`          | number   | `3`                             | Retry attempts for rate-limited API calls                     |
-| `providerEnv`         | object   | `{}`                            | Custom env vars passed to the provider CLI                    |
-| `fallbackOnRateLimit` | boolean  | `false`                         | Fall back to native Claude when proxy returns 429             |
-| `claudeModel`         | string   | `"sonnet"`                      | Claude model for native execution (`"sonnet"` or `"opus"`)    |
-| `notifications`       | object   | `{ webhooks: [] }`              | Notification webhook configuration (see below)                |
-| `prdPriority`         | string[] | `[]`                            | PRDs matching these names are executed first                  |
-| `roadmapScanner`      | object   | (see below)                     | Roadmap scanner configuration                                 |
-| `templatesDir`        | string   | `".night-watch/templates"`      | Directory for custom template overrides                       |
-| `boardProvider`       | object   | (see below)                     | Board provider configuration for PRD tracking                 |
-| `jobProviders`        | object   | `{}`                            | Per-job provider configuration                                |
-| `autoMerge`           | boolean  | `false`                         | Enable automatic merging of PRs that pass CI and review       |
-| `autoMergeMethod`     | string   | `"squash"`                      | Git merge method for auto-merge (`squash`, `merge`, `rebase`) |
-| `qa`                  | object   | (see below)                     | QA process configuration                                      |
-| `audit`               | object   | (see below)                     | Code audit configuration                                      |
+| Field                 | Type         | Default                         | Description                                                     |
+| --------------------- | ------------ | ------------------------------- | --------------------------------------------------------------- |
+| `defaultBranch`       | string       | `""` (auto-detect)              | Default branch name (e.g. `main`)                               |
+| `provider`            | string       | `"claude"`                      | AI provider (`claude` or `codex`)                               |
+| `executorEnabled`     | boolean      | `true`                          | Enable the PRD executor                                         |
+| `reviewerEnabled`     | boolean      | `true`                          | Enable the PR reviewer                                          |
+| `prdDir`              | string       | `"docs/prds"`                   | Directory containing PRD files                                  |
+| `maxRuntime`          | number       | `7200`                          | Max runtime in seconds for PRD execution                        |
+| `reviewerMaxRuntime`  | number       | `3600`                          | Max runtime in seconds for PR reviewer                          |
+| `branchPrefix`        | string       | `"night-watch"`                 | Prefix for created branches                                     |
+| `branchPatterns`      | string[]     | `["feat/", "night-watch/"]`     | Branch patterns for PR reviewer                                 |
+| `minReviewScore`      | number       | `80`                            | Min review score (out of 100)                                   |
+| `maxLogSize`          | number       | `524288`                        | Max log file size in bytes (512 KB)                             |
+| `cronSchedule`        | string       | `"0 0-21 * * *"`                | Cron schedule for executor                                      |
+| `reviewerSchedule`    | string       | `"0 0,3,6,9,12,15,18,21 * * *"` | Cron schedule for reviewer                                      |
+| `scheduleBundleId`    | string\|null | `null`                          | Persisted schedule template id from Settings (e.g. `always-on`) |
+| `cronScheduleOffset`  | number       | `0`                             | Minute offset (0-59) applied to cron schedules during install   |
+| `maxRetries`          | number       | `3`                             | Retry attempts for rate-limited API calls                       |
+| `providerEnv`         | object       | `{}`                            | Custom env vars passed to the provider CLI                      |
+| `fallbackOnRateLimit` | boolean      | `false`                         | Fall back to native Claude when proxy returns 429               |
+| `claudeModel`         | string       | `"sonnet"`                      | Claude model for native execution (`"sonnet"` or `"opus"`)      |
+| `notifications`       | object       | `{ webhooks: [] }`              | Notification webhook configuration (see below)                  |
+| `prdPriority`         | string[]     | `[]`                            | PRDs matching these names are executed first                    |
+| `roadmapScanner`      | object       | (see below)                     | Roadmap scanner configuration                                   |
+| `templatesDir`        | string       | `".night-watch/templates"`      | Directory for custom template overrides                         |
+| `boardProvider`       | object       | (see below)                     | Board provider configuration for PRD tracking                   |
+| `jobProviders`        | object       | `{}`                            | Per-job provider configuration                                  |
+| `autoMerge`           | boolean      | `false`                         | Enable automatic merging of PRs that pass CI and review         |
+| `autoMergeMethod`     | string       | `"squash"`                      | Git merge method for auto-merge (`squash`, `merge`, `rebase`)   |
+| `qa`                  | object       | (see below)                     | QA process configuration                                        |
+| `audit`               | object       | (see below)                     | Code audit configuration                                        |
 
 ---
 
@@ -306,9 +307,9 @@ The audit process runs automated code quality and security audits.
 
 ---
 
-## Roadmap Scanner (`roadmapScanner`)
+## Planner (`roadmapScanner`)
 
-The roadmap scanner automatically scans `ROADMAP.md` and generates PRDs for unchecked items. The Slicer uses AI to generate detailed PRDs from roadmap items.
+The planner generates one PRD per run. It prioritizes `ROADMAP.md` items by default, and falls back to audit findings from `logs/audit-report.md` when roadmap items are exhausted.
 
 ```json
 {
@@ -316,21 +317,25 @@ The roadmap scanner automatically scans `ROADMAP.md` and generates PRDs for unch
     "enabled": false,
     "roadmapPath": "ROADMAP.md",
     "autoScanInterval": 300,
-    "slicerSchedule": "0 2,8,14,20 * * *",
-    "slicerMaxRuntime": 600
+    "slicerSchedule": "0 */6 * * *",
+    "slicerMaxRuntime": 600,
+    "priorityMode": "roadmap-first",
+    "issueColumn": "Draft"
   }
 }
 ```
 
-### Roadmap Scanner Fields
+### Planner Fields
 
-| Field              | Type    | Default               | Description                                          |
-| ------------------ | ------- | --------------------- | ---------------------------------------------------- |
-| `enabled`          | boolean | `false`               | Enable the roadmap scanner                           |
-| `roadmapPath`      | string  | `"ROADMAP.md"`        | Path to ROADMAP.md file (relative to project root)   |
-| `autoScanInterval` | number  | `300`                 | Interval in seconds between automatic scans (min 30) |
-| `slicerSchedule`   | string  | `"0 2,8,14,20 * * *"` | Cron schedule for the slicer                         |
-| `slicerMaxRuntime` | number  | `600`                 | Maximum runtime in seconds for the slicer            |
+| Field              | Type    | Default           | Description                                             |
+| ------------------ | ------- | ----------------- | ------------------------------------------------------- |
+| `enabled`          | boolean | `true`            | Enable planner runs                                     |
+| `roadmapPath`      | string  | `"ROADMAP.md"`    | Path to ROADMAP.md file (relative to project root)      |
+| `autoScanInterval` | number  | `300`             | Interval in seconds between automatic scans (min 30)    |
+| `slicerSchedule`   | string  | `"0 */6 * * *"`   | Cron schedule for planner                               |
+| `slicerMaxRuntime` | number  | `600`             | Maximum runtime in seconds for planner                  |
+| `priorityMode`     | string  | `"roadmap-first"` | Source priority: `roadmap-first` or `audit-first`       |
+| `issueColumn`      | string  | `"Draft"`         | Column for auto-created planner issues: `Draft`/`Ready` |
 
 ---
 

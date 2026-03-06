@@ -81,6 +81,7 @@ export function getDefaultConfig(): INightWatchConfig {
     // Cron scheduling
     cronSchedule: DEFAULT_CRON_SCHEDULE,
     reviewerSchedule: DEFAULT_REVIEWER_SCHEDULE,
+    scheduleBundleId: null,
     cronScheduleOffset: DEFAULT_CRON_SCHEDULE_OFFSET,
     maxRetries: DEFAULT_MAX_RETRIES,
 
@@ -192,6 +193,13 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
     readString(rawConfig.cronSchedule) ?? readString(cron?.executorSchedule);
   normalized.reviewerSchedule =
     readString(rawConfig.reviewerSchedule) ?? readString(cron?.reviewerSchedule);
+  const rawScheduleBundleId = rawConfig.scheduleBundleId;
+  if (typeof rawScheduleBundleId === 'string') {
+    const trimmed = rawScheduleBundleId.trim();
+    normalized.scheduleBundleId = trimmed.length > 0 ? trimmed : null;
+  } else if (rawScheduleBundleId === null) {
+    normalized.scheduleBundleId = null;
+  }
   normalized.cronScheduleOffset = readNumber(rawConfig.cronScheduleOffset);
   normalized.maxRetries = readNumber(rawConfig.maxRetries);
   normalized.reviewerMaxRetries = readNumber(rawConfig.reviewerMaxRetries);
@@ -199,6 +207,12 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   normalized.provider = validateProvider(String(rawConfig.provider ?? '')) ?? undefined;
   normalized.executorEnabled = readBoolean(rawConfig.executorEnabled);
   normalized.reviewerEnabled = readBoolean(rawConfig.reviewerEnabled);
+
+  // providerLabel: optional human-friendly display name for the provider
+  const providerLabelVal = readString(rawConfig.providerLabel);
+  if (providerLabelVal) {
+    normalized.providerLabel = providerLabelVal;
+  }
 
   // providerEnv: Record<string, string> of extra env vars for the provider CLI
   const rawProviderEnv = readObject(rawConfig.providerEnv);
@@ -242,6 +256,18 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
   // Roadmap Scanner
   const rawRoadmapScanner = readObject(rawConfig.roadmapScanner);
   if (rawRoadmapScanner) {
+    const priorityModeRaw = readString(rawRoadmapScanner.priorityMode);
+    const priorityMode =
+      priorityModeRaw === 'roadmap-first' || priorityModeRaw === 'audit-first'
+        ? priorityModeRaw
+        : DEFAULT_ROADMAP_SCANNER.priorityMode;
+
+    const issueColumnRaw = readString(rawRoadmapScanner.issueColumn);
+    const issueColumn =
+      issueColumnRaw === 'Draft' || issueColumnRaw === 'Ready'
+        ? issueColumnRaw
+        : DEFAULT_ROADMAP_SCANNER.issueColumn;
+
     const roadmapScanner: IRoadmapScannerConfig = {
       enabled: readBoolean(rawRoadmapScanner.enabled) ?? DEFAULT_ROADMAP_SCANNER.enabled,
       roadmapPath: readString(rawRoadmapScanner.roadmapPath) ?? DEFAULT_ROADMAP_SCANNER.roadmapPath,
@@ -251,6 +277,8 @@ function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatc
         readString(rawRoadmapScanner.slicerSchedule) ?? DEFAULT_ROADMAP_SCANNER.slicerSchedule,
       slicerMaxRuntime:
         readNumber(rawRoadmapScanner.slicerMaxRuntime) ?? DEFAULT_ROADMAP_SCANNER.slicerMaxRuntime,
+      priorityMode,
+      issueColumn,
     };
     // Validate autoScanInterval has minimum of 30 seconds
     if (roadmapScanner.autoScanInterval < 30) {
@@ -455,7 +483,13 @@ function mergeConfigLayer(base: INightWatchConfig, layer: Partial<INightWatchCon
     if (value === undefined) continue;
 
     // Keys needing special (shallow) merge semantics with base
-    if (_key === 'providerEnv' || _key === 'boardProvider' || _key === 'qa' || _key === 'audit' || _key === 'queue') {
+    if (
+      _key === 'providerEnv' ||
+      _key === 'boardProvider' ||
+      _key === 'qa' ||
+      _key === 'audit' ||
+      _key === 'queue'
+    ) {
       (base as unknown as Record<string, unknown>)[_key] = {
         ...(base[_key] as object),
         ...(value as object),
@@ -675,6 +709,28 @@ export function loadConfig(projectDir: string): INightWatchConfig {
     }
   }
 
+  // NW_PLANNER_ISSUE_COLUMN environment variable
+  if (process.env.NW_PLANNER_ISSUE_COLUMN) {
+    const issueColumn = process.env.NW_PLANNER_ISSUE_COLUMN;
+    if (issueColumn === 'Draft' || issueColumn === 'Ready') {
+      envConfig.roadmapScanner = {
+        ...(envConfig.roadmapScanner ?? DEFAULT_ROADMAP_SCANNER),
+        issueColumn,
+      };
+    }
+  }
+
+  // NW_PLANNER_PRIORITY_MODE environment variable
+  if (process.env.NW_PLANNER_PRIORITY_MODE) {
+    const priorityMode = process.env.NW_PLANNER_PRIORITY_MODE;
+    if (priorityMode === 'roadmap-first' || priorityMode === 'audit-first') {
+      envConfig.roadmapScanner = {
+        ...(envConfig.roadmapScanner ?? DEFAULT_ROADMAP_SCANNER),
+        priorityMode,
+      };
+    }
+  }
+
   // NW_AUTO_MERGE environment variable
   if (process.env.NW_AUTO_MERGE) {
     const autoMerge = parseBoolean(process.env.NW_AUTO_MERGE);
@@ -814,8 +870,7 @@ export function loadConfig(projectDir: string): INightWatchConfig {
   }
 
   // Queue configuration from env vars
-  const queueBaseConfig = (): IQueueConfig =>
-    envConfig.queue ?? fileConfig?.queue ?? DEFAULT_QUEUE;
+  const queueBaseConfig = (): IQueueConfig => envConfig.queue ?? fileConfig?.queue ?? DEFAULT_QUEUE;
 
   if (process.env.NW_QUEUE_ENABLED) {
     const queueEnabled = parseBoolean(process.env.NW_QUEUE_ENABLED);

@@ -20,6 +20,7 @@ LOG_FILE="${LOG_DIR}/reviewer.log"
 MAX_RUNTIME="${NW_REVIEWER_MAX_RUNTIME:-3600}"  # 1 hour
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
+PROVIDER_LABEL="${NW_PROVIDER_LABEL:-}"
 MIN_REVIEW_SCORE="${NW_MIN_REVIEW_SCORE:-80}"
 BRANCH_PATTERNS_RAW="${NW_BRANCH_PATTERNS:-feat/,night-watch/}"
 AUTO_MERGE="${NW_AUTO_MERGE:-0}"
@@ -27,10 +28,17 @@ AUTO_MERGE_METHOD="${NW_AUTO_MERGE_METHOD:-squash}"
 TARGET_PR="${NW_TARGET_PR:-}"
 PARALLEL_ENABLED="${NW_REVIEWER_PARALLEL:-1}"
 WORKER_MODE="${NW_REVIEWER_WORKER_MODE:-0}"
+PRD_DIR_REL="${NW_PRD_DIR:-docs/PRDs/night-watch}"
+if [[ "${PRD_DIR_REL}" = /* ]]; then
+  PRD_DIR="${PRD_DIR_REL}"
+else
+  PRD_DIR="${PROJECT_DIR}/${PRD_DIR_REL}"
+fi
 
 # Retry configuration
 REVIEWER_MAX_RETRIES="${NW_REVIEWER_MAX_RETRIES:-2}"
 REVIEWER_RETRY_DELAY="${NW_REVIEWER_RETRY_DELAY:-30}"
+SCRIPT_START_TIME=$(date +%s)
 
 # Normalize retry settings to safe numeric ranges
 if ! [[ "${REVIEWER_MAX_RETRIES}" =~ ^[0-9]+$ ]]; then
@@ -59,6 +67,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
+PROVIDER_MODEL_DISPLAY=$(resolve_provider_model_display "${PROVIDER_CMD}" "${PROVIDER_LABEL}")
 GLOBAL_LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_RUNTIME_KEY}.lock"
 if [ "${WORKER_MODE}" = "1" ] && [ -n "${TARGET_PR}" ]; then
   LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_RUNTIME_KEY}-pr-${TARGET_PR}.lock"
@@ -100,6 +109,21 @@ emit_final_status() {
   local attempts="${5:-1}"
   local final_score="${6:-}"
   local details=""
+  local prs_summary=""
+  local auto_merged_summary=""
+  local auto_merge_failed_summary=""
+  local final_score_summary=""
+  local final_score_line=""
+
+  prs_summary="${prs_csv:-none}"
+  auto_merged_summary="${auto_merged:-none}"
+  auto_merge_failed_summary="${auto_merge_failed:-none}"
+  final_score_summary="${final_score:-n/a}"
+  if [ -n "${final_score}" ]; then
+    final_score_line="Final score: ${final_score_summary}/100"
+  else
+    final_score_line="Final score: n/a"
+  fi
 
   if [ "${exit_code}" -eq 0 ]; then
     details="prs=${prs_csv}|auto_merged=${auto_merged}|auto_merge_failed=${auto_merge_failed}|attempts=${attempts}"
@@ -107,6 +131,15 @@ emit_final_status() {
       details="${details}|final_score=${final_score}"
     fi
     log "DONE: PR reviewer completed successfully"
+    if [ "${WORKER_MODE}" != "1" ]; then
+      send_telegram_status_message "🔍 Night Watch Reviewer: completed" "Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Processed PRs: ${prs_summary}
+Attempts: ${attempts}
+${final_score_line}
+Auto-merged PRs: ${auto_merged_summary}
+Auto-merge failed: ${auto_merge_failed_summary}"
+    fi
     emit_result "success_reviewed" "${details}"
   elif [ "${exit_code}" -eq 124 ]; then
     details="prs=${prs_csv}|attempts=${attempts}"
@@ -114,6 +147,14 @@ emit_final_status() {
       details="${details}|final_score=${final_score}"
     fi
     log "TIMEOUT: PR reviewer killed after ${MAX_RUNTIME}s"
+    if [ "${WORKER_MODE}" != "1" ]; then
+      send_telegram_status_message "🔍 Night Watch Reviewer: timeout" "Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Timeout: ${MAX_RUNTIME}s
+Processed PRs: ${prs_summary}
+Attempts: ${attempts}
+${final_score_line}"
+    fi
     emit_result "timeout" "${details}"
   else
     details="prs=${prs_csv}|attempts=${attempts}"
@@ -121,6 +162,14 @@ emit_final_status() {
       details="${details}|final_score=${final_score}"
     fi
     log "FAIL: PR reviewer exited with code ${exit_code}"
+    if [ "${WORKER_MODE}" != "1" ]; then
+      send_telegram_status_message "🔍 Night Watch Reviewer: failed" "Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Exit code: ${exit_code}
+Processed PRs: ${prs_summary}
+Attempts: ${attempts}
+${final_score_line}"
+    fi
     emit_result "failure" "${details}"
   fi
 }
@@ -137,6 +186,186 @@ append_csv() {
   else
     printf "%s,%s" "${current}" "${incoming}"
   fi
+}
+
+provider_output_looks_invalid() {
+  local from_line="${1:-0}"
+  if [ ! -f "${LOG_FILE}" ]; then
+    return 1
+  fi
+
+  tail -n "+$((from_line + 1))" "${LOG_FILE}" 2>/dev/null \
+    | grep -Eqi \
+      'Unknown skill:|session is in a broken state|working directory .* no longer exists|Path ".*" does not exist|Please restart this session|failed to start LSP server plugin|spawn .* ENOENT'
+}
+
+truncate_for_prompt() {
+  local text="${1:-}"
+  local limit="${2:-7000}"
+  if [ "${#text}" -le "${limit}" ]; then
+    printf "%s" "${text}"
+  else
+    printf '%s\n\n[truncated to %s chars]' "${text:0:${limit}}" "${limit}"
+  fi
+}
+
+extract_linked_issue_numbers() {
+  local body="${1:-}"
+  printf '%s\n' "${body}" \
+    | grep -Eoi '(close[sd]?|fix(e[sd])?|resolve[sd]?)[[:space:]]*:?[[:space:]]*#[0-9]+' \
+    | grep -Eo '[0-9]+' \
+    | awk '!seen[$0]++' || true
+}
+
+find_prd_file_by_branch() {
+  local branch_name="${1:-}"
+  local branch_slug="${branch_name#*/}"
+  local branch_number=""
+  local candidate_dirs=()
+  local candidate=""
+  local base_name=""
+  local dir=""
+
+  if [ -z "${branch_slug}" ]; then
+    branch_slug="${branch_name}"
+  fi
+  [ -z "${branch_slug}" ] && return 1
+
+  if [ -d "${PRD_DIR}" ]; then
+    candidate_dirs+=("${PRD_DIR}")
+  fi
+  if [ -d "${PRD_DIR}/done" ]; then
+    candidate_dirs+=("${PRD_DIR}/done")
+  fi
+  [ "${#candidate_dirs[@]}" -eq 0 ] && return 1
+
+  for dir in "${candidate_dirs[@]}"; do
+    if [ -f "${dir}/${branch_slug}.md" ]; then
+      printf "%s" "${dir}/${branch_slug}.md"
+      return 0
+    fi
+  done
+
+  branch_number=$(printf '%s' "${branch_slug}" | grep -oE '^[0-9]+' || true)
+  for dir in "${candidate_dirs[@]}"; do
+    while IFS= read -r candidate; do
+      [ -z "${candidate}" ] && continue
+      base_name=$(basename "${candidate}" .md)
+      if [[ "${base_name}" == "${branch_slug}"* ]] || [[ "${branch_slug}" == "${base_name}"* ]]; then
+        printf "%s" "${candidate}"
+        return 0
+      fi
+      if [ -n "${branch_number}" ] && [[ "${base_name}" == "${branch_number}-"* ]]; then
+        printf "%s" "${candidate}"
+        return 0
+      fi
+    done < <(find "${dir}" -maxdepth 1 -type f -name '*.md' 2>/dev/null | sort)
+  done
+
+  return 1
+}
+
+build_prd_context_for_pr() {
+  local pr_number="${1:?PR number required}"
+  local pr_payload=""
+  local pr_title=""
+  local pr_branch=""
+  local pr_body=""
+  local pr_url=""
+  local issue_context=""
+  local issue_count=0
+  local issue_number=""
+  local issue_payload=""
+  local issue_title=""
+  local issue_body=""
+  local issue_excerpt=""
+  local prd_file=""
+  local prd_payload=""
+  local prd_excerpt=""
+  local prd_rel_path=""
+  local section=""
+
+  pr_payload=$(gh pr view "${pr_number}" --json title,headRefName,body,url 2>/dev/null || true)
+  pr_title=$(printf '%s' "${pr_payload}" | jq -r '.title // ""' 2>/dev/null || echo "")
+  pr_branch=$(printf '%s' "${pr_payload}" | jq -r '.headRefName // ""' 2>/dev/null || echo "")
+  pr_body=$(printf '%s' "${pr_payload}" | jq -r '.body // ""' 2>/dev/null || echo "")
+  pr_url=$(printf '%s' "${pr_payload}" | jq -r '.url // ""' 2>/dev/null || echo "")
+
+  if [ -n "${pr_body}" ]; then
+    while IFS= read -r issue_number; do
+      [ -z "${issue_number}" ] && continue
+      issue_count=$((issue_count + 1))
+      if [ "${issue_count}" -gt 2 ]; then
+        break
+      fi
+
+      issue_payload=$(gh issue view "${issue_number}" --json title,body,url 2>/dev/null || true)
+      issue_title=$(printf '%s' "${issue_payload}" | jq -r '.title // ""' 2>/dev/null || echo "")
+      issue_body=$(printf '%s' "${issue_payload}" | jq -r '.body // ""' 2>/dev/null || echo "")
+      [ -z "${issue_body}" ] && continue
+
+      issue_excerpt=$(truncate_for_prompt "${issue_body}" 4500)
+      issue_context="${issue_context}${issue_context:+$'\n\n'}Issue #${issue_number}: ${issue_title}
+${issue_excerpt}"
+    done < <(extract_linked_issue_numbers "${pr_body}")
+  fi
+
+  if [ -z "${issue_context}" ] && [ -n "${pr_branch}" ]; then
+    prd_file=$(find_prd_file_by_branch "${pr_branch}" || true)
+    if [ -n "${prd_file}" ] && [ -f "${prd_file}" ]; then
+      prd_payload=$(cat "${prd_file}" 2>/dev/null || true)
+      if [ -n "${prd_payload}" ]; then
+        prd_excerpt=$(truncate_for_prompt "${prd_payload}" 4500)
+        if [[ "${prd_file}" == "${PROJECT_DIR}/"* ]]; then
+          prd_rel_path="${prd_file#${PROJECT_DIR}/}"
+        else
+          prd_rel_path="${prd_file}"
+        fi
+      fi
+    fi
+  fi
+
+  section="### PR #${pr_number}"
+  if [ -n "${pr_title}" ]; then
+    section="${section} — ${pr_title}"
+  fi
+  section="${section}
+- branch: ${pr_branch:-unknown}"
+  if [ -n "${pr_url}" ]; then
+    section="${section}
+- url: ${pr_url}"
+  fi
+
+  if [ -n "${issue_context}" ]; then
+    section="${section}
+- context source: linked GitHub issue body
+${issue_context}"
+  elif [ -n "${prd_excerpt}" ]; then
+    section="${section}
+- context source: ${prd_rel_path}
+${prd_excerpt}"
+  else
+    section="${section}
+- context source: not found"
+  fi
+
+  printf "%s" "${section}"
+}
+
+build_prd_context_prompt() {
+  local pr_number=""
+  local entry=""
+  local combined=""
+
+  for pr_number in "$@"; do
+    [ -z "${pr_number}" ] && continue
+    entry=$(build_prd_context_for_pr "${pr_number}")
+    [ -z "${entry}" ] && continue
+    combined="${combined}${combined:+$'\n\n'}${entry}"
+  done
+
+  [ -z "${combined}" ] && return 0
+  printf '\n\n## PRD Context\nUse this product context while reviewing and fixing PRs.\n%s\n' "${combined}"
 }
 
 # Extract the latest review score from PR comments
@@ -294,6 +523,9 @@ if ! validate_provider "${PROVIDER_CMD}"; then
 fi
 
 rotate_log
+log_separator
+log "RUN-START: reviewer invoked project=${PROJECT_DIR} provider=${PROVIDER_CMD} worker=${WORKER_MODE} target_pr=${TARGET_PR:-all} parallel=${PARALLEL_ENABLED}"
+log "CONFIG: max_runtime=${MAX_RUNTIME}s min_review_score=${MIN_REVIEW_SCORE} auto_merge=${AUTO_MERGE} branch_patterns=${BRANCH_PATTERNS_RAW}"
 
 if ! acquire_lock "${LOCK_FILE}"; then
   emit_result "skip_locked"
@@ -301,6 +533,14 @@ if ! acquire_lock "${LOCK_FILE}"; then
 fi
 
 cd "${PROJECT_DIR}"
+
+if [ "${WORKER_MODE}" != "1" ]; then
+  send_telegram_status_message "🔍 Night Watch Reviewer: started" "Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Branch patterns: ${BRANCH_PATTERNS_RAW}
+Target PR: ${TARGET_PR:-all matching}
+Action: scanning open PRs for failing checks or low review scores."
+fi
 
 # Convert comma-separated branch prefixes into a regex that matches branch starts.
 BRANCH_REGEX=""
@@ -335,6 +575,13 @@ fi
 
 if [ "${OPEN_PRS}" -eq 0 ]; then
   log "SKIP: No open PRs matching branch patterns (${BRANCH_PATTERNS_RAW})"
+  if [ "${WORKER_MODE}" != "1" ]; then
+    send_telegram_status_message "🔍 Night Watch Reviewer: no matching PRs" "Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Branch patterns: ${BRANCH_PATTERNS_RAW}
+Target PR: ${TARGET_PR:-all matching}
+Result: 0 open PRs matched."
+  fi
   emit_result "skip_no_open_prs"
   exit 0
 fi
@@ -458,6 +705,11 @@ if [ "${NEEDS_WORK}" -eq 0 ]; then
     fi
   fi
 
+  if [ "${WORKER_MODE}" != "1" ]; then
+    send_telegram_status_message "🔍 Night Watch Reviewer: nothing to do" "Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Result: all ${OPEN_PRS} matching PRs already pass CI and review threshold (${MIN_REVIEW_SCORE})."
+  fi
   emit_result "skip_all_passing"
   exit 0
 fi
@@ -488,7 +740,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
   # Dry-run mode: print diagnostics and exit
   if [ "${NW_DRY_RUN:-0}" = "1" ]; then
     echo "=== Dry Run: PR Reviewer ==="
-    echo "Provider: ${PROVIDER_CMD}"
+    echo "Provider (model): ${PROVIDER_MODEL_DISPLAY}"
     echo "Branch Patterns: ${BRANCH_PATTERNS_RAW}"
     echo "Min Review Score: ${MIN_REVIEW_SCORE}"
     echo "Auto-merge: ${AUTO_MERGE}"
@@ -608,9 +860,10 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
   exit 0
 fi
 
-REVIEW_WORKTREE_BASENAME="${PROJECT_NAME}-nw-review-runner"
+REVIEW_RUN_TOKEN="${PROJECT_RUNTIME_KEY}-$$"
+REVIEW_WORKTREE_BASENAME="${PROJECT_NAME}-nw-review-runner-${REVIEW_RUN_TOKEN}"
 if [ -n "${TARGET_PR}" ]; then
-  REVIEW_WORKTREE_BASENAME="${REVIEW_WORKTREE_BASENAME}-pr-${TARGET_PR}"
+  REVIEW_WORKTREE_BASENAME="${PROJECT_NAME}-nw-review-runner-pr-${TARGET_PR}-${REVIEW_RUN_TOKEN}"
 fi
 REVIEW_WORKTREE_DIR="$(dirname "${PROJECT_DIR}")/${REVIEW_WORKTREE_BASENAME}"
 
@@ -619,7 +872,7 @@ cleanup_reviewer_worktrees "${REVIEW_WORKTREE_BASENAME}"
 # Dry-run mode: print diagnostics and exit
 if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   echo "=== Dry Run: PR Reviewer ==="
-  echo "Provider: ${PROVIDER_CMD}"
+  echo "Provider (model): ${PROVIDER_MODEL_DISPLAY}"
   echo "Branch Patterns: ${BRANCH_PATTERNS_RAW}"
   echo "Min Review Score: ${MIN_REVIEW_SCORE}"
   echo "Auto-merge: ${AUTO_MERGE}"
@@ -644,15 +897,25 @@ if ! prepare_detached_worktree "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}" "${DEFA
   exit 1
 fi
 
-REVIEWER_PROMPT_PATH=$(resolve_instruction_path "${REVIEW_WORKTREE_DIR}" "night-watch-pr-reviewer.md" || true)
+REVIEWER_PROMPT_PATH=$(resolve_instruction_path_with_fallback "${REVIEW_WORKTREE_DIR}" "pr-reviewer.md" "night-watch-pr-reviewer.md" || true)
 if [ -z "${REVIEWER_PROMPT_PATH}" ]; then
-  log "FAIL: Missing reviewer prompt file. Checked instructions/, .claude/commands/, and bundled templates/"
+  log "FAIL: Missing reviewer prompt file. Checked pr-reviewer.md/night-watch-pr-reviewer.md in instructions/, .claude/commands/, and bundled templates/"
   emit_result "failure" "reason=missing_reviewer_prompt"
   exit 1
 fi
+REVIEWER_PROMPT_BUNDLED_NAME="pr-reviewer.md"
+if [[ "${REVIEWER_PROMPT_PATH}" == */night-watch-pr-reviewer.md ]]; then
+  REVIEWER_PROMPT_BUNDLED_NAME="night-watch-pr-reviewer.md"
+fi
+REVIEWER_PROMPT_PATH=$(prefer_bundled_prompt_if_legacy_command "${REVIEW_WORKTREE_DIR}" "${REVIEWER_PROMPT_PATH}" "${REVIEWER_PROMPT_BUNDLED_NAME}")
 REVIEWER_PROMPT_BASE=$(cat "${REVIEWER_PROMPT_PATH}")
 REVIEWER_PROMPT_REF=$(instruction_ref_for_prompt "${REVIEW_WORKTREE_DIR}" "${REVIEWER_PROMPT_PATH}")
 log "INFO: Using reviewer prompt from ${REVIEWER_PROMPT_REF}"
+
+# Inject provider attribution requirement into the reviewer prompt.
+# The AI must add a footer to every review comment it posts.
+REVIEWER_PROVIDER_LABEL="${NW_PROVIDER_LABEL:-${PROVIDER_CMD}}"
+REVIEWER_PROMPT_BASE="${REVIEWER_PROMPT_BASE}"$'\n\n'"## Reviewer Attribution (Required)"$'\n'"At the very end of each review comment you post, add this footer on its own line:"$'\n'"> 🔍 Reviewed by ${REVIEWER_PROVIDER_LABEL}"
 
 EXIT_CODE=0
 ATTEMPTS_MADE=1
@@ -678,6 +941,22 @@ if [ -n "${TARGET_PR}" ]; then
   fi
 fi
 
+PRD_CONTEXT_PROMPT=""
+if [ -n "${TARGET_PR}" ]; then
+  PRD_CONTEXT_PROMPT=$(build_prd_context_prompt "${TARGET_PR}")
+elif [ "${#PR_NUMBER_ARRAY[@]}" -gt 0 ]; then
+  PRD_CONTEXT_PROMPT=$(build_prd_context_prompt "${PR_NUMBER_ARRAY[@]}")
+fi
+if [ -n "${PRD_CONTEXT_PROMPT}" ]; then
+  if [ -n "${TARGET_PR}" ]; then
+    log "INFO: Added PRD context for PR #${TARGET_PR}"
+  else
+    log "INFO: Added PRD context for ${#PR_NUMBER_ARRAY[@]} PR(s)"
+  fi
+else
+  log "WARN: No PRD context found for current reviewer scope"
+fi
+
 # ── Retry Loop for Targeted PR Review ──────────────────────────────────────────
 # Only retry when targeting a specific PR. Non-targeted mode handles all PRs in one shot.
 TOTAL_ATTEMPTS=1
@@ -685,6 +964,51 @@ if [ -n "${TARGET_PR}" ]; then
   TOTAL_ATTEMPTS=$((REVIEWER_MAX_RETRIES + 1))
 fi
 RUN_STARTED_AT=$(date +%s)
+
+remaining_runtime_budget() {
+  local now_ts
+  local elapsed
+  local remaining
+
+  now_ts=$(date +%s)
+  elapsed=$((now_ts - RUN_STARTED_AT))
+  remaining=$((MAX_RUNTIME - elapsed))
+  printf "%s" "${remaining}"
+}
+
+sleep_with_runtime_budget() {
+  local requested_sleep="${1:-0}"
+  local remaining
+  local sleep_for
+
+  if ! [[ "${requested_sleep}" =~ ^[0-9]+$ ]]; then
+    requested_sleep=0
+  fi
+  if [ "${requested_sleep}" -le 0 ]; then
+    return 0
+  fi
+
+  if [ -z "${TARGET_PR}" ]; then
+    sleep "${requested_sleep}"
+    return 0
+  fi
+
+  remaining=$(remaining_runtime_budget)
+  if [ "${remaining}" -le 0 ]; then
+    return 124
+  fi
+
+  sleep_for="${requested_sleep}"
+  if [ "${sleep_for}" -gt "${remaining}" ]; then
+    sleep_for="${remaining}"
+  fi
+  if [ "${sleep_for}" -le 0 ]; then
+    return 124
+  fi
+
+  sleep "${sleep_for}"
+  return 0
+}
 
 for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
   ATTEMPTS_MADE="${ATTEMPT}"
@@ -708,9 +1032,21 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
     fi
   fi
 
-  log "RETRY: Starting attempt ${ATTEMPT}/${TOTAL_ATTEMPTS} (timeout: ${ATTEMPT_TIMEOUT}s)"
+  # Recreate worktree if it was removed unexpectedly between attempts.
+  if [ ! -d "${REVIEW_WORKTREE_DIR}" ] || ! git -C "${REVIEW_WORKTREE_DIR}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    log "RETRY: Reviewer worktree missing for attempt ${ATTEMPT}; recreating ${REVIEW_WORKTREE_DIR}"
+    cleanup_reviewer_worktrees "${REVIEW_WORKTREE_BASENAME}"
+    if ! prepare_detached_worktree "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
+      EXIT_CODE=1
+      log "RETRY: Unable to recreate reviewer worktree; aborting"
+      break
+    fi
+  fi
+
+  log "RETRY: Starting attempt ${ATTEMPT}/${TOTAL_ATTEMPTS} (timeout: ${ATTEMPT_TIMEOUT}s) pr=${TARGET_PR:-all}"
   LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
-  REVIEWER_PROMPT="${REVIEWER_PROMPT_BASE}${TARGET_SCOPE_PROMPT}"
+  REVIEWER_ATTEMPT_START=$(date +%s)
+  REVIEWER_PROMPT="${REVIEWER_PROMPT_BASE}${TARGET_SCOPE_PROMPT}${PRD_CONTEXT_PROMPT}"
 
   case "${PROVIDER_CMD}" in
     claude)
@@ -728,9 +1064,9 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
     codex)
       if (
         cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" \
-          codex --quiet \
+          codex exec \
             --yolo \
-            --prompt "${REVIEWER_PROMPT}" \
+            "${REVIEWER_PROMPT}" \
             >> "${LOG_FILE}" 2>&1
       ); then
         EXIT_CODE=0
@@ -744,17 +1080,38 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
       ;;
   esac
 
+  REVIEWER_ATTEMPT_ELAPSED=$(( $(date +%s) - REVIEWER_ATTEMPT_START ))
+  log "RETRY: Attempt ${ATTEMPT}/${TOTAL_ATTEMPTS} finished exit_code=${EXIT_CODE} elapsed=${REVIEWER_ATTEMPT_ELAPSED}s pr=${TARGET_PR:-all}"
+
   # If provider failed (non-zero exit), check for rate limit before giving up
   if [ "${EXIT_CODE}" -ne 0 ]; then
-    if [ "${EXIT_CODE}" -ne 124 ] && \
-       check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}" && \
-       [ -n "${TARGET_PR}" ] && \
-       [ "${ATTEMPT}" -lt "${TOTAL_ATTEMPTS}" ]; then
-      log "RATE-LIMITED: 429 detected for PR #${TARGET_PR} (attempt ${ATTEMPT}/${TOTAL_ATTEMPTS}), retrying in 120s..."
-      sleep 120
-      continue
-    fi
+	    if [ "${EXIT_CODE}" -ne 124 ] && \
+	       check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}" && \
+	       [ -n "${TARGET_PR}" ] && \
+	       [ "${ATTEMPT}" -lt "${TOTAL_ATTEMPTS}" ]; then
+	      log "RATE-LIMITED: 429 detected for PR #${TARGET_PR} (attempt ${ATTEMPT}/${TOTAL_ATTEMPTS}), retrying in 120s..."
+	      if ! sleep_with_runtime_budget 120; then
+	        EXIT_CODE=124
+	        log "RETRY: Runtime budget exhausted while waiting to retry PR #${TARGET_PR}"
+	        break
+	      fi
+	      continue
+	    fi
     log "RETRY: Provider exited with code ${EXIT_CODE}, not retrying"
+    break
+  fi
+
+	  if provider_output_looks_invalid "${LOG_LINE_BEFORE}"; then
+	    log "RETRY: Invalid provider output detected for attempt ${ATTEMPT} (broken session/wrapper output)"
+	    if [ "${ATTEMPT}" -lt "${TOTAL_ATTEMPTS}" ]; then
+	      if ! sleep_with_runtime_budget "${REVIEWER_RETRY_DELAY}"; then
+	        EXIT_CODE=124
+	        log "RETRY: Runtime budget exhausted before retrying invalid provider output"
+	        break
+	      fi
+	      continue
+	    fi
+	    EXIT_CODE=1
     break
   fi
 
@@ -762,7 +1119,22 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
   if [ -n "${TARGET_PR}" ]; then
     CURRENT_SCORE=$(get_pr_score "${TARGET_PR}")
     if [ -z "${CURRENT_SCORE}" ]; then
-      log "RETRY: No review score found for PR #${TARGET_PR} after attempt ${ATTEMPT}; not retrying"
+      CURRENT_FAILED_CHECKS=$(get_pr_failed_ci_summary "${TARGET_PR}")
+      if [ -z "${CURRENT_FAILED_CHECKS}" ]; then
+        log "RETRY: No review score for PR #${TARGET_PR}, but CI shows no failing checks; treating as successful."
+        break
+	      fi
+	      if [ "${ATTEMPT}" -lt "${TOTAL_ATTEMPTS}" ]; then
+	        log "RETRY: No review score found for PR #${TARGET_PR} after attempt ${ATTEMPT}; retrying in ${REVIEWER_RETRY_DELAY}s..."
+	        if ! sleep_with_runtime_budget "${REVIEWER_RETRY_DELAY}"; then
+	          EXIT_CODE=124
+	          log "RETRY: Runtime budget exhausted before retrying missing score for PR #${TARGET_PR}"
+	          break
+	        fi
+	        continue
+	      fi
+	      log "RETRY: No review score found for PR #${TARGET_PR} after ${TOTAL_ATTEMPTS} attempts; failing run."
+      EXIT_CODE=1
       break
     fi
 
@@ -770,13 +1142,17 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
     if [ "${CURRENT_SCORE}" -ge "${MIN_REVIEW_SCORE}" ]; then
       log "RETRY: PR #${TARGET_PR} now scores ${CURRENT_SCORE}/100 (>= ${MIN_REVIEW_SCORE}) after attempt ${ATTEMPT}"
       break
-    fi
-    if [ "${ATTEMPT}" -lt "${TOTAL_ATTEMPTS}" ]; then
-      log "RETRY: PR #${TARGET_PR} scores ${CURRENT_SCORE:-unknown}/100 after attempt ${ATTEMPT}/${TOTAL_ATTEMPTS}, retrying in ${REVIEWER_RETRY_DELAY}s..."
-      sleep "${REVIEWER_RETRY_DELAY}"
-    else
-      log "RETRY: PR #${TARGET_PR} still at ${CURRENT_SCORE:-unknown}/100 after ${TOTAL_ATTEMPTS} attempts - giving up"
-      gh pr edit "${TARGET_PR}" --add-label "needs-human-review" 2>/dev/null || true
+	    fi
+	    if [ "${ATTEMPT}" -lt "${TOTAL_ATTEMPTS}" ]; then
+	      log "RETRY: PR #${TARGET_PR} scores ${CURRENT_SCORE:-unknown}/100 after attempt ${ATTEMPT}/${TOTAL_ATTEMPTS}, retrying in ${REVIEWER_RETRY_DELAY}s..."
+	      if ! sleep_with_runtime_budget "${REVIEWER_RETRY_DELAY}"; then
+	        EXIT_CODE=124
+	        log "RETRY: Runtime budget exhausted before retrying low score for PR #${TARGET_PR}"
+	        break
+	      fi
+	    else
+	      log "RETRY: PR #${TARGET_PR} still at ${CURRENT_SCORE:-unknown}/100 after ${TOTAL_ATTEMPTS} attempts - giving up"
+	      gh pr edit "${TARGET_PR}" --add-label "needs-human-review" 2>/dev/null || true
     fi
   else
     # Non-targeted mode: no retry (reviewer handles all PRs in one shot)
@@ -861,4 +1237,6 @@ if [ "${AUTO_MERGE}" = "1" ] && [ ${EXIT_CODE} -eq 0 ]; then
   done < <(gh pr list --state open --json number,headRefName --jq '.[] | [.number, .headRefName] | @tsv' 2>/dev/null || true)
 fi
 
+REVIEWER_TOTAL_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
+log "OUTCOME: exit_code=${EXIT_CODE} total_elapsed=${REVIEWER_TOTAL_ELAPSED}s prs=${PRS_NEEDING_WORK_CSV:-none} attempts=${ATTEMPTS_MADE}"
 emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${ATTEMPTS_MADE}" "${FINAL_SCORE}"

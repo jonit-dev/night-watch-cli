@@ -76,6 +76,24 @@ resolve_instruction_path() {
   return 1
 }
 
+resolve_instruction_path_with_fallback() {
+  local project_dir="${1:?project_dir required}"
+  shift || true
+  local instruction_file=""
+  local resolved_path=""
+
+  for instruction_file in "$@"; do
+    [ -z "${instruction_file}" ] && continue
+    resolved_path=$(resolve_instruction_path "${project_dir}" "${instruction_file}" || true)
+    if [ -n "${resolved_path}" ]; then
+      printf "%s" "${resolved_path}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 instruction_ref_for_prompt() {
   local root_dir="${1:?root_dir required}"
   local instruction_path="${2:?instruction_path required}"
@@ -85,6 +103,50 @@ instruction_ref_for_prompt() {
   else
     printf "%s" "${instruction_path}"
   fi
+}
+
+prefer_bundled_prompt_if_legacy_command() {
+  local project_root="${1:?project_root required}"
+  local resolved_prompt_path="${2:?resolved_prompt_path required}"
+  local bundled_prompt_name="${3:?bundled_prompt_name required}"
+  local script_dir=""
+  local bundled_prompt_path=""
+  local rel_path=""
+  local first_content_line=""
+  local looks_like_wrapper=1
+
+  if [ -n "${SCRIPT_DIR:-}" ]; then
+    script_dir="${SCRIPT_DIR}"
+  else
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  fi
+
+  bundled_prompt_path="${script_dir}/../templates/${bundled_prompt_name}"
+
+  # Some instruction files only contain slash-command wrappers (e.g. "/night-watch-qa")
+  # rather than the full automation prompt. If detected, force bundled templates.
+  if [ -f "${bundled_prompt_path}" ] && [ -f "${resolved_prompt_path}" ]; then
+    first_content_line=$(
+      awk 'NF {print; exit}' "${resolved_prompt_path}" 2>/dev/null \
+        | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+    )
+    if printf '%s' "${first_content_line}" | grep -Eqi '^/[a-z0-9._/-]+'; then
+      looks_like_wrapper=0
+    fi
+  fi
+
+  if [ "${looks_like_wrapper}" -eq 0 ]; then
+    if [[ "${resolved_prompt_path}" == "${project_root}/"* ]]; then
+      rel_path="${resolved_prompt_path#${project_root}/}"
+    else
+      rel_path="${resolved_prompt_path}"
+    fi
+    log "WARN: Prompt ${rel_path} looks like a slash-command wrapper; using bundled template ${bundled_prompt_name}"
+    printf "%s" "${bundled_prompt_path}"
+    return 0
+  fi
+
+  printf "%s" "${resolved_prompt_path}"
 }
 
 night_watch_history() {
@@ -97,7 +159,26 @@ night_watch_history() {
 
 log() {
   local log_file="${LOG_FILE:?LOG_FILE not set}"
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "${log_file}"
+  local elapsed_str=""
+  if [ -n "${SCRIPT_START_TIME:-}" ]; then
+    local _now _elapsed _emin _esec
+    _now=$(date +%s)
+    _elapsed=$(( _now - SCRIPT_START_TIME ))
+    _emin=$(( _elapsed / 60 ))
+    _esec=$(( _elapsed % 60 ))
+    elapsed_str=" [+${_emin}m${_esec}s]"
+  fi
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [PID:$$]${elapsed_str} $*" >> "${log_file}"
+}
+
+# Write a visual separator line to the log to delimit separate runs.
+log_separator() {
+  local log_file="${LOG_FILE:?LOG_FILE not set}"
+  {
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+  } >> "${log_file}"
 }
 
 # ── Log rotation ─────────────────────────────────────────────────────────────
@@ -493,6 +574,95 @@ check_rate_limited() {
   else
     tail -20 "${log_file}" 2>/dev/null | grep -q "429"
   fi
+}
+
+# Resolve URL host from a URL-like string.
+# Example: "https://api.z.ai/api/anthropic" -> "api.z.ai"
+extract_url_host() {
+  local raw_url="${1:-}"
+  if [ -z "${raw_url}" ]; then
+    return 0
+  fi
+  printf '%s' "${raw_url}" | sed -E 's#^[[:alpha:]][[:alnum:]+.-]*://##; s#/.*$##'
+}
+
+# Resolve a Claude model hint from env vars.
+# Priority:
+# 1) ANTHROPIC_DEFAULT_SONNET_MODEL / ANTHROPIC_DEFAULT_OPUS_MODEL (providerEnv overrides)
+# 2) NW_CLAUDE_MODEL_ID (resolved from config.claudeModel by caller)
+# 3) "default"
+resolve_claude_model_hint() {
+  local sonnet="${ANTHROPIC_DEFAULT_SONNET_MODEL:-}"
+  local opus="${ANTHROPIC_DEFAULT_OPUS_MODEL:-}"
+  local native_model="${NW_CLAUDE_MODEL_ID:-}"
+
+  if [ -n "${sonnet}" ] && [ -n "${opus}" ]; then
+    if [ "${sonnet}" = "${opus}" ]; then
+      printf "%s" "${sonnet}"
+    else
+      printf "sonnet=%s, opus=%s" "${sonnet}" "${opus}"
+    fi
+    return 0
+  fi
+  if [ -n "${sonnet}" ]; then
+    printf "%s" "${sonnet}"
+    return 0
+  fi
+  if [ -n "${opus}" ]; then
+    printf "%s" "${opus}"
+    return 0
+  fi
+  if [ -n "${native_model}" ]; then
+    printf "%s" "${native_model}"
+    return 0
+  fi
+  printf "default"
+}
+
+# Build a user-facing provider/model display string.
+# Examples:
+#   claude (glm-5 via api.z.ai)
+#   claude (claude-sonnet-4-6)
+#   codex
+#   codex (Custom Label)
+resolve_provider_model_display() {
+  local provider_cmd="${1:?provider command required}"
+  local provider_label="${2:-}"
+  local label_trimmed=""
+  local model_hint=""
+  local endpoint_host=""
+  local details=""
+
+  label_trimmed=$(printf '%s' "${provider_label}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+
+  case "${provider_cmd}" in
+    claude)
+      model_hint=$(resolve_claude_model_hint)
+      endpoint_host=$(extract_url_host "${ANTHROPIC_BASE_URL:-}")
+      details="${model_hint}"
+      if [ -n "${endpoint_host}" ]; then
+        details="${details} via ${endpoint_host}"
+      fi
+      if [ -n "${label_trimmed}" ] && [ "${label_trimmed}" != "Claude" ] && [ "${label_trimmed}" != "Claude (proxy)" ]; then
+        details="${label_trimmed}; ${details}"
+      fi
+      printf "%s (%s)" "${provider_cmd}" "${details}"
+      ;;
+    codex)
+      if [ -n "${label_trimmed}" ] && [ "${label_trimmed}" != "Codex" ]; then
+        printf "%s (%s)" "${provider_cmd}" "${label_trimmed}"
+      else
+        printf "%s" "${provider_cmd}"
+      fi
+      ;;
+    *)
+      if [ -n "${label_trimmed}" ]; then
+        printf "%s (%s)" "${provider_cmd}" "${label_trimmed}"
+      else
+        printf "%s" "${provider_cmd}"
+      fi
+      ;;
+  esac
 }
 
 # Send a generic Telegram status message.

@@ -13,9 +13,23 @@ import {
 import type { JobType } from '@night-watch/core';
 
 /**
+ * Derive a human-friendly provider label for display in PR bodies, comments, and commits.
+ * Uses config.providerLabel if set (e.g. "GLM-5"), otherwise auto-derives from provider/env.
+ */
+function deriveProviderLabel(config: INightWatchConfig, jobType: JobType): string {
+  if (config.providerLabel) return config.providerLabel;
+  const provider = resolveJobProvider(config, jobType);
+  if (provider === 'codex') return 'Codex';
+  // claude provider: check if a proxy base URL is configured
+  if (config.providerEnv?.ANTHROPIC_BASE_URL) return 'Claude (proxy)';
+  return 'Claude';
+}
+
+/**
  * Build the base environment variables shared by all job types.
  * Sets provider, queue, execution-context, and optional dry-run/default-branch env vars.
  * - NW_PROVIDER_CMD: the CLI binary for the resolved provider
+ * - NW_PROVIDER_LABEL: human-friendly provider name for PR/comment attribution
  * - NW_DEFAULT_BRANCH: optional default branch
  * - providerEnv: merged into env
  * - NW_QUEUE_*: queue configuration for bash scripts
@@ -31,6 +45,9 @@ export function buildBaseEnvVars(
 
   // Provider command - the actual CLI binary to call
   env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[resolveJobProvider(config, jobType)];
+
+  // Human-friendly provider label for attribution in PRs, comments, commits
+  env.NW_PROVIDER_LABEL = deriveProviderLabel(config, jobType);
 
   // Default branch (empty = auto-detect in bash script)
   if (config.defaultBranch) {
@@ -58,6 +75,18 @@ export function buildBaseEnvVars(
   env.NW_EXECUTION_CONTEXT = 'agent';
 
   return env;
+}
+
+/**
+ * Format provider display for notifications/UI using command + label.
+ */
+export function formatProviderDisplay(providerCmd?: string, providerLabel?: string): string {
+  const cmd = providerCmd?.trim();
+  if (!cmd) return 'unknown';
+  const label = providerLabel?.trim();
+  if (!label) return cmd;
+  if (label.toLowerCase() === cmd.toLowerCase()) return cmd;
+  return `${cmd} (${label})`;
 }
 
 /**

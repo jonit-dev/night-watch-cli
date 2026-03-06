@@ -10,49 +10,39 @@ export type CronPreset = {
 
 export const CRON_PRESETS: CronPreset[] = [
   {
-    label: 'Night Watch (default)',
-    value: '0 0-21 * * *',
-    description: 'Every hour from midnight to 9pm UTC',
+    label: 'Balanced (recommended)',
+    value: '5 */3 * * *',
+    description: 'Every 3 hours at minute 5 (good default, low burst risk)',
   },
   {
-    label: 'Every 3 hours',
-    value: '0 0,3,6,9,12,15,18,21 * * *',
-    description: 'At minute 0 past every 3rd hour',
+    label: 'Every 6 hours (very safe)',
+    value: '10 */6 * * *',
+    description: 'Every 6 hours at minute 10',
   },
   {
-    label: 'Business hours',
-    value: '0 0,1,2,3,4,5,6,7,8,11,14,17,20 * * *',
-    description: 'During typical US business hours',
-  },
-  {
-    label: 'Workday (9-5)',
-    value: '0 9,10,11,12,13,14,15,16,17 * * 1-5',
-    description: 'Hourly, Monday to Friday, 9am-5pm UTC',
+    label: 'Every 4 hours',
+    value: '10 */4 * * *',
+    description: 'Every 4 hours at minute 10',
   },
   {
     label: 'Twice daily',
-    value: '0 0,12 * * *',
-    description: 'At midnight and noon UTC',
+    value: '20 2,14 * * *',
+    description: 'At 02:20 and 14:20 UTC',
   },
   {
-    label: 'Hourly',
-    value: '0 * * * *',
-    description: 'At minute 0 of every hour',
+    label: 'Daily',
+    value: '30 3 * * *',
+    description: 'Once per day at 03:30 UTC',
   },
   {
-    label: 'Every 30 minutes',
-    value: '*/30 * * * *',
-    description: 'Twice per hour',
+    label: 'Weekdays only',
+    value: '30 9 * * 1-5',
+    description: 'At 09:30 UTC, Monday to Friday',
   },
   {
-    label: 'Daily at midnight',
-    value: '0 0 * * *',
-    description: 'Once per day at 00:00 UTC',
-  },
-  {
-    label: 'Weekdays at 9 AM',
-    value: '0 9 * * 1-5',
-    description: 'Monday to Friday at 9am UTC',
+    label: 'Weekly (Monday)',
+    value: '40 3 * * 1',
+    description: 'At 03:40 UTC every Monday',
   },
   {
     label: 'Custom',
@@ -61,19 +51,182 @@ export const CRON_PRESETS: CronPreset[] = [
   },
 ];
 
+export interface IScheduleTemplate {
+  id: string;
+  label: string;
+  description: string;
+  schedules: {
+    executor: string;
+    reviewer: string;
+    qa: string;
+    audit: string;
+    slicer: string;
+  };
+  hints: {
+    executor: string;
+    reviewer: string;
+    qa: string;
+    audit: string;
+    slicer: string;
+  };
+}
+
+export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
+  {
+    id: 'night-surge',
+    label: 'Night Surge',
+    description: 'Overnight execution with staggered jobs to avoid API bursts.',
+    schedules: {
+      executor: '5 21,0,3,6 * * *',
+      reviewer: '25 9,17 * * *',
+      qa: '45 22 * * *',
+      audit: '50 4 * * 1',
+      slicer: '35 20 * * *',
+    },
+    hints: {
+      executor: '9pm, 12am, 3am, 6am',
+      reviewer: '9:25am & 5:25pm',
+      qa: '10:45pm',
+      audit: 'Mon 4:50am',
+      slicer: '8:35pm kickoff',
+    },
+  },
+  {
+    id: 'always-on',
+    label: 'Always On (Recommended)',
+    description: '24/7 with conservative cadence and minute staggering to reduce rate limits.',
+    schedules: {
+      executor: '5 */3 * * *',
+      reviewer: '25 */6 * * *',
+      qa: '45 2,14 * * *',
+      audit: '50 3 * * 1',
+      slicer: '35 */12 * * *',
+    },
+    hints: {
+      executor: 'Every 3h at :05',
+      reviewer: 'Every 6h at :25',
+      qa: '2:45am & 2:45pm',
+      audit: 'Mon 3:50am',
+      slicer: 'Every 12h at :35',
+    },
+  },
+  {
+    id: 'day-shift',
+    label: 'Day Shift',
+    description: 'Weekday daytime cadence with staggered minutes per job.',
+    schedules: {
+      executor: '5 9-18 * * 1-5',
+      reviewer: '25 12,18 * * 1-5',
+      qa: '45 11,17 * * 1-5',
+      audit: '50 9 * * 1',
+      slicer: '35 8 * * 1',
+    },
+    hints: {
+      executor: 'Hourly at :05, weekdays',
+      reviewer: '12:25pm & 6:25pm, weekdays',
+      qa: '11:45am & 5:45pm, weekdays',
+      audit: 'Mon 9:50am',
+      slicer: 'Mon 8:35am',
+    },
+  },
+  {
+    id: 'minimal',
+    label: 'Minimal',
+    description: 'Lowest API usage with one lightweight run per day (weekly heavy jobs).',
+    schedules: {
+      executor: '5 2 * * *',
+      reviewer: '25 8 * * *',
+      qa: '45 3 * * 0',
+      audit: '50 4 * * 0',
+      slicer: '35 1 * * 1',
+    },
+    hints: {
+      executor: 'Daily 2:05am',
+      reviewer: 'Daily 8:25am',
+      qa: 'Sun 3:45am',
+      audit: 'Sun 4:50am',
+      slicer: 'Mon 1:35am',
+    },
+  },
+];
+
+export function normalizeCronExpression(expr: string): string {
+  return expr.trim().replace(/\s+/g, ' ');
+}
+
+export function isCronEquivalent(left: string, right: string): boolean {
+  return normalizeCronExpression(left) === normalizeCronExpression(right);
+}
+
+export function getTemplateById(id: string | null | undefined): IScheduleTemplate | undefined {
+  if (!id) return undefined;
+  return SCHEDULE_TEMPLATES.find((template) => template.id === id);
+}
+
+export function templateMatchesSchedules(
+  template: IScheduleTemplate,
+  executor: string,
+  reviewer: string,
+  qa: string,
+  audit: string,
+  slicer: string,
+): boolean {
+  return (
+    isCronEquivalent(template.schedules.executor, executor) &&
+    isCronEquivalent(template.schedules.reviewer, reviewer) &&
+    isCronEquivalent(template.schedules.qa, qa) &&
+    isCronEquivalent(template.schedules.audit, audit) &&
+    isCronEquivalent(template.schedules.slicer, slicer)
+  );
+}
+
+export function detectTemplate(
+  executor: string,
+  reviewer: string,
+  qa: string,
+  audit: string,
+  slicer: string,
+): IScheduleTemplate | undefined {
+  return SCHEDULE_TEMPLATES.find((t) =>
+    templateMatchesSchedules(t, executor, reviewer, qa, audit, slicer),
+  );
+}
+
+/**
+ * Resolve active template from persisted template id and current schedules.
+ * Uses persisted id when it exists and still matches current schedules;
+ * otherwise falls back to schedule-based detection.
+ */
+export function resolveActiveTemplate(
+  scheduleBundleId: string | null | undefined,
+  executor: string,
+  reviewer: string,
+  qa: string,
+  audit: string,
+  slicer: string,
+): IScheduleTemplate | undefined {
+  const byId = getTemplateById(scheduleBundleId);
+  if (byId && templateMatchesSchedules(byId, executor, reviewer, qa, audit, slicer)) {
+    return byId;
+  }
+  return detectTemplate(executor, reviewer, qa, audit, slicer);
+}
+
 /**
  * Convert cron expression to human-readable format
  */
 export function cronToHuman(expr: string): string {
-  const parts = expr.trim().split(/\s+/);
+  const normalizedExpr = normalizeCronExpression(expr);
+  const parts = normalizedExpr.split(/\s+/);
   if (parts.length !== 5) {
-    return expr;
+    return normalizedExpr;
   }
 
   const [minute, hour, dayOfMonth, month, dayOfWeek] = parts;
+  const isFixedMinute = /^\d+$/.test(minute);
 
   // Check for presets
-  const preset = CRON_PRESETS.find(p => p.value === expr);
+  const preset = CRON_PRESETS.find((p) => normalizeCronExpression(p.value) === normalizedExpr);
   if (preset) {
     return preset.label;
   }
@@ -89,21 +242,30 @@ export function cronToHuman(expr: string): string {
     const interval = parseInt(minute.replace('*/', ''), 10);
     return `Every ${interval} minutes`;
   }
+  if (
+    isFixedMinute &&
+    hour.startsWith('*/') &&
+    dayOfMonth === '*' &&
+    month === '*' &&
+    dayOfWeek === '*'
+  ) {
+    const interval = parseInt(hour.replace('*/', ''), 10);
+    return minute === '0'
+      ? `Every ${interval} hours`
+      : `Every ${interval} hours at :${minute.padStart(2, '0')}`;
+  }
   if (minute === '0' && hour.startsWith('*/')) {
     const interval = parseInt(hour.replace('*/', ''), 10);
     return `Every ${interval} hours`;
   }
-  if (minute === '0' && hour !== '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
-    return `Daily at ${formatHour(hour)}`;
-  }
-  if (minute === '0' && hour !== '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '1-5') {
-    return `Weekdays at ${formatHour(hour)}`;
-  }
-
   // Handle hour range (e.g., 0-21)
   if (minute === '0' && hour.includes('-')) {
     const [start, end] = hour.split('-');
     return `Every hour from ${formatHour(start)} to ${formatHour(end)}`;
+  }
+  if (isFixedMinute && hour.includes('-') && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+    const [start, end] = hour.split('-');
+    return `Every hour from ${formatTime(start, minute)} to ${formatTime(end, minute)}`;
   }
 
   // Handle comma-separated hours
@@ -114,9 +276,48 @@ export function cronToHuman(expr: string): string {
     }
     return `At ${hours.slice(0, -1).join(', ')}, and ${hours[hours.length - 1]}`;
   }
+  if (
+    isFixedMinute &&
+    hour.includes(',') &&
+    dayOfMonth === '*' &&
+    month === '*' &&
+    (dayOfWeek === '*' || dayOfWeek === '1-5')
+  ) {
+    const times = hour.split(',').map((value) => formatTime(value, minute));
+    const prefix = dayOfWeek === '1-5' ? 'Weekdays at ' : 'At ';
+    if (times.length <= 3) {
+      return `${prefix}${times.join(' and ')}`;
+    }
+    return `${prefix}${times.slice(0, -1).join(', ')}, and ${times[times.length - 1]}`;
+  }
+
+  if (minute === '0' && hour !== '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '*') {
+    return `Daily at ${formatHour(hour)}`;
+  }
+  if (
+    isFixedMinute &&
+    hour !== '*' &&
+    dayOfMonth === '*' &&
+    month === '*' &&
+    dayOfWeek === '*'
+  ) {
+    return `Daily at ${formatTime(hour, minute)}`;
+  }
+  if (minute === '0' && hour !== '*' && dayOfMonth === '*' && month === '*' && dayOfWeek === '1-5') {
+    return `Weekdays at ${formatHour(hour)}`;
+  }
+  if (
+    isFixedMinute &&
+    hour !== '*' &&
+    dayOfMonth === '*' &&
+    month === '*' &&
+    dayOfWeek === '1-5'
+  ) {
+    return `Weekdays at ${formatTime(hour, minute)}`;
+  }
 
   // Default: return the expression itself
-  return expr;
+  return normalizedExpr;
 }
 
 /**
@@ -130,11 +331,24 @@ function formatHour(hour: string): string {
   return `${h - 12} PM`;
 }
 
+function formatTime(hour: string, minute: string): string {
+  const paddedMinute = minute.padStart(2, '0');
+  const h = parseInt(hour, 10);
+  if (Number.isNaN(h)) {
+    return `${hour}:${paddedMinute}`;
+  }
+  if (h === 0) return `12:${paddedMinute} AM`;
+  if (h < 12) return `${h}:${paddedMinute} AM`;
+  if (h === 12) return `12:${paddedMinute} PM`;
+  return `${h - 12}:${paddedMinute} PM`;
+}
+
 /**
  * Get the preset value for a given cron expression
  */
 export function getPresetValue(cronExpr: string): string {
-  const preset = CRON_PRESETS.find(p => p.value === cronExpr);
+  const normalizedExpr = normalizeCronExpression(cronExpr);
+  const preset = CRON_PRESETS.find((p) => normalizeCronExpression(p.value) === normalizedExpr);
   return preset?.value ?? '__custom__';
 }
 

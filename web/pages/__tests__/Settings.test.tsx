@@ -5,7 +5,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
     it('should include all fields from INightWatchConfig except _cliProviderOverride', () => {
       // This is a compile-time check - the test passes if the code compiles
       // The ConfigForm type in Settings.tsx includes:
-      // - provider, defaultBranch, prdDir, branchPrefix, branchPatterns
+      // - provider, providerLabel, defaultBranch, prdDir, branchPrefix, branchPatterns
       // - executorEnabled, reviewerEnabled, minReviewScore, maxRuntime, reviewerMaxRuntime, maxLogSize
       // - cronSchedule, reviewerSchedule, cronScheduleOffset, maxRetries
       // - reviewerMaxRetries, reviewerRetryDelay
@@ -16,6 +16,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
 
       const requiredFields = [
         'provider',
+        'providerLabel',
         'defaultBranch',
         'prdDir',
         'branchPrefix',
@@ -28,6 +29,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
         'maxLogSize',
         'cronSchedule',
         'reviewerSchedule',
+        'scheduleBundleId',
         'cronScheduleOffset',
         'maxRetries',
         'reviewerMaxRetries',
@@ -55,14 +57,15 @@ describe('Settings Page - PRD Coverage Verification', () => {
       expect(requiredFields).toContain('audit');
       expect(requiredFields).toContain('cronSchedule');
       expect(requiredFields).toContain('reviewerSchedule');
+      expect(requiredFields).toContain('scheduleBundleId');
       expect(requiredFields).toContain('cronScheduleOffset');
 
       // Verify reviewer retry fields are included
       expect(requiredFields).toContain('reviewerMaxRetries');
       expect(requiredFields).toContain('reviewerRetryDelay');
 
-      // If we got here, all 30 fields are defined in ConfigForm
-      expect(requiredFields.length).toBe(30);
+      // If we got here, all 32 fields are defined in ConfigForm
+      expect(requiredFields.length).toBe(32);
     });
   });
 
@@ -71,14 +74,16 @@ describe('Settings Page - PRD Coverage Verification', () => {
       // Verify defaults for new fields from PRD
       const defaults = {
         prdDir: 'docs/prds',
-        fallbackOnRateLimit: false,
+        providerLabel: '',
+        fallbackOnRateLimit: true,
         claudeModel: 'sonnet',
-        cronSchedule: '0 0-21 * * *',
-        reviewerSchedule: '0 0,3,6,9,12,15,18,21 * * *',
+        cronSchedule: '5 */3 * * *',
+        reviewerSchedule: '25 */6 * * *',
+        scheduleBundleId: null,
         cronScheduleOffset: 0,
         qa: {
           enabled: true,
-          schedule: '30 1,7,13,19 * * *',
+          schedule: '45 2,14 * * *',
           maxRuntime: 3600,
           branchPatterns: [],
           artifacts: 'both',
@@ -87,14 +92,15 @@ describe('Settings Page - PRD Coverage Verification', () => {
         },
         audit: {
           enabled: true,
-          schedule: '0 2,8,14,20 * * *',
+          schedule: '50 3 * * 1',
           maxRuntime: 1800,
         },
       };
 
       // These defaults match the toFormState() function in Settings.tsx
       expect(defaults.prdDir).toBe('docs/prds');
-      expect(defaults.fallbackOnRateLimit).toBe(false);
+      expect(defaults.providerLabel).toBe('');
+      expect(defaults.fallbackOnRateLimit).toBe(true);
       expect(defaults.claudeModel).toBe('sonnet');
       expect(defaults.qa.artifacts).toBe('both');
       expect(defaults.audit.maxRuntime).toBe(1800);
@@ -106,25 +112,25 @@ describe('Settings Page - PRD Coverage Verification', () => {
       // These tabs exist in Settings.tsx
       const tabs = [
         'General',
+        'Providers',
         'Runtime',
         'Schedules',
-        'Provider Env',
         'Notifications',
         'Roadmap',
         'Board',
-        'Job Providers',
         'QA',
         'Audit',
         'Advanced',
       ];
 
       // New tabs added for PRD
+      expect(tabs).toContain('Providers');
       expect(tabs).toContain('Schedules');
       expect(tabs).toContain('QA');
       expect(tabs).toContain('Audit');
 
-      // Total tabs should be 11
-      expect(tabs.length).toBe(11);
+      // Total tabs should be 10
+      expect(tabs.length).toBe(10);
     });
   });
 

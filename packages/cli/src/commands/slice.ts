@@ -4,9 +4,12 @@
 
 import { Command } from 'commander';
 import {
+  BoardColumnName,
+  CLAUDE_MODEL_IDS,
   INightWatchConfig,
   LOCK_FILE_PREFIX,
   PROVIDER_COMMANDS,
+  createBoardProvider,
   createSpinner,
   createTable,
   dim,
@@ -20,6 +23,7 @@ import {
   sendNotifications,
   sliceNextItem,
   error as uiError,
+  warn,
 } from '@night-watch/core';
 import { buildBaseEnvVars, getTelegramStatusWebhooks } from './shared/env-builder.js';
 import type { ISliceResult } from '@night-watch/core';
@@ -33,6 +37,13 @@ export interface ISliceOptions {
   dryRun: boolean;
   timeout?: string;
   provider?: string;
+}
+
+export interface IPlannerIssueCreationResult {
+  created: boolean;
+  skippedReason?: string;
+  issueNumber?: number;
+  issueUrl?: string;
 }
 
 function plannerLockPath(projectDir: string): string {
@@ -73,6 +84,97 @@ function releasePlannerLock(lockFile: string): void {
   }
 }
 
+function resolvePlannerIssueColumn(config: INightWatchConfig): BoardColumnName {
+  return config.roadmapScanner.issueColumn === 'Ready' ? 'Ready' : 'Draft';
+}
+
+function buildPlannerIssueBody(
+  projectDir: string,
+  config: INightWatchConfig,
+  result: ISliceResult,
+): string {
+  const relativePrdPath = path.join(config.prdDir, result.file ?? '').replace(/\\/g, '/');
+  const absolutePrdPath = path.join(projectDir, config.prdDir, result.file ?? '');
+  const sourceItem = result.item;
+
+  let prdContent = '';
+  try {
+    prdContent = fs.readFileSync(absolutePrdPath, 'utf-8');
+  } catch {
+    prdContent = `Unable to read generated PRD file at \`${relativePrdPath}\`.`;
+  }
+
+  const maxBodyChars = 60000;
+  const truncated = prdContent.length > maxBodyChars;
+  const prdPreview = truncated
+    ? `${prdContent.slice(0, maxBodyChars)}\n\n...[truncated]`
+    : prdContent;
+
+  const sourceLines = sourceItem
+    ? [
+        `- Source section: ${sourceItem.section}`,
+        `- Source item: ${sourceItem.title}`,
+        sourceItem.description ? `- Source summary: ${sourceItem.description}` : '',
+      ].filter((line) => line.length > 0)
+    : [];
+
+  return [
+    '## Planner Generated PRD',
+    '',
+    `- PRD file: \`${relativePrdPath}\``,
+    ...sourceLines,
+    '',
+    '---',
+    '',
+    prdPreview,
+  ].join('\n');
+}
+
+export async function createPlannerIssue(
+  projectDir: string,
+  config: INightWatchConfig,
+  result: ISliceResult,
+): Promise<IPlannerIssueCreationResult> {
+  if (!result.sliced || !result.file || !result.item) {
+    return { created: false, skippedReason: 'nothing-created' };
+  }
+
+  if (!config.boardProvider?.enabled) {
+    return { created: false, skippedReason: 'board-disabled' };
+  }
+
+  const provider = createBoardProvider(config.boardProvider, projectDir);
+  const board = await provider.getBoard();
+  if (!board) {
+    return { created: false, skippedReason: 'board-not-configured' };
+  }
+
+  const existingIssues = await provider.getAllIssues();
+  const existing = existingIssues.find(
+    (issue) => issue.title.trim().toLowerCase() === result.item!.title.trim().toLowerCase(),
+  );
+  if (existing) {
+    return {
+      created: false,
+      skippedReason: 'already-exists',
+      issueNumber: existing.number,
+      issueUrl: existing.url,
+    };
+  }
+
+  const issue = await provider.createIssue({
+    title: result.item.title,
+    body: buildPlannerIssueBody(projectDir, config, result),
+    column: resolvePlannerIssueColumn(config),
+  });
+
+  return {
+    created: true,
+    issueNumber: issue.number,
+    issueUrl: issue.url,
+  };
+}
+
 /**
  * Build environment variables map from config and CLI options for slicer
  */
@@ -91,6 +193,7 @@ export function buildEnvVars(
 
   // Roadmap path
   env.NW_ROADMAP_PATH = config.roadmapScanner.roadmapPath;
+  env.NW_CLAUDE_MODEL_ID = CLAUDE_MODEL_IDS[config.claudeModel ?? 'sonnet'];
 
   // Telegram status messages from bash scripts (start/progress/final status)
   const telegramWebhooks = getTelegramStatusWebhooks(config);
@@ -179,6 +282,8 @@ export function sliceCommand(program: Command): void {
           `${config.roadmapScanner.slicerMaxRuntime}s (${Math.floor(config.roadmapScanner.slicerMaxRuntime / 60)}min)`,
         ]);
         configTable.push(['Planner Schedule', config.roadmapScanner.slicerSchedule]);
+        configTable.push(['Planner Priority Mode', config.roadmapScanner.priorityMode]);
+        configTable.push(['Planner Issue Column', resolvePlannerIssueColumn(config)]);
         configTable.push(['Scanner Enabled', config.roadmapScanner.enabled ? 'Yes' : 'No']);
         console.log(configTable.toString());
 
@@ -218,9 +323,11 @@ export function sliceCommand(program: Command): void {
 
         // Provider invocation command
         header('Provider Invocation');
-        const providerCmd = PROVIDER_COMMANDS[slicerProvider];
-        const autoFlag = slicerProvider === 'claude' ? '--dangerously-skip-permissions' : '--yolo';
-        dim(`  ${providerCmd} ${autoFlag} -p "/night-watch-slicer"`);
+        if (slicerProvider === 'claude') {
+          dim('  claude -p "/night-watch-slicer" --dangerously-skip-permissions');
+        } else {
+          dim('  codex exec --yolo "/night-watch-slicer"');
+        }
 
         // Environment variables
         header('Environment Variables');
@@ -258,8 +365,26 @@ export function sliceCommand(program: Command): void {
 
         const result: ISliceResult = await sliceNextItem(projectDir, config);
 
+        let issueSummary = '';
         if (result.sliced) {
-          spinner.succeed(`Planner completed successfully: Created ${result.file}`);
+          try {
+            const issueResult = await createPlannerIssue(projectDir, config, result);
+            if (issueResult.created && issueResult.issueNumber) {
+              issueSummary = `; issue #${issueResult.issueNumber} (${resolvePlannerIssueColumn(config)})`;
+            } else if (issueResult.skippedReason === 'already-exists' && issueResult.issueNumber) {
+              issueSummary = `; existing issue #${issueResult.issueNumber}`;
+            }
+          } catch (issueError) {
+            warn(
+              `Planner created ${result.file} but failed to create board issue: ${
+                issueError instanceof Error ? issueError.message : String(issueError)
+              }`,
+            );
+          }
+        }
+
+        if (result.sliced) {
+          spinner.succeed(`Planner completed successfully: Created ${result.file}${issueSummary}`);
         } else if (result.error) {
           if (result.error === 'No pending items to process') {
             spinner.succeed('No pending items to process');

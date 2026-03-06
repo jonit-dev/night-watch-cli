@@ -108,6 +108,7 @@ describe('review command', () => {
       expect(env.NW_REVIEWER_MAX_RUNTIME).toBe('3600');
       expect(env.NW_MIN_REVIEW_SCORE).toBe('80');
       expect(env.NW_BRANCH_PATTERNS).toBe('feat/,night-watch/');
+      expect(env.NW_PRD_DIR).toBe('docs/PRDs/night-watch');
 
       // Should NOT set NW_MAX_RUNTIME
       expect(env.NW_MAX_RUNTIME).toBeUndefined();
@@ -129,6 +130,15 @@ describe('review command', () => {
       const env = buildEnvVars(config, options);
 
       expect(env.NW_PROVIDER_CMD).toBe('codex');
+    });
+
+    it('should set NW_CLAUDE_MODEL_ID from config.claudeModel', () => {
+      const config = createTestConfig({ claudeModel: 'opus' } as Partial<INightWatchConfig>);
+      const options: IReviewOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_CLAUDE_MODEL_ID).toBe('claude-opus-4-6');
     });
 
     it('should pass NW_DEFAULT_BRANCH when configured', () => {

@@ -535,10 +535,11 @@ export function runCommand(program: Command): void {
 
         // Provider invocation command
         header('Provider Invocation');
-        const providerCmd = PROVIDER_COMMANDS[executorProvider];
-        const autoFlag =
-          executorProvider === 'claude' ? '--dangerously-skip-permissions' : '--yolo';
-        dim(`  ${providerCmd} ${autoFlag} -p "/night-watch"`);
+        if (executorProvider === 'claude') {
+          dim('  claude -p "/night-watch" --dangerously-skip-permissions');
+        } else {
+          dim('  codex exec --yolo "/night-watch"');
+        }
 
         // Environment variables
         header('Environment Variables');

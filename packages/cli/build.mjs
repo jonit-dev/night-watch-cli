@@ -12,6 +12,7 @@
  */
 
 import { cpSync, existsSync } from 'fs';
+import { execSync } from 'child_process';
 
 import * as esbuild from 'esbuild';
 import { dirname, join, resolve } from 'path';
@@ -69,15 +70,18 @@ await esbuild.build({
 
 console.log('Bundle complete: dist/cli.js');
 
-// Copy web UI assets into the CLI dist so they ship with the npm package.
+// Build and copy web UI assets into the CLI dist so they ship with the npm package.
 // The server resolves __dirname/web/ at runtime when no monorepo root is found.
+const webRoot = resolve(__dirname, '../../web');
 const webSrc = resolve(__dirname, '../../web/dist');
 const webDest = resolve(__dirname, 'dist/web');
-if (existsSync(webSrc)) {
+if (existsSync(webRoot)) {
+  console.log('Building web UI...');
+  execSync('yarn build', { cwd: webRoot, stdio: 'inherit' });
   cpSync(webSrc, webDest, { recursive: true });
   console.log('Web UI copied: dist/web/');
 } else {
-  console.warn('Warning: web/dist not found — web UI will not be bundled.');
+  console.warn('Warning: web/ not found — web UI will not be bundled.');
 }
 
 // Copy shell scripts into dist/scripts/ so they are always available regardless

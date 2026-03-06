@@ -64,6 +64,8 @@ export interface IRoadmapScannerConfig {
   autoScanInterval: number;
   slicerSchedule?: string;
   slicerMaxRuntime?: number;
+  priorityMode?: 'roadmap-first' | 'audit-first';
+  issueColumn?: 'Draft' | 'Ready';
 }
 
 // ==================== QA Config ====================
@@ -115,11 +117,13 @@ export interface INightWatchConfig {
   maxLogSize: number;
   cronSchedule: string;
   reviewerSchedule: string;
+  scheduleBundleId?: string | null;
   cronScheduleOffset: number;
   maxRetries: number;
   reviewerMaxRetries: number;
   reviewerRetryDelay: number;
   provider: Provider;
+  providerLabel?: string;
   executorEnabled?: boolean;
   reviewerEnabled: boolean;
   providerEnv: Record<string, string>;
