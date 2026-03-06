@@ -15,6 +15,7 @@ import {
   removeEntriesForProject,
   success,
   error as uiError,
+  unregisterProject,
   warn,
 } from '@night-watch/core';
 
@@ -44,10 +45,12 @@ export function performUninstall(
       new Set([...getEntries(marker), ...getProjectEntries(projectDir)]),
     );
     if (existingEntries.length === 0) {
+      unregisterProject(projectDir);
       return { success: true, removedCount: 0 };
     }
 
     const removedCount = removeEntriesForProject(projectDir, marker);
+    unregisterProject(projectDir);
 
     if (!options?.keepLogs) {
       const logDir = path.join(projectDir, 'logs');

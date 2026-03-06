@@ -54,8 +54,10 @@ fi
 
 # Global gate: if queue is enabled and we can't acquire the global lock,
 # enqueue the job and exit. The dispatcher will run it later.
-if [ "${NW_QUEUE_ENABLED:-1}" = "1" ]; then
-  if ! acquire_global_gate; then
+if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
+  if acquire_global_gate; then
+    arm_global_queue_cleanup
+  else
     enqueue_job "${SCRIPT_TYPE}" "${PROJECT_DIR}"
     emit_result "queued"
     exit 0
@@ -192,8 +194,6 @@ if [ "${EXIT_CODE}" -eq 0 ]; then
     send_telegram_status_message "🔎 Night Watch Auditor: failed" "Project: ${PROJECT_NAME}
 Provider exited successfully but no report file was generated."
     emit_result "failure_no_report"
-    release_global_gate
-    dispatch_next_queued_job
     exit 1
   fi
 
@@ -219,8 +219,5 @@ else
 Exit code: ${EXIT_CODE}"
   emit_result "failure" "provider_exit=${EXIT_CODE}"
 fi
-
-release_global_gate
-dispatch_next_queued_job
 
 exit "${EXIT_CODE}"

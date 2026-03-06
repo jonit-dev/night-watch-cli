@@ -47,8 +47,10 @@ SCRIPT_TYPE="qa"
 # ── Global Job Queue Gate ────────────────────────────────────────────────────
 # Acquire global gate before per-project lock to serialize jobs across projects.
 # When gate is busy, enqueue the job and exit cleanly.
-if [ "${NW_QUEUE_ENABLED:-1}" = "1" ]; then
-  if ! acquire_global_gate; then
+if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
+  if acquire_global_gate; then
+    arm_global_queue_cleanup
+  else
     enqueue_job "${SCRIPT_TYPE}" "${PROJECT_DIR}"
     emit_result "queued"
     exit 0
@@ -317,10 +319,5 @@ Processed PRs: ${PRS_NEEDING_QA_CSV}"
   else
     emit_result "failure" "prs=${PRS_NEEDING_QA_CSV}"
   fi
-# ── Global Job Queue Dispatcher ──────────────────────────────────────
-# After this job completes, release the gate and dispatch the next queued job
-release_global_gate
-dispatch_next_queued_job
-# ──────────────────────────────────────────────────────────────────────────────
 fi
 exit "${EXIT_CODE}"

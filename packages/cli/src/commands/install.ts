@@ -18,6 +18,7 @@ import {
   header,
   loadConfig,
   readCrontab,
+  registerProject,
   success,
   error as uiError,
   warn,
@@ -163,6 +164,7 @@ export function performInstall(
         new Set([...getEntries(marker), ...getProjectEntries(projectDir)]),
       );
       if (existingEntries.length > 0) {
+        registerProject(projectDir);
         return {
           success: false,
           entries: existingEntries,
@@ -228,6 +230,7 @@ export function performInstall(
     const currentCrontab = readCrontab();
     const newCrontab = [...currentCrontab, ...entries];
     writeCrontab(newCrontab);
+    registerProject(projectDir);
 
     return { success: true, entries };
   } catch (err) {

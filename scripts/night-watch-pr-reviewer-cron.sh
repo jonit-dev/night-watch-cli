@@ -71,8 +71,10 @@ fi
 # Acquire global gate before per-project lock to serialize jobs across projects.
 # When gate is busy, enqueue the job and exit cleanly.
 SCRIPT_TYPE="reviewer"
-if [ "${NW_QUEUE_ENABLED:-1}" = "1" ]; then
-  if ! acquire_global_gate; then
+if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
+  if acquire_global_gate; then
+    arm_global_queue_cleanup
+  else
     enqueue_job "${SCRIPT_TYPE}" "${PROJECT_DIR}"
     emit_result "queued"
     exit 0

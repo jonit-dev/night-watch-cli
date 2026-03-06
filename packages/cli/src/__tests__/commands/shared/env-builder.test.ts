@@ -55,6 +55,18 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
       schedule: '0 3 * * *',
       maxRuntime: 1800,
     },
+    queue: {
+      enabled: false,
+      maxConcurrency: 1,
+      maxWaitTime: 7200,
+      priority: {
+        executor: 50,
+        reviewer: 40,
+        slicer: 30,
+        qa: 20,
+        audit: 10,
+      },
+    },
     jobProviders: {},
     ...overrides,
   };
@@ -104,6 +116,37 @@ describe('buildBaseEnvVars', () => {
 
     expect(env.MY_API_KEY).toBe('test-key');
     expect(env.OTHER_VAR).toBe('other-value');
+  });
+
+  it('should inject queue configuration into result', () => {
+    const config = createTestConfig({
+      queue: {
+        enabled: true,
+        maxConcurrency: 3,
+        maxWaitTime: 1800,
+        priority: {
+          executor: 100,
+          reviewer: 90,
+          slicer: 80,
+          qa: 70,
+          audit: 60,
+        },
+      },
+    });
+    const env = buildBaseEnvVars(config, 'executor', false);
+
+    expect(env.NW_QUEUE_ENABLED).toBe('1');
+    expect(env.NW_QUEUE_MAX_CONCURRENCY).toBe('3');
+    expect(env.NW_QUEUE_MAX_WAIT_TIME).toBe('1800');
+    expect(env.NW_QUEUE_PRIORITY_JSON).toBe(
+      JSON.stringify({
+        executor: 100,
+        reviewer: 90,
+        slicer: 80,
+        qa: 70,
+        audit: 60,
+      }),
+    );
   });
 
   it('should skip NW_DEFAULT_BRANCH when not set', () => {
