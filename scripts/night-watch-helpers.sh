@@ -159,7 +159,26 @@ night_watch_history() {
 
 log() {
   local log_file="${LOG_FILE:?LOG_FILE not set}"
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "${log_file}"
+  local elapsed_str=""
+  if [ -n "${SCRIPT_START_TIME:-}" ]; then
+    local _now _elapsed _emin _esec
+    _now=$(date +%s)
+    _elapsed=$(( _now - SCRIPT_START_TIME ))
+    _emin=$(( _elapsed / 60 ))
+    _esec=$(( _elapsed % 60 ))
+    elapsed_str=" [+${_emin}m${_esec}s]"
+  fi
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [PID:$$]${elapsed_str} $*" >> "${log_file}"
+}
+
+# Write a visual separator line to the log to delimit separate runs.
+log_separator() {
+  local log_file="${LOG_FILE:?LOG_FILE not set}"
+  {
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+  } >> "${log_file}"
 }
 
 # ── Log rotation ─────────────────────────────────────────────────────────────

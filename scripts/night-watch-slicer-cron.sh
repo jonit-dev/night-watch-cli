@@ -23,6 +23,7 @@ MAX_RUNTIME="${NW_SLICER_MAX_RUNTIME:-600}"  # 10 minutes
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 PROVIDER_LABEL="${NW_PROVIDER_LABEL:-}"
+SCRIPT_START_TIME=$(date +%s)
 
 # Ensure NVM / Node / Night Watch CLI are on PATH
 export NVM_DIR="${HOME}/.nvm"
@@ -44,6 +45,9 @@ if ! validate_provider "${PROVIDER_CMD}"; then
 fi
 
 rotate_log
+log_separator
+log "RUN-START: slicer invoked project=${PROJECT_DIR} provider=${PROVIDER_CMD} dry_run=${NW_DRY_RUN:-0}"
+log "CONFIG: max_runtime=${MAX_RUNTIME}s roadmap_path=${NW_ROADMAP_PATH:-ROADMAP.md}"
 
 if ! acquire_lock "${LOCK_FILE}"; then
   exit 0
@@ -83,11 +87,17 @@ fi
 
 # Run the slice command with timeout
 EXIT_CODE=0
+SLICER_RUN_START=$(date +%s)
+log "SLICER: Starting night-watch slice timeout=${MAX_RUNTIME}s"
 if timeout "${MAX_RUNTIME}" "${CLI_BIN}" slice >> "${LOG_FILE}" 2>&1; then
   EXIT_CODE=0
 else
   EXIT_CODE=$?
 fi
+
+SLICER_ELAPSED=$(( $(date +%s) - SLICER_RUN_START ))
+SLICER_TOTAL_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
+log "OUTCOME: exit_code=${EXIT_CODE} run_elapsed=${SLICER_ELAPSED}s total_elapsed=${SLICER_TOTAL_ELAPSED}s project=${PROJECT_NAME}"
 
 if [ ${EXIT_CODE} -eq 0 ]; then
   log "DONE: Slicer completed successfully"
