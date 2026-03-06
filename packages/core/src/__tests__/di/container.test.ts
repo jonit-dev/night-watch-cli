@@ -5,7 +5,6 @@ import * as path from 'path';
 import { container } from 'tsyringe';
 
 import { initContainer, DATABASE_TOKEN } from '@/di/container.js';
-import { SqliteAgentPersonaRepository } from '@/storage/repositories/sqlite/agent-persona.repository.js';
 import { SqliteExecutionHistoryRepository } from '@/storage/repositories/sqlite/execution-history.repository.js';
 import { SqlitePrdStateRepository } from '@/storage/repositories/sqlite/prd-state.repository.js';
 import { SqliteProjectRegistryRepository } from '@/storage/repositories/sqlite/project-registry.repository.js';
@@ -31,13 +30,6 @@ describe('DI Container', () => {
   it('should register the Database token', () => {
     initContainer(tmpDir);
     expect(container.isRegistered(DATABASE_TOKEN)).toBe(true);
-  });
-
-  it('should resolve SqliteAgentPersonaRepository', () => {
-    initContainer(tmpDir);
-    const repo = container.resolve(SqliteAgentPersonaRepository);
-    expect(repo).toBeDefined();
-    expect(repo).toBeInstanceOf(SqliteAgentPersonaRepository);
   });
 
   it('should resolve SqliteExecutionHistoryRepository', () => {
