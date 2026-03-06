@@ -1808,39 +1808,15 @@ describe('config', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Phase 2: Queue job weights and provider-aware config tests
+  // Queue config tests
   // ---------------------------------------------------------------------------
 
   describe('queue config', () => {
-    it('should load queue defaults including mode, jobWeights, providerBuckets', () => {
+    it('should load queue defaults including mode and providerBuckets', () => {
       const config = loadConfig(tempDir);
 
       expect(config.queue.mode).toBe('conservative');
-      expect(config.queue.jobWeights).toBeDefined();
-      expect(config.queue.jobWeights.executor).toEqual({ aiPressure: 5, runtimePressure: 4 });
-      expect(config.queue.jobWeights.reviewer).toEqual({ aiPressure: 2, runtimePressure: 2 });
       expect(config.queue.providerBuckets).toEqual({});
-    });
-
-    it('loads and validates queue job weights from config file', () => {
-      const configPath = path.join(tempDir, 'night-watch.config.json');
-      fs.writeFileSync(
-        configPath,
-        JSON.stringify({
-          queue: {
-            jobWeights: {
-              executor: { aiPressure: 3, runtimePressure: 2 },
-            },
-          },
-        }),
-      );
-
-      const config = loadConfig(tempDir);
-
-      // Custom executor weight is applied
-      expect(config.queue.jobWeights.executor).toEqual({ aiPressure: 3, runtimePressure: 2 });
-      // Other job weights retain defaults
-      expect(config.queue.jobWeights.reviewer).toEqual({ aiPressure: 2, runtimePressure: 2 });
     });
 
     it('loads provider-aware mode from config file', () => {
@@ -1883,8 +1859,8 @@ describe('config', () => {
           queue: {
             mode: 'provider-aware',
             providerBuckets: {
-              'claude-native': { maxConcurrency: 1, aiCapacity: 8, runtimeCapacity: 6 },
-              codex: { maxConcurrency: 2, aiCapacity: 10, runtimeCapacity: 8 },
+              'claude-native': { maxConcurrency: 1 },
+              codex: { maxConcurrency: 2 },
             },
           },
         }),
@@ -1894,13 +1870,9 @@ describe('config', () => {
 
       expect(config.queue.providerBuckets['claude-native']).toEqual({
         maxConcurrency: 1,
-        aiCapacity: 8,
-        runtimeCapacity: 6,
       });
       expect(config.queue.providerBuckets['codex']).toEqual({
         maxConcurrency: 2,
-        aiCapacity: 10,
-        runtimeCapacity: 8,
       });
     });
 
@@ -1920,8 +1892,6 @@ describe('config', () => {
       // Default priorities survive the merge
       expect(config.queue.priority.executor).toBe(50);
       expect(config.queue.priority.reviewer).toBe(40);
-      // Default job weights survive the merge
-      expect(config.queue.jobWeights.slicer).toEqual({ aiPressure: 4, runtimePressure: 2 });
     });
   });
 });

@@ -8,7 +8,6 @@ import {
   ClaudeModel,
   IAuditConfig,
   IJobProviders,
-  IJobWeight,
   INightWatchConfig,
   INotificationConfig,
   IProviderBucketConfig,
@@ -27,7 +26,6 @@ import {
 import {
   DEFAULT_AUDIT,
   DEFAULT_BOARD_PROVIDER,
-  DEFAULT_JOB_WEIGHTS,
   DEFAULT_QA,
   DEFAULT_QUEUE,
   DEFAULT_ROADMAP_SCANNER,
@@ -261,7 +259,6 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
       maxConcurrency: DEFAULT_QUEUE.maxConcurrency,
       maxWaitTime: readNumber(rawQueue.maxWaitTime) ?? DEFAULT_QUEUE.maxWaitTime,
       priority: { ...DEFAULT_QUEUE.priority },
-      jobWeights: { ...DEFAULT_JOB_WEIGHTS },
       providerBuckets: {},
     };
 
@@ -275,37 +272,14 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
       }
     }
 
-    const rawJobWeights = readObject(rawQueue.jobWeights);
-    if (rawJobWeights) {
-      for (const jobType of VALID_JOB_TYPES) {
-        const rawWeight = readObject(rawJobWeights[jobType]);
-        if (rawWeight) {
-          const aiPressure = readNumber(rawWeight.aiPressure);
-          const runtimePressure = readNumber(rawWeight.runtimePressure);
-          const existing = queue.jobWeights[jobType] ?? DEFAULT_JOB_WEIGHTS[jobType];
-          const merged: IJobWeight = {
-            aiPressure: aiPressure ?? existing?.aiPressure ?? 0,
-            runtimePressure: runtimePressure ?? existing?.runtimePressure ?? 0,
-          };
-          queue.jobWeights[jobType] = merged;
-        }
-      }
-    }
-
     const rawProviderBuckets = readObject(rawQueue.providerBuckets);
     if (rawProviderBuckets) {
       for (const [bucketKey, bucketVal] of Object.entries(rawProviderBuckets)) {
         const rawBucket = readObject(bucketVal);
         if (rawBucket) {
           const maxConcurrency = readNumber(rawBucket.maxConcurrency);
-          const aiCapacity = readNumber(rawBucket.aiCapacity);
-          const runtimeCapacity = readNumber(rawBucket.runtimeCapacity);
-          if (
-            maxConcurrency !== undefined &&
-            aiCapacity !== undefined &&
-            runtimeCapacity !== undefined
-          ) {
-            const bucketConfig: IProviderBucketConfig = { maxConcurrency, aiCapacity, runtimeCapacity };
+          if (maxConcurrency !== undefined) {
+            const bucketConfig: IProviderBucketConfig = { maxConcurrency };
             queue.providerBuckets[bucketKey] = bucketConfig;
           }
         }

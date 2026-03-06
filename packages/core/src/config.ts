@@ -150,7 +150,6 @@ function mergeConfigLayer(base: INightWatchConfig, layer: Partial<INightWatchCon
       (base as unknown as Record<string, unknown>)[_key] = {
         ...baseQueue,
         ...layerQueue,
-        jobWeights: { ...baseQueue.jobWeights, ...layerQueue.jobWeights },
         providerBuckets: { ...baseQueue.providerBuckets, ...layerQueue.providerBuckets },
       };
     } else if (

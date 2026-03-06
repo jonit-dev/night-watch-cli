@@ -267,26 +267,11 @@ export type QueueEntryStatus = 'pending' | 'running' | 'expired' | 'dispatched';
 export type QueueMode = 'conservative' | 'provider-aware';
 
 /**
- * Per-job AI and runtime pressure weights used for provider-aware scheduling.
- * Higher values mean the job is heavier on that resource.
- */
-export interface IJobWeight {
-  /** AI API throughput pressure (0–10 scale) */
-  aiPressure: number;
-  /** Local runtime/CPU pressure (0–10 scale) */
-  runtimePressure: number;
-}
-
-/**
  * Per-provider-bucket capacity limits for provider-aware scheduling.
  */
 export interface IProviderBucketConfig {
   /** Maximum number of concurrent in-flight jobs for this bucket */
   maxConcurrency: number;
-  /** Maximum total aiPressure of all in-flight jobs for this bucket */
-  aiCapacity: number;
-  /** Maximum total runtimePressure of all in-flight jobs for this bucket */
-  runtimeCapacity: number;
 }
 
 /**
@@ -305,10 +290,6 @@ export interface IQueueEntry {
   expiredAt: number | null;
   /** Provider bucket key (e.g. 'claude-native', 'codex', 'claude-proxy:api.z.ai') */
   providerKey?: string;
-  /** AI API pressure weight for this job */
-  aiPressure?: number;
-  /** Runtime/CPU pressure weight for this job */
-  runtimePressure?: number;
 }
 
 /**
@@ -323,11 +304,6 @@ export interface IQueueStatus {
     byProviderBucket: Record<string, number>;
   };
   items: IQueueEntry[];
-  pressureByBucket: Record<string, {
-    aiPressure: number;
-    runtimePressure: number;
-    count: number;
-  }>;
   averageWaitSeconds: number | null;
   oldestPendingAge: number | null;
 }
@@ -381,8 +357,6 @@ export interface IJobRunAnalytics {
   byProviderBucket: Record<string, {
     running: number;
     pending: number;
-    totalAiPressure: number;
-    totalRuntimePressure: number;
   }>;
   averageWaitSeconds: number | null;
   oldestPendingAge: number | null;
@@ -410,12 +384,6 @@ export interface IQueueConfig {
 
   /** Priority mapping: job_type → priority (higher = first). Default has executor highest. */
   priority: Record<string, number>;
-
-  /**
-   * Per-job-type weight definitions used by the provider-aware scheduler.
-   * Keyed by JobType string (e.g. 'executor', 'reviewer').
-   */
-  jobWeights: Record<string, IJobWeight>;
 
   /**
    * Per-provider-bucket capacity configuration for provider-aware mode.

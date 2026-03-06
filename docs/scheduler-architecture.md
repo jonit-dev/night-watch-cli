@@ -16,7 +16,7 @@ graph TD
     subgraph Core["packages/core"]
         JQ["job-queue.ts\nenqueueJob / dispatchNextJob\ngetQueueStatus / getJobRunsAnalytics"]
         CFG["config.ts\nloadConfig()"]
-        CONSTS["constants.ts\nDEFAULT_QUEUE_*\nDEFAULT_JOB_WEIGHTS\nresolveProviderBucketKey()"]
+        CONSTS["constants.ts\nDEFAULT_QUEUE_*\nresolveProviderBucketKey()"]
         SCHED["scheduling.ts\ngetSchedulingPlan()\nnormalizeSchedulingPriority()"]
     end
 
@@ -25,7 +25,7 @@ graph TD
     end
 
     subgraph Web["web/"]
-        SP["Scheduling.tsx\nQueue Overview\nProvider Lanes\nPressure Bars\nRecent Runs"]
+        SP["Scheduling.tsx\nQueue Overview\nProvider Lanes\nRecent Runs"]
         API["api.ts\nfetchQueueStatus()\nfetchQueueAnalytics()"]
     end
 
@@ -94,22 +94,14 @@ flowchart TD
     CheckMode -->|provider-aware| GetCandidates[getAllPendingCandidates\none head per project\nsorted by priority + scheduling priority]
     GetCandidates --> HasCandidates{any candidates?}
     HasCandidates -->|No| ReturnNull3([return null\nlogged: no pending jobs])
-    HasCandidates -->|Yes| GetPressure[getInFlightPressureByBucket\nquery in-flight ai/runtime sums per bucket]
-    GetPressure --> IterateCandidates[For each candidate...]
+    HasCandidates -->|Yes| IterateCandidates[For each candidate...]
 
-    IterateCandidates --> FitsCapacity{fitsProviderCapacity?}
+    IterateCandidates --> FitsCapacity{bucket configured?}
     FitsCapacity -->|No bucket assigned| PassThrough([return true\nno per-bucket check])
     FitsCapacity -->|Bucket not configured| PassThrough
-    FitsCapacity -->|Check bucket| BucketChecks
-
-    subgraph BucketChecks["Bucket Capacity Checks"]
-        BC1{inFlightCount >= maxConcurrency?} -->|Yes| Reject1([return false\nlogged: concurrency limit])
-        BC1 -->|No| BC2{inFlightAi + candidateAi > aiCapacity?}
-        BC2 -->|Yes| Reject2([return false\nlogged: AI capacity exceeded])
-        BC2 -->|No| BC3{inFlightRuntime + candidateRuntime > runtimeCapacity?}
-        BC3 -->|Yes| Reject3([return false\nlogged: runtime capacity exceeded])
-        BC3 -->|No| PassBucket([return true\nlogged: capacity check passed])
-    end
+    FitsCapacity -->|Check bucket| BC1{inFlightCount >= maxConcurrency?}
+    BC1 -->|Yes| Reject1([return false\nlogged: concurrency limit])
+    BC1 -->|No| PassBucket([return true\nlogged: capacity check passed])
 
     PassThrough --> Fits
     PassBucket --> Fits
@@ -179,8 +171,6 @@ flowchart LR
 | `dispatched_at`   | INTEGER | Unix timestamp of dispatch (nullable)                |
 | `expired_at`      | INTEGER | Unix timestamp of expiry (nullable)                  |
 | `provider_key`    | TEXT    | Provider bucket key e.g. `claude-native`, `codex`    |
-| `ai_pressure`     | REAL    | AI API saturation weight 0–10 (nullable)             |
-| `runtime_pressure`| REAL    | CPU/wall-clock contention weight 0–10 (nullable)     |
 
 Index: `(status, priority DESC, enqueued_at ASC)` — optimises dispatch query.
 
@@ -222,15 +212,15 @@ flowchart TD
 
 ---
 
-## Default Job Weights & Priorities
+## Default Job Priorities
 
-| Job Type  | Priority | AI Pressure | Runtime Pressure |
-|-----------|----------|-------------|------------------|
-| executor  | 50       | 5           | 4                |
-| reviewer  | 40       | 2           | 2                |
-| slicer    | 30       | 4           | 2                |
-| qa        | 20       | 1           | 4                |
-| audit     | 10       | 4           | 3                |
+| Job Type  | Priority |
+|-----------|----------|
+| executor  | 50       |
+| reviewer  | 40       |
+| slicer    | 30       |
+| qa        | 20       |
+| audit     | 10       |
 
 ---
 
@@ -283,5 +273,5 @@ This ensures multi-provider setups always run each job with its own project's pr
 | `packages/cli/src/commands/queue.ts` | CLI subcommands (status, dispatch, enqueue, clear, expire) |
 | `packages/cli/src/commands/shared/env-builder.ts` | `buildQueuedJobEnv` — env reconstruction at dispatch |
 | `packages/server/src/routes/queue.routes.ts` | `GET /api/queue/status`, `GET /api/queue/analytics` |
-| `web/pages/Scheduling.tsx` | Scheduling UI (overview cards, provider lanes, pressure bars) |
+| `web/pages/Scheduling.tsx` | Scheduling UI (overview cards, provider lanes, recent runs) |
 | `docs/prds/provider-aware-weighted-scheduling.md` | Original design PRD |

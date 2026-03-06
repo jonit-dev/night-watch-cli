@@ -127,7 +127,7 @@ describe('runMigrations', () => {
     );
   });
 
-  it('job_queue table has provider_key, ai_pressure, runtime_pressure columns', () => {
+  it('creates job_queue table without pressure columns', () => {
     runMigrations(db);
 
     const columns = db
@@ -135,9 +135,13 @@ describe('runMigrations', () => {
       .all() as Array<{ name: string }>;
 
     const colNames = columns.map((c) => c.name);
-    expect(colNames).toEqual(
-      expect.arrayContaining(['provider_key', 'ai_pressure', 'runtime_pressure']),
-    );
+
+    // provider_key must be present
+    expect(colNames).toContain('provider_key');
+
+    // pressure columns must NOT be present
+    expect(colNames).not.toContain('ai_pressure');
+    expect(colNames).not.toContain('runtime_pressure');
   });
 
   it('idx_job_runs_lookup index is created', () => {

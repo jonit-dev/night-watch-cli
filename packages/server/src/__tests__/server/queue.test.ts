@@ -113,7 +113,6 @@ describe('queue API routes', () => {
           byProviderBucket: expect.any(Object),
         }),
         items: expect.any(Array),
-        pressureByBucket: expect.any(Object),
       });
       // averageWaitSeconds and oldestPendingAge should be present (null when queue empty)
       expect('averageWaitSeconds' in response.body).toBe(true);
@@ -211,7 +210,6 @@ describe('queue API routes in global mode', () => {
     // Should succeed (global app mounts the route too)
     expect(response.status).toBe(200);
     expect(response.body).toHaveProperty('pending');
-    expect(response.body).toHaveProperty('pressureByBucket');
   });
 
   it('GET /api/queue/analytics responds in global mode', async () => {

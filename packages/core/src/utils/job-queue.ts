@@ -70,8 +70,6 @@ function rowToEntry(row: Record<string, unknown>): IQueueEntry {
     dispatchedAt: row.dispatched_at as number | null,
     expiredAt: row.expired_at as number | null,
     providerKey: (row.provider_key as string | null) ?? undefined,
-    aiPressure: (row.ai_pressure as number | null) ?? undefined,
-    runtimePressure: (row.runtime_pressure as number | null) ?? undefined,
   };
 }
 
@@ -94,7 +92,17 @@ function getProjectSchedulingPriority(
   return priority;
 }
 
-function selectNextPendingEntry(db: Database.Database): IQueueEntry | null {
+/**
+ * Get pending candidates — one head entry per project (lowest enqueue_time per project_id),
+ * sorted by priority DESC + scheduling_priority DESC + enqueue_time ASC.
+ *
+ * When `limit` is 1, only the top candidate is returned (conservative mode).
+ * When `limit` is undefined, all per-project heads are returned (provider-aware mode).
+ *
+ * @param db - Open database connection (caller manages lifecycle)
+ * @param limit - Optional maximum number of candidates to return
+ */
+function getPendingCandidates(db: Database.Database, limit?: number): IQueueEntry[] {
   const rows = db
     .prepare(
       `SELECT * FROM job_queue
@@ -104,9 +112,10 @@ function selectNextPendingEntry(db: Database.Database): IQueueEntry | null {
     .all() as Array<Record<string, unknown>>;
 
   if (rows.length === 0) {
-    return null;
+    return [];
   }
 
+  // Take only the head (highest-priority pending) entry per project
   const headByProject = new Map<string, IQueueEntry>();
   for (const row of rows) {
     const entry = rowToEntry(row);
@@ -139,7 +148,7 @@ function selectNextPendingEntry(db: Database.Database): IQueueEntry | null {
     return left.id - right.id;
   });
 
-  return candidates[0] ?? null;
+  return limit !== undefined ? candidates.slice(0, limit) : candidates;
 }
 
 /**
@@ -159,8 +168,6 @@ export function getJobPriority(jobType: JobType, config?: IQueueConfig): number 
  * @param envVars - Environment variables to pass to the job
  * @param config - Optional queue configuration (used for priority lookup)
  * @param providerKey - Optional provider bucket key (e.g. 'claude-native', 'codex')
- * @param aiPressure - Optional AI API pressure weight for this job
- * @param runtimePressure - Optional runtime/CPU pressure weight for this job
  * @returns The inserted queue entry ID
  */
 export function enqueueJob(
@@ -170,8 +177,6 @@ export function enqueueJob(
   envVars: Record<string, string>,
   config?: IQueueConfig,
   providerKey?: string,
-  aiPressure?: number,
-  runtimePressure?: number,
 ): number {
   const db = openDb();
   try {
@@ -183,20 +188,10 @@ export function enqueueJob(
       .prepare(
         `INSERT INTO job_queue
            (project_path, project_name, job_type, priority, status, env_json, enqueued_at,
-            provider_key, ai_pressure, runtime_pressure)
-         VALUES (?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
+            provider_key)
+         VALUES (?, ?, ?, ?, 'pending', ?, ?, ?)`,
       )
-      .run(
-        projectPath,
-        projectName,
-        jobType,
-        priority,
-        envJson,
-        now,
-        providerKey ?? null,
-        aiPressure ?? null,
-        runtimePressure ?? null,
-      );
+      .run(projectPath, projectName, jobType, priority, envJson, now, providerKey ?? null);
 
     const id = result.lastInsertRowid as number;
     logger.info('Job enqueued', {
@@ -205,8 +200,6 @@ export function enqueueJob(
       project: projectName,
       priority,
       providerKey: providerKey ?? null,
-      aiPressure: aiPressure ?? null,
-      runtimePressure: runtimePressure ?? null,
     });
     return id;
   } finally {
@@ -261,7 +254,7 @@ export function removeJob(queueId: number): void {
 export function getNextPendingJob(): IQueueEntry | null {
   const db = openDb();
   try {
-    return selectNextPendingEntry(db);
+    return getPendingCandidates(db, 1)[0] ?? null;
   } finally {
     db.close();
   }
@@ -285,96 +278,27 @@ export function canStartJob(config?: IQueueConfig): boolean {
 }
 
 /**
- * Get in-flight pressure sums grouped by provider bucket key.
- * Used by the provider-aware scheduler to check per-bucket capacity.
+ * Get in-flight job counts grouped by provider bucket key.
+ * Used by the provider-aware scheduler to check per-bucket concurrency.
  *
  * @param db - Open database connection (caller manages lifecycle)
- * @returns Map from providerKey → { count, totalAi, totalRuntime }
+ * @returns Record from providerKey → count of in-flight jobs
  */
-function getInFlightPressureByBucket(
-  db: Database.Database,
-): Map<string, { count: number; totalAi: number; totalRuntime: number }> {
+function getInFlightCountByBucket(db: Database.Database): Record<string, number> {
   const rows = db
     .prepare(
-      `SELECT provider_key, COUNT(*) as count,
-              COALESCE(SUM(ai_pressure), 0) as total_ai,
-              COALESCE(SUM(runtime_pressure), 0) as total_runtime
+      `SELECT provider_key, COUNT(*) as count
        FROM job_queue
        WHERE status IN ('running', 'dispatched') AND provider_key IS NOT NULL
        GROUP BY provider_key`,
     )
-    .all() as Array<{
-    provider_key: string;
-    count: number;
-    total_ai: number;
-    total_runtime: number;
-  }>;
+    .all() as Array<{ provider_key: string; count: number }>;
 
-  const result = new Map<string, { count: number; totalAi: number; totalRuntime: number }>();
+  const result: Record<string, number> = {};
   for (const row of rows) {
-    result.set(row.provider_key, {
-      count: row.count,
-      totalAi: row.total_ai,
-      totalRuntime: row.total_runtime,
-    });
+    result[row.provider_key] = row.count;
   }
   return result;
-}
-
-/**
- * Get all pending candidates (one head entry per project), sorted by scheduling priority.
- * Used by the provider-aware dispatcher to iterate candidates and find the first that fits.
- *
- * @param db - Open database connection (caller manages lifecycle)
- */
-function getAllPendingCandidates(db: Database.Database): IQueueEntry[] {
-  const rows = db
-    .prepare(
-      `SELECT * FROM job_queue
-       WHERE status = 'pending'
-       ORDER BY priority DESC, enqueued_at ASC, id ASC`,
-    )
-    .all() as Array<Record<string, unknown>>;
-
-  if (rows.length === 0) {
-    return [];
-  }
-
-  // Take only the head (highest-priority pending) entry per project
-  const headByProject = new Map<string, IQueueEntry>();
-  for (const row of rows) {
-    const entry = rowToEntry(row);
-    if (!headByProject.has(entry.projectPath)) {
-      headByProject.set(entry.projectPath, entry);
-    }
-  }
-
-  // Sort candidates using the same multi-criteria order as selectNextPendingEntry
-  const priorityCache = new Map<string, number>();
-  const candidates = Array.from(headByProject.values());
-  candidates.sort((left, right) => {
-    if (left.priority !== right.priority) {
-      return right.priority - left.priority;
-    }
-
-    const leftProjectPriority = getProjectSchedulingPriority(left.projectPath, priorityCache);
-    const rightProjectPriority = getProjectSchedulingPriority(right.projectPath, priorityCache);
-    if (leftProjectPriority !== rightProjectPriority) {
-      return rightProjectPriority - leftProjectPriority;
-    }
-
-    if (left.enqueuedAt !== right.enqueuedAt) {
-      return left.enqueuedAt - right.enqueuedAt;
-    }
-
-    if (left.projectName !== right.projectName) {
-      return left.projectName.localeCompare(right.projectName);
-    }
-
-    return left.id - right.id;
-  });
-
-  return candidates;
 }
 
 /**
@@ -385,13 +309,13 @@ function getAllPendingCandidates(db: Database.Database): IQueueEntry[] {
  *
  * @param candidate - The queue entry to test
  * @param config - Queue configuration (may be undefined)
- * @param pressureByBucket - Current in-flight pressure map from getInFlightPressureByBucket
+ * @param inFlightByBucket - Current in-flight counts from getInFlightCountByBucket
  * @returns true if the candidate can be dispatched without exceeding bucket limits
  */
 function fitsProviderCapacity(
   candidate: IQueueEntry,
   config: IQueueConfig | undefined,
-  pressureByBucket: Map<string, { count: number; totalAi: number; totalRuntime: number }>,
+  inFlightByBucket: Record<string, number>,
 ): boolean {
   const bucketKey = candidate.providerKey;
   if (!bucketKey) {
@@ -407,41 +331,15 @@ function fitsProviderCapacity(
     return true;
   }
 
-  const inFlight = pressureByBucket.get(bucketKey) ?? { count: 0, totalAi: 0, totalRuntime: 0 };
+  const inFlightCount = inFlightByBucket[bucketKey] ?? 0;
 
   // Check bucket-level concurrency
-  if (inFlight.count >= bucketConfig.maxConcurrency) {
+  if (inFlightCount >= bucketConfig.maxConcurrency) {
     logger.debug('Capacity check failed: concurrency limit reached', {
       id: candidate.id,
       bucket: bucketKey,
-      inFlightCount: inFlight.count,
+      inFlightCount,
       maxConcurrency: bucketConfig.maxConcurrency,
-    });
-    return false;
-  }
-
-  // Check AI capacity
-  const aiPressure = candidate.aiPressure ?? 0;
-  if (inFlight.totalAi + aiPressure > bucketConfig.aiCapacity) {
-    logger.debug('Capacity check failed: AI capacity exceeded', {
-      id: candidate.id,
-      bucket: bucketKey,
-      inFlightAi: inFlight.totalAi,
-      candidateAi: aiPressure,
-      aiCapacity: bucketConfig.aiCapacity,
-    });
-    return false;
-  }
-
-  // Check runtime capacity
-  const runtimePressure = candidate.runtimePressure ?? 0;
-  if (inFlight.totalRuntime + runtimePressure > bucketConfig.runtimeCapacity) {
-    logger.debug('Capacity check failed: runtime capacity exceeded', {
-      id: candidate.id,
-      bucket: bucketKey,
-      inFlightRuntime: inFlight.totalRuntime,
-      candidateRuntime: runtimePressure,
-      runtimeCapacity: bucketConfig.runtimeCapacity,
     });
     return false;
   }
@@ -449,9 +347,7 @@ function fitsProviderCapacity(
   logger.debug('Capacity check passed', {
     id: candidate.id,
     bucket: bucketKey,
-    inFlightCount: inFlight.count,
-    inFlightAi: inFlight.totalAi,
-    inFlightRuntime: inFlight.totalRuntime,
+    inFlightCount,
   });
   return true;
 }
@@ -491,7 +387,7 @@ export function dispatchNextJob(config?: IQueueConfig): IQueueEntry | null {
 
     if (mode === 'conservative') {
       // Existing behaviour: dispatch the single top-priority pending entry
-      const entry = selectNextPendingEntry(db);
+      const [entry] = getPendingCandidates(db, 1);
       if (!entry) {
         logger.debug('Dispatch skipped: no pending jobs');
         return null;
@@ -514,7 +410,7 @@ export function dispatchNextJob(config?: IQueueConfig): IQueueEntry | null {
     }
 
     // provider-aware mode: find first candidate that fits bucket capacity
-    const candidates = getAllPendingCandidates(db);
+    const candidates = getPendingCandidates(db);
     if (candidates.length === 0) {
       logger.debug('Dispatch skipped: no pending jobs');
       return null;
@@ -522,10 +418,10 @@ export function dispatchNextJob(config?: IQueueConfig): IQueueEntry | null {
 
     logger.debug('Provider-aware dispatch: evaluating candidates', { candidateCount: candidates.length });
 
-    const pressureByBucket = getInFlightPressureByBucket(db);
+    const inFlightByBucket = getInFlightCountByBucket(db);
 
     for (const candidate of candidates) {
-      if (fitsProviderCapacity(candidate, config, pressureByBucket)) {
+      if (fitsProviderCapacity(candidate, config, inFlightByBucket)) {
         db
           .prepare(`UPDATE job_queue SET status = 'dispatched', dispatched_at = ? WHERE id = ?`)
           .run(now, candidate.id);
@@ -591,33 +487,6 @@ export function getQueueStatus(): IQueueStatus {
       byProviderBucket[row.bucket] = row.count;
     }
 
-    // Get in-flight pressure aggregates by provider bucket
-    const pressureRows = db
-      .prepare(
-        `SELECT COALESCE(provider_key, '__unassigned__') as bucket,
-                COUNT(*) as count,
-                COALESCE(SUM(ai_pressure), 0) as ai_pressure,
-                COALESCE(SUM(runtime_pressure), 0) as runtime_pressure
-         FROM job_queue
-         WHERE status IN ('running', 'dispatched')
-         GROUP BY provider_key`,
-      )
-      .all() as Array<{
-      bucket: string;
-      count: number;
-      ai_pressure: number;
-      runtime_pressure: number;
-    }>;
-
-    const pressureByBucket: IQueueStatus['pressureByBucket'] = {};
-    for (const row of pressureRows) {
-      pressureByBucket[row.bucket] = {
-        aiPressure: row.ai_pressure,
-        runtimePressure: row.runtime_pressure,
-        count: row.count,
-      };
-    }
-
     // Compute average wait for pending jobs
     const now = Math.floor(Date.now() / 1000);
     const waitRow = db
@@ -646,7 +515,6 @@ export function getQueueStatus(): IQueueStatus {
       running,
       pending: { total, byType, byProviderBucket },
       items,
-      pressureByBucket,
       averageWaitSeconds,
       oldestPendingAge,
     };
@@ -836,9 +704,7 @@ export function getJobRunsAnalytics(windowHours = 24): IJobRunAnalytics {
         `SELECT
            COALESCE(provider_key, '__unassigned__') as bucket,
            SUM(CASE WHEN status IN ('running', 'dispatched') THEN 1 ELSE 0 END) as running,
-           SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-           COALESCE(SUM(CASE WHEN status IN ('running','dispatched') THEN ai_pressure ELSE 0 END), 0) as total_ai,
-           COALESCE(SUM(CASE WHEN status IN ('running','dispatched') THEN runtime_pressure ELSE 0 END), 0) as total_runtime
+           SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending
          FROM job_queue
          WHERE status IN ('pending', 'running', 'dispatched')
          GROUP BY provider_key`,
@@ -847,8 +713,6 @@ export function getJobRunsAnalytics(windowHours = 24): IJobRunAnalytics {
       bucket: string;
       running: number;
       pending: number;
-      total_ai: number;
-      total_runtime: number;
     }>;
 
     const byProviderBucket: IJobRunAnalytics['byProviderBucket'] = {};
@@ -856,8 +720,6 @@ export function getJobRunsAnalytics(windowHours = 24): IJobRunAnalytics {
       byProviderBucket[row.bucket] = {
         running: row.running,
         pending: row.pending,
-        totalAiPressure: row.total_ai,
-        totalRuntimePressure: row.total_runtime,
       };
     }
 
