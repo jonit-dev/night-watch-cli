@@ -17,7 +17,8 @@
     "format": "prettier --write 'packages/**/*.{ts,tsx,js,mjs,json}'",
     "format:check": "prettier --check 'packages/**/*.{ts,tsx,js,mjs,json}'",
     "local": "yarn build && yarn link",
-    "prepare": "husky"
+    "prepare": "husky",
+    "deploy": "yarn workspace @jonit-dev/night-watch-cli deploy"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
