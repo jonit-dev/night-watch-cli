@@ -19,6 +19,7 @@ REPORT_FILE="${PROJECT_DIR}/logs/audit-report.md"
 MAX_RUNTIME="${NW_AUDIT_MAX_RUNTIME:-1800}"  # 30 minutes
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
+SCRIPT_TYPE="audit"
 
 # Ensure NVM / Node / Claude are on PATH
 export NVM_DIR="${HOME}/.nvm"
@@ -49,6 +50,16 @@ if ! validate_provider "${PROVIDER_CMD}"; then
   echo "ERROR: Unknown provider: ${PROVIDER_CMD}" >&2
   emit_result "failure" "reason=unknown_provider"
   exit 1
+fi
+
+# Global gate: if queue is enabled and we can't acquire the global lock,
+# enqueue the job and exit. The dispatcher will run it later.
+if [ "${NW_QUEUE_ENABLED:-1}" = "1" ]; then
+  if ! acquire_global_gate; then
+    enqueue_job "${SCRIPT_TYPE}" "${PROJECT_DIR}"
+    emit_result "queued"
+    exit 0
+  fi
 fi
 
 rotate_log
@@ -181,6 +192,8 @@ if [ "${EXIT_CODE}" -eq 0 ]; then
     send_telegram_status_message "🔎 Night Watch Auditor: failed" "Project: ${PROJECT_NAME}
 Provider exited successfully but no report file was generated."
     emit_result "failure_no_report"
+    release_global_gate
+    dispatch_next_queued_job
     exit 1
   fi
 
@@ -206,5 +219,8 @@ else
 Exit code: ${EXIT_CODE}"
   emit_result "failure" "provider_exit=${EXIT_CODE}"
 fi
+
+release_global_gate
+dispatch_next_queued_job
 
 exit "${EXIT_CODE}"

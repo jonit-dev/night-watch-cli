@@ -203,7 +203,9 @@ export function qaCommand(program: Command): void {
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
 
         if (exitCode === 0) {
-          if (scriptResult?.status?.startsWith('skip_')) {
+          if (scriptResult?.status === 'queued') {
+            spinner.succeed('QA process queued — another job is currently running');
+          } else if (scriptResult?.status?.startsWith('skip_')) {
             spinner.succeed('QA process completed (no PRs needed QA)');
           } else {
             spinner.succeed('QA process completed successfully');

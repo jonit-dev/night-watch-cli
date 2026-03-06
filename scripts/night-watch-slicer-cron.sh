@@ -46,7 +46,15 @@ rotate_log
 if ! acquire_lock "${LOCK_FILE}"; then
   exit 0
 fi
-
+# ── Global Job Queue Gate ──────────────────────────────────────
+if [ "${NW_QUEUE_ENABLED:-1}" = "1" ]; then
+  if ! acquire_global_gate; then
+    enqueue_job "slicer" "${PROJECT_DIR}"
+    emit_result "queued"
+    exit 0
+  fi
+fi
+# ──────────────────────────────────────────────────────────────────────────────
 cleanup_on_exit() {
   rm -f "${LOCK_FILE}"
 }
@@ -95,5 +103,8 @@ else
   send_telegram_status_message "📋 Night Watch Planner: failed" "Project: ${PROJECT_NAME}
 Exit code: ${EXIT_CODE}"
 fi
-
+# ── Global Job Queue Dispatcher ──────────────────────────────────────
+release_global_gate
+dispatch_next_queued_job
+# ──────────────────────────────────────────────────────────────────────────────
 exit ${EXIT_CODE}

@@ -89,6 +89,21 @@ export function runMigrations(db: Database.Database): void {
       body        TEXT    NOT NULL,
       created_at  INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS job_queue (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_path  TEXT    NOT NULL,
+      project_name  TEXT    NOT NULL,
+      job_type      TEXT    NOT NULL,
+      priority      INTEGER NOT NULL DEFAULT 0,
+      status        TEXT    NOT NULL DEFAULT 'pending',
+      env_json      TEXT    NOT NULL DEFAULT '{}',
+      enqueued_at   INTEGER NOT NULL,
+      dispatched_at INTEGER,
+      expired_at    INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS idx_queue_pending
+      ON job_queue(status, priority DESC, enqueued_at ASC);
   `);
 
   // Phase 2 cleanup: drop slack_discussions table (multi-agent deliberation removed)
