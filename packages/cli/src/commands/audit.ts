@@ -111,7 +111,7 @@ export function auditCommand(program: Command): void {
             `  ${providerCmd} -p "<bundled night-watch-audit.md>" --dangerously-skip-permissions`,
           );
         } else {
-          dim(`  ${providerCmd} --quiet --yolo --prompt "<bundled night-watch-audit.md>"`);
+          dim(`  ${providerCmd} exec --yolo "<bundled night-watch-audit.md>"`);
         }
 
         header('Command');

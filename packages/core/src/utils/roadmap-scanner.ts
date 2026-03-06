@@ -8,6 +8,7 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import { createHash } from 'crypto';
 import { INightWatchConfig, Provider } from '../types.js';
+import { resolveJobProvider } from '../config.js';
 import { getNextPrdNumber, slugify } from './prd-utils.js';
 import { IRoadmapItem, parseRoadmap } from './roadmap-parser.js';
 import {
@@ -326,7 +327,7 @@ function scanExistingPrdSlugs(prdDir: string): Set<string> {
  */
 function buildProviderArgs(provider: Provider, prompt: string): string[] {
   if (provider === 'codex') {
-    return ['--quiet', '--yolo', '--prompt', prompt];
+    return ['exec', '--yolo', prompt];
   }
   // Default: claude
   return ['-p', prompt, '--dangerously-skip-permissions'];
@@ -381,7 +382,8 @@ export async function sliceRoadmapItem(
   const prompt = renderSlicerPrompt(promptVars);
 
   // Spawn the AI provider
-  const providerArgs = buildProviderArgs(config.provider, prompt);
+  const provider = resolveJobProvider(config, 'slicer');
+  const providerArgs = buildProviderArgs(provider, prompt);
 
   // Create log file for stdout/stderr
   const logDir = path.join(projectDir, 'logs');
@@ -403,7 +405,7 @@ export async function sliceRoadmapItem(
       ...config.providerEnv,
     };
 
-    const child = spawn(config.provider, providerArgs, {
+    const child = spawn(provider, providerArgs, {
       env: childEnv,
       cwd: projectDir,
       stdio: ['inherit', 'pipe', 'pipe'],

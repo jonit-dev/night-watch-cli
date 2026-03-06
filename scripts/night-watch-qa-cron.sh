@@ -588,9 +588,9 @@ Action: generating QA tests and evidence."
     codex)
       if (
         cd "${QA_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
-          codex --quiet \
+          codex exec \
             --yolo \
-            --prompt "${QA_PROMPT}" \
+            "${QA_PROMPT}" \
             >> "${LOG_FILE}" 2>&1
       ); then
         PROVIDER_OK=1

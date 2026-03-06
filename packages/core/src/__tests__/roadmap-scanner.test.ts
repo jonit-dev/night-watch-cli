@@ -46,9 +46,18 @@ describe('roadmap-scanner', () => {
     maxLogSize: 524288,
     cronSchedule: '0 0-21 * * *',
     reviewerSchedule: '0 0,3,6,9,12,15,18,21 * * *',
+    scheduleBundleId: null,
+    cronScheduleOffset: 0,
+    maxRetries: 3,
+    reviewerMaxRetries: 2,
+    reviewerRetryDelay: 30,
     provider: 'claude',
+    executorEnabled: true,
     reviewerEnabled: true,
     providerEnv: {},
+    providerLabel: '',
+    fallbackOnRateLimit: false,
+    claudeModel: 'sonnet',
     notifications: { webhooks: [] },
     prdPriority: [],
     roadmapScanner: {
@@ -58,6 +67,25 @@ describe('roadmap-scanner', () => {
       slicerSchedule: '0 * * * *',
       slicerMaxRuntime: 3600,
     },
+    templatesDir: '.night-watch/templates',
+    boardProvider: { enabled: false, provider: 'github' },
+    autoMerge: false,
+    autoMergeMethod: 'squash',
+    qa: {
+      enabled: true,
+      schedule: '45 2,14 * * *',
+      maxRuntime: 3600,
+      branchPatterns: [],
+      artifacts: 'both',
+      skipLabel: 'skip-qa',
+      autoInstallPlaywright: true,
+    },
+    audit: {
+      enabled: true,
+      schedule: '50 3 * * 1',
+      maxRuntime: 1800,
+    },
+    jobProviders: {},
   };
 
   const disabledConfig: INightWatchConfig = {
@@ -550,6 +578,40 @@ Generated: 2026-03-03T12:00:00.000Z
 
       // Verify file was created
       expect(fs.existsSync(path.join(prdDir, '01-success-feature.md'))).toBe(true);
+    });
+
+    it('sliceRoadmapItem should honor the slicer job override and use codex exec syntax', async () => {
+      const item: IRoadmapItem = {
+        hash: 'slicer001',
+        title: 'Planner Override Feature',
+        description: 'Uses codex for planner work',
+        checked: false,
+        section: 'Features',
+      };
+
+      mockProviderSuccess('01-planner-override-feature.md');
+
+      const config: INightWatchConfig = {
+        ...defaultConfig,
+        prdDir: path.relative(tempDir, prdDir),
+        jobProviders: {
+          slicer: 'codex',
+        },
+      };
+
+      const result = await sliceRoadmapItem(tempDir, prdDir, item, config);
+
+      expect(result.sliced).toBe(true);
+
+      const spawnMock = childProcess.spawn as ReturnType<typeof vi.fn>;
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+
+      const [providerCmd, providerArgs] = spawnMock.mock.calls[0] as [string, string[]];
+      expect(providerCmd).toBe('codex');
+      expect(providerArgs[0]).toBe('exec');
+      expect(providerArgs).toContain('--yolo');
+      expect(providerArgs).not.toContain('--quiet');
+      expect(providerArgs).not.toContain('--prompt');
     });
 
     it('sliceRoadmapItem should fail when provider succeeds but does not create file', async () => {

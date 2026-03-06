@@ -1210,6 +1210,76 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure');
   });
 
+  it('reviewer should invoke codex with exec syntax when reviewer provider is codex', () => {
+    const projectDir = mkTempDir('nw-smoke-reviewer-codex-argv-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-reviewer-codex-argv-bin-');
+    const argsFile = path.join(projectDir, '.codex-argv');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'codex'),
+      '#!/usr/bin/env bash\n' +
+        'printf \'%s\\0\' "$@" > "$NW_SMOKE_ARGS_FILE"\n' +
+        'echo "codex stub invoked" >&2\n' +
+        'exit 1\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'args="$*"\n' +
+        'if [[ "$1" == "repo" && "$2" == "view" ]]; then\n' +
+        "  echo 'owner/repo'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ "$args" == *"mergeStateStatus"* ]]; then\n' +
+        "    echo 'DIRTY'\n" +
+        '  else\n' +
+        '    echo \'{"number":1}\'\n' +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  if [[ "$args" == *"number,headRefName"* ]]; then\n' +
+        "    printf '1\\tnight-watch/codex-argv-test\\n'\n" +
+        '  else\n' +
+        "    echo 'night-watch/codex-argv-test'\n" +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "checks" ]]; then\n' +
+        "  echo 'fail 1/1 checks'\n" +
+        '  exit 1\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(reviewerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'codex',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BRANCH_PATTERNS: 'night-watch/',
+      NW_REVIEWER_WORKER_MODE: '0',
+      NW_REVIEWER_PARALLEL: '0',
+      NW_AUTO_MERGE: '0',
+      NW_SMOKE_ARGS_FILE: argsFile,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure');
+
+    const argv = fs.readFileSync(argsFile, 'utf-8').split('\0').filter(Boolean);
+    expect(argv[0]).toBe('exec');
+    expect(argv).toContain('--yolo');
+    expect(argv).not.toContain('--quiet');
+    expect(argv).not.toContain('--prompt');
+  });
+
   it('reviewer parallel mode should aggregate results when one worker times out and one succeeds', async () => {
     const projectDir = mkTempDir('nw-smoke-reviewer-parallel-mixed-');
     initGitRepo(projectDir);
