@@ -3,6 +3,7 @@
  */
 
 import { Request, Response, Router } from 'express';
+import { CronExpressionParser } from 'cron-parser';
 
 import {
   INightWatchConfig,
@@ -15,6 +16,28 @@ import {
   saveConfig,
   validateWebhook,
 } from '@night-watch/core';
+
+function isValidCronExpression(value: string): boolean {
+  try {
+    CronExpressionParser.parse(value.trim());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function validateCronField(fieldName: string, value: unknown): string | null {
+  if (value === undefined) {
+    return null;
+  }
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return `${fieldName} must be a non-empty string`;
+  }
+  if (!isValidCronExpression(value)) {
+    return `${fieldName} must be a valid cron expression`;
+  }
+  return null;
+}
 
 /**
  * Validates config changes and returns an error string if invalid, null if valid.
@@ -29,6 +52,21 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
     if (!validProviders.includes(changes.provider)) {
       return `Invalid provider. Must be one of: ${validProviders.join(', ')}`;
     }
+  }
+
+  if (changes.providerLabel !== undefined && typeof changes.providerLabel !== 'string') {
+    return 'providerLabel must be a string';
+  }
+
+  if (changes.defaultBranch !== undefined && typeof changes.defaultBranch !== 'string') {
+    return 'defaultBranch must be a string';
+  }
+
+  if (
+    changes.branchPrefix !== undefined &&
+    (typeof changes.branchPrefix !== 'string' || changes.branchPrefix.trim().length === 0)
+  ) {
+    return 'branchPrefix must be a non-empty string';
   }
 
   if (changes.reviewerEnabled !== undefined && typeof changes.reviewerEnabled !== 'boolean') {
@@ -70,6 +108,35 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
   }
 
   if (
+    changes.maxRetries !== undefined &&
+    (typeof changes.maxRetries !== 'number' ||
+      !Number.isInteger(changes.maxRetries) ||
+      changes.maxRetries < 1)
+  ) {
+    return 'maxRetries must be an integer >= 1';
+  }
+
+  if (
+    changes.reviewerMaxRetries !== undefined &&
+    (typeof changes.reviewerMaxRetries !== 'number' ||
+      !Number.isInteger(changes.reviewerMaxRetries) ||
+      changes.reviewerMaxRetries < 0 ||
+      changes.reviewerMaxRetries > 10)
+  ) {
+    return 'reviewerMaxRetries must be an integer between 0 and 10';
+  }
+
+  if (
+    changes.reviewerRetryDelay !== undefined &&
+    (typeof changes.reviewerRetryDelay !== 'number' ||
+      !Number.isInteger(changes.reviewerRetryDelay) ||
+      changes.reviewerRetryDelay < 0 ||
+      changes.reviewerRetryDelay > 300)
+  ) {
+    return 'reviewerRetryDelay must be an integer between 0 and 300';
+  }
+
+  if (
     changes.branchPatterns !== undefined &&
     (!Array.isArray(changes.branchPatterns) ||
       !changes.branchPatterns.every((p) => typeof p === 'string'))
@@ -85,18 +152,23 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
     return 'prdPriority must be an array of strings';
   }
 
-  if (
-    changes.cronSchedule !== undefined &&
-    (typeof changes.cronSchedule !== 'string' || changes.cronSchedule.trim().length === 0)
-  ) {
-    return 'cronSchedule must be a non-empty string';
+  const rootCronFields: Array<[string, unknown]> = [
+    ['cronSchedule', changes.cronSchedule],
+    ['reviewerSchedule', changes.reviewerSchedule],
+  ];
+  for (const [fieldName, value] of rootCronFields) {
+    const cronError = validateCronField(fieldName, value);
+    if (cronError) {
+      return cronError;
+    }
   }
 
   if (
-    changes.reviewerSchedule !== undefined &&
-    (typeof changes.reviewerSchedule !== 'string' || changes.reviewerSchedule.trim().length === 0)
+    changes.scheduleBundleId !== undefined &&
+    changes.scheduleBundleId !== null &&
+    (typeof changes.scheduleBundleId !== 'string' || changes.scheduleBundleId.trim().length === 0)
   ) {
-    return 'reviewerSchedule must be a non-empty string';
+    return 'scheduleBundleId must be a non-empty string or null';
   }
 
   if (changes.notifications?.webhooks !== undefined) {
@@ -134,6 +206,47 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
       (typeof rs.autoScanInterval !== 'number' || rs.autoScanInterval < 30)
     ) {
       return 'roadmapScanner.autoScanInterval must be a number >= 30';
+    }
+    const slicerScheduleError = validateCronField(
+      'roadmapScanner.slicerSchedule',
+      rs.slicerSchedule,
+    );
+    if (slicerScheduleError) {
+      return slicerScheduleError;
+    }
+
+    if (
+      rs.slicerMaxRuntime !== undefined &&
+      (typeof rs.slicerMaxRuntime !== 'number' || rs.slicerMaxRuntime < 60)
+    ) {
+      return 'roadmapScanner.slicerMaxRuntime must be a number >= 60';
+    }
+
+    if (
+      rs.priorityMode !== undefined &&
+      rs.priorityMode !== 'roadmap-first' &&
+      rs.priorityMode !== 'audit-first'
+    ) {
+      return 'roadmapScanner.priorityMode must be one of: roadmap-first, audit-first';
+    }
+
+    if (rs.issueColumn !== undefined && rs.issueColumn !== 'Draft' && rs.issueColumn !== 'Ready') {
+      return 'roadmapScanner.issueColumn must be one of: Draft, Ready';
+    }
+  }
+
+  if (changes.providerEnv !== undefined) {
+    if (typeof changes.providerEnv !== 'object' || changes.providerEnv === null) {
+      return 'providerEnv must be an object';
+    }
+
+    for (const [key, value] of Object.entries(changes.providerEnv)) {
+      if (key.trim().length === 0) {
+        return 'providerEnv keys must be non-empty strings';
+      }
+      if (typeof value !== 'string') {
+        return 'providerEnv values must be strings';
+      }
     }
   }
 
@@ -176,6 +289,14 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
     return 'prdDir must be a non-empty string';
   }
 
+  // templatesDir validation
+  if (
+    changes.templatesDir !== undefined &&
+    (typeof changes.templatesDir !== 'string' || changes.templatesDir.trim().length === 0)
+  ) {
+    return 'templatesDir must be a non-empty string';
+  }
+
   // cronScheduleOffset validation
   if (
     changes.cronScheduleOffset !== undefined &&
@@ -211,11 +332,9 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
       return 'qa.enabled must be a boolean';
     }
 
-    if (
-      qa.schedule !== undefined &&
-      (typeof qa.schedule !== 'string' || qa.schedule.trim().length === 0)
-    ) {
-      return 'qa.schedule must be a non-empty string';
+    const qaScheduleError = validateCronField('qa.schedule', qa.schedule);
+    if (qaScheduleError) {
+      return qaScheduleError;
     }
 
     if (qa.maxRuntime !== undefined && (typeof qa.maxRuntime !== 'number' || qa.maxRuntime < 60)) {
@@ -259,11 +378,9 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
       return 'audit.enabled must be a boolean';
     }
 
-    if (
-      audit.schedule !== undefined &&
-      (typeof audit.schedule !== 'string' || audit.schedule.trim().length === 0)
-    ) {
-      return 'audit.schedule must be a non-empty string';
+    const auditScheduleError = validateCronField('audit.schedule', audit.schedule);
+    if (auditScheduleError) {
+      return auditScheduleError;
     }
 
     if (
@@ -274,29 +391,34 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
     }
   }
 
-  // roadmapScanner slicer fields validation
-  if (changes.roadmapScanner !== undefined) {
-    const rs = changes.roadmapScanner;
-
-    if (
-      rs.slicerSchedule !== undefined &&
-      (typeof rs.slicerSchedule !== 'string' || rs.slicerSchedule.trim().length === 0)
-    ) {
-      return 'roadmapScanner.slicerSchedule must be a non-empty string';
-    }
-
-    if (
-      rs.slicerMaxRuntime !== undefined &&
-      (typeof rs.slicerMaxRuntime !== 'number' || rs.slicerMaxRuntime < 60)
-    ) {
-      return 'roadmapScanner.slicerMaxRuntime must be a number >= 60';
-    }
-  }
-
   // boardProvider.enabled validation
   if (changes.boardProvider !== undefined) {
     if (typeof changes.boardProvider !== 'object' || changes.boardProvider === null) {
       return 'boardProvider must be an object';
+    }
+
+    if (
+      changes.boardProvider.provider !== undefined &&
+      !['github', 'jira', 'linear', 'local'].includes(changes.boardProvider.provider)
+    ) {
+      return 'boardProvider.provider must be one of: github, jira, linear, local';
+    }
+
+    if (
+      changes.boardProvider.projectNumber !== undefined &&
+      (typeof changes.boardProvider.projectNumber !== 'number' ||
+        !Number.isInteger(changes.boardProvider.projectNumber) ||
+        changes.boardProvider.projectNumber <= 0)
+    ) {
+      return 'boardProvider.projectNumber must be an integer > 0';
+    }
+
+    if (
+      changes.boardProvider.repo !== undefined &&
+      (typeof changes.boardProvider.repo !== 'string' ||
+        changes.boardProvider.repo.trim().length === 0)
+    ) {
+      return 'boardProvider.repo must be a non-empty string';
     }
 
     if (

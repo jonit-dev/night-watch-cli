@@ -1,123 +1,162 @@
-# Night Watch CLI Roadmap
+# Night Watch CLI — Roadmap
 
-This roadmap is organized by delivery horizon and focused on three goals:
-
-- Make autonomous execution safer and more reliable.
-- Make the CLI + web experience easier for day-to-day use.
-- Build a scalable foundation for multi-project and team usage.
+> **Vision:** An async AI execution layer for software teams: specs and queued work turn into reviewed pull requests with clear trust controls and human override.
 
 ---
 
-## Short Term (0-6 weeks)
+## Where We Are Today (v1.7)
 
-### 1) Reliability and correctness hardening
+Night Watch is a **cron-driven overnight execution system** for well-scoped engineering work. It picks up work from a GitHub Projects board, implements it in isolated git worktrees, opens PRs, reviews them, runs QA, audits code, and can auto-merge when trust is high enough.
 
-- [ ] Close remaining consistency gaps between CLI and bash runtime (paths, logs, lock conventions, status reporting).
-- [ ] Add stronger error handling around provider and GitHub CLI failures with clear recovery hints.
-- [ ] Improve notification delivery accuracy (treat non-2xx webhook responses as failures).
-- [ ] Add regression tests for failure/timeout/retry execution flows.
-- [ ] Harden the claim file mechanism — stale claims from crashed processes should be detected and auto-released (currently relies on `maxRuntime` age check only; a process that dies at minute 1 of a 2-hour window blocks the PRD for the remaining time).
-- [ ] Add structured logging (JSON lines) alongside human-readable logs so downstream tools can parse run outcomes without regex.
+The current product wedge is not "fully autonomous software engineering." It is "your repo's night shift" for AI-native solo developers, maintainers, and small teams that already work from specs or queue-based workflows.
 
-### 2) Quality gates and developer workflow
+### Product Positioning
 
-- [x] Add minimal CI pipeline (`verify`, `test`) on pull requests. _(ci.yml + tests.yml active; husky + lint-staged for pre-commit)_
-- [ ] Add coverage tooling (`@vitest/coverage-v8`) and publish baseline coverage in CI output.
-- [ ] Add shell script quality checks (`shellcheck`, optional `bats`) to reduce runtime script regressions.
-- [x] Align docs with current product reality (commands, web UI pages, config defaults). _(architecture.md + architecture-overview.md rewritten in da5d482)_
-- [ ] Add integration test that exercises the full `run --dry-run` path end-to-end (currently only unit-tested in isolation).
+- **Primary users:** solo founders, maintainers, and small engineering teams that already trust AI on bounded work
+- **Best jobs-to-be-done:** backlog chores, review fixes, QA/test generation, maintenance work, and well-scoped feature PRDs
+- **Core promise:** define work during the day, let Night Watch execute overnight, review the output in the morning
+- **Not the current promise:** replacing real-time collaboration, product strategy, or all engineering judgment
 
-### 3) Product completeness for core operators
+### Current Capabilities
 
-- [x] Finalize roadmap scanner UX and edge-case handling (duplicates, malformed roadmap entries, clear completion state). _(Ticket categorization + roadmap-horizon alignment added in #34; roadmap-mapping.ts maps roadmap items to board columns)_
-- [ ] Improve `doctor` output with actionable fix guidance and clearer environment diagnostics.
-- [ ] Strengthen scheduling visibility (next run, paused state, install/uninstall outcomes) across CLI and web.
-- [ ] Add `night-watch history` command — show a table of recent runs with outcome, duration, PRD name, and branch. Right now there's no easy way to answer "what happened last night?" without reading raw logs.
-- [ ] Surface provider token/quota health in `doctor` — validate that the configured API key has remaining credits before a 2-hour run burns wall-clock time and fails at the provider layer.
+| Agent        | Role                                                    | Status |
+| ------------ | ------------------------------------------------------- | ------ |
+| **Executor** | Implements PRDs as code, opens PRs                      | Stable |
+| **Reviewer** | Scores PRs, requests fixes, retries, auto-merges        | Stable |
+| **QA**       | Generates and runs Playwright e2e tests on PR branches  | Stable |
+| **Auditor**  | Scans codebase for quality issues, writes audit reports | Stable |
+| **Slicer**   | Converts ROADMAP.md items into granular PRD files       | Stable |
 
----
+### Current Infrastructure
 
-## Medium Term (6 weeks-4 months)
+- Multi-provider support (Claude, Codex) with per-job provider assignment
+- Rate-limit fallback (proxy → native Claude)
+- GitHub Projects board integration (Draft → Ready → In Progress → Review → Done)
+- Notification webhooks (Slack, Discord, Telegram)
+- Web dashboard (React) + TUI dashboard (blessed)
+- SQLite state tracking across all job types
 
-### 4) Unified operations experience (CLI + Web)
+### Legacy Code Pending Removal
 
-- [ ] Add full PRD lifecycle operations in CLI and web (inspect, prioritize, retry, cancel, archive). _(Web UI consolidated around GitHub Projects board in #36 — filesystem PRDs section removed; board is now the source of truth)_
-- [ ] Implement richer dependency visualization (blocked reasons, dependency graph, dependency health).
-- [ ] Add real-time activity/event stream for run/review lifecycle and auditability.
-- [ ] Improve logs experience with filters, correlation IDs, and run-level grouping.
-- [ ] Add a **run timeline view** in the web UI — a Gantt-style or vertical timeline showing each run's start, duration, outcome, and the PRD it processed. The current status page is a snapshot; operators need the movie, not just the last frame.
-- [ ] Support **PRD editing** in the web UI — even a basic markdown editor with preview would eliminate the context-switch of opening an editor, finding the file, editing, saving, and coming back to the dashboard.
-
-### 5) Provider and execution platform expansion
-
-- [ ] Expand provider abstraction to support additional AI runtimes and richer provider-specific configuration.
-- [ ] Introduce safer execution guards (budget/time caps, branch protections, optional approval checkpoints).
-- [ ] Add resumable run metadata to recover from interruptions without manual cleanup.
-- [x] Improve PR review automation with better CI signal interpretation and confidence thresholds. _(Auto-merge added in #26; CI status + review score derivation fixed in #20)_
-- [ ] **Add Gemini CLI as a third provider.** The provider abstraction already exists (`claude | codex`); Gemini CLI follows a similar invocation pattern. This is low-hanging fruit that doubles the audience.
-- [ ] **Decouple provider invocation from bash scripts.** The current `case` statement in `night-watch-cron.sh` is the single point where new providers get wired in. Moving provider invocation into a TypeScript strategy pattern would make adding providers a config-only change and make the bash layer thinner and more testable.
-- [ ] Add **cost tracking per run** — capture token usage or API cost from provider output and surface it in status/history. Autonomous agents burning money silently is the #1 trust-killer.
-
-### 6) Team and multi-project ergonomics
-
-- [ ] Mature global mode for managing multiple repositories from one dashboard.
-- [ ] Add project profiles and reusable config presets.
-- [ ] Add collaboration features: ownership/claim visibility, handoff notes, and shared run history.
-- [ ] Add import/export tooling for config and scheduling setups.
-- [ ] **Add a `night-watch clone` command** — initialize a new project with config copied from an existing one. When managing 5+ repos, re-running `init` and manually copying config is friction that compounds.
+- **Agent personas** (Maya, Carlos, Priya, Dev) + soul/style/skill compilation — unused, ~1250 LOC
+- **Filesystem PRD mode** — superseded by board mode; dead code paths across 11 command files
 
 ---
 
-## Long Term (4-12 months)
+## Phase 1 — Hardening & Observability
 
-### 7) Platformization and enterprise readiness
+> Make the existing system rock-solid before expanding it.
 
-- [ ] Add optional remote worker execution (self-hosted agents) for non-local automation.
-- [ ] Introduce policy engine support (allowed commands, branch rules, security controls).
-- [ ] Add auth and role-based permissions for web operations in shared environments.
-- [ ] Add immutable audit trails and compliance-oriented operational reporting.
+### 1.1 Structured Execution Telemetry
 
-### 8) Intelligence and autonomous planning
+- Emit structured JSON events for every agent action (task claimed, branch created, tests run, PR opened, review scored, etc.)
+- Store events in SQLite `execution_events` table with timestamps, durations, token usage, and cost estimates
+- Surface metrics in dashboard: success rate, avg cycle time (PRD → merged), cost per PR, retry rate
 
-- [ ] Evolve roadmap scanner into roadmap planning assistant (sizing, dependency suggestions, slice recommendations).
-- [ ] Add PRD quality scoring and pre-execution readiness checks.
-- [ ] Add historical learning loop: use prior run outcomes to improve prompts/templates and task slicing.
-- [ ] Add strategic queue optimization (priority + dependency + risk aware scheduling).
-- [ ] **Automatic PRD decomposition** — when a roadmap item is too large (detected via heuristics or LLM analysis), automatically split it into smaller, phase-aligned PRDs before queuing for execution. Large PRDs are the #1 cause of failed runs; this is where the "intelligence" layer would deliver the most value.
-- [ ] **Post-run self-review** — after a run produces a PR, automatically trigger the reviewer on it before notifying the operator. Close the loop: generate -> review -> fix -> notify. Currently these are two independent cron schedules with no causal link.
+### 1.2 Failure Recovery & Self-Healing
 
-### 9) Ecosystem and adoption
+- Detect and auto-recover from stale worktrees, orphaned lock files, and zombie branches
+- Implement checkpoint-resume: if an executor times out mid-implementation, the next run picks up where it left off instead of starting over
+- Dead-letter queue for PRDs that fail N times — surface them in dashboard with failure context
 
-- [ ] Publish stable extension points for templates, providers, and notifier integrations.
-- [ ] Create migration and onboarding kits for teams adopting Night Watch at scale.
-- [ ] Build public examples/playbooks for common workflows (solo dev, startup team, platform team).
-- [ ] Define and track product SLOs (run success rate, mean time to PR, review repair latency).
-- [ ] **Publish a GitHub Action** — `uses: jonit-dev/night-watch-action@v1` that wraps the CLI for teams that prefer CI-triggered execution over local cron. This also solves the "my laptop is closed" problem without requiring self-hosted agents.
+### 1.3 CI-Aware Reviewer
 
----
+- Reviewer waits for and parses CI check results before scoring
+- Map CI failure categories (lint, type-check, unit test, e2e) to targeted fix instructions
+- Reviewer can push fix commits directly instead of requesting changes
 
-## Opinions & Notes (Claude's take)
+### 1.4 Smarter QA
 
-Things I noticed while reading the codebase that aren't bugs but are worth flagging:
+- QA agent reads existing test patterns in the project before writing new tests
+- Test deduplication — skip generating tests that already exist
+- Flaky test detection and quarantine
+- Prune redundant tests
 
-1. **The bash scripts are the riskiest surface area.** `night-watch-cron.sh` does git operations, worktree management, claim files, lock files, and provider invocation — all in bash. Every new provider or execution mode adds another `case` branch. The long-term play is to move this logic into TypeScript where it can be unit-tested, and reduce the bash layer to a thin shim that the TS layer calls.
+### 1.5 Pre-Execution Environment Checks (Migrations)
 
-2. **Config file contains secrets in plain text.** `night-watch.config.json` stores API tokens and bot tokens directly. This works for local-only usage, but the moment someone commits this file or uses global mode across machines, it becomes a security issue. Consider supporting environment variable references in config (`"$ENV:MY_TOKEN"`) or a separate `.env.night-watch` that's gitignored.
-
-3. **The web UI is a black box from the main repo's perspective.** `web/dist/` is shipped as a pre-built artifact. This is fine for distribution, but makes it invisible to the main test/lint pipeline. If the web UI grows in importance (and it should — it's the friendliest surface for non-CLI users), consider integrating its build/test into the main `yarn verify` flow.
-
-4. **No persistence layer beyond the filesystem.** Status, state, claims, logs — everything is flat files. This is actually a strength for the solo-dev use case (zero dependencies, inspect anything with `cat`). But it'll become a bottleneck for multi-project global mode. Worth being intentional about when/if to introduce SQLite or similar.
-
-5. **The roadmap scanner is the most interesting feature.** It closes the loop from "I have ideas in a markdown file" to "there are PRDs queued for autonomous execution." The natural next step is making it smarter — detecting when a roadmap item is actually an epic that needs decomposition, suggesting dependencies between items, and estimating complexity from the description.
+- Detect and apply unapplied database migrations automatically before executor waves begin.
+- Ensure all required environment variables are verified via a `schema.ts`/`env.ts` validation check.
+- Fail early if the schema dependencies for a phase aren't present in the target environment.
 
 ---
 
-## Success Metrics (Cross-Horizon)
+## Phase 2 — Smarter Automation
 
-- [ ] Increase autonomous run success rate to >90% on well-formed PRDs.
-- [ ] Reduce mean time from PRD creation to open PR by at least 50%.
-- [ ] Keep false-positive notification rate near zero.
-- [ ] Maintain high delivery confidence through stable CI and growing test coverage.
-- [ ] Improve operator trust via clear status, recovery flows, and auditable run history.
-- [ ] Track and reduce **cost per successful PR** — the metric that connects execution quality to resource efficiency.
-- [ ] Measure **time-to-first-review** — how long between PR creation and first meaningful reviewer feedback (human or automated).
+> Make agents more capable and the pipeline more efficient.
+
+### 2.1 Parallel Execution
+
+- Run multiple executors concurrently on independent PRDs (no dependency conflicts)
+- Conflict detection: if two executors touch overlapping files, flag for sequential processing
+
+### 2.2 Intelligent Slicer
+
+- Slicer analyzes codebase architecture before generating PRDs
+- Uses prd-creator template/instructions to standardize PRD creation
+- PRDs include file-level implementation hints and dependency declarations
+- Automatic complexity estimation (S/M/L) with runtime budget allocation
+
+### 2.3 Audit → Action Pipeline
+
+- Audit findings automatically become PRD candidates
+- Priority scoring: security issues > bugs > tech debt > style
+- Configurable thresholds for auto-creating vs. drafting PRDs from audit findings
+
+### 2.4 Cost Tracking
+
+- Track token usage and cost per job type and per PRD complexity
+- Route simple tasks to cheaper/faster models, complex tasks to stronger models
+
+### 2.5 Release Planning
+
+- Agent analyzes merged PRs since last release and drafts changelog
+- Suggests semantic version bump based on change categories
+- Can trigger `npm publish` workflow when release criteria are met
+
+---
+
+## Future — Advanced Capabilities
+
+> Ideas for later exploration once the core pipeline is mature.
+
+### Multi-Agent Collaboration
+
+- Agent communication protocol — structured message bus for inter-agent coordination
+- Intra-PRD agent swarms — decompose a single PRD into a DAG and run phases concurrently
+- Work-stealing — idle agents pick up tasks from a shared queue
+- Architecture review gate — architect agent reviews approach before executor starts large PRDs
+- PR review deliberation — multiple reviewer personas with weighted consensus scoring
+
+### Learning & Adaptation
+
+- Execution memory — persist patterns from successful implementations, feed back into prompts
+- Prompt evolution — A/B test system prompts, auto-tune based on success metrics
+- Failure pattern recognition — cluster common failure modes, pre-inject mitigations
+- Context optimization (RAG) — dynamic context retrieval via AST parsing to reduce token bloat
+
+### External Integration & Multi-Repo
+
+- Multi-repo orchestration — manage multiple repositories from a single instance
+- Board provider expansion — Linear, Jira, generic webhook adapter
+- Deployment agent — post-merge smoke tests, rollback triggers, canary deployments
+- Incident response agent — monitor error tracking, auto-generate bug-fix PRDs
+
+### Org-Level Autonomy
+
+- Product strategy agent — generate feature proposals from metrics and user feedback
+- Technical debt manager — track, score, and balance debt paydown vs. feature work
+- Documentation agent — auto-generate and maintain API/architecture docs
+- Backlog grooming agent — detect stale/redundant PRDs, suggest merges and re-prioritizations
+- Human-in-the-loop controls — configurable approval gates, escalation rules, audit log
+
+These remain long-term explorations. They should not dilute the near-term positioning around safe, overnight execution for scoped work.
+
+---
+
+## Guiding Principles
+
+1. **Ship incrementally** — each phase delivers standalone value
+2. **Observe before optimizing** — telemetry first, automation second
+3. **Human override always available** — autonomy is a dial, not a switch
+4. **Dog-food relentlessly** — Night Watch builds Night Watch
+5. **Cost-aware** — track and optimize AI spend as a first-class metric

@@ -270,6 +270,74 @@ describe('core flow smoke tests (bash scripts)', () => {
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
 
     const fakeBin = mkTempDir('nw-smoke-qa-success-bin-');
+    const qaReadyFlag = path.join(projectDir, '.smoke-qa-ready');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' + 'touch "${NW_SMOKE_QA_READY_FILE}"\n' + 'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'args="$*"\n' +
+        'qa_comment="<!-- night-watch-qa-marker -->\n' +
+        '## Night Watch QA Report\n' +
+        '**QA: No tests needed for this PR**"\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  echo \'[{"number":1,"headRefName":"feat/qa-success","title":"QA success","labels":[]}]\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "repo" && "$2" == "view" ]]; then\n' +
+        "  echo 'owner/repo'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ -f "${NW_SMOKE_QA_READY_FILE}" && "$args" == *"--json comments"* ]]; then\n' +
+        '    printf "%s" "${qa_comment}" | base64 | tr -d "\\n"\n' +
+        '    printf "\\n"\n' +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$args" == *"--json files"* ]]; then\n' +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "api" ]]; then\n' +
+        '  if [[ -f "${NW_SMOKE_QA_READY_FILE}" ]]; then\n' +
+        '    printf "%s" "${qa_comment}" | base64 | tr -d "\\n"\n' +
+        '    printf "\\n"\n' +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "checkout" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(qaScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BRANCH_PATTERNS: 'feat/',
+      NW_SMOKE_QA_READY_FILE: qaReadyFlag,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success_qa');
+    expect(result.stdout).toContain('prs=#1');
+    expect(result.stdout).toContain('repo=owner/repo');
+  });
+
+  it('qa should fail when provider exits 0 but does not leave verifiable QA evidence', () => {
+    const projectDir = mkTempDir('nw-smoke-qa-missing-evidence-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-qa-missing-evidence-bin-');
 
     fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
       encoding: 'utf-8',
@@ -280,7 +348,7 @@ describe('core flow smoke tests (bash scripts)', () => {
       path.join(fakeBin, 'gh'),
       '#!/usr/bin/env bash\n' +
         'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
-        '  echo \'[{"number":1,"headRefName":"feat/qa-success","title":"QA success","labels":[]}]\'\n' +
+        '  echo \'[{"number":1,"headRefName":"feat/qa-no-evidence","title":"QA no evidence","labels":[]}]\'\n' +
         '  exit 0\n' +
         'fi\n' +
         'if [[ "$1" == "repo" && "$2" == "view" ]]; then\n' +
@@ -288,11 +356,9 @@ describe('core flow smoke tests (bash scripts)', () => {
         '  exit 0\n' +
         'fi\n' +
         'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
-        '  # No QA comment yet (PR needs QA)\n' +
         '  exit 0\n' +
         'fi\n' +
         'if [[ "$1" == "api" ]]; then\n' +
-        "  echo '[]'\n" +
         '  exit 0\n' +
         'fi\n' +
         'if [[ "$1" == "pr" && "$2" == "checkout" ]]; then\n' +
@@ -309,10 +375,8 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_BRANCH_PATTERNS: 'feat/',
     });
 
-    expect(result.status).toBe(0);
-    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success_qa');
-    expect(result.stdout).toContain('prs=#1');
-    expect(result.stdout).toContain('repo=owner/repo');
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure');
   });
 
   it('qa should return non-zero when provider fails on a PR', () => {
@@ -1147,6 +1211,76 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure');
   });
 
+  it('reviewer should invoke codex with exec syntax when reviewer provider is codex', () => {
+    const projectDir = mkTempDir('nw-smoke-reviewer-codex-argv-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-reviewer-codex-argv-bin-');
+    const argsFile = path.join(projectDir, '.codex-argv');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'codex'),
+      '#!/usr/bin/env bash\n' +
+        'printf \'%s\\0\' "$@" > "$NW_SMOKE_ARGS_FILE"\n' +
+        'echo "codex stub invoked" >&2\n' +
+        'exit 1\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'args="$*"\n' +
+        'if [[ "$1" == "repo" && "$2" == "view" ]]; then\n' +
+        "  echo 'owner/repo'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ "$args" == *"mergeStateStatus"* ]]; then\n' +
+        "    echo 'DIRTY'\n" +
+        '  else\n' +
+        '    echo \'{"number":1}\'\n' +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  if [[ "$args" == *"number,headRefName"* ]]; then\n' +
+        "    printf '1\\tnight-watch/codex-argv-test\\n'\n" +
+        '  else\n' +
+        "    echo 'night-watch/codex-argv-test'\n" +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "checks" ]]; then\n' +
+        "  echo 'fail 1/1 checks'\n" +
+        '  exit 1\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(reviewerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'codex',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BRANCH_PATTERNS: 'night-watch/',
+      NW_REVIEWER_WORKER_MODE: '0',
+      NW_REVIEWER_PARALLEL: '0',
+      NW_AUTO_MERGE: '0',
+      NW_SMOKE_ARGS_FILE: argsFile,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure');
+
+    const argv = fs.readFileSync(argsFile, 'utf-8').split('\0').filter(Boolean);
+    expect(argv[0]).toBe('exec');
+    expect(argv).toContain('--yolo');
+    expect(argv).not.toContain('--quiet');
+    expect(argv).not.toContain('--prompt');
+  });
+
   it('reviewer parallel mode should aggregate results when one worker times out and one succeeds', async () => {
     const projectDir = mkTempDir('nw-smoke-reviewer-parallel-mixed-');
     initGitRepo(projectDir);
@@ -1646,19 +1780,22 @@ describe('core flow smoke tests (bash scripts)', () => {
     initGitRepo(projectDir);
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
 
-    // The prompt template is at scripts/../templates/night-watch-audit.md
-    // We need to temporarily move it to trigger the missing prompt error
-    const templatePath = path.join(repoRoot, 'templates', 'night-watch-audit.md');
-    const tempTemplatePath = templatePath + '.bak';
+    // Audit prompt filename differs across template migrations.
+    // Temporarily move all known audit prompt candidates to force missing-prompt path.
+    const templatePaths = [
+      path.join(repoRoot, 'templates', 'audit.md'),
+      path.join(repoRoot, 'templates', 'night-watch-audit.md'),
+    ].filter((p) => fs.existsSync(p));
 
-    // Skip test if template doesn't exist (shouldn't happen in normal repo)
-    if (!fs.existsSync(templatePath)) {
+    if (templatePaths.length === 0) {
       return;
     }
+    const tempTemplatePaths = templatePaths.map((p) => `${p}.bak`);
 
     try {
-      // Temporarily move the template
-      fs.renameSync(templatePath, tempTemplatePath);
+      for (let i = 0; i < templatePaths.length; i += 1) {
+        fs.renameSync(templatePaths[i], tempTemplatePaths[i]);
+      }
 
       const result = runScript(auditScript, projectDir, {
         NW_PROVIDER_CMD: 'claude',
@@ -1668,9 +1805,10 @@ describe('core flow smoke tests (bash scripts)', () => {
       expect(result.status).toBe(1);
       expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure_missing_prompt');
     } finally {
-      // Restore the template file
-      if (fs.existsSync(tempTemplatePath)) {
-        fs.renameSync(tempTemplatePath, templatePath);
+      for (let i = 0; i < tempTemplatePaths.length; i += 1) {
+        if (fs.existsSync(tempTemplatePaths[i])) {
+          fs.renameSync(tempTemplatePaths[i], templatePaths[i]);
+        }
       }
     }
   });

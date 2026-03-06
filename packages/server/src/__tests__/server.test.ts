@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import request from 'supertest';
+import { CronExpressionParser } from 'cron-parser';
 import { createApp } from '../index.js';
 import { INightWatchConfig } from '@night-watch/core/types.js';
 
@@ -209,6 +210,137 @@ describe('server API', () => {
     });
   });
 
+  describe('GET /api/schedule-info', () => {
+    it('returns installed status and next run for each scheduled job', async () => {
+      vi.mocked(getEntries).mockReturnValue([
+        `5 */3 * * * cd "${tempDir}" && night-watch run >> "${tempDir}/logs/executor.log" 2>&1`,
+        `25 */6 * * * cd "${tempDir}" && night-watch review >> "${tempDir}/logs/reviewer.log" 2>&1`,
+        `45 2,14 * * * cd "${tempDir}" && night-watch qa >> "${tempDir}/logs/qa.log" 2>&1`,
+        `50 3 * * 1 cd "${tempDir}" && night-watch audit >> "${tempDir}/logs/audit.log" 2>&1`,
+        `35 */12 * * * cd "${tempDir}" && night-watch planner >> "${tempDir}/logs/planner.log" 2>&1`,
+      ]);
+
+      const response = await request(app).get('/api/schedule-info');
+
+      expect(response.status).toBe(200);
+      expect(response.body.paused).toBe(false);
+      expect(response.body.executor.installed).toBe(true);
+      expect(response.body.reviewer.installed).toBe(true);
+      expect(response.body.qa.installed).toBe(true);
+      expect(response.body.audit.installed).toBe(true);
+      expect(response.body.planner.installed).toBe(true);
+      expect(typeof response.body.executor.nextRun).toBe('string');
+      expect(typeof response.body.reviewer.nextRun).toBe('string');
+      expect(typeof response.body.qa.nextRun).toBe('string');
+      expect(typeof response.body.audit.nextRun).toBe('string');
+      expect(typeof response.body.planner.nextRun).toBe('string');
+    });
+
+    it('recognizes legacy slice command as planner schedule', async () => {
+      vi.mocked(getEntries).mockReturnValue([
+        `35 */12 * * * cd "${tempDir}" && night-watch slice >> "${tempDir}/logs/planner.log" 2>&1`,
+      ]);
+
+      const response = await request(app).get('/api/schedule-info');
+
+      expect(response.status).toBe(200);
+      expect(response.body.paused).toBe(false);
+      expect(response.body.planner.installed).toBe(true);
+      expect(typeof response.body.planner.nextRun).toBe('string');
+    });
+
+    it('returns paused with null next-run values when no crontab entries exist', async () => {
+      vi.mocked(getEntries).mockReturnValue([]);
+      vi.mocked(getProjectEntries).mockReturnValue([]);
+
+      const response = await request(app).get('/api/schedule-info');
+
+      expect(response.status).toBe(200);
+      expect(response.body.paused).toBe(true);
+      expect(response.body.executor.installed).toBe(false);
+      expect(response.body.reviewer.installed).toBe(false);
+      expect(response.body.qa.installed).toBe(false);
+      expect(response.body.audit.installed).toBe(false);
+      expect(response.body.planner.installed).toBe(false);
+      expect(response.body.executor.nextRun).toBeNull();
+      expect(response.body.reviewer.nextRun).toBeNull();
+      expect(response.body.qa.nextRun).toBeNull();
+      expect(response.body.audit.nextRun).toBeNull();
+      expect(response.body.planner.nextRun).toBeNull();
+    });
+
+    it('rejects invalid cron updates at config boundary', async () => {
+      const updateResponse = await request(app)
+        .put('/api/config')
+        .send({ cronSchedule: 'not a cron' });
+      expect(updateResponse.status).toBe(400);
+      expect(updateResponse.body.error).toContain('valid cron expression');
+    });
+
+    it('respects enabled toggles even if cron entries exist', async () => {
+      vi.mocked(getEntries).mockReturnValue([
+        `5 */3 * * * cd "${tempDir}" && night-watch run >> "${tempDir}/logs/executor.log" 2>&1`,
+        `25 */6 * * * cd "${tempDir}" && night-watch review >> "${tempDir}/logs/reviewer.log" 2>&1`,
+        `45 2,14 * * * cd "${tempDir}" && night-watch qa >> "${tempDir}/logs/qa.log" 2>&1`,
+        `50 3 * * 1 cd "${tempDir}" && night-watch audit >> "${tempDir}/logs/audit.log" 2>&1`,
+        `35 */12 * * * cd "${tempDir}" && night-watch planner >> "${tempDir}/logs/planner.log" 2>&1`,
+      ]);
+
+      const updateResponse = await request(app)
+        .put('/api/config')
+        .send({
+          executorEnabled: false,
+          reviewerEnabled: false,
+          qa: { enabled: false },
+          audit: { enabled: false },
+          roadmapScanner: { enabled: false },
+        });
+      expect(updateResponse.status).toBe(200);
+
+      const response = await request(app).get('/api/schedule-info');
+
+      expect(response.status).toBe(200);
+      expect(response.body.executor.installed).toBe(false);
+      expect(response.body.reviewer.installed).toBe(false);
+      expect(response.body.qa.installed).toBe(false);
+      expect(response.body.audit.installed).toBe(false);
+      expect(response.body.planner.installed).toBe(false);
+    });
+
+    it('applies cronScheduleOffset to reported schedules and next runs', async () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-03-05T00:00:00.000Z'));
+
+        vi.mocked(getEntries).mockReturnValue([
+          `30 */3 * * * cd "${tempDir}" && night-watch run >> "${tempDir}/logs/executor.log" 2>&1`,
+          `30 */6 * * * cd "${tempDir}" && night-watch review >> "${tempDir}/logs/reviewer.log" 2>&1`,
+        ]);
+
+        const updateResponse = await request(app).put('/api/config').send({
+          cronSchedule: '0 */3 * * *',
+          reviewerSchedule: '0 */6 * * *',
+          cronScheduleOffset: 30,
+        });
+        expect(updateResponse.status).toBe(200);
+
+        const response = await request(app).get('/api/schedule-info');
+
+        expect(response.status).toBe(200);
+        expect(response.body.executor.schedule).toBe('30 */3 * * *');
+        expect(response.body.reviewer.schedule).toBe('30 */6 * * *');
+        expect(response.body.executor.nextRun).toBe(
+          CronExpressionParser.parse('30 */3 * * *').next().toISOString(),
+        );
+        expect(response.body.reviewer.nextRun).toBe(
+          CronExpressionParser.parse('30 */6 * * *').next().toISOString(),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   describe('GET /api/prds', () => {
     it('should return 410 Gone (endpoint deprecated)', async () => {
       const response = await request(app).get('/api/prds');
@@ -328,6 +460,34 @@ describe('server API', () => {
       expect(response.body).toHaveProperty('error');
     });
 
+    it('should validate providerLabel is a string', async () => {
+      const response = await request(app).put('/api/config').send({ providerLabel: 123 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('providerLabel');
+    });
+
+    it('should accept providerLabel string (including empty string to clear)', async () => {
+      const response = await request(app).put('/api/config').send({ providerLabel: '' });
+
+      expect(response.status).toBe(200);
+      expect(response.body.providerLabel).toBeUndefined();
+    });
+
+    it('should validate defaultBranch is a string', async () => {
+      const response = await request(app).put('/api/config').send({ defaultBranch: 42 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('defaultBranch');
+    });
+
+    it('should validate branchPrefix is non-empty string', async () => {
+      const response = await request(app).put('/api/config').send({ branchPrefix: '' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('branchPrefix');
+    });
+
     it('should validate reviewerEnabled is boolean', async () => {
       const response = await request(app).put('/api/config').send({ reviewerEnabled: 'true' });
 
@@ -356,6 +516,38 @@ describe('server API', () => {
       expect(response.body.error).toContain('minReviewScore');
     });
 
+    it('should validate maxRetries is integer >= 1', async () => {
+      const response = await request(app).put('/api/config').send({ maxRetries: 0 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('maxRetries');
+    });
+
+    it('should validate reviewerMaxRetries range', async () => {
+      const response = await request(app).put('/api/config').send({ reviewerMaxRetries: 11 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('reviewerMaxRetries');
+    });
+
+    it('should validate reviewerRetryDelay range', async () => {
+      const response = await request(app).put('/api/config').send({ reviewerRetryDelay: 301 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('reviewerRetryDelay');
+    });
+
+    it('should accept valid retry configuration fields', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ maxRetries: 4, reviewerMaxRetries: 3, reviewerRetryDelay: 45 });
+
+      expect(response.status).toBe(200);
+      expect(response.body.maxRetries).toBe(4);
+      expect(response.body.reviewerMaxRetries).toBe(3);
+      expect(response.body.reviewerRetryDelay).toBe(45);
+    });
+
     it('should validate branchPatterns is array of strings', async () => {
       const response = await request(app)
         .put('/api/config')
@@ -381,11 +573,60 @@ describe('server API', () => {
       expect(response.body.error).toContain('cronSchedule');
     });
 
+    it('should validate cronSchedule is valid cron expression', async () => {
+      const response = await request(app).put('/api/config').send({ cronSchedule: 'not a cron' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('valid cron expression');
+    });
+
     it('should validate reviewerSchedule is non-empty string', async () => {
       const response = await request(app).put('/api/config').send({ reviewerSchedule: '' });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('reviewerSchedule');
+    });
+
+    it('should validate reviewerSchedule is valid cron expression', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ reviewerSchedule: 'not a cron' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('valid cron expression');
+    });
+
+    it('should validate scheduleBundleId type', async () => {
+      const response = await request(app).put('/api/config').send({ scheduleBundleId: 123 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('scheduleBundleId');
+    });
+
+    it('should accept scheduleBundleId as string or null', async () => {
+      const setResponse = await request(app)
+        .put('/api/config')
+        .send({ scheduleBundleId: 'always-on' });
+      expect(setResponse.status).toBe(200);
+      expect(setResponse.body.scheduleBundleId).toBe('always-on');
+
+      const clearResponse = await request(app).put('/api/config').send({ scheduleBundleId: null });
+      expect(clearResponse.status).toBe(200);
+      expect(clearResponse.body.scheduleBundleId).toBeNull();
+    });
+
+    it('should accept valid cron expressions with surrounding whitespace across all schedule fields', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          cronSchedule: '  5 */3 * * *  ',
+          reviewerSchedule: '  25 */6 * * *  ',
+          qa: { schedule: '  45 2,14 * * *  ' },
+          audit: { schedule: '  50 3 * * 1  ' },
+          roadmapScanner: { slicerSchedule: '  35 */12 * * *  ' },
+        });
+
+      expect(response.status).toBe(200);
     });
 
     it('should reject invalid request body', async () => {
@@ -430,6 +671,24 @@ describe('server API', () => {
         });
 
       expect(response.status).toBe(200);
+    });
+
+    it('should validate providerEnv values are strings', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ providerEnv: { API_KEY: 123 } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('providerEnv');
+    });
+
+    it('should accept valid providerEnv object', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ providerEnv: { API_KEY: 'abc', BASE_URL: 'https://example.com' } });
+
+      expect(response.status).toBe(200);
+      expect(response.body.providerEnv.API_KEY).toBe('abc');
     });
 
     it('should accept valid autoMerge boolean', async () => {
@@ -504,6 +763,13 @@ describe('server API', () => {
       expect(response.body).toHaveProperty('prdDir', 'docs/prd');
     });
 
+    it('should validate templatesDir is non-empty string', async () => {
+      const response = await request(app).put('/api/config').send({ templatesDir: '' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('templatesDir');
+    });
+
     it('should validate cronScheduleOffset is between 0 and 59', async () => {
       const response = await request(app).put('/api/config').send({ cronScheduleOffset: 100 });
 
@@ -564,6 +830,15 @@ describe('server API', () => {
       expect(response.body.error).toContain('qa.schedule');
     });
 
+    it('should validate qa.schedule is valid cron expression', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ qa: { schedule: 'not a cron' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('valid cron expression');
+    });
+
     it('should validate qa.maxRuntime is number >= 60', async () => {
       const response = await request(app)
         .put('/api/config')
@@ -610,6 +885,32 @@ describe('server API', () => {
       expect(response.body.qa.artifacts).toBe('screenshot');
     });
 
+    it('should preserve existing QA schedule fields when toggling qa.enabled', async () => {
+      const firstResponse = await request(app)
+        .put('/api/config')
+        .send({
+          qa: {
+            schedule: '5 * * * *',
+            maxRuntime: 1800,
+            artifacts: 'video',
+          },
+        });
+
+      expect(firstResponse.status).toBe(200);
+
+      const secondResponse = await request(app)
+        .put('/api/config')
+        .send({ qa: { enabled: false } });
+
+      expect(secondResponse.status).toBe(200);
+      expect(secondResponse.body.qa).toMatchObject({
+        enabled: false,
+        schedule: '5 * * * *',
+        maxRuntime: 1800,
+        artifacts: 'video',
+      });
+    });
+
     it('should validate audit.enabled is boolean', async () => {
       const response = await request(app)
         .put('/api/config')
@@ -626,6 +927,15 @@ describe('server API', () => {
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('audit.schedule');
+    });
+
+    it('should validate audit.schedule is valid cron expression', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ audit: { schedule: 'not a cron' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('valid cron expression');
     });
 
     it('should validate audit.maxRuntime is number >= 60', async () => {
@@ -662,6 +972,40 @@ describe('server API', () => {
       expect(response.body.error).toContain('slicerSchedule');
     });
 
+    it('should validate roadmapScanner.slicerSchedule is valid cron expression', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ roadmapScanner: { slicerSchedule: 'not a cron' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('valid cron expression');
+    });
+
+    it('should preserve existing planner schedule fields when toggling roadmapScanner.enabled', async () => {
+      const firstResponse = await request(app)
+        .put('/api/config')
+        .send({
+          roadmapScanner: {
+            enabled: true,
+            slicerSchedule: '15 */8 * * *',
+            slicerMaxRuntime: 900,
+          },
+        });
+
+      expect(firstResponse.status).toBe(200);
+
+      const secondResponse = await request(app)
+        .put('/api/config')
+        .send({ roadmapScanner: { enabled: false } });
+
+      expect(secondResponse.status).toBe(200);
+      expect(secondResponse.body.roadmapScanner).toMatchObject({
+        enabled: false,
+        slicerSchedule: '15 */8 * * *',
+        slicerMaxRuntime: 900,
+      });
+    });
+
     it('should validate roadmapScanner.slicerMaxRuntime is number >= 60', async () => {
       const response = await request(app)
         .put('/api/config')
@@ -678,12 +1022,34 @@ describe('server API', () => {
           roadmapScanner: {
             slicerSchedule: '0 */4 * * *',
             slicerMaxRuntime: 900,
+            priorityMode: 'roadmap-first',
+            issueColumn: 'Draft',
           },
         });
 
       expect(response.status).toBe(200);
       expect(response.body.roadmapScanner.slicerSchedule).toBe('0 */4 * * *');
       expect(response.body.roadmapScanner.slicerMaxRuntime).toBe(900);
+      expect(response.body.roadmapScanner.priorityMode).toBe('roadmap-first');
+      expect(response.body.roadmapScanner.issueColumn).toBe('Draft');
+    });
+
+    it('should validate roadmapScanner.priorityMode value', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ roadmapScanner: { priorityMode: 'invalid' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('roadmapScanner.priorityMode');
+    });
+
+    it('should validate roadmapScanner.issueColumn value', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ roadmapScanner: { issueColumn: 'In Progress' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('roadmapScanner.issueColumn');
     });
 
     it('should validate boardProvider.enabled is boolean', async () => {
@@ -702,6 +1068,51 @@ describe('server API', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.boardProvider.enabled).toBe(false);
+    });
+
+    it('should validate boardProvider.provider value', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ boardProvider: { provider: 'trello' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('boardProvider.provider');
+    });
+
+    it('should validate boardProvider.projectNumber', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ boardProvider: { projectNumber: 0 } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('boardProvider.projectNumber');
+    });
+
+    it('should validate boardProvider.repo is non-empty string when provided', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ boardProvider: { repo: '' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('boardProvider.repo');
+    });
+
+    it('should accept valid boardProvider details', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          boardProvider: {
+            enabled: true,
+            provider: 'github',
+            projectNumber: 12,
+            repo: 'owner/repo',
+          },
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.boardProvider.provider).toBe('github');
+      expect(response.body.boardProvider.projectNumber).toBe(12);
+      expect(response.body.boardProvider.repo).toBe('owner/repo');
     });
   });
 
@@ -796,34 +1207,38 @@ describe('server API', () => {
   });
 
   describe('POST /api/actions/install-cron', () => {
-    it('should spawn install process', async () => {
+    it('should force-install cron in a single CLI call', async () => {
       const response = await request(app).post('/api/actions/install-cron');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('started', true);
-      expect(spawn).toHaveBeenCalledWith(
-        'night-watch',
-        ['install'],
+      expect(execSync).toHaveBeenCalledWith(
+        'night-watch install --force',
         expect.objectContaining({
-          detached: true,
-          stdio: 'ignore',
+          cwd: tempDir,
+          encoding: 'utf-8',
+          stdio: 'pipe',
         }),
+      );
+      expect(execSync).not.toHaveBeenCalledWith(
+        'night-watch uninstall --keep-logs',
+        expect.anything(),
       );
     });
   });
 
   describe('POST /api/actions/uninstall-cron', () => {
-    it('should spawn uninstall process', async () => {
+    it('should uninstall cron synchronously while keeping logs', async () => {
       const response = await request(app).post('/api/actions/uninstall-cron');
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('started', true);
-      expect(spawn).toHaveBeenCalledWith(
-        'night-watch',
-        ['uninstall'],
+      expect(execSync).toHaveBeenCalledWith(
+        'night-watch uninstall --keep-logs',
         expect.objectContaining({
-          detached: true,
-          stdio: 'ignore',
+          cwd: tempDir,
+          encoding: 'utf-8',
+          stdio: 'pipe',
         }),
       );
     });

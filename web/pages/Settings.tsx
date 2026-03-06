@@ -1,34 +1,37 @@
+import { Activity, AlertCircle, Check, Edit2, Eye, EyeOff, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react';
 import React from 'react';
-import { Save, RotateCcw, Activity, AlertCircle, Plus, Trash2, Eye, EyeOff, Edit2, X, Check } from 'lucide-react';
-import Button from '../components/ui/Button';
-import Card from '../components/ui/Card';
-import Input from '../components/ui/Input';
-import Select from '../components/ui/Select';
-import Tabs from '../components/ui/Tabs';
-import Switch from '../components/ui/Switch';
-import CronScheduleInput from '../components/ui/CronScheduleInput';
-import { useStore } from '../store/useStore';
 import {
+  ClaudeModel,
   fetchConfig,
   fetchDoctor,
+  IAuditConfig,
   IBoardProviderConfig,
+  IJobProviders,
   INightWatchConfig,
   INotificationConfig,
-  IWebhookConfig,
+  IQaConfig,
   IRoadmapScannerConfig,
-  IJobProviders,
+  IWebhookConfig,
   MergeMethod,
+  QaArtifacts,
+  triggerInstallCron,
+  toggleRoadmapScanner,
   updateConfig,
   useApi,
-  toggleRoadmapScanner,
-  ClaudeModel,
-  IQaConfig,
-  IAuditConfig,
-  QaArtifacts,
 } from '../api';
+import Button from '../components/ui/Button';
+import Card from '../components/ui/Card';
+import CronScheduleInput from '../components/ui/CronScheduleInput';
+import { IScheduleTemplate, SCHEDULE_TEMPLATES, resolveActiveTemplate } from '../utils/cron.js';
+import Input from '../components/ui/Input';
+import Select from '../components/ui/Select';
+import Switch from '../components/ui/Switch';
+import Tabs from '../components/ui/Tabs';
+import { useStore } from '../store/useStore';
 
 type ConfigForm = {
   provider: INightWatchConfig['provider'];
+  providerLabel: string;
   defaultBranch: string;
   prdDir: string;
   branchPrefix: string;
@@ -41,6 +44,7 @@ type ConfigForm = {
   maxLogSize: number;
   cronSchedule: string;
   reviewerSchedule: string;
+  scheduleBundleId: string | null;
   cronScheduleOffset: number;
   maxRetries: number;
   reviewerMaxRetries: number;
@@ -62,6 +66,7 @@ type ConfigForm = {
 
 const toFormState = (config: INightWatchConfig): ConfigForm => ({
   provider: config.provider,
+  providerLabel: config.providerLabel ?? '',
   defaultBranch: config.defaultBranch,
   prdDir: config.prdDir || 'docs/prds',
   branchPrefix: config.branchPrefix,
@@ -72,8 +77,9 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   maxRuntime: config.maxRuntime,
   reviewerMaxRuntime: config.reviewerMaxRuntime,
   maxLogSize: config.maxLogSize,
-  cronSchedule: config.cronSchedule || '0 0-21 * * *',
-  reviewerSchedule: config.reviewerSchedule || '0 0,3,6,9,12,15,18,21 * * *',
+  cronSchedule: config.cronSchedule || '5 */3 * * *',
+  reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
+  scheduleBundleId: config.scheduleBundleId ?? null,
   cronScheduleOffset: config.cronScheduleOffset ?? 0,
   maxRetries: config.maxRetries ?? 3,
   reviewerMaxRetries: config.reviewerMaxRetries ?? 2,
@@ -81,21 +87,25 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   providerEnv: config.providerEnv || {},
   notifications: config.notifications || { webhooks: [] },
   prdPriority: config.prdPriority || [],
-  roadmapScanner: config.roadmapScanner || {
-    enabled: true,
-    roadmapPath: 'ROADMAP.md',
-    autoScanInterval: 300,
+  roadmapScanner: {
+    enabled: config.roadmapScanner?.enabled ?? true,
+    roadmapPath: config.roadmapScanner?.roadmapPath ?? 'ROADMAP.md',
+    autoScanInterval: config.roadmapScanner?.autoScanInterval ?? 300,
+    slicerSchedule: config.roadmapScanner?.slicerSchedule ?? '35 */12 * * *',
+    slicerMaxRuntime: config.roadmapScanner?.slicerMaxRuntime ?? 600,
+    priorityMode: config.roadmapScanner?.priorityMode ?? 'roadmap-first',
+    issueColumn: config.roadmapScanner?.issueColumn ?? 'Draft',
   },
   templatesDir: config.templatesDir || '.night-watch/templates',
   boardProvider: config.boardProvider || { enabled: true, provider: 'github' },
   jobProviders: config.jobProviders || {},
   autoMerge: config.autoMerge ?? false,
   autoMergeMethod: config.autoMergeMethod ?? 'squash',
-  fallbackOnRateLimit: config.fallbackOnRateLimit ?? false,
+  fallbackOnRateLimit: config.fallbackOnRateLimit ?? true,
   claudeModel: config.claudeModel ?? 'sonnet',
   qa: config.qa || {
     enabled: true,
-    schedule: '30 1,7,13,19 * * *',
+    schedule: '45 2,14 * * *',
     maxRuntime: 3600,
     branchPatterns: [],
     artifacts: 'both',
@@ -104,10 +114,32 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   },
   audit: config.audit || {
     enabled: true,
-    schedule: '0 2,8,14,20 * * *',
+    schedule: '50 3 * * 1',
     maxRuntime: 1800,
   },
 });
+
+type ScheduleUiState = {
+  mode: 'template' | 'custom';
+  selectedTemplateId: string;
+};
+
+const resolveScheduleUiState = (form: ConfigForm): ScheduleUiState => {
+  const detected = resolveActiveTemplate(
+    form.scheduleBundleId,
+    form.cronSchedule,
+    form.reviewerSchedule,
+    form.qa.schedule,
+    form.audit.schedule,
+    form.roadmapScanner.slicerSchedule ?? '35 */12 * * *',
+  );
+
+  if (detected) {
+    return { mode: 'template', selectedTemplateId: detected.id };
+  }
+
+  return { mode: 'custom', selectedTemplateId: '' };
+};
 
 // Helper to check if a value looks sensitive
 const isSensitiveKey = (key: string): boolean => {
@@ -132,6 +164,8 @@ const MaskedValue: React.FC<{ value: string; isSensitive: boolean }> = ({ value,
         type="button"
         onClick={() => setShow(!show)}
         className="text-slate-500 hover:text-slate-300"
+        aria-label={show ? 'Hide sensitive value' : 'Show sensitive value'}
+        title={show ? 'Hide sensitive value' : 'Show sensitive value'}
       >
         {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
       </button>
@@ -225,6 +259,8 @@ const ProviderEnvEditor: React.FC<{
                       type="button"
                       onClick={handleSaveEdit}
                       className="p-1 text-green-400 hover:text-green-300"
+                      aria-label={`Save ${key} value`}
+                      title={`Save ${key} value`}
                     >
                       <Check className="h-4 w-4" />
                     </button>
@@ -232,6 +268,8 @@ const ProviderEnvEditor: React.FC<{
                       type="button"
                       onClick={handleCancelEdit}
                       className="p-1 text-slate-400 hover:text-slate-300"
+                      aria-label={`Cancel editing ${key}`}
+                      title={`Cancel editing ${key}`}
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -246,6 +284,8 @@ const ProviderEnvEditor: React.FC<{
                     type="button"
                     onClick={() => handleStartEdit(key)}
                     className="p-1 text-slate-400 hover:text-slate-200"
+                    aria-label={`Edit ${key}`}
+                    title={`Edit ${key}`}
                   >
                     <Edit2 className="h-4 w-4" />
                   </button>
@@ -253,6 +293,8 @@ const ProviderEnvEditor: React.FC<{
                     type="button"
                     onClick={() => handleDelete(key)}
                     className="p-1 text-red-400 hover:text-red-300"
+                    aria-label={`Delete ${key}`}
+                    title={`Delete ${key}`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -409,11 +451,10 @@ const WebhookEditor: React.FC<{
               key={opt.value}
               type="button"
               onClick={() => onChange({ ...webhook, events: toggleEvent(webhook.events, opt.value) })}
-              className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
-                webhook.events.includes(opt.value)
+              className={`px-3 py-1.5 rounded-md text-sm transition-colors ${webhook.events.includes(opt.value)
                   ? 'bg-indigo-600 text-white'
                   : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-              }`}
+                }`}
             >
               {opt.label}
             </button>
@@ -485,6 +526,8 @@ const WebhookEditor: React.FC<{
                       type="button"
                       onClick={() => setEditingIndex(index)}
                       className="p-2 text-slate-400 hover:text-slate-200"
+                      aria-label={`Edit ${webhook.type} webhook`}
+                      title={`Edit ${webhook.type} webhook`}
                     >
                       <Edit2 className="h-4 w-4" />
                     </button>
@@ -492,6 +535,8 @@ const WebhookEditor: React.FC<{
                       type="button"
                       onClick={() => handleDeleteWebhook(index)}
                       className="p-2 text-red-400 hover:text-red-300"
+                      aria-label={`Delete ${webhook.type} webhook`}
+                      title={`Delete ${webhook.type} webhook`}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -564,6 +609,8 @@ const TagInput: React.FC<{
               type="button"
               onClick={() => handleRemove(tag)}
               className="text-slate-500 hover:text-red-400"
+              aria-label={`Remove ${tag}`}
+              title={`Remove ${tag}`}
             >
               <X className="h-3 w-3" />
             </button>
@@ -579,7 +626,7 @@ const TagInput: React.FC<{
           placeholder={placeholder}
           className="flex-1 bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 placeholder-slate-500"
         />
-        <Button onClick={handleAdd} disabled={!input.trim()}>
+        <Button onClick={handleAdd} disabled={!input.trim()} aria-label={`Add ${label.toLowerCase()} value`}>
           <Plus className="h-4 w-4" />
         </Button>
       </div>
@@ -594,6 +641,8 @@ const Settings: React.FC = () => {
   const [form, setForm] = React.useState<ConfigForm | null>(null);
   // Prevents refetchConfig from overwriting the form after a save (form was already set from PUT response)
   const skipNextFormResetRef = React.useRef(false);
+  const [scheduleMode, setScheduleMode] = React.useState<'template' | 'custom'>('template');
+  const [selectedTemplateId, setSelectedTemplateId] = React.useState<string>('always-on');
 
   const {
     data: config,
@@ -604,15 +653,23 @@ const Settings: React.FC = () => {
   const { data: doctorChecksData, loading: doctorLoading, refetch: refetchDoctor } = useApi(fetchDoctor, [selectedProjectId], { enabled: !globalModeLoading });
   const doctorChecks = doctorChecksData ?? [];
 
+  const applyScheduleUiState = React.useCallback((formState: ConfigForm) => {
+    const scheduleUiState = resolveScheduleUiState(formState);
+    setScheduleMode(scheduleUiState.mode);
+    setSelectedTemplateId(scheduleUiState.selectedTemplateId);
+  }, []);
+
   React.useEffect(() => {
     if (config) {
       if (skipNextFormResetRef.current) {
         skipNextFormResetRef.current = false;
       } else {
-        setForm(toFormState(config));
+        const newForm = toFormState(config);
+        setForm(newForm);
+        applyScheduleUiState(newForm);
       }
     }
-  }, [config]);
+  }, [config, applyScheduleUiState]);
 
   const updateField = <K extends keyof ConfigForm>(key: K, value: ConfigForm[K]) => {
     setForm((prev) => {
@@ -623,10 +680,60 @@ const Settings: React.FC = () => {
     });
   };
 
+  const switchToTemplateMode = () => {
+    setScheduleMode('template');
+    if (!form) {
+      return;
+    }
+
+    const scheduleUiState = resolveScheduleUiState(form);
+    if (scheduleUiState.mode === 'template') {
+      setSelectedTemplateId(scheduleUiState.selectedTemplateId);
+      updateField('scheduleBundleId', scheduleUiState.selectedTemplateId);
+    }
+  };
+
+  const switchToCustomMode = () => {
+    setScheduleMode('custom');
+    updateField('scheduleBundleId', null);
+    setSelectedTemplateId('');
+  };
+
+  const applyTemplate = (tpl: IScheduleTemplate) => {
+    setSelectedTemplateId(tpl.id);
+    setForm((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        cronSchedule: tpl.schedules.executor,
+        reviewerSchedule: tpl.schedules.reviewer,
+        scheduleBundleId: tpl.id,
+        qa: { ...prev.qa, schedule: tpl.schedules.qa },
+        audit: { ...prev.audit, schedule: tpl.schedules.audit },
+        roadmapScanner: { ...prev.roadmapScanner, slicerSchedule: tpl.schedules.slicer },
+        fallbackOnRateLimit: true,
+      };
+    });
+  };
+
   const handleSave = async () => {
     if (!form) {
       return;
     }
+
+    const shouldReinstallCron =
+      form.cronSchedule !== config?.cronSchedule ||
+      form.reviewerSchedule !== config?.reviewerSchedule ||
+      form.cronScheduleOffset !== (config?.cronScheduleOffset ?? 0) ||
+      form.executorEnabled !== (config?.executorEnabled ?? true) ||
+      form.reviewerEnabled !== (config?.reviewerEnabled ?? true) ||
+      form.qa.enabled !== (config?.qa.enabled ?? true) ||
+      form.qa.schedule !== config?.qa.schedule ||
+      form.audit.enabled !== (config?.audit.enabled ?? true) ||
+      form.audit.schedule !== config?.audit.schedule ||
+      form.roadmapScanner.enabled !== (config?.roadmapScanner?.enabled ?? true) ||
+      (form.roadmapScanner.slicerSchedule || '35 */12 * * *') !==
+        (config?.roadmapScanner?.slicerSchedule || '35 */12 * * *');
 
     // Filter out empty/undefined job provider values
     const cleanedJobProviders: IJobProviders = {};
@@ -640,6 +747,7 @@ const Settings: React.FC = () => {
     try {
       const savedConfig = await updateConfig({
         provider: form.provider,
+        providerLabel: form.providerLabel.trim(),
         defaultBranch: form.defaultBranch,
         prdDir: form.prdDir,
         branchPrefix: form.branchPrefix,
@@ -652,6 +760,7 @@ const Settings: React.FC = () => {
         maxLogSize: form.maxLogSize,
         cronSchedule: form.cronSchedule,
         reviewerSchedule: form.reviewerSchedule,
+        scheduleBundleId: scheduleMode === 'template' ? form.scheduleBundleId : null,
         cronScheduleOffset: form.cronScheduleOffset,
         maxRetries: form.maxRetries,
         reviewerMaxRetries: form.reviewerMaxRetries,
@@ -672,13 +781,35 @@ const Settings: React.FC = () => {
       });
 
       // Update form directly from server response to ensure it reflects persisted values
-      setForm(toFormState(savedConfig));
+      const updatedForm = toFormState(savedConfig);
+      setForm(updatedForm);
+      applyScheduleUiState(updatedForm);
 
-      addToast({
-        title: 'Settings Saved',
-        message: 'Configuration updated successfully.',
-        type: 'success',
-      });
+      let cronInstallFailedMessage = '';
+      if (shouldReinstallCron) {
+        try {
+          await triggerInstallCron();
+        } catch (cronErr) {
+          cronInstallFailedMessage =
+            cronErr instanceof Error ? cronErr.message : 'failed to reinstall cron schedules';
+        }
+      }
+
+      if (cronInstallFailedMessage) {
+        addToast({
+          title: 'Settings Saved (Cron Reinstall Failed)',
+          message: cronInstallFailedMessage,
+          type: 'warning',
+        });
+      } else {
+        addToast({
+          title: 'Settings Saved',
+          message: shouldReinstallCron
+            ? 'Configuration updated and cron schedules reinstalled.'
+            : 'Configuration updated successfully.',
+          type: 'success',
+        });
+      }
 
       // Sync useApi's internal config state but skip the form reset (already done above)
       skipNextFormResetRef.current = true;
@@ -697,7 +828,9 @@ const Settings: React.FC = () => {
 
   const handleReset = () => {
     if (config) {
-      setForm(toFormState(config));
+      const resetForm = toFormState(config);
+      setForm(resetForm);
+      applyScheduleUiState(resetForm);
       addToast({
         title: 'Reset Complete',
         message: 'Unsaved changes were discarded.',
@@ -710,11 +843,28 @@ const Settings: React.FC = () => {
     try {
       const updatedConfig = await toggleRoadmapScanner(enabled);
       updateField('roadmapScanner', updatedConfig.roadmapScanner);
-      addToast({
-        title: enabled ? 'Roadmap Scanner Enabled' : 'Roadmap Scanner Disabled',
-        message: `Roadmap scanner has been ${enabled ? 'enabled' : 'disabled'}.`,
-        type: 'success',
-      });
+
+      let cronInstallFailedMessage = '';
+      try {
+        await triggerInstallCron();
+      } catch (cronErr) {
+        cronInstallFailedMessage =
+          cronErr instanceof Error ? cronErr.message : 'Failed to reinstall cron schedules';
+      }
+
+      addToast(
+        cronInstallFailedMessage
+          ? {
+              title: 'Planner Saved (Cron Reinstall Failed)',
+              message: cronInstallFailedMessage,
+              type: 'warning',
+            }
+          : {
+              title: enabled ? 'Roadmap Scanner Enabled' : 'Roadmap Scanner Disabled',
+              message: `Roadmap scanner has been ${enabled ? 'enabled' : 'disabled'}.`,
+              type: 'success',
+            },
+      );
     } catch (err) {
       addToast({
         title: 'Toggle Failed',
@@ -754,6 +904,12 @@ const Settings: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
               <Input label="Project Name" value={projectName} disabled />
               <Input label="Default Branch" value={form.defaultBranch} onChange={(e) => updateField('defaultBranch', e.target.value)} />
+              <Input
+                label="PRD Directory"
+                value={form.prdDir}
+                onChange={(e) => updateField('prdDir', e.target.value)}
+                helperText="Directory containing PRD files (relative to project root)"
+              />
               <Input label="Branch Prefix" value={form.branchPrefix} onChange={(e) => updateField('branchPrefix', e.target.value)} />
               <div className="md:col-span-2">
                 <Switch
@@ -789,6 +945,16 @@ const Settings: React.FC = () => {
                 />
               )}
             </div>
+
+            <div className="pt-4 mt-4 border-t border-slate-800">
+              <TagInput
+                label="Branch Patterns"
+                value={form.branchPatterns}
+                onChange={(patterns) => updateField('branchPatterns', patterns)}
+                placeholder="e.g., feat/"
+                helpText="Branch patterns matched by reviewer and related automation jobs"
+              />
+            </div>
           </div>
         </Card>
       ),
@@ -812,6 +978,13 @@ const Settings: React.FC = () => {
                   { label: 'Anthropic (Claude)', value: 'claude' },
                   { label: 'OpenAI (Codex)', value: 'codex' },
                 ]}
+              />
+              <Input
+                label="Provider Label"
+                value={form.providerLabel}
+                onChange={(e) => updateField('providerLabel', e.target.value)}
+                placeholder="e.g. GLM-5 (auto-derived if blank)"
+                helperText="Human-friendly name shown in PR comments, review footers, and commit attribution"
               />
               <Select
                 label="Claude Model"
@@ -853,26 +1026,28 @@ const Settings: React.FC = () => {
               ] as const).map(({ key, label }) => (
                 <div
                   key={key}
-                  className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40"
+                  className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40 gap-4"
                 >
-                  <span className="text-sm font-medium text-slate-200">{label}</span>
-                  <Select
-                    value={form.jobProviders[key] ?? ''}
-                    onChange={(val) => {
-                      const newJobProviders = { ...form.jobProviders };
-                      if (val === '') {
-                        delete newJobProviders[key];
-                      } else {
-                        newJobProviders[key] = val as 'claude' | 'codex';
-                      }
-                      updateField('jobProviders', newJobProviders);
-                    }}
-                    options={[
-                      { label: 'Use Global (default)', value: '' },
-                      { label: 'Anthropic (Claude)', value: 'claude' },
-                      { label: 'OpenAI (Codex)', value: 'codex' },
-                    ]}
-                  />
+                  <span className="text-sm font-medium text-slate-200 whitespace-nowrap">{label}</span>
+                  <div className="w-64">
+                    <Select
+                      value={form.jobProviders[key] ?? ''}
+                      onChange={(val) => {
+                        const newJobProviders = { ...form.jobProviders };
+                        if (val === '') {
+                          delete newJobProviders[key];
+                        } else {
+                          newJobProviders[key] = val as 'claude' | 'codex';
+                        }
+                        updateField('jobProviders', newJobProviders);
+                      }}
+                      options={[
+                        { label: 'Use Global (default)', value: '' },
+                        { label: 'Anthropic (Claude)', value: 'claude' },
+                        { label: 'OpenAI (Codex)', value: 'codex' },
+                      ]}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
@@ -976,56 +1151,124 @@ const Settings: React.FC = () => {
       label: 'Schedules',
       content: (
         <Card className="p-6 space-y-6">
-          <div>
-            <h3 className="text-lg font-medium text-slate-200 mb-2">Job Schedules</h3>
-            <p className="text-sm text-slate-400 mb-4">
-              Configure when automated jobs run using cron expressions or presets
-            </p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-medium text-slate-200 mb-1">Job Schedules</h3>
+              <p className="text-sm text-slate-400">
+                Configure when automated jobs run using a preset template or custom cron expressions
+              </p>
+            </div>
+            <div className="flex rounded-lg border border-slate-700 overflow-hidden shrink-0">
+              <button
+                type="button"
+                className={`px-4 py-1.5 text-sm font-medium transition-colors ${
+                  scheduleMode === 'template'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+                onClick={switchToTemplateMode}
+              >
+                Template
+              </button>
+              <button
+                type="button"
+                className={`px-4 py-1.5 text-sm font-medium transition-colors ${
+                  scheduleMode === 'custom'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                }`}
+                onClick={switchToCustomMode}
+              >
+                Custom
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <CronScheduleInput
-              label="PRD Execution Schedule"
-              value={form.cronSchedule}
-              onChange={(val) => updateField('cronSchedule', val)}
-            />
-            <CronScheduleInput
-              label="PR Review Schedule"
-              value={form.reviewerSchedule}
-              onChange={(val) => updateField('reviewerSchedule', val)}
-            />
-            <CronScheduleInput
-              label="QA Schedule"
-              value={form.qa.schedule}
-              onChange={(val) =>
-                updateField('qa', {
-                  ...form.qa,
-                  schedule: val,
-                })
-              }
-            />
-            <CronScheduleInput
-              label="Audit Schedule"
-              value={form.audit.schedule}
-              onChange={(val) =>
-                updateField('audit', {
-                  ...form.audit,
-                  schedule: val,
-                })
-              }
-            />
-            {form.roadmapScanner.enabled && (
+          {scheduleMode === 'template' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {SCHEDULE_TEMPLATES.map((tpl) => {
+                const active = selectedTemplateId === tpl.id;
+                return (
+                  <button
+                    key={tpl.id}
+                    type="button"
+                    onClick={() => applyTemplate(tpl)}
+                    className={`text-left p-4 rounded-lg border transition-colors ${
+                      active
+                        ? 'border-indigo-500 bg-indigo-950/40'
+                        : 'border-slate-700 bg-slate-800/30 hover:border-slate-600'
+                    }`}
+                  >
+                    <div className="font-medium text-slate-200 mb-1">{tpl.label}</div>
+                    <p className="text-xs text-slate-400 mb-3">{tpl.description}</p>
+                    <div className="space-y-0.5">
+                      {(
+                        [
+                          ['Executor', tpl.hints.executor],
+                          ['Reviewer', tpl.hints.reviewer],
+                          ['QA', tpl.hints.qa],
+                          ['Audit', tpl.hints.audit],
+                          ['Slicer', tpl.hints.slicer],
+                        ] as [string, string][]
+                      ).map(([name, hint]) => (
+                        <div key={name} className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500 w-16 shrink-0">{name}</span>
+                          <span className="text-xs text-slate-400">{hint}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <CronScheduleInput
-                label="Planner Schedule"
-                value={form.roadmapScanner.slicerSchedule || '0 */6 * * *'}
+                label="PRD Execution Schedule"
+                value={form.cronSchedule}
+                onChange={(val) => updateField('cronSchedule', val)}
+              />
+              <CronScheduleInput
+                label="PR Review Schedule"
+                value={form.reviewerSchedule}
+                onChange={(val) => updateField('reviewerSchedule', val)}
+              />
+              <CronScheduleInput
+                label="QA Schedule"
+                value={form.qa.schedule}
                 onChange={(val) =>
-                  updateField('roadmapScanner', {
-                    ...form.roadmapScanner,
-                    slicerSchedule: val,
+                  updateField('qa', {
+                    ...form.qa,
+                    schedule: val,
                   })
                 }
               />
-            )}
+              <CronScheduleInput
+                label="Audit Schedule"
+                value={form.audit.schedule}
+                onChange={(val) =>
+                  updateField('audit', {
+                    ...form.audit,
+                    schedule: val,
+                  })
+                }
+              />
+              {form.roadmapScanner.enabled && (
+                <CronScheduleInput
+                  label="Planner Schedule"
+                  value={form.roadmapScanner.slicerSchedule || '35 */12 * * *'}
+                  onChange={(val) =>
+                    updateField('roadmapScanner', {
+                      ...form.roadmapScanner,
+                      slicerSchedule: val,
+                    })
+                  }
+                />
+              )}
+            </div>
+          )}
+
+          <div className="pt-4 border-t border-slate-800">
             <Input
               label="Cron Schedule Offset"
               type="number"
@@ -1057,18 +1300,19 @@ const Settings: React.FC = () => {
     },
     {
       id: 'roadmap',
-      label: 'Roadmap',
+      label: 'Planner',
       content: (
         <Card className="p-6 space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-medium text-slate-200">Roadmap Scanner</h3>
+              <h3 className="text-lg font-medium text-slate-200">Planner</h3>
               <p className="text-sm text-slate-400">
-                Automatically scan ROADMAP.md and generate PRDs for unchecked items
+                Generate one PRD per run using ROADMAP.md first, then audit findings when roadmap work is exhausted
               </p>
             </div>
             <Switch
               checked={form.roadmapScanner.enabled}
+              aria-label="Enable planner"
               onChange={handleRoadmapToggle}
             />
           </div>
@@ -1077,7 +1321,7 @@ const Settings: React.FC = () => {
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
                 <Input
-                  label="Roadmap Path"
+                  label="Roadmap File Path"
                   value={form.roadmapScanner.roadmapPath}
                   onChange={(e) =>
                     updateField('roadmapScanner', {
@@ -1085,27 +1329,24 @@ const Settings: React.FC = () => {
                       roadmapPath: e.target.value,
                     })
                   }
-                  helperText="Path to ROADMAP.md file (relative to project root)"
+                  helperText="Primary planning source (relative to project root)."
                 />
-                <Input
-                  label="Auto Scan Interval"
-                  type="number"
-                  value={String(form.roadmapScanner.autoScanInterval)}
-                  onChange={(e) =>
+                <CronScheduleInput
+                  label="Planner Schedule"
+                  value={form.roadmapScanner.slicerSchedule || '35 */12 * * *'}
+                  onChange={(val) =>
                     updateField('roadmapScanner', {
                       ...form.roadmapScanner,
-                      autoScanInterval: Math.max(30, Number(e.target.value || 30)),
+                      slicerSchedule: val,
                     })
                   }
-                  rightIcon={<span className="text-xs">sec (min 30)</span>}
-                  helperText="How often to check for new roadmap items"
                 />
               </div>
 
               <div className="pt-4 border-t border-slate-800">
-                <h4 className="text-md font-medium text-slate-200 mb-4">Planner Configuration</h4>
+                <h4 className="text-md font-medium text-slate-200 mb-4">Planner Execution</h4>
                 <p className="text-sm text-slate-400 mb-4">
-                  The Planner generates detailed PRDs from roadmap items using AI
+                  Planner creates one PRD at a time and can auto-create a board issue for handoff.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <Input
@@ -1120,6 +1361,36 @@ const Settings: React.FC = () => {
                     }
                     rightIcon={<span className="text-xs">sec</span>}
                     helperText="Maximum runtime for planner tasks"
+                  />
+                  <Select
+                    label="Planner Priority Mode"
+                    value={form.roadmapScanner.priorityMode || 'roadmap-first'}
+                    onChange={(val) =>
+                      updateField('roadmapScanner', {
+                        ...form.roadmapScanner,
+                        priorityMode: val === 'audit-first' ? 'audit-first' : 'roadmap-first',
+                      })
+                    }
+                    options={[
+                      { label: 'Roadmap first (recommended)', value: 'roadmap-first' },
+                      { label: 'Audit first', value: 'audit-first' },
+                    ]}
+                    helperText="Choose whether planner consumes roadmap items or audit findings first."
+                  />
+                  <Select
+                    label="Planner Issue Column"
+                    value={form.roadmapScanner.issueColumn || 'Draft'}
+                    onChange={(val) =>
+                      updateField('roadmapScanner', {
+                        ...form.roadmapScanner,
+                        issueColumn: val === 'Ready' ? 'Ready' : 'Draft',
+                      })
+                    }
+                    options={[
+                      { label: 'Draft (default)', value: 'Draft' },
+                      { label: 'Ready', value: 'Ready' },
+                    ]}
+                    helperText="Column where planner-created issues are added after PRD generation."
                   />
                 </div>
               </div>
@@ -1360,9 +1631,7 @@ const Settings: React.FC = () => {
       content: (
         <Card className="p-6 space-y-6">
           <h3 className="text-lg font-medium text-slate-200">Advanced Settings</h3>
-          <p className="text-sm text-slate-400">
-            Less commonly used configuration options
-          </p>
+          <p className="text-sm text-slate-400">Templates, retry policy, and PRD execution priority</p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Input
@@ -1385,14 +1654,6 @@ const Settings: React.FC = () => {
           </div>
 
           <div className="pt-4 border-t border-slate-800 space-y-4">
-            <TagInput
-              label="Branch Patterns"
-              value={form.branchPatterns}
-              onChange={(patterns) => updateField('branchPatterns', patterns)}
-              placeholder="e.g., feat/"
-              helpText="Patterns to match for PR reviews"
-            />
-
             <TagInput
               label="PRD Priority"
               value={form.prdPriority}

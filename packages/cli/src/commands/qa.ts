@@ -4,6 +4,7 @@
 
 import { Command } from 'commander';
 import {
+  CLAUDE_MODEL_IDS,
   INightWatchConfig,
   PROVIDER_COMMANDS,
   createSpinner,
@@ -11,6 +12,7 @@ import {
   dim,
   executeScriptWithOutput,
   fetchPrDetailsByNumber,
+  fetchQaScreenshotUrlsForPr,
   getScriptPath,
   header,
   info,
@@ -20,7 +22,11 @@ import {
   sendNotifications,
   error as uiError,
 } from '@night-watch/core';
-import { buildBaseEnvVars, getTelegramStatusWebhooks } from './shared/env-builder.js';
+import {
+  buildBaseEnvVars,
+  formatProviderDisplay,
+  getTelegramStatusWebhooks,
+} from './shared/env-builder.js';
 import * as path from 'path';
 
 /**
@@ -61,6 +67,15 @@ export function parseQaPrNumbers(prsRaw?: string): number[] {
   return numbers;
 }
 
+function parseRepoFromPrUrl(prUrl?: string): string | undefined {
+  if (!prUrl) {
+    return undefined;
+  }
+
+  const match = prUrl.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/\d+/i);
+  return match?.[1];
+}
+
 /**
  * Build environment variables map from config and CLI options for QA
  */
@@ -83,6 +98,7 @@ export function buildEnvVars(
   env.NW_QA_SKIP_LABEL = config.qa.skipLabel;
   env.NW_QA_ARTIFACTS = config.qa.artifacts;
   env.NW_QA_AUTO_INSTALL_PLAYWRIGHT = config.qa.autoInstallPlaywright ? '1' : '0';
+  env.NW_CLAUDE_MODEL_ID = CLAUDE_MODEL_IDS[config.claudeModel ?? 'sonnet'];
 
   // Telegram status messages from bash scripts (start/progress/final status)
   const telegramWebhooks = getTelegramStatusWebhooks(config);
@@ -226,17 +242,21 @@ export function qaCommand(program: Command): void {
             const qaPrNumbers = parseQaPrNumbers(scriptResult?.data.prs);
             const primaryQaPr = qaPrNumbers[0];
             const prDetails = primaryQaPr ? fetchPrDetailsByNumber(primaryQaPr, projectDir) : null;
-            const repo = scriptResult?.data.repo;
+            const repo = scriptResult?.data.repo ?? parseRepoFromPrUrl(prDetails?.url);
             const fallbackPrUrl =
               !prDetails?.url && primaryQaPr && repo
                 ? `https://github.com/${repo}/pull/${primaryQaPr}`
                 : undefined;
+            const qaScreenshotUrls =
+              primaryQaPr !== undefined
+                ? fetchQaScreenshotUrlsForPr(primaryQaPr, projectDir, repo)
+                : [];
 
             const _qaCtx = {
               event: 'qa_completed' as const,
               projectName: path.basename(projectDir),
               exitCode,
-              provider: config.provider,
+              provider: formatProviderDisplay(envVars.NW_PROVIDER_CMD, envVars.NW_PROVIDER_LABEL),
               prNumber: prDetails?.number ?? primaryQaPr,
               prUrl: prDetails?.url ?? fallbackPrUrl,
               prTitle: prDetails?.title,
@@ -244,6 +264,7 @@ export function qaCommand(program: Command): void {
               filesChanged: prDetails?.changedFiles,
               additions: prDetails?.additions,
               deletions: prDetails?.deletions,
+              qaScreenshotUrls,
             };
             await sendNotifications(config, _qaCtx);
           }

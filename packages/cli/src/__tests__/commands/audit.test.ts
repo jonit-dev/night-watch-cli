@@ -135,6 +135,15 @@ describe('audit command', () => {
       expect(env.NW_AUDIT_MAX_RUNTIME).toBe('3600');
     });
 
+    it('should set NW_CLAUDE_MODEL_ID from config.claudeModel', () => {
+      const config = createTestConfig({ claudeModel: 'opus' } as Partial<INightWatchConfig>);
+      const options: IAuditOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_CLAUDE_MODEL_ID).toBe('claude-opus-4-6');
+    });
+
     it('should pass NW_DEFAULT_BRANCH when configured', () => {
       const config = createTestConfig({ defaultBranch: 'main' });
       const options: IAuditOptions = { dryRun: false };

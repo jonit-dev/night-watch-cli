@@ -1,7 +1,7 @@
 import React from 'react';
+import { CRON_PRESETS, getPresetValue } from '../../utils/cron';
 import Input from './Input';
 import Select from './Select';
-import { CRON_PRESETS, getPresetValue, cronToHuman } from '../../utils/cron';
 
 interface CronScheduleInputProps {
   label: string;
@@ -16,7 +16,7 @@ const CronScheduleInput: React.FC<CronScheduleInputProps> = ({
   value,
   onChange,
   helperText,
-  placeholder = '0 0-21 * * *',
+  placeholder = '5 */3 * * *',
 }) => {
   const presetValue = getPresetValue(value);
   const isCustom = presetValue === '__custom__';
@@ -34,36 +34,29 @@ const CronScheduleInput: React.FC<CronScheduleInputProps> = ({
   const currentPreset = CRON_PRESETS.find((p) => p.value === presetValue);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <Select
         label={label}
         value={presetValue}
         onChange={handlePresetChange}
         options={CRON_PRESETS.map((p) => ({ label: p.label, value: p.value }))}
-        helperText={currentPreset?.description || helperText}
+        helperText={isCustom ? undefined : currentPreset?.description || helperText}
       />
       {isCustom && (
-        <>
+        <div className="space-y-2 mt-2">
           <Input
-            label="Custom Cron Expression"
+            label="Cron Expression"
             value={value}
             onChange={handleCustomChange}
-            helperText="Custom cron expression (format: minute hour day month weekday)"
             placeholder={placeholder}
           />
-          <div className="text-xs text-slate-500 mt-1">
-            <strong>Cron format:</strong> minute hour day month weekday
+          <div className="text-xs text-slate-500 bg-slate-900/40 p-3 rounded-md border border-slate-800/60">
+            <strong className="text-slate-400">Format:</strong> minute hour day month weekday
             <br />
-            <strong>Examples:</strong> <code>0 * * * *</code> (hourly),{' '}
-            <code>0 0 * * *</code> (daily at midnight),{' '}
-            <code>0 0-21/3 * * *</code> (every 3 hours from 0-21)
+            <strong className="text-slate-400">Examples:</strong>{' '}
+            <code className="bg-slate-950 px-1 py-0.5 rounded text-indigo-300">0 * * * *</code> (hourly),{' '}
+            <code className="bg-slate-950 px-1 py-0.5 rounded text-indigo-300">0 0 * * *</code> (daily at midnight)
           </div>
-        </>
-      )}
-      {!isCustom && (
-        <div className="text-sm text-slate-400 mt-1">
-          <span className="text-slate-500">Schedule:</span>{' '}
-          <span className="text-slate-200">{cronToHuman(value)}</span>
         </div>
       )}
     </div>

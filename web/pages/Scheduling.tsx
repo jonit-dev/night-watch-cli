@@ -29,6 +29,8 @@ import {
   CRON_PRESETS,
   cronToHuman,
   getPresetValue,
+  isCronEquivalent,
+  resolveActiveTemplate,
   formatRelativeTime,
   formatAbsoluteTime,
   isWithin30Minutes,
@@ -83,6 +85,14 @@ const Scheduling: React.FC = () => {
     }
   }, [config, editState.isEditing]);
 
+  const syncScheduleState = () => {
+    refetchConfig();
+    refetchSchedule();
+  };
+
+  const formatErrorMessage = (error: unknown, fallback: string) =>
+    error instanceof Error ? error.message : fallback;
+
   const handlePauseResume = async () => {
     if (!scheduleInfo) return;
 
@@ -105,11 +115,11 @@ const Scheduling: React.FC = () => {
           type: 'info',
         });
       }
-      refetchSchedule();
+      syncScheduleState();
     } catch (error) {
       addToast({
         title: 'Action Failed',
-        message: error instanceof Error ? error.message : 'Failed to toggle schedule state',
+        message: formatErrorMessage(error, 'Failed to toggle schedule state'),
         type: 'error',
       });
     } finally {
@@ -142,28 +152,41 @@ const Scheduling: React.FC = () => {
 
     setSaving(true);
     try {
-      // Update config with new schedules
       await updateConfig({
         cronSchedule: editState.executorSchedule,
         reviewerSchedule: editState.reviewerSchedule,
       });
 
-      // Install cron with new schedules
-      await triggerInstallCron();
+      let cronInstallFailedMessage = '';
+      try {
+        await triggerInstallCron();
+      } catch (cronError) {
+        cronInstallFailedMessage = formatErrorMessage(
+          cronError,
+          'Failed to reinstall cron schedules',
+        );
+      }
 
-      addToast({
-        title: 'Schedule Updated',
-        message: 'Cron schedules have been saved and installed.',
-        type: 'success',
-      });
+      setEditState((prev) => ({ ...prev, isEditing: false }));
+      syncScheduleState();
 
-      setEditState(prev => ({ ...prev, isEditing: false }));
-      refetchConfig();
-      refetchSchedule();
+      addToast(
+        cronInstallFailedMessage
+          ? {
+              title: 'Schedules Saved (Cron Reinstall Failed)',
+              message: cronInstallFailedMessage,
+              type: 'warning',
+            }
+          : {
+              title: 'Schedule Updated',
+              message: 'Cron schedules have been saved and installed.',
+              type: 'success',
+            },
+      );
     } catch (error) {
       addToast({
         title: 'Save Failed',
-        message: error instanceof Error ? error.message : 'Failed to save schedules',
+        message: formatErrorMessage(error, 'Failed to save schedules'),
         type: 'error',
       });
     } finally {
@@ -193,18 +216,35 @@ const Scheduling: React.FC = () => {
         });
       }
 
-      addToast({
-        title: 'Job Updated',
-        message: `${job[0].toUpperCase() + job.slice(1)} ${enabled ? 'enabled' : 'disabled'}.`,
-        type: 'success',
-      });
+      let cronInstallFailedMessage = '';
+      try {
+        await triggerInstallCron();
+      } catch (cronError) {
+        cronInstallFailedMessage = formatErrorMessage(
+          cronError,
+          'Failed to reinstall cron schedules',
+        );
+      }
 
-      refetchConfig();
-      refetchSchedule();
+      syncScheduleState();
+
+      addToast(
+        cronInstallFailedMessage
+          ? {
+              title: 'Job Saved (Cron Reinstall Failed)',
+              message: cronInstallFailedMessage,
+              type: 'warning',
+            }
+          : {
+              title: 'Job Updated',
+              message: `${job[0].toUpperCase() + job.slice(1)} ${enabled ? 'enabled' : 'disabled'}.`,
+              type: 'success',
+            },
+      );
     } catch (error) {
       addToast({
         title: 'Update Failed',
-        message: error instanceof Error ? error.message : 'Failed to update job configuration',
+        message: formatErrorMessage(error, 'Failed to update job configuration'),
         type: 'error',
       });
     } finally {
@@ -212,7 +252,7 @@ const Scheduling: React.FC = () => {
     }
   };
 
-  const renderNextRun = (nextRunStr: string | null | undefined, _cronExpr: string) => {
+  const renderNextRun = (nextRunStr: string | null | undefined) => {
     if (!nextRunStr) {
       return <span className="text-slate-500">Not scheduled</span>;
     }
@@ -298,11 +338,45 @@ const Scheduling: React.FC = () => {
   const isPaused = scheduleInfo.paused;
   const statusColor = isPaused ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-green-500/10 text-green-400 border-green-500/20';
   const statusText = isPaused ? 'Paused' : 'Active';
+  const activeTemplate = resolveActiveTemplate(
+    config.scheduleBundleId,
+    config.cronSchedule,
+    config.reviewerSchedule,
+    config.qa.schedule,
+    config.audit.schedule,
+    config.roadmapScanner.slicerSchedule || '35 */12 * * *',
+  );
+  const hasScheduleOffset = (config.cronScheduleOffset ?? 0) !== 0;
+
+  const formatScheduleLabel = (
+    job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer',
+    configuredCronExpr: string,
+    effectiveCronExpr: string,
+  ): string => {
+    if (hasScheduleOffset || !activeTemplate) {
+      return cronToHuman(effectiveCronExpr);
+    }
+
+    if (!isCronEquivalent(activeTemplate.schedules[job], configuredCronExpr)) {
+      return cronToHuman(effectiveCronExpr);
+    }
+
+    return `${activeTemplate.label} • ${activeTemplate.hints[job]}`;
+  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-slate-100">Scheduling</h1>
+        {activeTemplate && (
+          <div className="text-right">
+            <div className="text-xs uppercase tracking-wide text-slate-500">Schedule Bundle</div>
+            <div className="text-sm font-medium text-indigo-300">{activeTemplate.label}</div>
+            {hasScheduleOffset && (
+              <div className="text-xs text-slate-500">Installed with +{config.cronScheduleOffset}m offset</div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* A. Status Banner */}
@@ -366,12 +440,20 @@ const Scheduling: React.FC = () => {
                   <>
                     <div>
                       <div className="text-sm text-slate-400 mb-1">Schedule</div>
-                      <div className="text-lg text-slate-200 font-medium">{cronToHuman(config.cronSchedule)}</div>
-                      <div className="text-xs text-slate-500 font-mono mt-1">{config.cronSchedule}</div>
+                      <div className="text-lg text-slate-200 font-medium">
+                        {formatScheduleLabel(
+                          'executor',
+                          config.cronSchedule,
+                          scheduleInfo.executor.schedule,
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500 font-mono mt-1">
+                        {scheduleInfo.executor.schedule}
+                      </div>
                     </div>
                     <div>
                       <div className="text-sm text-slate-400 mb-1">Next Run</div>
-                      {renderNextRun(scheduleInfo.executor.nextRun, config.cronSchedule)}
+                      {renderNextRun(scheduleInfo.executor.nextRun)}
                     </div>
                     <div className={`flex items-center space-x-2 text-sm ${scheduleInfo.executor.installed ? 'text-green-400' : 'text-amber-400'}`}>
                       <Check className="h-4 w-4" />
@@ -411,12 +493,20 @@ const Scheduling: React.FC = () => {
                   <>
                     <div>
                       <div className="text-sm text-slate-400 mb-1">Schedule</div>
-                      <div className="text-lg text-slate-200 font-medium">{cronToHuman(config.reviewerSchedule)}</div>
-                      <div className="text-xs text-slate-500 font-mono mt-1">{config.reviewerSchedule}</div>
+                      <div className="text-lg text-slate-200 font-medium">
+                        {formatScheduleLabel(
+                          'reviewer',
+                          config.reviewerSchedule,
+                          scheduleInfo.reviewer.schedule,
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500 font-mono mt-1">
+                        {scheduleInfo.reviewer.schedule}
+                      </div>
                     </div>
                     <div>
                       <div className="text-sm text-slate-400 mb-1">Next Run</div>
-                      {renderNextRun(scheduleInfo.reviewer.nextRun, config.reviewerSchedule)}
+                      {renderNextRun(scheduleInfo.reviewer.nextRun)}
                     </div>
                     <div className={`flex items-center space-x-2 text-sm ${scheduleInfo.reviewer.installed ? 'text-green-400' : 'text-amber-400'}`}>
                       <Check className="h-4 w-4" />
@@ -446,6 +536,7 @@ const Scheduling: React.FC = () => {
             <Switch
               checked={config.executorEnabled !== false}
               disabled={updatingJob !== null}
+              aria-label="Toggle executor automation"
               onChange={(checked) => handleJobToggle('executor', checked)}
             />
           </div>
@@ -457,6 +548,7 @@ const Scheduling: React.FC = () => {
             <Switch
               checked={config.reviewerEnabled}
               disabled={updatingJob !== null}
+              aria-label="Toggle reviewer automation"
               onChange={(checked) => handleJobToggle('reviewer', checked)}
             />
           </div>
@@ -468,6 +560,7 @@ const Scheduling: React.FC = () => {
             <Switch
               checked={config.qa.enabled}
               disabled={updatingJob !== null}
+              aria-label="Toggle QA automation"
               onChange={(checked) => handleJobToggle('qa', checked)}
             />
           </div>
@@ -479,6 +572,7 @@ const Scheduling: React.FC = () => {
             <Switch
               checked={config.audit.enabled}
               disabled={updatingJob !== null}
+              aria-label="Toggle audit automation"
               onChange={(checked) => handleJobToggle('audit', checked)}
             />
           </div>
@@ -490,6 +584,7 @@ const Scheduling: React.FC = () => {
             <Switch
               checked={config.roadmapScanner.enabled}
               disabled={updatingJob !== null}
+              aria-label="Toggle planner automation"
               onChange={(checked) => handleJobToggle('planner', checked)}
             />
           </div>
@@ -512,12 +607,16 @@ const Scheduling: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <div className="text-sm text-slate-400 mb-1">Schedule</div>
-                <div className="text-lg text-slate-200 font-medium">{cronToHuman(config.qa.schedule)}</div>
-                <div className="text-xs text-slate-500 font-mono mt-1">{config.qa.schedule}</div>
+                <div className="text-lg text-slate-200 font-medium">
+                  {formatScheduleLabel('qa', config.qa.schedule, scheduleInfo.qa?.schedule ?? config.qa.schedule)}
+                </div>
+                <div className="text-xs text-slate-500 font-mono mt-1">
+                  {scheduleInfo.qa?.schedule ?? config.qa.schedule}
+                </div>
               </div>
               <div>
                 <div className="text-sm text-slate-400 mb-1">Next Run</div>
-                {renderNextRun(scheduleInfo.qa?.nextRun, config.qa.schedule)}
+                {renderNextRun(scheduleInfo.qa?.nextRun)}
               </div>
             </div>
           ) : (
@@ -539,12 +638,20 @@ const Scheduling: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <div className="text-sm text-slate-400 mb-1">Schedule</div>
-                <div className="text-lg text-slate-200 font-medium">{cronToHuman(config.audit.schedule)}</div>
-                <div className="text-xs text-slate-500 font-mono mt-1">{config.audit.schedule}</div>
+                <div className="text-lg text-slate-200 font-medium">
+                  {formatScheduleLabel(
+                    'audit',
+                    config.audit.schedule,
+                    scheduleInfo.audit?.schedule ?? config.audit.schedule,
+                  )}
+                </div>
+                <div className="text-xs text-slate-500 font-mono mt-1">
+                  {scheduleInfo.audit?.schedule ?? config.audit.schedule}
+                </div>
               </div>
               <div>
                 <div className="text-sm text-slate-400 mb-1">Next Run</div>
-                {renderNextRun(scheduleInfo.audit?.nextRun, config.audit.schedule)}
+                {renderNextRun(scheduleInfo.audit?.nextRun)}
               </div>
             </div>
           ) : (
@@ -567,18 +674,19 @@ const Scheduling: React.FC = () => {
               <div>
                 <div className="text-sm text-slate-400 mb-1">Schedule</div>
                 <div className="text-lg text-slate-200 font-medium">
-                  {cronToHuman(config.roadmapScanner.slicerSchedule)}
+                  {formatScheduleLabel(
+                    'slicer',
+                    config.roadmapScanner.slicerSchedule,
+                    scheduleInfo.planner?.schedule ?? config.roadmapScanner.slicerSchedule,
+                  )}
                 </div>
                 <div className="text-xs text-slate-500 font-mono mt-1">
-                  {config.roadmapScanner.slicerSchedule}
+                  {scheduleInfo.planner?.schedule ?? config.roadmapScanner.slicerSchedule}
                 </div>
               </div>
               <div>
                 <div className="text-sm text-slate-400 mb-1">Next Run</div>
-                {renderNextRun(
-                  scheduleInfo.planner?.nextRun,
-                  config.roadmapScanner.slicerSchedule,
-                )}
+                {renderNextRun(scheduleInfo.planner?.nextRun)}
               </div>
             </div>
           ) : (

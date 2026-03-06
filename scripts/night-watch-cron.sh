@@ -25,7 +25,13 @@ LOG_FILE="${LOG_DIR}/executor.log"
 MAX_RUNTIME="${NW_MAX_RUNTIME:-7200}"  # 2 hours
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
+# Human-friendly provider label used in PR comments, board comments, and commit attribution.
+# NW_PROVIDER_LABEL is set by the Node CLI (derived from config.providerLabel or auto-detected).
+# EFFECTIVE_PROVIDER_LABEL may be updated after execution if rate-limit fallback is triggered.
+PROVIDER_LABEL="${NW_PROVIDER_LABEL:-${PROVIDER_CMD}}"
+EFFECTIVE_PROVIDER_LABEL="${PROVIDER_LABEL}"
 BRANCH_PREFIX="${NW_BRANCH_PREFIX:-night-watch}"
+SCRIPT_START_TIME=$(date +%s)
 
 # Ensure NVM / Node / Claude are on PATH
 export NVM_DIR="${HOME}/.nvm"
@@ -83,6 +89,8 @@ if ! validate_provider "${PROVIDER_CMD}"; then
 fi
 
 rotate_log
+log_separator
+log "RUN-START: executor invoked project=${PROJECT_DIR} provider=${PROVIDER_CMD} board=${NW_BOARD_ENABLED:-false} dry_run=${NW_DRY_RUN:-0}"
 
 if ! acquire_lock "${LOCK_FILE}"; then
   emit_result "skip_locked"
@@ -304,7 +312,7 @@ finalize_prd_done() {
       fi
       git -C "${BOOKKEEP_WORKTREE_DIR}" commit -m "chore: mark ${ELIGIBLE_PRD} as done (${reason})
 
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" || true
+Co-Authored-By: Night Watch [${EFFECTIVE_PROVIDER_LABEL}] <noreply@anthropic.com>" || true
       git -C "${BOOKKEEP_WORKTREE_DIR}" push origin "HEAD:${DEFAULT_BRANCH}" || true
       log "DONE: ${ELIGIBLE_PRD} ${reason}, PRD moved to done/"
       return 0
@@ -317,6 +325,10 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>" || true
   return 1
 }
 
+log "CONFIG: prd=${ELIGIBLE_PRD} branch=${BRANCH_NAME}"
+log "CONFIG: worktree=${WORKTREE_DIR}"
+log "CONFIG: default_branch=${DEFAULT_BRANCH} provider=${PROVIDER_CMD} label=${PROVIDER_LABEL:-none}"
+log "CONFIG: max_runtime=${MAX_RUNTIME}s max_retries=${NW_MAX_RETRIES:-3} board=${NW_BOARD_ENABLED:-false}"
 log "START: Processing ${ELIGIBLE_PRD} on branch ${BRANCH_NAME} (worktree: ${WORKTREE_DIR})"
 
 EXECUTOR_PROMPT_PATH=$(resolve_instruction_path "${PROJECT_DIR}" "prd-executor.md" || true)
@@ -440,8 +452,12 @@ EXIT_CODE=0
 ATTEMPT=0
 RATE_LIMIT_FALLBACK_TRIGGERED=0
 
+ATTEMPT_NUM=0
 while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
   EXIT_CODE=0
+  ATTEMPT_NUM=$((ATTEMPT_NUM + 1))
+  ATTEMPT_START_TIME=$(date +%s)
+  log "ATTEMPT: ${ATTEMPT_NUM}/${MAX_RETRIES} starting provider=${PROVIDER_CMD} prd=${ELIGIBLE_PRD}"
   # Capture log position before this attempt so check_rate_limited only
   # scans lines written by the current invocation (not leftover 429s from
   # previous runs that would cause false-positive rate-limit retries).
@@ -463,9 +479,9 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
     codex)
       if (
         cd "${WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
-          codex --quiet \
+          codex exec \
             --yolo \
-            --prompt "${PROMPT}" \
+            "${PROMPT}" \
             >> "${LOG_FILE}" 2>&1
       ); then
         EXIT_CODE=0
@@ -478,6 +494,9 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
       exit 1
       ;;
   esac
+
+  ATTEMPT_ELAPSED=$(( $(date +%s) - ATTEMPT_START_TIME ))
+  log "ATTEMPT: ${ATTEMPT_NUM}/${MAX_RETRIES} finished exit_code=${EXIT_CODE} elapsed=${ATTEMPT_ELAPSED}s prd=${ELIGIBLE_PRD}"
 
   # Success or timeout — don't retry
   if [ ${EXIT_CODE} -eq 0 ] || [ ${EXIT_CODE} -eq 124 ]; then
@@ -513,12 +532,13 @@ done
 # same prompt with native Claude (OAuth), bypassing the proxy entirely.
 if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
   FALLBACK_MODEL="${NW_CLAUDE_MODEL_ID:-claude-sonnet-4-6}"
-  log "RATE-LIMIT-FALLBACK: Running native Claude (${FALLBACK_MODEL})"
+  log "RATE-LIMIT-FALLBACK: Running native Claude (${FALLBACK_MODEL}) prd=${ELIGIBLE_PRD}"
 
   # Send immediate Telegram warning (fire-and-forget)
   send_rate_limit_fallback_warning "${FALLBACK_MODEL}" "$(basename "${PROJECT_DIR}")"
 
   LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
+  FALLBACK_START_TIME=$(date +%s)
 
   if (
     cd "${WORKTREE_DIR}" && \
@@ -535,8 +555,14 @@ if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
     EXIT_CODE=$?
   fi
 
-  log "RATE-LIMIT-FALLBACK: Native Claude exited with code ${EXIT_CODE}"
+  FALLBACK_ELAPSED=$(( $(date +%s) - FALLBACK_START_TIME ))
+  log "RATE-LIMIT-FALLBACK: Native Claude exited with code ${EXIT_CODE} elapsed=${FALLBACK_ELAPSED}s"
+  # Update effective provider label to reflect actual executor used
+  EFFECTIVE_PROVIDER_LABEL="Claude ${FALLBACK_MODEL} (fallback)"
 fi
+
+TOTAL_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
+log "OUTCOME: exit_code=${EXIT_CODE} total_elapsed=${TOTAL_ELAPSED}s prd=${ELIGIBLE_PRD} branch=${BRANCH_NAME}"
 
 if [ ${EXIT_CODE} -eq 0 ]; then
   OPEN_PR_COUNT=$(count_prs_for_branch open "${BRANCH_NAME}")
@@ -546,12 +572,19 @@ if [ ${EXIT_CODE} -eq 0 ]; then
       PR_URL=$(gh pr list --state open --json headRefName,url \
         --jq ".[] | select(.headRefName == \"${BRANCH_NAME}\") | .url" 2>/dev/null || true)
       if [ -n "${PR_URL}" ]; then
-        "${NW_CLI}" board comment "${ISSUE_NUMBER}" --body "PR opened: ${PR_URL}" 2>>"${LOG_FILE}" || true
+        "${NW_CLI}" board comment "${ISSUE_NUMBER}" --body "PR opened: ${PR_URL} (via ${EFFECTIVE_PROVIDER_LABEL})" 2>>"${LOG_FILE}" || true
+        gh pr comment "${PR_URL}" --body "> 🤖 Implemented by ${EFFECTIVE_PROVIDER_LABEL}" 2>>"${LOG_FILE}" || true
       fi
       "${NW_CLI}" board close-issue "${ISSUE_NUMBER}" 2>>"${LOG_FILE}" || \
         "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Done" 2>>"${LOG_FILE}" || true
       emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
     elif finalize_prd_done "implemented, PR opened on ${BRANCH_NAME}"; then
+      # Non-board mode: post attribution comment to the PR
+      NON_BOARD_PR_URL=$(gh pr list --state open --json headRefName,url \
+        --jq ".[] | select(.headRefName == \"${BRANCH_NAME}\") | .url" 2>/dev/null || true)
+      if [ -n "${NON_BOARD_PR_URL}" ]; then
+        gh pr comment "${NON_BOARD_PR_URL}" --body "> 🤖 Implemented by ${EFFECTIVE_PROVIDER_LABEL}" 2>>"${LOG_FILE}" || true
+      fi
       emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
     else
       night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
@@ -577,7 +610,7 @@ if [ ${EXIT_CODE} -eq 0 ]; then
       if [ -n "${ISSUE_NUMBER}" ]; then
         "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
         "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
-          --body "Execution completed but no PR was found. Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
+          --body "Execution completed but no PR was found (via ${EFFECTIVE_PROVIDER_LABEL}). Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
       fi
       night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
       emit_result "failure_no_pr_after_success" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
@@ -590,7 +623,7 @@ elif [ ${EXIT_CODE} -eq 124 ]; then
   if [ -n "${ISSUE_NUMBER}" ]; then
     "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
     "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
-      --body "Execution timed out after ${MAX_RUNTIME}s. Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
+      --body "Execution timed out after ${MAX_RUNTIME}s (via ${EFFECTIVE_PROVIDER_LABEL}). Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
     TIMEOUT_FOLLOWUP_COMMENT=$(build_timeout_followup_comment \
       "${MAX_RUNTIME}" \
       "${ELIGIBLE_PRD}" \
@@ -605,7 +638,7 @@ else
   if [ -n "${ISSUE_NUMBER}" ]; then
     "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
     "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
-      --body "Execution failed with exit code ${EXIT_CODE}. Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
+      --body "Execution failed with exit code ${EXIT_CODE} (via ${EFFECTIVE_PROVIDER_LABEL}). Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
   fi
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code "${EXIT_CODE}" 1>/dev/null || true
   emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"

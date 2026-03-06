@@ -12,6 +12,12 @@ Treat `gh pr checks <number> --json name,state,conclusion` as the source of trut
 
 A PR needs attention if **any** of the following: merge conflicts present, review score below 80, or any CI job failed.
 
+## PRD Context
+
+The cron wrapper may append a `## PRD Context` section with linked issue bodies and/or PRD file excerpts.
+Read that context before making changes and align fixes with the intended product behavior.
+If current PR code or review feedback conflicts with the PRD context, call out the conflict explicitly in your PR comment.
+
 ## Important: Early Exit
 
 - If there are **no open PRs** on `night-watch/` or `feat/` branches, **stop immediately** and report "No PRs to review."
@@ -131,6 +137,16 @@ Parse the review score from the comment body. Look for patterns like:
      ```
      gh pr checks <number> --json name,state,conclusion
      ```
+   - First enumerate all checks/jobs from GitHub (source of truth):
+     ```
+     gh pr checks <number> --json name,state,conclusion --jq '.[] | [.name, .state, .conclusion] | @tsv'
+     ```
+   - To inspect the latest workflow run's job list in detail:
+     ```
+     RUN_ID=$(gh run list --branch <branch-name> --limit 1 --json databaseId --jq '.[0].databaseId')
+     gh run view "${RUN_ID}" --json jobs --jq '.jobs[] | [.name, .status, .conclusion] | @tsv'
+     gh run view "${RUN_ID}" --log-failed
+     ```
    - Read the failed job logs carefully to understand the root cause.
    - Fix checks based on their actual names and errors (for example: `typecheck`, `lint`, `test`, `build`, `verify`, `executor`, `qa`, `audit`).
    - Do not assume only a fixed set of CI job names.
@@ -195,3 +211,20 @@ Parse the review score from the comment body. Look for patterns like:
 6. When done, return to ${DEFAULT_BRANCH}: `git checkout ${DEFAULT_BRANCH}`
 
 Start now. Check for open PRs that need merge conflicts resolved, review feedback addressed, or CI failures fixed.
+
+---
+
+## Board Mode (when board provider is enabled)
+
+When reviewing a PR that references a board issue (`Closes #N` in the body):
+
+1. After pushing review fixes, comment on the issue:
+
+   ```
+   night-watch board comment <N> --body "Review fixes pushed: <commit-sha>"
+   ```
+
+2. If review score >= threshold AND CI passes, move to Done:
+   ```
+   night-watch board move-issue <N> --column "Done"
+   ```

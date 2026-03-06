@@ -46,9 +46,18 @@ describe('roadmap-scanner', () => {
     maxLogSize: 524288,
     cronSchedule: '0 0-21 * * *',
     reviewerSchedule: '0 0,3,6,9,12,15,18,21 * * *',
+    scheduleBundleId: null,
+    cronScheduleOffset: 0,
+    maxRetries: 3,
+    reviewerMaxRetries: 2,
+    reviewerRetryDelay: 30,
     provider: 'claude',
+    executorEnabled: true,
     reviewerEnabled: true,
     providerEnv: {},
+    providerLabel: '',
+    fallbackOnRateLimit: false,
+    claudeModel: 'sonnet',
     notifications: { webhooks: [] },
     prdPriority: [],
     roadmapScanner: {
@@ -58,6 +67,25 @@ describe('roadmap-scanner', () => {
       slicerSchedule: '0 * * * *',
       slicerMaxRuntime: 3600,
     },
+    templatesDir: '.night-watch/templates',
+    boardProvider: { enabled: false, provider: 'github' },
+    autoMerge: false,
+    autoMergeMethod: 'squash',
+    qa: {
+      enabled: true,
+      schedule: '45 2,14 * * *',
+      maxRuntime: 3600,
+      branchPatterns: [],
+      artifacts: 'both',
+      skipLabel: 'skip-qa',
+      autoInstallPlaywright: true,
+    },
+    audit: {
+      enabled: true,
+      schedule: '50 3 * * 1',
+      maxRuntime: 1800,
+    },
+    jobProviders: {},
   };
 
   const disabledConfig: INightWatchConfig = {
@@ -344,7 +372,7 @@ describe('roadmap-scanner', () => {
       expect(childProcess.spawn).not.toHaveBeenCalled();
     });
 
-    it('sliceNextItem should prioritize audit findings before roadmap items', async () => {
+    it('sliceNextItem should prioritize roadmap items before audit findings', async () => {
       fs.writeFileSync(
         roadmapPath,
         `## Features
@@ -381,11 +409,60 @@ Generated: 2026-03-03T12:00:00.000Z
         'utf-8',
       );
 
-      const expectedTitle = 'Audit Finding 2: unhandled_promise (critical) at src/high-risk.ts:88';
+      const expectedTitle = 'Roadmap Feature';
       const expectedFilename = `01-${slugify(expectedTitle)}.md`;
       mockProviderSuccess(expectedFilename);
 
       const config = { ...defaultConfig, prdDir: path.relative(tempDir, prdDir) };
+      const result = await sliceNextItem(tempDir, config);
+
+      expect(result.sliced).toBe(true);
+      expect(result.file).toBe(expectedFilename);
+      expect(result.item?.section).toBe('Features');
+      expect(result.item?.title).toBe(expectedTitle);
+    });
+
+    it('sliceNextItem should prioritize audit findings when priorityMode is audit-first', async () => {
+      fs.writeFileSync(
+        roadmapPath,
+        `## Features
+- [ ] Roadmap Feature
+`,
+      );
+
+      const logsDir = path.join(tempDir, 'logs');
+      fs.mkdirSync(logsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(logsDir, 'audit-report.md'),
+        `# Code Audit Report
+
+Generated: 2026-03-03T12:00:00.000Z
+
+## Findings
+
+### Finding 1
+- **Location**: \`src/high-risk.ts:88\`
+- **Severity**: critical
+- **Category**: unhandled_promise
+- **Description**: Promise rejection can terminate process unexpectedly.
+- **Snippet**: \`doAsyncThing();\`
+- **Suggested Fix**: Await promise and handle rejection explicitly.
+`,
+        'utf-8',
+      );
+
+      const expectedTitle = 'Audit Finding 1: unhandled_promise (critical) at src/high-risk.ts:88';
+      const expectedFilename = `01-${slugify(expectedTitle)}.md`;
+      mockProviderSuccess(expectedFilename);
+
+      const config = {
+        ...defaultConfig,
+        prdDir: path.relative(tempDir, prdDir),
+        roadmapScanner: {
+          ...defaultConfig.roadmapScanner,
+          priorityMode: 'audit-first',
+        },
+      };
       const result = await sliceNextItem(tempDir, config);
 
       expect(result.sliced).toBe(true);
@@ -501,6 +578,40 @@ Generated: 2026-03-03T12:00:00.000Z
 
       // Verify file was created
       expect(fs.existsSync(path.join(prdDir, '01-success-feature.md'))).toBe(true);
+    });
+
+    it('sliceRoadmapItem should honor the slicer job override and use codex exec syntax', async () => {
+      const item: IRoadmapItem = {
+        hash: 'slicer001',
+        title: 'Planner Override Feature',
+        description: 'Uses codex for planner work',
+        checked: false,
+        section: 'Features',
+      };
+
+      mockProviderSuccess('01-planner-override-feature.md');
+
+      const config: INightWatchConfig = {
+        ...defaultConfig,
+        prdDir: path.relative(tempDir, prdDir),
+        jobProviders: {
+          slicer: 'codex',
+        },
+      };
+
+      const result = await sliceRoadmapItem(tempDir, prdDir, item, config);
+
+      expect(result.sliced).toBe(true);
+
+      const spawnMock = childProcess.spawn as ReturnType<typeof vi.fn>;
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+
+      const [providerCmd, providerArgs] = spawnMock.mock.calls[0] as [string, string[]];
+      expect(providerCmd).toBe('codex');
+      expect(providerArgs[0]).toBe('exec');
+      expect(providerArgs).toContain('--yolo');
+      expect(providerArgs).not.toContain('--quiet');
+      expect(providerArgs).not.toContain('--prompt');
     });
 
     it('sliceRoadmapItem should fail when provider succeeds but does not create file', async () => {

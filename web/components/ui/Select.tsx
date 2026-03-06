@@ -12,6 +12,12 @@ interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>
 
 const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
   ({ className = '', label, error, helperText, options, value, onChange, children, ...props }, ref) => {
+    const generatedId = React.useId();
+    const selectId = props.id ?? generatedId;
+    const errorId = error ? `${selectId}-error` : undefined;
+    const helperTextId = !error && helperText ? `${selectId}-help` : undefined;
+    const describedBy = [errorId, helperTextId].filter(Boolean).join(' ') || undefined;
+
     const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
       if (onChange) {
         onChange(e.target.value);
@@ -21,13 +27,16 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
     return (
       <div className="w-full">
         {label && (
-          <label className="block text-sm font-medium text-slate-400 mb-1.5">
+          <label htmlFor={selectId} className="block text-sm font-medium text-slate-400 mb-1.5">
             {label}
           </label>
         )}
         <div className="relative">
           <select
             ref={ref}
+            id={selectId}
+            aria-describedby={describedBy}
+            aria-invalid={error ? true : props['aria-invalid']}
             className={`
               w-full appearance-none rounded-lg bg-slate-950 border border-slate-800
               px-3 py-2 pr-10 text-sm text-slate-200
@@ -54,9 +63,13 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
           </div>
         </div>
         {error ? (
-          <p className="mt-1.5 text-xs text-red-400">{error}</p>
+          <p id={errorId} className="mt-1.5 text-xs text-red-400">
+            {error}
+          </p>
         ) : helperText ? (
-          <p className="mt-1.5 text-xs text-slate-500">{helperText}</p>
+          <p id={helperTextId} className="mt-1.5 text-xs text-slate-500">
+            {helperText}
+          </p>
         ) : null}
       </div>
     );

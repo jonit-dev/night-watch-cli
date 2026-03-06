@@ -58,8 +58,9 @@ describe('config', () => {
       expect(config.branchPatterns).toEqual(['feat/', 'night-watch/']);
       expect(config.minReviewScore).toBe(80);
       expect(config.maxLogSize).toBe(524288);
-      expect(config.cronSchedule).toBe('0 0-21 * * *');
-      expect(config.reviewerSchedule).toBe('0 0,3,6,9,12,15,18,21 * * *');
+      expect(config.cronSchedule).toBe('5 */3 * * *');
+      expect(config.reviewerSchedule).toBe('25 */6 * * *');
+      expect(config.scheduleBundleId).toBeNull();
     });
 
     it('should return defaults with provider and reviewerEnabled', () => {
@@ -115,8 +116,36 @@ describe('config', () => {
       expect(config.branchPrefix).toBe('night-watch');
       expect(config.minReviewScore).toBe(80);
       expect(config.maxLogSize).toBe(524288);
-      expect(config.cronSchedule).toBe('0 0-21 * * *');
-      expect(config.reviewerSchedule).toBe('0 0,3,6,9,12,15,18,21 * * *');
+      expect(config.cronSchedule).toBe('5 */3 * * *');
+      expect(config.reviewerSchedule).toBe('25 */6 * * *');
+    });
+
+    it('should load scheduleBundleId from config file', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          scheduleBundleId: 'always-on',
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.scheduleBundleId).toBe('always-on');
+    });
+
+    it('should treat null scheduleBundleId as custom mode', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          scheduleBundleId: null,
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.scheduleBundleId).toBeNull();
     });
 
     it('should support nested init/template config format', () => {
@@ -823,6 +852,18 @@ describe('config', () => {
       expect(config.roadmapScanner.slicerMaxRuntime).toBe(600);
     });
 
+    it('should default planner issueColumn to Draft', () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.roadmapScanner.issueColumn).toBe('Draft');
+    });
+
+    it('should default planner priorityMode to roadmap-first', () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.roadmapScanner.priorityMode).toBe('roadmap-first');
+    });
+
     it('should override slicerSchedule from env', () => {
       const configPath = path.join(tempDir, 'night-watch.config.json');
       fs.writeFileSync(
@@ -841,6 +882,22 @@ describe('config', () => {
       const config = loadConfig(tempDir);
 
       expect(config.roadmapScanner.slicerSchedule).toBe(envValue);
+    });
+
+    it('should override planner issueColumn from env', () => {
+      process.env.NW_PLANNER_ISSUE_COLUMN = 'Ready';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.roadmapScanner.issueColumn).toBe('Ready');
+    });
+
+    it('should override planner priorityMode from env', () => {
+      process.env.NW_PLANNER_PRIORITY_MODE = 'audit-first';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.roadmapScanner.priorityMode).toBe('audit-first');
     });
   });
 
@@ -991,7 +1048,7 @@ describe('config', () => {
 
       expect(config.qa).toBeDefined();
       expect(config.qa.enabled).toBe(true);
-      expect(config.qa.schedule).toBe('30 1,7,13,19 * * *');
+      expect(config.qa.schedule).toBe('45 2,14 * * *');
       expect(config.qa.maxRuntime).toBe(3600);
       expect(config.qa.branchPatterns).toEqual([]);
       expect(config.qa.artifacts).toBe('both');
@@ -1153,7 +1210,7 @@ describe('config', () => {
 
       expect(config.audit).toBeDefined();
       expect(config.audit.enabled).toBe(true);
-      expect(config.audit.schedule).toBe('0 3 * * *');
+      expect(config.audit.schedule).toBe('50 3 * * 1');
       expect(config.audit.maxRuntime).toBe(1800);
     });
 
@@ -1511,6 +1568,8 @@ describe('config', () => {
       // normalizeConfig fills missing fields from DEFAULT_ROADMAP_SCANNER
       expect(config.roadmapScanner.autoScanInterval).toBe(300);
       expect(config.roadmapScanner.roadmapPath).toBe('ROADMAP.md');
+      expect(config.roadmapScanner.priorityMode).toBe('roadmap-first');
+      expect(config.roadmapScanner.issueColumn).toBe('Draft');
     });
 
     it('jobProviders from file replaces default (replace semantics)', () => {
@@ -1578,6 +1637,7 @@ describe('config', () => {
         'maxLogSize',
         'cronSchedule',
         'reviewerSchedule',
+        'scheduleBundleId',
         'cronScheduleOffset',
         'maxRetries',
         'reviewerMaxRetries',
@@ -1618,6 +1678,7 @@ describe('config', () => {
         'maxLogSize',
         'cronSchedule',
         'reviewerSchedule',
+        'scheduleBundleId',
         'cronScheduleOffset',
         'maxRetries',
         'reviewerMaxRetries',
@@ -1709,6 +1770,7 @@ describe('config', () => {
         'maxLogSize',
         'cronSchedule',
         'reviewerSchedule',
+        'scheduleBundleId',
         'cronScheduleOffset',
         'maxRetries',
         'reviewerMaxRetries',
