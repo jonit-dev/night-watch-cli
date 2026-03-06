@@ -13,8 +13,7 @@ import {
   Zap,
   CheckCircle2,
 } from 'lucide-react';
-import type { IRoadmapItem } from '../api';
-import type { IBoardIssue, BoardColumnName } from '../api';
+import type { IRoadmapItem, IBoardIssue } from '../api';
 
 // ==================== Types ====================
 
@@ -148,8 +147,8 @@ export function getItemHorizonAndCategory(item: IRoadmapItem): IItemMapping | nu
  */
 export function groupItemsByHorizon(
   items: IEnrichedRoadmapItem[],
-): Record<HorizonLabel | 'unmapped', Record<CategoryLabel | 'other', IEnrichedRoadmapItem[]>> {
-  const result: Record<HorizonLabel | 'unmapped', Record<CategoryLabel | 'other', IEnrichedRoadmapItem[]>> = {
+): Record<HorizonLabel | 'unmapped', Partial<Record<CategoryLabel | 'other', IEnrichedRoadmapItem[]>>> {
+  const result: Record<HorizonLabel | 'unmapped', Partial<Record<CategoryLabel | 'other', IEnrichedRoadmapItem[]>>> = {
     'short-term':  {},
     'medium-term': {},
     'long-term':   {},
