@@ -9,6 +9,7 @@ import {
   IJobProviders,
   INotificationConfig,
   IQaConfig,
+  IQueueConfig,
   IRoadmapScannerConfig,
   JobType,
   MergeMethod,
@@ -183,3 +184,25 @@ export const STATE_DB_FILE_NAME = 'state.db';
 
 // Execution History
 export const MAX_HISTORY_RECORDS_PER_PRD = 10;
+
+// Global Job Queue Configuration
+export const DEFAULT_QUEUE_ENABLED = true;
+export const DEFAULT_QUEUE_MAX_CONCURRENCY = 1;
+export const DEFAULT_QUEUE_MAX_WAIT_TIME = 7200; // 2 hours in seconds
+export const DEFAULT_QUEUE_PRIORITY: Record<string, number> = {
+  executor: 50,
+  reviewer: 40,
+  slicer: 30,
+  qa: 20,
+  audit: 10,
+};
+
+export const DEFAULT_QUEUE: IQueueConfig = {
+  enabled: DEFAULT_QUEUE_ENABLED,
+  maxConcurrency: DEFAULT_QUEUE_MAX_CONCURRENCY,
+  maxWaitTime: DEFAULT_QUEUE_MAX_WAIT_TIME,
+  priority: { ...DEFAULT_QUEUE_PRIORITY },
+};
+
+// Queue lock file path (relative to global config dir)
+export const QUEUE_LOCK_FILE_NAME = 'queue.lock';

@@ -161,7 +161,9 @@ export function auditCommand(program: Command): void {
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
 
         if (exitCode === 0) {
-          if (scriptResult?.status === 'skip_clean') {
+          if (scriptResult?.status === 'queued') {
+            spinner.succeed('Code audit queued — another job is currently running');
+          } else if (scriptResult?.status === 'skip_clean') {
             spinner.succeed('Code audit complete — no actionable issues found');
           } else if (scriptResult?.status?.startsWith('skip_')) {
             spinner.succeed('Code audit skipped');

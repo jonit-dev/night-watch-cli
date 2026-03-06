@@ -396,7 +396,9 @@ export function reviewCommand(program: Command): void {
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
 
         if (exitCode === 0) {
-          if (scriptResult?.status?.startsWith('skip_')) {
+          if (scriptResult?.status === 'queued') {
+            spinner.succeed('PR reviewer queued — another job is currently running');
+          } else if (scriptResult?.status?.startsWith('skip_')) {
             spinner.succeed('PR reviewer completed (no PRs needed review)');
           } else {
             spinner.succeed('PR reviewer completed successfully');

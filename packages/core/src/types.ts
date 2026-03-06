@@ -141,6 +141,9 @@ export interface INightWatchConfig {
   /** Per-job provider configuration */
   jobProviders: IJobProviders;
 
+  /** Global job queue configuration */
+  queue: IQueueConfig;
+
   /**
    * Internal: CLI override for provider (--provider flag).
    * Takes precedence over all other provider settings.
@@ -223,4 +226,55 @@ export interface IRoadmapScannerConfig {
 
   /** Maximum runtime in seconds for the slicer */
   slicerMaxRuntime: number;
+}
+
+/**
+ * Queue entry status
+ */
+export type QueueEntryStatus = 'pending' | 'running' | 'expired' | 'dispatched';
+
+/**
+ * Queue entry for job_queue table
+ */
+export interface IQueueEntry {
+  id: number;
+  projectPath: string;
+  projectName: string;
+  jobType: JobType;
+  priority: number;
+  status: QueueEntryStatus;
+  envJson: Record<string, string>;
+  enqueuedAt: number;
+  dispatchedAt: number | null;
+  expiredAt: number | null;
+}
+
+/**
+ * Queue status response
+ */
+export interface IQueueStatus {
+  enabled: boolean;
+  running: IQueueEntry | null;
+  pending: {
+    total: number;
+    byType: Record<string, number>;
+  };
+  items: IQueueEntry[];
+}
+
+/**
+ * Global Job Queue configuration
+ */
+export interface IQueueConfig {
+  /** Whether the global queue is enabled */
+  enabled: boolean;
+
+  /** Maximum concurrent jobs (default: 1 for fully serial execution) */
+  maxConcurrency: number;
+
+  /** Maximum wait time in seconds before a queued job expires (default: 7200 = 2 hours) */
+  maxWaitTime: number;
+
+  /** Priority mapping: job_type → priority (higher = first). Default has executor highest. */
+  priority: Record<string, number>;
 }
