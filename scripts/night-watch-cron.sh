@@ -150,31 +150,30 @@ if [ "${NW_BOARD_ENABLED:-}" = "true" ]; then
   else
     ISSUE_JSON=$(find_eligible_board_issue "${PROJECT_DIR}" "${MAX_RUNTIME}") || true
     if [ -z "${ISSUE_JSON}" ]; then
-      log "SKIP: No eligible issues in Ready column (board mode)"
-      emit_result "skip_no_eligible_prd"
-      exit 0
+      log "INFO: No eligible board issues found; falling back to filesystem PRDs"
+    else
+      ISSUE_NUMBER=$(printf '%s' "${ISSUE_JSON}" | jq -r '.number // empty' 2>/dev/null || true)
+      ISSUE_TITLE_RAW=$(printf '%s' "${ISSUE_JSON}" | jq -r '.title // empty' 2>/dev/null || true)
+      ISSUE_BODY=$(printf '%s' "${ISSUE_JSON}" | jq -r '.body // empty' 2>/dev/null || true)
+      if [ -z "${ISSUE_NUMBER}" ]; then
+        log "ERROR: Board mode: failed to parse issue number from JSON"
+        exit 1
+      fi
+      # Move issue to In Progress (claim it on the board)
+      "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "In Progress" 2>>"${LOG_FILE}" || \
+        log "WARN: Failed to move issue #${ISSUE_NUMBER} to In Progress"
     fi
-    ISSUE_NUMBER=$(printf '%s' "${ISSUE_JSON}" | jq -r '.number // empty' 2>/dev/null || true)
-    ISSUE_TITLE_RAW=$(printf '%s' "${ISSUE_JSON}" | jq -r '.title // empty' 2>/dev/null || true)
-    ISSUE_BODY=$(printf '%s' "${ISSUE_JSON}" | jq -r '.body // empty' 2>/dev/null || true)
-    if [ -z "${ISSUE_NUMBER}" ]; then
-      log "ERROR: Board mode: failed to parse issue number from JSON"
-      exit 1
-    fi
-    # Move issue to In Progress (claim it on the board)
-    "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "In Progress" 2>>"${LOG_FILE}" || \
-      log "WARN: Failed to move issue #${ISSUE_NUMBER} to In Progress"
   fi
 
-  if [ -z "${ISSUE_NUMBER}" ]; then
-    log "ERROR: Board mode: no issue number resolved"
-    exit 1
+  if [ -n "${ISSUE_NUMBER}" ]; then
+    # Slugify title for branch naming
+    ELIGIBLE_PRD="${ISSUE_NUMBER}-$(printf '%s' "${ISSUE_TITLE_RAW}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-\|-$//g')"
+    log "BOARD: Processing issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}"
+    trap "rm -f '${LOCK_FILE}'" EXIT
   fi
-  # Slugify title for branch naming
-  ELIGIBLE_PRD="${ISSUE_NUMBER}-$(printf '%s' "${ISSUE_TITLE_RAW}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-\|-$//g')"
-  log "BOARD: Processing issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}"
-  trap "rm -f '${LOCK_FILE}'" EXIT
-else
+fi
+
+if [ -z "${ISSUE_NUMBER}" ]; then
   # Filesystem mode: scan PRD directory
   ELIGIBLE_PRD=$(find_eligible_prd "${PRD_DIR}" "${MAX_RUNTIME}" "${PROJECT_DIR}")
   if [ -z "${ELIGIBLE_PRD}" ]; then

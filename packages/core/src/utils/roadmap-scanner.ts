@@ -490,7 +490,7 @@ export async function sliceNextItem(
   if (!roadmapExists && auditItems.length === 0) {
     return {
       sliced: false,
-      error: 'ROADMAP.md not found',
+      error: 'No pending items to process',
     };
   }
 

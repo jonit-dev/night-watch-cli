@@ -274,6 +274,15 @@ describe('roadmap-scanner', () => {
   });
 
   describe('sliceNextItem', () => {
+    it('sliceNextItem should no-op when roadmap and audit inputs are missing', async () => {
+      const config = { ...defaultConfig, prdDir: path.relative(tempDir, prdDir) };
+      const result = await sliceNextItem(tempDir, config);
+
+      expect(result.sliced).toBe(false);
+      expect(result.error).toContain('No pending items');
+      expect(childProcess.spawn).not.toHaveBeenCalled();
+    });
+
     it('sliceNextItem should pick the first unprocessed item', async () => {
       fs.writeFileSync(
         roadmapPath,

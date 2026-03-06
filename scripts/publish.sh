@@ -7,6 +7,10 @@ PROJECTS_FILE="$HOME/.night-watch/projects.json"
 
 cd "$REPO_ROOT"
 
+# Yarn workspace sets npm_config_registry=https://registry.yarnpkg.com which breaks auth.
+# Force all npm calls to use the official registry where the auth token is stored.
+export npm_config_registry=https://registry.npmjs.org
+
 echo "==> Running verify + tests..."
 yarn verify && yarn test
 
@@ -33,8 +37,19 @@ echo "==> Publishing to npm..."
 cd "$CLI_PKG"
 npm publish --access public
 
-echo "==> Installing globally..."
-npm i -g "@jonit-dev/night-watch-cli@$NEW_VERSION"
+echo "==> Installing globally (with retry for registry propagation)..."
+for attempt in 1 2 3 4 5; do
+  if npm i -g "@jonit-dev/night-watch-cli@$NEW_VERSION"; then
+    break
+  fi
+  if [[ $attempt -lt 5 ]]; then
+    echo "    Attempt $attempt failed, retrying in 10s..."
+    sleep 10
+  else
+    echo "    All attempts failed. Install manually: npm i -g @jonit-dev/night-watch-cli@$NEW_VERSION"
+    exit 1
+  fi
+done
 night-watch --version
 
 echo "==> Updating registered projects (skipping /tmp/*)..."

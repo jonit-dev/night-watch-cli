@@ -40,7 +40,7 @@ night-watch init
 night-watch run --dry-run
 
 # 4. Add a well-scoped PRD
-echo "# My First PRD\n\nImplement feature X..." > docs/PRDs/night-watch/my-feature.md
+echo "# My First PRD\n\nImplement feature X..." > docs/prds/my-feature.md
 
 # 5. Run or install cron
 night-watch run           # Run once
