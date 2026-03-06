@@ -20,7 +20,6 @@ import {
   triggerRoadmapScan,
   useApi,
   IRoadmapStatus,
-  IRoadmapItem,
 } from '../api';
 import {
   CATEGORY_COLORS,
