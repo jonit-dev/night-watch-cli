@@ -86,6 +86,22 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
       schedule: '0 2 * * *',
       maxRuntime: 3600,
     },
+    analytics: {
+      enabled: false,
+      schedule: '0 6 * * 1',
+      maxRuntime: 900,
+      lookbackDays: 7,
+      targetColumn: 'Draft' as const,
+      analysisPrompt: '',
+    },
+    jobProviders: {
+      executor: undefined,
+      reviewer: undefined,
+      qa: undefined,
+      audit: undefined,
+      slicer: undefined,
+      analytics: undefined,
+    },
     queue: {
       enabled: false,
       maxConcurrency: 1,
