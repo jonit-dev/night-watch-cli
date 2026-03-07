@@ -168,7 +168,9 @@ log() {
     _esec=$(( _elapsed % 60 ))
     elapsed_str=" [+${_emin}m${_esec}s]"
   fi
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [PID:$$]${elapsed_str} $*" >> "${log_file}"
+  local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [PID:$$]${elapsed_str} $*"
+  echo "${msg}" >> "${log_file}"
+  echo "${msg}" >&2
 }
 
 # Write a visual separator line to the log to delimit separate runs.
