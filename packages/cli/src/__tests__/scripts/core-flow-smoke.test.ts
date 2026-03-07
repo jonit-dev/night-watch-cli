@@ -1571,6 +1571,46 @@ describe('core flow smoke tests (bash scripts)', () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_no_eligible_prd');
+    expect(fs.readFileSync(path.join(projectDir, 'logs', 'executor.log'), 'utf-8')).toContain(
+      'INFO: No Ready board issues found; falling back to filesystem PRDs',
+    );
+  });
+
+  it('executor board mode should log cooldown-specific fallback when all Ready issues are in cooldown', () => {
+    const projectDir = mkTempDir('nw-smoke-executor-board-cooldown-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-bin-board-cooldown-');
+
+    const nwCli = path.join(fakeBin, 'night-watch');
+    fs.writeFileSync(
+      nwCli,
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "board" && "$2" == "next-issue" ]]; then\n' +
+        '  echo \'[{"number":53,"title":"PRD: Backlink Exchange System","body":"Cooldown repro"}]\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "history" && "$2" == "check" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(executorScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BOARD_ENABLED: 'true',
+      NW_CLI_BIN: nwCli,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_no_eligible_prd');
+    expect(fs.readFileSync(path.join(projectDir, 'logs', 'executor.log'), 'utf-8')).toContain(
+      'INFO: Ready board issues were found, but all are in cooldown; falling back to filesystem PRDs',
+    );
   });
 
   it('executor board mode should move issue back to Ready when provider fails', () => {

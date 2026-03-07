@@ -808,7 +808,8 @@ Proxy quota exhausted - falling back to native Claude (${model})"
 # Get the next eligible issue from the board provider.
 # Iterates through Ready issues sorted by priority, skipping any in cooldown.
 # Prints the JSON of the first eligible issue to stdout, or nothing if none found.
-# Returns 0 on success, 1 if no issue found or CLI unavailable.
+# Returns 0 on success, 1 if no Ready issues were returned, 2 if Ready issues
+# were found but every candidate was skipped due to cooldown.
 #
 # Args:
 #   $1 - project directory (for cooldown history lookup)
@@ -816,6 +817,7 @@ Proxy quota exhausted - falling back to native Claude (${model})"
 find_eligible_board_issue() {
   local project_dir="${1:-}"
   local max_runtime="${2:-7200}"
+  local skipped_due_to_cooldown=0
 
   local cli_bin
   cli_bin=$(resolve_night_watch_cli) || {
@@ -858,6 +860,7 @@ find_eligible_board_issue() {
     # Check cooldown — skip issues that failed recently
     if [ -n "${project_dir}" ] && "${cli_bin}" history check "${project_dir}" "${prd_name}" --cooldown "${max_runtime}" 2>/dev/null; then
       log "SKIP-BOARD: Issue #${number} — in cooldown after recent failure"
+      skipped_due_to_cooldown=1
       i=$((i + 1))
       continue
     fi
@@ -865,6 +868,10 @@ find_eligible_board_issue() {
     printf '%s' "${issue}"
     return 0
   done
+
+  if [ "${skipped_due_to_cooldown}" -eq 1 ]; then
+    return 2
+  fi
 
   return 1
 }
