@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   plugins: [react() as any],
   resolve: {
     alias: {
@@ -14,7 +15,7 @@ export default defineConfig({
     globals: true,
     environment: 'happy-dom',
     setupFiles: ['./src/__tests__/setup.ts'],
-    include: ['src/**/__tests__/**/*.test.tsx', 'pages/**/__tests__/**/*.test.tsx'],
+    include: ['src/**/__tests__/**/*.test.{ts,tsx}', 'utils/**/*.test.ts', 'pages/**/__tests__/**/*.test.{ts,tsx}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
