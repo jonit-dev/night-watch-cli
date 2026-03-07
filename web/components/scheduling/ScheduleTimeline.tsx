@@ -93,7 +93,6 @@ const ScheduleTimeline: React.FC<ScheduleTimelineProps> = ({
           const interval = CronExpressionParser.parse(cronExpr, {
             currentDate: startTime,
             endDate: endTime,
-            iterator: true,
           });
 
           while (interval.hasNext()) {

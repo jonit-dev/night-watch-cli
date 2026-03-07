@@ -262,6 +262,8 @@ describe('Settings schedules mode sync', () => {
     const disabledConfig = makeConfig({
       roadmapScanner: {
         enabled: false,
+        roadmapPath: 'ROADMAP.md',
+        autoScanInterval: 300,
       },
     });
     apiMocks.toggleRoadmapScanner.mockResolvedValue(disabledConfig);
@@ -286,6 +288,8 @@ describe('Settings schedules mode sync', () => {
     const disabledConfig = makeConfig({
       roadmapScanner: {
         enabled: false,
+        roadmapPath: 'ROADMAP.md',
+        autoScanInterval: 300,
       },
     });
     apiMocks.toggleRoadmapScanner.mockResolvedValue(disabledConfig);

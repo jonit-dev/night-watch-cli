@@ -5,7 +5,6 @@ import {
   CheckCircle,
   Clock,
   ArrowRight,
-  AlertCircle,
   Calendar,
   XCircle,
   Play,
@@ -15,7 +14,7 @@ import {
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { useApi, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, triggerRun, triggerReview, triggerQa, triggerAudit, triggerPlanner, BOARD_COLUMNS, IBoardStatus, BoardColumnName, fetchStatus } from '../api';
+import { useApi, fetchScheduleInfo, fetchBoardStatus, fetchStatus, triggerCancel, triggerClearLock, triggerRun, triggerReview, triggerQa, triggerAudit, triggerPlanner, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
 import { useStore } from '../store/useStore';
 
 const BOARD_COLUMN_COLORS: Record<BoardColumnName, string> = {
@@ -31,7 +30,13 @@ const Dashboard: React.FC = () => {
   const [cancellingProcess, setCancellingProcess] = useState<'run' | 'review' | null>(null);
   const [clearingLock, setClearingLock] = useState(false);
   const [startingProcess, setStartingProcess] = useState<string | null>(null);
-  const { setProjectName, addToast, selectedProjectId, globalModeLoading, status } = useStore();
+  const { setProjectName, addToast, selectedProjectId, globalModeLoading, status, setStatus } = useStore();
+
+  // Refetch status from server
+  const refetch = React.useCallback(() => {
+    fetchStatus().then(setStatus).catch(() => {});
+  }, [setStatus]);
+
   const { data: scheduleInfo } = useApi(fetchScheduleInfo, [selectedProjectId], { enabled: !globalModeLoading });
   const { data: boardStatus } = useApi<IBoardStatus | null>(
     () => fetchBoardStatus().catch(() => null),
@@ -345,7 +350,7 @@ const Dashboard: React.FC = () => {
                   </>
                 ),
               },
-            ] as const).sort((a, b) => (b.process?.running ? 1 : 0) - (a.process?.running ? 1 : 0))
+            ]).sort((a, b) => (b.process?.running ? 1 : 0) - (a.process?.running ? 1 : 0))
               .map(({ label, process, subtitle, actions }) => (
               <div
                 key={label}
