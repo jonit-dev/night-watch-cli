@@ -1078,7 +1078,7 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
         cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" \
           claude -p "${REVIEWER_PROMPT}" \
             --dangerously-skip-permissions \
-            >> "${LOG_FILE}" 2>&1
+            2>&1 | tee -a "${LOG_FILE}"
       ); then
         EXIT_CODE=0
       else
@@ -1092,7 +1092,7 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
             -C "${REVIEW_WORKTREE_DIR}" \
             --yolo \
             "${REVIEWER_PROMPT}" \
-            >> "${LOG_FILE}" 2>&1
+            2>&1 | tee -a "${LOG_FILE}"
       ); then
         EXIT_CODE=0
       else

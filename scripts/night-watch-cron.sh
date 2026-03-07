@@ -8,7 +8,7 @@ set -euo pipefail
 # NOTE: This script expects environment variables to be set by the caller.
 # The Node.js CLI will inject config values via environment variables.
 # Required env vars (with defaults shown):
-#   NW_MAX_RUNTIME=7200          - Maximum runtime in seconds (2 hours)
+#   NW_MAX_RUNTIME=14400         - Maximum runtime in seconds (4 hours)
 #   NW_PROVIDER_CMD=claude       - AI provider CLI to use (claude, codex, etc.)
 #   NW_DRY_RUN=0                 - Set to 1 for dry-run mode (prints diagnostics only)
 
@@ -22,7 +22,7 @@ else
 fi
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/executor.log"
-MAX_RUNTIME="${NW_MAX_RUNTIME:-7200}"  # 2 hours — used for cooldowns and eligibility
+MAX_RUNTIME="${NW_MAX_RUNTIME:-14400}"  # 4 hours — used for cooldowns and eligibility
 SESSION_MAX_RUNTIME="${NW_SESSION_MAX_RUNTIME:-${MAX_RUNTIME}}"  # per-invocation timeout; defaults to MAX_RUNTIME
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
@@ -78,14 +78,25 @@ sanitize_result_value() {
 
 latest_failure_detail() {
   local log_file="${1:?log_file required}"
+  local since_line="${2:-0}"
   local summary=""
 
-  summary=$(tail -50 "${log_file}" 2>/dev/null \
-    | grep -E 'fatal:|error:|ERROR:|FAIL:|WARN:' \
-    | tail -1 || true)
+  if [ "${since_line}" -gt 0 ]; then
+    summary=$(tail -n +"${since_line}" "${log_file}" 2>/dev/null \
+      | grep -E 'fatal:|error:|ERROR:|FAIL:|WARN:' \
+      | tail -1 || true)
+  else
+    summary=$(tail -50 "${log_file}" 2>/dev/null \
+      | grep -E 'fatal:|error:|ERROR:|FAIL:|WARN:' \
+      | tail -1 || true)
+  fi
 
   if [ -z "${summary}" ]; then
-    summary=$(tail -20 "${log_file}" 2>/dev/null | tail -1 || true)
+    if [ "${since_line}" -gt 0 ]; then
+      summary=$(tail -n +"${since_line}" "${log_file}" 2>/dev/null | tail -1 || true)
+    else
+      summary=$(tail -20 "${log_file}" 2>/dev/null | tail -1 || true)
+    fi
   fi
 
   sanitize_result_value "${summary}"
@@ -537,7 +548,7 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
         cd "${WORKTREE_DIR}" && timeout "${SESSION_MAX_RUNTIME}" \
           claude -p "${PROMPT}" \
             --dangerously-skip-permissions \
-            >> "${LOG_FILE}" 2>&1
+            2>&1 | tee -a "${LOG_FILE}"
       ); then
         EXIT_CODE=0
       else
@@ -551,7 +562,7 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
             -C "${WORKTREE_DIR}" \
             --yolo \
             "${PROMPT}" \
-            >> "${LOG_FILE}" 2>&1
+            2>&1 | tee -a "${LOG_FILE}"
       ); then
         EXIT_CODE=0
       else
@@ -618,7 +629,7 @@ if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
         claude -p "${PROMPT}" \
           --dangerously-skip-permissions \
           --model "${FALLBACK_MODEL}" \
-          >> "${LOG_FILE}" 2>&1
+          2>&1 | tee -a "${LOG_FILE}"
   ); then
     EXIT_CODE=0
   else
@@ -629,6 +640,15 @@ if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
   log "RATE-LIMIT-FALLBACK: Native Claude exited with code ${EXIT_CODE} elapsed=${FALLBACK_ELAPSED}s"
   # Update effective provider label to reflect actual executor used
   EFFECTIVE_PROVIDER_LABEL="Claude ${FALLBACK_MODEL} (fallback)"
+fi
+
+# Detect double rate-limit: both proxy AND native Claude exhausted
+DOUBLE_RATE_LIMITED=0
+if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ] && [ ${EXIT_CODE} -ne 0 ]; then
+  if check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
+    DOUBLE_RATE_LIMITED=1
+    log "RATE-LIMITED: Both proxy and native Claude are rate-limited for ${ELIGIBLE_PRD}"
+  fi
 fi
 
 TOTAL_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
@@ -647,6 +667,7 @@ if [ ${EXIT_CODE} -eq 0 ]; then
       fi
       "${NW_CLI}" board close-issue "${ISSUE_NUMBER}" 2>>"${LOG_FILE}" || \
         "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Done" 2>>"${LOG_FILE}" || true
+      log "SUCCESS: PR opened and ready for review — ${PR_URL}"
       emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
     elif finalize_prd_done "implemented, PR opened on ${BRANCH_NAME}"; then
       # Non-board mode: post attribution comment to the PR
@@ -655,6 +676,7 @@ if [ ${EXIT_CODE} -eq 0 ]; then
       if [ -n "${NON_BOARD_PR_URL}" ]; then
         gh pr comment "${NON_BOARD_PR_URL}" --body "> 🤖 Implemented by ${EFFECTIVE_PROVIDER_LABEL}" 2>>"${LOG_FILE}" || true
       fi
+      log "SUCCESS: PR opened and ready for review — ${NON_BOARD_PR_URL}"
       emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
     else
       night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
@@ -708,8 +730,16 @@ elif [ ${EXIT_CODE} -eq 124 ]; then
   fi
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" timeout --exit-code 124 2>/dev/null || true
   emit_result "timeout" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
+elif [ "${DOUBLE_RATE_LIMITED}" = "1" ]; then
+  if [ -n "${ISSUE_NUMBER}" ]; then
+    "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
+    "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
+      --body "Both proxy and native Claude are rate-limited. Will retry after reset (via ${EFFECTIVE_PROVIDER_LABEL})." 2>>"${LOG_FILE}" || true
+  fi
+  night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" rate_limited --exit-code "${EXIT_CODE}" 2>/dev/null || true
+  emit_result "rate_limited" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=double_rate_limit"
 else
-  PROVIDER_ERROR_DETAIL=$(latest_failure_detail "${LOG_FILE}")
+  PROVIDER_ERROR_DETAIL=$(latest_failure_detail "${LOG_FILE}" "${LOG_LINE_BEFORE}")
   log "FAIL: Night watch exited with code ${EXIT_CODE} while processing ${ELIGIBLE_PRD}"
   if [ -n "${ISSUE_NUMBER}" ]; then
     "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true

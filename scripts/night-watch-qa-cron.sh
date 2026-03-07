@@ -598,7 +598,7 @@ Action: generating QA tests and evidence."
         cd "${QA_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
           claude -p "${QA_PROMPT}" \
             --dangerously-skip-permissions \
-            >> "${LOG_FILE}" 2>&1
+            2>&1 | tee -a "${LOG_FILE}"
       ); then
         PROVIDER_OK=1
       else
@@ -625,7 +625,7 @@ Action: generating QA tests and evidence."
             -C "${QA_WORKTREE_DIR}" \
             --yolo \
             "${QA_PROMPT}" \
-            >> "${LOG_FILE}" 2>&1
+            2>&1 | tee -a "${LOG_FILE}"
       ); then
         PROVIDER_OK=1
       else

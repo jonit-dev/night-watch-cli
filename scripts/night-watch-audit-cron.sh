@@ -166,7 +166,7 @@ for AUDIT_ATTEMPT in $(seq 1 "${AUDIT_MAX_RETRIES}"); do
         cd "${AUDIT_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
           claude -p "${AUDIT_PROMPT}" \
             --dangerously-skip-permissions \
-            >> "${LOG_FILE}" 2>&1
+            2>&1 | tee -a "${LOG_FILE}"
       ); then
         EXIT_CODE=0
       else
@@ -180,7 +180,7 @@ for AUDIT_ATTEMPT in $(seq 1 "${AUDIT_MAX_RETRIES}"); do
             -C "${AUDIT_WORKTREE_DIR}" \
             --yolo \
             "${AUDIT_PROMPT}" \
-            >> "${LOG_FILE}" 2>&1
+            2>&1 | tee -a "${LOG_FILE}"
       ); then
         EXIT_CODE=0
       else
