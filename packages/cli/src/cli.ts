@@ -29,6 +29,7 @@ import { sliceCommand } from './commands/slice.js';
 import { createStateCommand } from './commands/state.js';
 import { boardCommand } from './commands/board.js';
 import { queueCommand } from './commands/queue.js';
+import { notifyCommand } from './commands/notify.js';
 
 // Find the package root (works from both src/ in dev and dist/src/ in production)
 const __filename = fileURLToPath(import.meta.url);
@@ -116,5 +117,8 @@ boardCommand(program);
 
 // Register queue command (global job queue)
 queueCommand(program);
+
+// Register notify command (send notification events from bash scripts)
+notifyCommand(program);
 
 program.parse();

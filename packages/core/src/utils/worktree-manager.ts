@@ -120,6 +120,19 @@ export function prepareBranchWorktree(
 ): IPrepareWorktreeResult {
   const { projectDir, worktreeDir, branchName, defaultBranch, logFile } = options;
 
+  // Remove stale directory that exists on disk but is not registered in git's
+  // worktree list (left over from a killed or interrupted previous run).
+  if (fs.existsSync(worktreeDir)) {
+    const isRegistered = isWorktreeRegistered(projectDir, worktreeDir);
+    if (!isRegistered) {
+      try {
+        fs.rmSync(worktreeDir, { recursive: true, force: true });
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
+  }
+
   // Fetch origin/defaultBranch
   gitExec(['fetch', 'origin', defaultBranch], projectDir, logFile);
 

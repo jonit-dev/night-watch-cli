@@ -101,6 +101,24 @@ describe.skipIf(!isGitAvailable())('worktree-manager', () => {
       expect(branches).toContain('new-feature');
     });
 
+    it('should remove unregistered stale directory before creating branch worktree', () => {
+      const worktreeDir = path.join(tmpDir, 'worktree-branch-stale');
+
+      fs.mkdirSync(worktreeDir, { recursive: true });
+      fs.writeFileSync(path.join(worktreeDir, 'stale-file.txt'), 'stale content');
+
+      const result = prepareBranchWorktree({
+        projectDir,
+        worktreeDir,
+        branchName: 'stale-feature',
+        defaultBranch: 'main',
+      });
+
+      expect(result.success).toBe(true);
+      expect(fs.existsSync(path.join(worktreeDir, 'stale-file.txt'))).toBe(false);
+      expect(git(['branch', '--list', 'stale-feature'])).toContain('stale-feature');
+    });
+
     it('should return error when no valid base ref exists', () => {
       // Create a fresh repo with no commits
       const emptyDir = path.join(tmpDir, 'empty');

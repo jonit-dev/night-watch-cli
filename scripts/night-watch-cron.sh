@@ -68,6 +68,28 @@ emit_result() {
   fi
 }
 
+sanitize_result_value() {
+  local raw="${1:-}"
+  printf '%s' "${raw}" \
+    | tr '\r\n' '  ' \
+    | sed -E 's/[[:space:]]+/ /g; s/[|]/\//g; s/^[[:space:]]+//; s/[[:space:]]+$//'
+}
+
+latest_failure_detail() {
+  local log_file="${1:?log_file required}"
+  local summary=""
+
+  summary=$(tail -50 "${log_file}" 2>/dev/null \
+    | grep -E 'fatal:|error:|ERROR:|FAIL:|WARN:' \
+    | tail -1 || true)
+
+  if [ -z "${summary}" ]; then
+    summary=$(tail -20 "${log_file}" 2>/dev/null | tail -1 || true)
+  fi
+
+  sanitize_result_value "${summary}"
+}
+
 # ── Global Job Queue Gate ────────────────────────────────────────────────────
 # Acquire global gate before per-project lock to serialize jobs across projects.
 # When gate is busy, enqueue the job and exit cleanly.
@@ -339,6 +361,15 @@ log "CONFIG: default_branch=${DEFAULT_BRANCH} provider=${PROVIDER_CMD} label=${P
 log "CONFIG: max_runtime=${MAX_RUNTIME}s max_retries=${NW_MAX_RETRIES:-3} board=${NW_BOARD_ENABLED:-false}"
 log "START: Processing ${ELIGIBLE_PRD} on branch ${BRANCH_NAME} (worktree: ${WORKTREE_DIR})"
 
+# Send run_started notification via all configured webhooks (Telegram, Slack, Discord)
+if NW_NOTIFY_CLI=$(resolve_night_watch_cli 2>/dev/null); then
+  "${NW_NOTIFY_CLI}" notify run_started "${PROJECT_DIR}" \
+    --prd "${ELIGIBLE_PRD}" \
+    --branch "${BRANCH_NAME}" \
+    --provider "${PROVIDER_LABEL:-${PROVIDER_CMD}}" \
+    >> "${LOG_FILE}" 2>&1 || true
+fi
+
 EXECUTOR_PROMPT_PATH=$(resolve_instruction_path "${PROJECT_DIR}" "prd-executor.md" || true)
 if [ -z "${EXECUTOR_PROMPT_PATH}" ]; then
   log "FAIL: Missing PRD executor instructions. Checked instructions/, .claude/commands/, and bundled templates/"
@@ -437,7 +468,7 @@ if [ "${MERGED_PR_COUNT}" -gt 0 ]; then
     exit 0
   fi
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
-  emit_result "failure_finalize" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
+  emit_result "failure_finalize" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=finalize_failed|detail=Failed_to_finalize_already_merged_prd"
   exit 1
 fi
 
@@ -445,6 +476,7 @@ if ! prepare_branch_worktree "${PROJECT_DIR}" "${WORKTREE_DIR}" "${BRANCH_NAME}"
   log "FAIL: Unable to create isolated worktree ${WORKTREE_DIR} for ${BRANCH_NAME}"
   restore_issue_to_ready "Failed to prepare worktree for branch ${BRANCH_NAME}. Moved back to Ready for retry."
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
+  emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=worktree_setup_failed|detail=$(latest_failure_detail "${LOG_FILE}")"
   exit 1
 fi
 
@@ -466,6 +498,7 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
   ATTEMPT_NUM=$((ATTEMPT_NUM + 1))
   ATTEMPT_START_TIME=$(date +%s)
   log "ATTEMPT: ${ATTEMPT_NUM}/${MAX_RETRIES} starting provider=${PROVIDER_CMD} prd=${ELIGIBLE_PRD}"
+  log "EXECUTING: Launching ${PROVIDER_CMD} — output will stream below. This may take several minutes."
   # Capture log position before this attempt so check_rate_limited only
   # scans lines written by the current invocation (not leftover 429s from
   # previous runs that would cause false-positive rate-limit retries).
@@ -499,6 +532,7 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
       ;;
     *)
       log "ERROR: Unknown provider: ${PROVIDER_CMD}"
+      emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=unknown_provider|detail=$(sanitize_result_value "Unknown provider: ${PROVIDER_CMD}")"
       exit 1
       ;;
   esac
@@ -596,7 +630,7 @@ if [ ${EXIT_CODE} -eq 0 ]; then
       emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
     else
       night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
-      emit_result "failure_finalize" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
+      emit_result "failure_finalize" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=finalize_failed|detail=Failed_to_finalize_open_prd"
       EXIT_CODE=1
     fi
   else
@@ -610,7 +644,7 @@ if [ ${EXIT_CODE} -eq 0 ]; then
         emit_result "success_already_merged" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
       else
         night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
-        emit_result "failure_finalize" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
+        emit_result "failure_finalize" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=finalize_failed|detail=Failed_to_finalize_merged_prd"
         EXIT_CODE=1
       fi
     else
@@ -621,7 +655,7 @@ if [ ${EXIT_CODE} -eq 0 ]; then
           --body "Execution completed but no PR was found (via ${EFFECTIVE_PROVIDER_LABEL}). Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
       fi
       night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
-      emit_result "failure_no_pr_after_success" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
+      emit_result "failure_no_pr_after_success" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=no_pr_after_success|detail=$(sanitize_result_value "Provider exited successfully but no open or merged PR was found")"
       EXIT_CODE=1
     fi
   fi
@@ -649,7 +683,7 @@ else
       --body "Execution failed with exit code ${EXIT_CODE} (via ${EFFECTIVE_PROVIDER_LABEL}). Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
   fi
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code "${EXIT_CODE}" 1>/dev/null || true
-  emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
+  emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=provider_exit|detail=$(latest_failure_detail "${LOG_FILE}")"
 fi
 
 cleanup_worktrees "${PROJECT_DIR}"
