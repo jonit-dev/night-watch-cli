@@ -359,6 +359,7 @@ export function buildInitConfig(params: {
       branchPatterns: [...defaults.qa.branchPatterns],
     },
     audit: { ...defaults.audit },
+    analytics: { ...defaults.analytics },
     jobProviders: { ...defaults.jobProviders },
     queue: {
       ...defaults.queue,

@@ -44,7 +44,7 @@ export interface IProviderPreset {
 export type MergeMethod = 'squash' | 'merge' | 'rebase';
 
 /** Job types that can have per-job provider configuration */
-export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer';
+export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics';
 
 /** Per-job provider configuration */
 export interface IJobProviders {
@@ -53,6 +53,7 @@ export interface IJobProviders {
   qa?: string;
   audit?: string;
   slicer?: string;
+  analytics?: string;
 }
 
 // ==================== Provider Strategy ====================
@@ -130,6 +131,25 @@ export interface IAuditConfig {
   maxRuntime: number;
 }
 
+// ==================== Analytics Config ====================
+
+export type BoardColumnName = 'Draft' | 'Ready' | 'In Progress' | 'Review' | 'Done';
+
+export interface IAnalyticsConfig {
+  /** Whether the analytics job is enabled */
+  enabled: boolean;
+  /** Cron schedule for analytics execution */
+  schedule: string;
+  /** Maximum runtime in seconds for the analytics job */
+  maxRuntime: number;
+  /** Number of days to look back when fetching Amplitude data */
+  lookbackDays: number;
+  /** Board column to place created issues in */
+  targetColumn: BoardColumnName;
+  /** Custom prompt for the AI analysis (optional override) */
+  analysisPrompt: string;
+}
+
 // ==================== Night Watch Config ====================
 
 /**
@@ -177,6 +197,7 @@ export interface INightWatchConfig {
   claudeModel: ClaudeModel;
   qa: IQaConfig;
   audit: IAuditConfig;
+  analytics: IAnalyticsConfig;
   queue: IQueueConfig;
 }
 

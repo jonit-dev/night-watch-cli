@@ -2,7 +2,7 @@
  * TypeScript interfaces for Night Watch CLI configuration
  */
 
-import { IBoardProviderConfig } from './board/types.js';
+import { BoardColumnName, IBoardProviderConfig } from './board/types.js';
 
 /**
  * Supported AI providers (string to allow custom presets)
@@ -39,7 +39,7 @@ export interface IProviderPreset {
 /**
  * Job types that can have per-job provider configuration
  */
-export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer';
+export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics';
 
 /**
  * Per-job provider configuration
@@ -51,6 +51,7 @@ export interface IJobProviders {
   qa?: string;
   audit?: string;
   slicer?: string;
+  analytics?: string;
 }
 
 /**
@@ -231,6 +232,9 @@ export interface INightWatchConfig {
   /** Code audit configuration */
   audit: IAuditConfig;
 
+  /** Analytics job configuration (Amplitude integration) */
+  analytics: IAnalyticsConfig;
+
   /** Per-job provider configuration */
   jobProviders: IJobProviders;
 
@@ -271,6 +275,21 @@ export interface IAuditConfig {
   schedule: string;
   /** Maximum runtime in seconds for the audit */
   maxRuntime: number;
+}
+
+export interface IAnalyticsConfig {
+  /** Whether the analytics job is enabled */
+  enabled: boolean;
+  /** Cron schedule for analytics execution */
+  schedule: string;
+  /** Maximum runtime in seconds for the analytics job */
+  maxRuntime: number;
+  /** Number of days to look back when fetching Amplitude data */
+  lookbackDays: number;
+  /** Board column to place created issues in */
+  targetColumn: BoardColumnName;
+  /** Custom prompt for the AI analysis (optional override) */
+  analysisPrompt: string;
 }
 
 export type WebhookType = 'slack' | 'discord' | 'telegram';

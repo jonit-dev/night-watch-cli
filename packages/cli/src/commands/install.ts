@@ -34,6 +34,8 @@ export interface IInstallOptions {
   qa?: boolean;
   noAudit?: boolean;
   audit?: boolean;
+  noAnalytics?: boolean;
+  analytics?: boolean;
   force?: boolean;
 }
 
@@ -143,6 +145,8 @@ export function performInstall(
     qa?: boolean;
     noAudit?: boolean;
     audit?: boolean;
+    noAnalytics?: boolean;
+    analytics?: boolean;
     force?: boolean;
   },
 ): IInstallResult {
@@ -231,6 +235,16 @@ export function performInstall(
       entries.push(auditEntry);
     }
 
+    // Analytics entry (if enabled and noAnalytics not set)
+    const disableAnalytics = options?.noAnalytics === true || options?.analytics === false;
+    const installAnalytics = disableAnalytics ? false : config.analytics.enabled;
+    if (installAnalytics) {
+      const analyticsSchedule = config.analytics.schedule;
+      const analyticsLog = path.join(logDir, 'analytics.log');
+      const analyticsEntry = `${analyticsSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} analytics >> ${shellQuote(analyticsLog)} 2>&1  ${marker}`;
+      entries.push(analyticsEntry);
+    }
+
     const existingEntries = new Set(
       Array.from(new Set([...getEntries(marker), ...getProjectEntries(projectDir)])),
     );
@@ -265,6 +279,7 @@ export function installCommand(program: Command): void {
     .option('--no-slicer', 'Skip installing slicer cron')
     .option('--no-qa', 'Skip installing QA cron')
     .option('--no-audit', 'Skip installing audit cron')
+    .option('--no-analytics', 'Skip installing analytics cron')
     .option('-f, --force', 'Replace existing cron entries for this project')
     .action(async (options: IInstallOptions) => {
       try {
@@ -380,6 +395,20 @@ export function installCommand(program: Command): void {
           entries.push(auditEntry);
         }
 
+        // Determine if analytics should be installed
+        const disableAnalytics =
+          options.noAnalytics === true || (options as Record<string, unknown>).analytics === false;
+        const installAnalytics = disableAnalytics ? false : config.analytics.enabled;
+
+        // Analytics entry (if enabled)
+        let analyticsLog: string | undefined;
+        if (installAnalytics) {
+          analyticsLog = path.join(logDir, 'analytics.log');
+          const analyticsSchedule = config.analytics.schedule;
+          const analyticsEntry = `${analyticsSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} analytics >> ${shellQuote(analyticsLog)} 2>&1  ${marker}`;
+          entries.push(analyticsEntry);
+        }
+
         // Add all entries
         const existingEntrySet = new Set(existingEntries);
         const currentCrontab = readCrontab();
@@ -410,6 +439,9 @@ export function installCommand(program: Command): void {
         }
         if (installAudit && auditLog) {
           dim(`  Audit: ${auditLog}`);
+        }
+        if (installAnalytics && analyticsLog) {
+          dim(`  Analytics: ${analyticsLog}`);
         }
         console.log();
         dim('To uninstall, run: night-watch uninstall');

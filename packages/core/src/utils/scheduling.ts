@@ -45,6 +45,8 @@ export function isJobTypeEnabled(config: INightWatchConfig, jobType: JobType): b
       return config.audit.enabled;
     case 'slicer':
       return config.roadmapScanner.enabled;
+    case 'analytics':
+      return config.analytics.enabled;
     default:
       return true;
   }
@@ -119,7 +121,10 @@ export function getSchedulingPlan(
   );
   const peerCount = Math.max(1, peers.length);
   const balancedDelayMinutes = peerCount <= 1 ? 0 : Math.floor((slotIndex * 60) / peerCount);
-  const manualDelayMinutes = Math.max(0, Math.floor(config.cronScheduleOffset ?? DEFAULT_CRON_SCHEDULE_OFFSET));
+  const manualDelayMinutes = Math.max(
+    0,
+    Math.floor(config.cronScheduleOffset ?? DEFAULT_CRON_SCHEDULE_OFFSET),
+  );
 
   return {
     manualDelayMinutes,

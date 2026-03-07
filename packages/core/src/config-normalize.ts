@@ -3,9 +3,15 @@
  * Handles legacy nested keys and validates field values.
  */
 
-import { BoardProviderType, IBoardProviderConfig } from './board/types.js';
+import {
+  BOARD_COLUMNS,
+  BoardColumnName,
+  BoardProviderType,
+  IBoardProviderConfig,
+} from './board/types.js';
 import {
   ClaudeModel,
+  IAnalyticsConfig,
   IAuditConfig,
   IJobProviders,
   INightWatchConfig,
@@ -24,6 +30,7 @@ import {
   WebhookType,
 } from './types.js';
 import {
+  DEFAULT_ANALYTICS,
   DEFAULT_AUDIT,
   DEFAULT_BOARD_PROVIDER,
   DEFAULT_QA,
@@ -288,6 +295,25 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
       maxRuntime: readNumber(rawAudit.maxRuntime) ?? DEFAULT_AUDIT.maxRuntime,
     };
     normalized.audit = audit;
+  }
+
+  const rawAnalytics = readObject(rawConfig.analytics);
+  if (rawAnalytics) {
+    const targetColumnRaw = readString(rawAnalytics.targetColumn);
+    const targetColumn: BoardColumnName =
+      targetColumnRaw && BOARD_COLUMNS.includes(targetColumnRaw as BoardColumnName)
+        ? (targetColumnRaw as BoardColumnName)
+        : DEFAULT_ANALYTICS.targetColumn;
+
+    const analytics: IAnalyticsConfig = {
+      enabled: readBoolean(rawAnalytics.enabled) ?? DEFAULT_ANALYTICS.enabled,
+      schedule: readString(rawAnalytics.schedule) ?? DEFAULT_ANALYTICS.schedule,
+      maxRuntime: readNumber(rawAnalytics.maxRuntime) ?? DEFAULT_ANALYTICS.maxRuntime,
+      lookbackDays: readNumber(rawAnalytics.lookbackDays) ?? DEFAULT_ANALYTICS.lookbackDays,
+      targetColumn,
+      analysisPrompt: readString(rawAnalytics.analysisPrompt) ?? DEFAULT_ANALYTICS.analysisPrompt,
+    };
+    normalized.analytics = analytics;
   }
 
   const rawJobProviders = readObject(rawConfig.jobProviders);

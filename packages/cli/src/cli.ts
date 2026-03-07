@@ -10,6 +10,7 @@ import { runCommand } from './commands/run.js';
 import { reviewCommand } from './commands/review.js';
 import { qaCommand } from './commands/qa.js';
 import { auditCommand } from './commands/audit.js';
+import { analyticsCommand } from './commands/analytics.js';
 import { installCommand } from './commands/install.js';
 import { uninstallCommand } from './commands/uninstall.js';
 import { statusCommand } from './commands/status.js';
@@ -66,6 +67,9 @@ qaCommand(program);
 
 // Register audit command
 auditCommand(program);
+
+// Register analytics command
+analyticsCommand(program);
 
 // Register Phase 5 commands
 installCommand(program);

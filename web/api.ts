@@ -6,6 +6,7 @@
 
 import type {
     ClaudeModel,
+    IAnalyticsConfig,
     IAuditConfig,
     IBoardProviderConfig,
     IJobProviders,
@@ -29,7 +30,7 @@ import { DependencyList, useEffect, useRef, useState } from 'react';
 
 // Re-export shared types so consumers can import from either place
 export type {
-    ClaudeModel, IAuditConfig, IBoardProviderConfig, IJobProviders, ILogInfo, INightWatchConfig,
+    ClaudeModel, IAnalyticsConfig, IAuditConfig, IBoardProviderConfig, IJobProviders, ILogInfo, INightWatchConfig,
     INotificationConfig, IPrdInfo, IProviderPreset, IPrInfo, IProcessInfo, IQaConfig, IRoadmapItem, IRoadmapScannerConfig, IRoadmapStatus, IStatusSnapshot, IWebhookConfig, MergeMethod, QaArtifacts
 };
 
@@ -193,6 +194,14 @@ export interface IScheduleInfo {
     manualDelayMinutes: number;
     balancedDelayMinutes: number;
   };
+  analytics?: {
+    schedule: string;
+    installed: boolean;
+    nextRun: string | null;
+    delayMinutes: number;
+    manualDelayMinutes: number;
+    balancedDelayMinutes: number;
+  };
   paused: boolean;
   schedulingPriority: number;
   entries: string[];
@@ -287,6 +296,12 @@ export function triggerQa(): Promise<ActionResult> {
 
 export function triggerAudit(): Promise<ActionResult> {
   return apiFetch<ActionResult>(apiPath('/api/actions/audit'), {
+    method: 'POST',
+  });
+}
+
+export function triggerAnalytics(): Promise<ActionResult> {
+  return apiFetch<ActionResult>(apiPath('/api/actions/analytics'), {
     method: 'POST',
   });
 }

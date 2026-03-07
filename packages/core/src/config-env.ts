@@ -5,6 +5,7 @@
 
 import {
   ClaudeModel,
+  IAnalyticsConfig,
   IAuditConfig,
   IJobProviders,
   INightWatchConfig,
@@ -17,6 +18,7 @@ import {
   QaArtifacts,
 } from './types.js';
 import {
+  DEFAULT_ANALYTICS,
   DEFAULT_AUDIT,
   DEFAULT_QA,
   DEFAULT_QUEUE,
@@ -242,6 +244,26 @@ export function buildEnvOverrideConfig(
   if (process.env.NW_AUDIT_MAX_RUNTIME) {
     const v = parseInt(process.env.NW_AUDIT_MAX_RUNTIME, 10);
     if (!isNaN(v) && v > 0) env.audit = { ...auditBase(), maxRuntime: v };
+  }
+
+  // Analytics env vars
+  const analyticsBase = (): IAnalyticsConfig =>
+    env.analytics ?? fileConfig?.analytics ?? DEFAULT_ANALYTICS;
+
+  if (process.env.NW_ANALYTICS_ENABLED) {
+    const v = parseBoolean(process.env.NW_ANALYTICS_ENABLED);
+    if (v !== null) env.analytics = { ...analyticsBase(), enabled: v };
+  }
+  if (process.env.NW_ANALYTICS_SCHEDULE) {
+    env.analytics = { ...analyticsBase(), schedule: process.env.NW_ANALYTICS_SCHEDULE };
+  }
+  if (process.env.NW_ANALYTICS_MAX_RUNTIME) {
+    const v = parseInt(process.env.NW_ANALYTICS_MAX_RUNTIME, 10);
+    if (!isNaN(v) && v > 0) env.analytics = { ...analyticsBase(), maxRuntime: v };
+  }
+  if (process.env.NW_ANALYTICS_LOOKBACK_DAYS) {
+    const v = parseInt(process.env.NW_ANALYTICS_LOOKBACK_DAYS, 10);
+    if (!isNaN(v) && v > 0) env.analytics = { ...analyticsBase(), lookbackDays: v };
   }
 
   // Per-job provider overrides (NW_JOB_PROVIDER_<JOBTYPE>)

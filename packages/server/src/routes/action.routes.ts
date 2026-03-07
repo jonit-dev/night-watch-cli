@@ -190,6 +190,10 @@ function createActionRouteHandlers(ctx: IActionRouteContext): Router {
     spawnAction(ctx.getProjectDir(req), ['audit'], req, res);
   });
 
+  router.post(`/${p}analytics`, (req: Request, res: Response): void => {
+    spawnAction(ctx.getProjectDir(req), ['analytics'], req, res);
+  });
+
   router.post(`/${p}planner`, (req: Request, res: Response): void => {
     spawnAction(ctx.getProjectDir(req), ['planner'], req, res);
   });
