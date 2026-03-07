@@ -29,17 +29,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
 
-# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
-if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
-  echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
-  exit 127
-fi
-PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
-# NOTE: Lock file path must match auditLockPath() in src/utils/status-data.ts
-LOCK_FILE="/tmp/night-watch-audit-${PROJECT_RUNTIME_KEY}.lock"
-AUDIT_PROMPT_TEMPLATE="${SCRIPT_DIR}/../templates/audit.md"
-PROVIDER_MODEL_DISPLAY=$(resolve_provider_model_display "${PROVIDER_CMD}" "${PROVIDER_LABEL}")
-
+# emit_result helper - must be defined before use
 emit_result() {
   local status="${1:?status required}"
   local details="${2:-}"
@@ -50,12 +40,24 @@ emit_result() {
   fi
 }
 
-# Validate provider
+# Validate provider name first (must be claude or codex)
 if ! validate_provider "${PROVIDER_CMD}"; then
   echo "ERROR: Unknown provider: ${PROVIDER_CMD}" >&2
   emit_result "failure" "reason=unknown_provider"
   exit 1
 fi
+
+# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
+if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
+  echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
+  emit_result "failure" "reason=provider_not_found"
+  exit 1
+fi
+PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
+# NOTE: Lock file path must match auditLockPath() in src/utils/status-data.ts
+LOCK_FILE="/tmp/night-watch-audit-${PROJECT_RUNTIME_KEY}.lock"
+AUDIT_PROMPT_TEMPLATE="${SCRIPT_DIR}/../templates/audit.md"
+PROVIDER_MODEL_DISPLAY=$(resolve_provider_model_display "${PROVIDER_CMD}" "${PROVIDER_LABEL}")
 
 # Global gate: if queue is enabled and we can't acquire the global lock,
 # enqueue the job and exit. The dispatcher will run it later.
