@@ -211,6 +211,101 @@ describe('core flow smoke tests (bash scripts)', () => {
     ).toBe(true);
   });
 
+  it('executor should invoke the provider from a linked worktree instead of the main checkout', () => {
+    const projectDir = mkTempDir('nw-smoke-executor-worktree-cwd-');
+    initGitRepo(projectDir);
+    createPrd(projectDir, '01-smoke-worktree-cwd');
+    commitAll(projectDir, 'add PRD');
+
+    const fakeBin = mkTempDir('nw-smoke-bin-worktree-cwd-');
+    const cwdFile = path.join(projectDir, '.smoke-provider-cwd');
+    const gitMetadataFile = path.join(projectDir, '.smoke-provider-git-metadata');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' +
+        'pwd > "$NW_SMOKE_CWD_FILE"\n' +
+        'if [[ -f .git ]]; then\n' +
+        '  echo "linked-worktree" > "$NW_SMOKE_GIT_METADATA_FILE"\n' +
+        'else\n' +
+        '  echo "not-linked-worktree" > "$NW_SMOKE_GIT_METADATA_FILE"\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\nif [[ "$1" == "pr" && "$2" == "list" ]]; then\n  exit 0\nfi\nexit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(executorScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_PRD_DIR: 'docs/PRDs/night-watch',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_SMOKE_CWD_FILE: cwdFile,
+      NW_SMOKE_GIT_METADATA_FILE: gitMetadataFile,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure_no_pr_after_success');
+    expect(fs.readFileSync(cwdFile, 'utf-8').trim()).not.toBe(projectDir);
+    expect(path.basename(fs.readFileSync(cwdFile, 'utf-8').trim())).toContain(
+      'nw-01-smoke-worktree-cwd',
+    );
+    expect(fs.readFileSync(gitMetadataFile, 'utf-8').trim()).toBe('linked-worktree');
+  });
+
+  it('executor should pass the isolated worktree path to codex exec', () => {
+    const projectDir = mkTempDir('nw-smoke-executor-codex-argv-');
+    initGitRepo(projectDir);
+    createPrd(projectDir, '01-smoke-codex-argv');
+    commitAll(projectDir, 'add PRD');
+
+    const fakeBin = mkTempDir('nw-smoke-executor-codex-argv-bin-');
+    const argsFile = path.join(projectDir, '.codex-argv');
+    const expectedWorktreeDir = path.join(
+      path.dirname(projectDir),
+      `${path.basename(projectDir)}-nw-01-smoke-codex-argv`,
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'codex'),
+      '#!/usr/bin/env bash\n' +
+        'printf \'%s\\0\' "$@" > "$NW_SMOKE_ARGS_FILE"\n' +
+        'echo "codex stub invoked" >&2\n' +
+        'exit 1\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\nif [[ "$1" == "pr" && "$2" == "list" ]]; then\n  exit 0\nfi\nexit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(executorScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'codex',
+      NW_PRD_DIR: 'docs/PRDs/night-watch',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_SMOKE_ARGS_FILE: argsFile,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure');
+
+    const argv = fs.readFileSync(argsFile, 'utf-8').split('\0').filter(Boolean);
+    const cdIndex = argv.indexOf('-C');
+
+    expect(argv[0]).toBe('exec');
+    expect(argv).toContain('--yolo');
+    expect(cdIndex).toBeGreaterThan(-1);
+    expect(argv[cdIndex + 1]).toBe(expectedWorktreeDir);
+  });
+
   it('qa should emit skip marker when no open PRs', () => {
     const projectDir = mkTempDir('nw-smoke-qa-skip-');
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
@@ -1275,7 +1370,10 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure');
 
     const argv = fs.readFileSync(argsFile, 'utf-8').split('\0').filter(Boolean);
+    const cdIndex = argv.indexOf('-C');
     expect(argv[0]).toBe('exec');
+    expect(cdIndex).toBeGreaterThan(-1);
+    expect(argv[cdIndex + 1]).toContain('-nw-review-runner-');
     expect(argv).toContain('--yolo');
     expect(argv).not.toContain('--quiet');
     expect(argv).not.toContain('--prompt');

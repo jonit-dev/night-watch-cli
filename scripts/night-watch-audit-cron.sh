@@ -135,6 +135,16 @@ Failed to create audit worktree."
   exit 1
 fi
 
+if ! assert_isolated_worktree "${PROJECT_DIR}" "${AUDIT_WORKTREE_DIR}" "audit"; then
+  log "FAIL: Audit worktree guard rejected ${AUDIT_WORKTREE_DIR}"
+  send_telegram_status_message "🔎 Night Watch Auditor: failed" "Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Failure reason: worktree_guard_failed
+Audit run refused to execute in the primary checkout."
+  emit_result "failure" "reason=worktree_guard_failed"
+  exit 1
+fi
+
 # Ensure the logs dir exists inside the worktree so the provider can write the report
 mkdir -p "${AUDIT_WORKTREE_DIR}/logs"
 
@@ -167,6 +177,7 @@ for AUDIT_ATTEMPT in $(seq 1 "${AUDIT_MAX_RETRIES}"); do
       if (
         cd "${AUDIT_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
           codex exec \
+            -C "${AUDIT_WORKTREE_DIR}" \
             --yolo \
             "${AUDIT_PROMPT}" \
             >> "${LOG_FILE}" 2>&1
