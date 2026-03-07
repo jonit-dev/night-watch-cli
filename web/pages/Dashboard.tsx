@@ -31,7 +31,8 @@ const Dashboard: React.FC = () => {
   const [cancellingProcess, setCancellingProcess] = useState<'run' | 'review' | null>(null);
   const [clearingLock, setClearingLock] = useState(false);
   const [startingProcess, setStartingProcess] = useState<string | null>(null);
-  const { setProjectName, addToast, selectedProjectId, globalModeLoading, status } = useStore();
+  const { setProjectName, addToast, selectedProjectId, globalModeLoading, status, setStatus } = useStore();
+  const refetch = () => fetchStatus().then(setStatus).catch(() => {});
   const { data: scheduleInfo } = useApi(fetchScheduleInfo, [selectedProjectId], { enabled: !globalModeLoading });
   const { data: boardStatus } = useApi<IBoardStatus | null>(
     () => fetchBoardStatus().catch(() => null),
