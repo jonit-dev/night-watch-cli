@@ -46,6 +46,13 @@ export interface INightWatchConfig {
   /** Maximum runtime in seconds for PRD execution */
   maxRuntime: number;
 
+  /**
+   * Maximum runtime per executor session in seconds.
+   * When a session hits this limit it checkpoints and re-queues the issue for the next run.
+   * Defaults to maxRuntime when not set.
+   */
+  sessionMaxRuntime?: number;
+
   /** Maximum runtime in seconds for PR reviewer */
   reviewerMaxRuntime: number;
 
