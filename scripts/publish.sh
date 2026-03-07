@@ -43,8 +43,8 @@ for attempt in 1 2 3 4 5; do
     break
   fi
   if [[ $attempt -lt 5 ]]; then
-    echo "    Attempt $attempt failed, retrying in 10s..."
-    sleep 10
+    echo "    Attempt $attempt failed, retrying in 30s..."
+    sleep 30
   else
     echo "    All attempts failed. Install manually: npm i -g @jonit-dev/night-watch-cli@$NEW_VERSION"
     exit 1
