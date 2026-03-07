@@ -25,15 +25,14 @@ PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 PROVIDER_LABEL="${NW_PROVIDER_LABEL:-}"
 SCRIPT_START_TIME=$(date +%s)
 
-# Ensure NVM / Node / Night Watch CLI are on PATH
-export NVM_DIR="${HOME}/.nvm"
-[ -s "${NVM_DIR}/nvm.sh" ] && . "${NVM_DIR}/nvm.sh"
-
 mkdir -p "${LOG_DIR}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
+
+# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
+ensure_provider_on_path "${PROVIDER_CMD}" || true
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 LOCK_FILE="/tmp/night-watch-slicer-${PROJECT_RUNTIME_KEY}.lock"
 PROVIDER_MODEL_DISPLAY=$(resolve_provider_model_display "${PROVIDER_CMD}" "${PROVIDER_LABEL}")
