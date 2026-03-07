@@ -6,6 +6,7 @@ import {
   fetchAllConfigs,
   fetchConfig,
   fetchDoctor,
+  IAnalyticsConfig,
   IAuditConfig,
   IBoardProviderConfig,
   IJobProviders,
@@ -66,6 +67,7 @@ type ConfigForm = {
   claudeModel: ClaudeModel;
   qa: IQaConfig;
   audit: IAuditConfig;
+  analytics: IAnalyticsConfig;
   queue: INightWatchConfig['queue'];
 };
 
@@ -122,6 +124,14 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
     enabled: true,
     schedule: '50 3 * * 1',
     maxRuntime: 1800,
+  },
+  analytics: config.analytics || {
+    enabled: false,
+    schedule: '0 6 * * 1',
+    maxRuntime: 900,
+    lookbackDays: 7,
+    targetColumn: 'Draft',
+    analysisPrompt: '',
   },
   queue: config.queue || {
     enabled: true,
@@ -815,6 +825,8 @@ const Settings: React.FC = () => {
       form.qa.schedule !== config?.qa.schedule ||
       form.audit.enabled !== (config?.audit.enabled ?? true) ||
       form.audit.schedule !== config?.audit.schedule ||
+      form.analytics.enabled !== (config?.analytics?.enabled ?? false) ||
+      form.analytics.schedule !== (config?.analytics?.schedule ?? '0 6 * * 1') ||
       form.roadmapScanner.enabled !== (config?.roadmapScanner?.enabled ?? true) ||
       (form.roadmapScanner.slicerSchedule || '35 */12 * * *') !==
       (config?.roadmapScanner?.slicerSchedule || '35 */12 * * *');
@@ -863,6 +875,7 @@ const Settings: React.FC = () => {
         claudeModel: form.claudeModel,
         qa: form.qa,
         audit: form.audit,
+        analytics: form.analytics,
         queue: form.queue,
       });
 
@@ -1364,6 +1377,20 @@ const Settings: React.FC = () => {
                   />
                 </div>
               )}
+              {form.analytics.enabled && (
+                <div id="job-schedule-analytics">
+                  <CronScheduleInput
+                    label="Analytics Schedule"
+                    value={form.analytics.schedule}
+                    onChange={(val) =>
+                      updateField('analytics', {
+                        ...form.analytics,
+                        schedule: val,
+                      })
+                    }
+                  />
+                </div>
+              )}
             </div>
           )}
 
@@ -1752,6 +1779,90 @@ const Settings: React.FC = () => {
                 }
                 rightIcon={<span className="text-xs">sec</span>}
                 helperText="Maximum runtime for audit tasks (default: 1800 seconds)"
+              />
+            </div>
+          )}
+        </Card>
+      ),
+    },
+    {
+      id: 'analytics',
+      label: 'Analytics',
+      content: (
+        <Card className="p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium text-slate-200">Analytics (Amplitude)</h3>
+              <p className="text-sm text-slate-400">
+                Fetch Amplitude data, analyze with AI, and create board issues
+              </p>
+            </div>
+            <Switch
+              checked={form.analytics.enabled}
+              onChange={(checked) => {
+                if (checked && !form.providerEnv?.AMPLITUDE_API_KEY && !form.providerEnv?.AMPLITUDE_SECRET_KEY) {
+                  return;
+                }
+                updateField('analytics', {
+                  ...form.analytics,
+                  enabled: checked,
+                });
+              }}
+            />
+          </div>
+
+          {form.analytics.enabled && !form.providerEnv?.AMPLITUDE_API_KEY && (
+            <p className="text-sm text-amber-400">
+              Amplitude API Key and Secret Key are required. Set them in Provider Environment below.
+            </p>
+          )}
+
+          {form.analytics.enabled && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
+              <Input
+                label="Max Runtime"
+                type="number"
+                value={String(form.analytics.maxRuntime)}
+                onChange={(e) =>
+                  updateField('analytics', {
+                    ...form.analytics,
+                    maxRuntime: Number(e.target.value || 0),
+                  })
+                }
+                rightIcon={<span className="text-xs">sec</span>}
+                helperText="Maximum runtime for analytics job (default: 900 seconds)"
+              />
+              <Input
+                label="Lookback Days"
+                type="number"
+                min="1"
+                max="90"
+                value={String(form.analytics.lookbackDays)}
+                onChange={(e) =>
+                  updateField('analytics', {
+                    ...form.analytics,
+                    lookbackDays: Math.max(1, Math.min(90, Number(e.target.value || 7))),
+                  })
+                }
+                helperText="Number of days to look back in Amplitude (1-90)"
+              />
+              <Select
+                label="Target Column"
+                value={form.analytics.targetColumn}
+                onChange={(e) =>
+                  updateField('analytics', {
+                    ...form.analytics,
+                    targetColumn: e.target.value as IAnalyticsConfig['targetColumn'],
+                  })
+                }
+                options={[
+                  { value: 'Draft', label: 'Draft' },
+                  { value: 'Ready', label: 'Ready' },
+                  { value: 'In Progress', label: 'In Progress' },
+                  { value: 'Review', label: 'Review' },
+                  { value: 'Done', label: 'Done' },
+                ]}
+                helperText="Board column for created issues"
               />
             </div>
           )}

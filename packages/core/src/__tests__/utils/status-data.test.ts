@@ -1316,13 +1316,13 @@ describe('status-data utilities', () => {
   });
 
   describe('collectLogInfo', () => {
-    it('should collect info for executor/reviewer/qa/audit/planner logs', async () => {
+    it('should collect info for executor/reviewer/qa/audit/planner/analytics logs', async () => {
       const logDir = path.join(tempDir, 'logs');
       fs.mkdirSync(logDir, { recursive: true });
       fs.writeFileSync(path.join(logDir, 'executor.log'), 'Executor line 1');
 
       const result = collectLogInfo(tempDir);
-      expect(result).toHaveLength(5);
+      expect(result).toHaveLength(6);
 
       const executorLog = result.find((l) => l.name === 'executor');
       expect(executorLog).toBeDefined();
@@ -1344,9 +1344,13 @@ describe('status-data utilities', () => {
       const plannerLog = result.find((l) => l.name === 'planner');
       expect(plannerLog).toBeDefined();
       expect(plannerLog!.exists).toBe(false);
+
+      const analyticsLog = result.find((l) => l.name === 'analytics');
+      expect(analyticsLog).toBeDefined();
+      expect(analyticsLog!.exists).toBe(false);
     });
 
-    it('should use correct file names (executor.log, reviewer.log, night-watch-qa.log)', async () => {
+    it('should use correct file names (executor.log, reviewer.log, night-watch-qa.log, analytics.log)', async () => {
       const logDir = path.join(tempDir, 'logs');
       fs.mkdirSync(logDir, { recursive: true });
       fs.writeFileSync(path.join(logDir, 'executor.log'), 'Executor line 1');
@@ -1354,9 +1358,10 @@ describe('status-data utilities', () => {
       fs.writeFileSync(path.join(logDir, 'night-watch-qa.log'), 'QA line 1');
       fs.writeFileSync(path.join(logDir, 'audit.log'), 'Audit line 1');
       fs.writeFileSync(path.join(logDir, 'slicer.log'), 'Planner line 1');
+      fs.writeFileSync(path.join(logDir, 'analytics.log'), 'Analytics line 1');
 
       const result = collectLogInfo(tempDir);
-      expect(result).toHaveLength(5);
+      expect(result).toHaveLength(6);
 
       const executorLog = result.find((l) => l.name === 'executor');
       expect(executorLog).toBeDefined();
@@ -1525,15 +1530,16 @@ describe('status-data utilities', () => {
       expect(snapshot.config).toBe(config);
       expect(Array.isArray(snapshot.prds)).toBe(true);
       expect(Array.isArray(snapshot.processes)).toBe(true);
-      expect(snapshot.processes).toHaveLength(5);
+      expect(snapshot.processes).toHaveLength(6);
       expect(snapshot.processes[0].name).toBe('executor');
       expect(snapshot.processes[1].name).toBe('reviewer');
       expect(snapshot.processes[2].name).toBe('qa');
       expect(snapshot.processes[3].name).toBe('audit');
       expect(snapshot.processes[4].name).toBe('planner');
+      expect(snapshot.processes[5].name).toBe('analytics');
       expect(Array.isArray(snapshot.prs)).toBe(true);
       expect(Array.isArray(snapshot.logs)).toBe(true);
-      expect(snapshot.logs).toHaveLength(5);
+      expect(snapshot.logs).toHaveLength(6);
       expect(snapshot.crontab).toHaveProperty('installed');
       expect(snapshot.crontab).toHaveProperty('entries');
       expect(snapshot.activePrd).toBeNull();

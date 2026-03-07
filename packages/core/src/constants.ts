@@ -5,6 +5,7 @@
 import { IBoardProviderConfig } from './board/types.js';
 import {
   ClaudeModel,
+  IAnalyticsConfig,
   IAuditConfig,
   IJobProviders,
   INotificationConfig,
@@ -137,14 +138,43 @@ export const DEFAULT_AUDIT: IAuditConfig = {
   maxRuntime: DEFAULT_AUDIT_MAX_RUNTIME,
 };
 
+// Analytics Configuration (Amplitude integration)
+export const DEFAULT_ANALYTICS_ENABLED = false;
+export const DEFAULT_ANALYTICS_SCHEDULE = '0 6 * * 1'; // weekly Monday 06:00
+export const DEFAULT_ANALYTICS_MAX_RUNTIME = 900; // 15 minutes
+export const DEFAULT_ANALYTICS_LOOKBACK_DAYS = 7;
+export const DEFAULT_ANALYTICS_TARGET_COLUMN = 'Draft' as const;
+export const DEFAULT_ANALYTICS_PROMPT = `You are an analytics reviewer. Analyze the following Amplitude product analytics data.
+Identify significant trends, anomalies, or drops that warrant engineering attention.
+For each actionable finding, output a JSON array of issues:
+[{ "title": "...", "body": "...", "labels": ["analytics"] }]
+If no issues are warranted, output an empty array: []`;
+
+export const DEFAULT_ANALYTICS: IAnalyticsConfig = {
+  enabled: DEFAULT_ANALYTICS_ENABLED,
+  schedule: DEFAULT_ANALYTICS_SCHEDULE,
+  maxRuntime: DEFAULT_ANALYTICS_MAX_RUNTIME,
+  lookbackDays: DEFAULT_ANALYTICS_LOOKBACK_DAYS,
+  targetColumn: DEFAULT_ANALYTICS_TARGET_COLUMN,
+  analysisPrompt: DEFAULT_ANALYTICS_PROMPT,
+};
+
 export const AUDIT_LOG_NAME = 'audit';
 export const PLANNER_LOG_NAME = 'slicer';
+export const ANALYTICS_LOG_NAME = 'analytics';
 
 // Valid providers
 export const VALID_PROVIDERS: Provider[] = ['claude', 'codex'];
 
 // Valid job types for per-job provider configuration
-export const VALID_JOB_TYPES: JobType[] = ['executor', 'reviewer', 'qa', 'audit', 'slicer'];
+export const VALID_JOB_TYPES: JobType[] = [
+  'executor',
+  'reviewer',
+  'qa',
+  'audit',
+  'slicer',
+  'analytics',
+];
 
 // Default per-job provider configuration (empty = use global provider)
 export const DEFAULT_JOB_PROVIDERS: IJobProviders = {};
@@ -176,6 +206,7 @@ export const LOG_FILE_NAMES: Record<string, string> = {
   qa: QA_LOG_NAME,
   audit: AUDIT_LOG_NAME,
   planner: PLANNER_LOG_NAME,
+  analytics: ANALYTICS_LOG_NAME,
 };
 
 // Global Registry
@@ -199,6 +230,7 @@ export const DEFAULT_QUEUE_PRIORITY: Record<string, number> = {
   slicer: 30,
   qa: 20,
   audit: 10,
+  analytics: 10,
 };
 
 export const DEFAULT_QUEUE: IQueueConfig = {

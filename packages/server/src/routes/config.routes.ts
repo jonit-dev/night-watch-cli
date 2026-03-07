@@ -401,6 +401,51 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
     }
   }
 
+  // Analytics configuration validation
+  if (changes.analytics !== undefined) {
+    if (typeof changes.analytics !== 'object' || changes.analytics === null) {
+      return 'analytics must be an object';
+    }
+
+    const analytics = changes.analytics;
+
+    if (analytics.enabled !== undefined && typeof analytics.enabled !== 'boolean') {
+      return 'analytics.enabled must be a boolean';
+    }
+
+    const analyticsScheduleError = validateCronField('analytics.schedule', analytics.schedule);
+    if (analyticsScheduleError) {
+      return analyticsScheduleError;
+    }
+
+    if (
+      analytics.maxRuntime !== undefined &&
+      (typeof analytics.maxRuntime !== 'number' || analytics.maxRuntime < 60)
+    ) {
+      return 'analytics.maxRuntime must be a number >= 60';
+    }
+
+    if (
+      analytics.lookbackDays !== undefined &&
+      (typeof analytics.lookbackDays !== 'number' ||
+        analytics.lookbackDays < 1 ||
+        analytics.lookbackDays > 90)
+    ) {
+      return 'analytics.lookbackDays must be a number between 1 and 90';
+    }
+
+    if (analytics.targetColumn !== undefined) {
+      const validColumns = ['Draft', 'Ready', 'In Progress', 'Review', 'Done'];
+      if (!validColumns.includes(analytics.targetColumn)) {
+        return `analytics.targetColumn must be one of: ${validColumns.join(', ')}`;
+      }
+    }
+
+    if (analytics.analysisPrompt !== undefined && typeof analytics.analysisPrompt !== 'string') {
+      return 'analytics.analysisPrompt must be a string';
+    }
+  }
+
   if (changes.queue !== undefined) {
     if (typeof changes.queue !== 'object' || changes.queue === null) {
       return 'queue must be an object';
@@ -414,7 +459,9 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
 
     if (
       queue.maxWaitTime !== undefined &&
-      (typeof queue.maxWaitTime !== 'number' || queue.maxWaitTime < 300 || queue.maxWaitTime > 14400)
+      (typeof queue.maxWaitTime !== 'number' ||
+        queue.maxWaitTime < 300 ||
+        queue.maxWaitTime > 14400)
     ) {
       return 'queue.maxWaitTime must be a number between 300 and 14400';
     }
@@ -428,7 +475,14 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
         return 'queue.priority must be an object';
       }
 
-      const validQueueJobs: JobType[] = ['executor', 'reviewer', 'qa', 'audit', 'slicer'];
+      const validQueueJobs: JobType[] = [
+        'executor',
+        'reviewer',
+        'qa',
+        'audit',
+        'slicer',
+        'analytics',
+      ];
       for (const [jobType, value] of Object.entries(queue.priority)) {
         if (!validQueueJobs.includes(jobType as JobType)) {
           return `queue.priority contains invalid job type: ${jobType}`;
