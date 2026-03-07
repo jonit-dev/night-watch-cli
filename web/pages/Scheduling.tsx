@@ -3,7 +3,6 @@ import {
   Pause,
   Play,
   Clock,
-  Edit,
   Check,
   AlertCircle,
   Calendar,
@@ -13,9 +12,9 @@ import {
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
-import Input from '../components/ui/Input';
-import Select from '../components/ui/Select';
 import Switch from '../components/ui/Switch';
+import ScheduleConfig from '../components/scheduling/ScheduleConfig.js';
+import type { IScheduleConfigForm } from '../components/scheduling/ScheduleConfig.js';
 import { useStore } from '../store/useStore';
 import {
   fetchScheduleInfo,
@@ -26,20 +25,20 @@ import {
   useApi,
 } from '../api';
 import {
-  CRON_PRESETS,
   cronToHuman,
-  getPresetValue,
   isCronEquivalent,
   resolveActiveTemplate,
   formatRelativeTime,
   formatAbsoluteTime,
   isWithin30Minutes,
 } from '../utils/cron';
+import type { IScheduleTemplate } from '../utils/cron.js';
 
-interface ScheduleEditState {
-  executorSchedule: string;
-  reviewerSchedule: string;
-  isEditing: boolean;
+interface IScheduleEditState {
+  form: IScheduleConfigForm;
+  scheduleMode: 'template' | 'custom';
+  selectedTemplateId: string;
+  isDirty: boolean;
 }
 
 const Scheduling: React.FC = () => {
@@ -47,10 +46,22 @@ const Scheduling: React.FC = () => {
   const [toggling, setToggling] = useState(false);
   const [saving, setSaving] = useState(false);
   const [updatingJob, setUpdatingJob] = useState<string | null>(null);
-  const [editState, setEditState] = useState<ScheduleEditState>({
-    executorSchedule: '',
-    reviewerSchedule: '',
-    isEditing: false,
+
+  const [editState, setEditState] = useState<IScheduleEditState>({
+    form: {
+      cronSchedule: '5 */3 * * *',
+      reviewerSchedule: '25 */6 * * *',
+      qa: { schedule: '45 2,14 * * *', enabled: true },
+      audit: { schedule: '50 3 * * 1', enabled: true },
+      roadmapScanner: { slicerSchedule: '35 */12 * * *', enabled: true },
+      scheduleBundleId: null,
+      schedulingPriority: 3,
+      cronScheduleOffset: 0,
+      globalQueueEnabled: true,
+    },
+    scheduleMode: 'template',
+    selectedTemplateId: 'always-on',
+    isDirty: false,
   });
 
   const {
@@ -73,29 +84,43 @@ const Scheduling: React.FC = () => {
     }, 30000);
     return () => clearInterval(interval);
   }, [refetchSchedule]);
-
-  // Initialize edit state when data loads
+  // Initialize edit state when config loads
   useEffect(() => {
-    if (config && !editState.isEditing) {
+    if (config && !editState.isDirty) {
+      const scheduleMode = resolveActiveTemplate(
+        config.scheduleBundleId,
+        config.cronSchedule,
+        config.reviewerSchedule,
+        config.qa?.schedule || '45 2,14 * * *',
+        config.audit?.schedule || '50 3 * * 1',
+        config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+      ) ? 'template' : 'custom';
       setEditState({
-        executorSchedule: config.cronSchedule,
-        reviewerSchedule: config.reviewerSchedule,
-        isEditing: false,
+        form: {
+          cronSchedule: config.cronSchedule || '5 */3 * * *',
+          reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
+          qa: config.qa || { schedule: '45 2,14 * * *', enabled: true },
+          audit: config.audit || { schedule: '50 3 * * 1', enabled: true },
+          roadmapScanner: config.roadmapScanner || { slicerSchedule: '35 */12 * * *', enabled: true },
+          scheduleBundleId: config.scheduleBundleId ?? null,
+          schedulingPriority: config.schedulingPriority ?? 3,
+          cronScheduleOffset: config.cronScheduleOffset ?? 0,
+          globalQueueEnabled: config.queue?.enabled ?? true,
+        },
+        scheduleMode: scheduleMode ? 'template' : 'custom',
+        selectedTemplateId: scheduleMode?.id ?? '',
+        isDirty: false,
       });
     }
-  }, [config, editState.isEditing]);
-
+  }, [config, editState.isDirty]);
   const syncScheduleState = () => {
     refetchConfig();
     refetchSchedule();
   };
-
   const formatErrorMessage = (error: unknown, fallback: string) =>
     error instanceof Error ? error.message : fallback;
-
   const handlePauseResume = async () => {
     if (!scheduleInfo) return;
-
     setToggling(true);
     try {
       if (scheduleInfo.paused) {
@@ -126,80 +151,11 @@ const Scheduling: React.FC = () => {
       setToggling(false);
     }
   };
-
-  const handleEdit = () => {
-    if (config) {
-      setEditState({
-        executorSchedule: config.cronSchedule,
-        reviewerSchedule: config.reviewerSchedule,
-        isEditing: true,
-      });
-    }
-  };
-
-  const handleCancelEdit = () => {
-    if (config) {
-      setEditState({
-        executorSchedule: config.cronSchedule,
-        reviewerSchedule: config.reviewerSchedule,
-        isEditing: false,
-      });
-    }
-  };
-
-  const handleSaveAndInstall = async () => {
-    if (!config) return;
-
-    setSaving(true);
-    try {
-      await updateConfig({
-        cronSchedule: editState.executorSchedule,
-        reviewerSchedule: editState.reviewerSchedule,
-      });
-
-      let cronInstallFailedMessage = '';
-      try {
-        await triggerInstallCron();
-      } catch (cronError) {
-        cronInstallFailedMessage = formatErrorMessage(
-          cronError,
-          'Failed to reinstall cron schedules',
-        );
-      }
-
-      setEditState((prev) => ({ ...prev, isEditing: false }));
-      syncScheduleState();
-
-      addToast(
-        cronInstallFailedMessage
-          ? {
-              title: 'Schedules Saved (Cron Reinstall Failed)',
-              message: cronInstallFailedMessage,
-              type: 'warning',
-            }
-          : {
-              title: 'Schedule Updated',
-              message: 'Cron schedules have been saved and installed.',
-              type: 'success',
-            },
-      );
-    } catch (error) {
-      addToast({
-        title: 'Save Failed',
-        message: formatErrorMessage(error, 'Failed to save schedules'),
-        type: 'error',
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleJobToggle = async (
     job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner',
     enabled: boolean,
   ) => {
     if (!config) return;
-
     setUpdatingJob(job);
     try {
       if (job === 'executor') {
@@ -215,7 +171,6 @@ const Scheduling: React.FC = () => {
           roadmapScanner: { ...config.roadmapScanner, enabled },
         });
       }
-
       let cronInstallFailedMessage = '';
       try {
         await triggerInstallCron();
@@ -225,9 +180,7 @@ const Scheduling: React.FC = () => {
           'Failed to reinstall cron schedules',
         );
       }
-
       syncScheduleState();
-
       addToast(
         cronInstallFailedMessage
           ? {
@@ -251,15 +204,138 @@ const Scheduling: React.FC = () => {
       setUpdatingJob(null);
     }
   };
-
+  const handleFieldChange = (field: string, value: unknown) => {
+    setEditState((prev) => ({
+      ...prev,
+      form: {
+        ...prev.form,
+        [field]: value,
+      },
+      isDirty: true,
+    }));
+  };
+  const switchToTemplateMode = () => {
+    if (!editState.form) return;
+    const detected = resolveActiveTemplate(
+      editState.form.scheduleBundleId,
+      editState.form.cronSchedule,
+      editState.form.reviewerSchedule,
+      editState.form.qa.schedule,
+      editState.form.audit.schedule,
+      editState.form.roadmapScanner.slicerSchedule || '35 */12 * * *',
+    );
+    setEditState((prev) => ({
+      ...prev,
+      scheduleMode: 'template',
+      selectedTemplateId: detected?.id ?? 'always-on',
+      form: {
+        ...prev.form,
+        scheduleBundleId: detected?.id ?? null,
+      },
+      isDirty: true,
+    }));
+  };
+  const switchToCustomMode = () => {
+    setEditState((prev) => ({
+      ...prev,
+      scheduleMode: 'custom',
+      selectedTemplateId: '',
+      form: {
+        ...prev.form,
+        scheduleBundleId: null,
+      },
+      isDirty: true,
+    }));
+  };
+  const applyTemplate = (tpl: IScheduleTemplate) => {
+    setEditState((prev) => ({
+      ...prev,
+      selectedTemplateId: tpl.id,
+      scheduleMode: 'template',
+      form: {
+        ...prev.form,
+        cronSchedule: tpl.schedules.executor,
+        reviewerSchedule: tpl.schedules.reviewer,
+        scheduleBundleId: tpl.id,
+        qa: { ...prev.form.qa, schedule: tpl.schedules.qa },
+        audit: { ...prev.form.audit, schedule: tpl.schedules.audit },
+        roadmapScanner: {
+          ...prev.form.roadmapScanner,
+          slicerSchedule: tpl.schedules.slicer,
+        },
+      },
+      isDirty: true,
+    }));
+  };
+  const handleSaveAndInstall = async () => {
+    if (!config) return;
+    setSaving(true);
+    try {
+      await updateConfig({
+        cronSchedule: editState.form.cronSchedule,
+        reviewerSchedule: editState.form.reviewerSchedule,
+        scheduleBundleId: editState.scheduleMode === 'template' ? editState.form.scheduleBundleId : null,
+        cronScheduleOffset: editState.form.cronScheduleOffset,
+        schedulingPriority: editState.form.schedulingPriority,
+        qa: {
+          ...config.qa,
+          schedule: editState.form.qa.schedule,
+        },
+        audit: {
+          ...config.audit,
+          schedule: editState.form.audit.schedule,
+        },
+        roadmapScanner: {
+          ...config.roadmapScanner,
+          slicerSchedule: editState.form.roadmapScanner.slicerSchedule || '35 */12 * * *',
+        },
+        queue: {
+          ...config.queue,
+          enabled: editState.form.globalQueueEnabled ?? true,
+        },
+        executorEnabled: config.executorEnabled,
+        reviewerEnabled: config.reviewerEnabled,
+      });
+      let cronInstallFailedMessage = '';
+      try {
+        await triggerInstallCron();
+      } catch (cronError) {
+        cronInstallFailedMessage = formatErrorMessage(
+          cronError,
+          'Failed to reinstall cron schedules',
+        );
+      }
+      setEditState((prev) => ({ ...prev, isDirty: false }));
+      syncScheduleState();
+      addToast(
+        cronInstallFailedMessage
+          ? {
+              title: 'Schedules Saved (Cron Reinstall Failed)',
+              message: cronInstallFailedMessage,
+              type: 'warning',
+            }
+          : {
+              title: 'Schedule Updated',
+              message: 'Cron schedules have been saved and installed.',
+              type: 'success',
+            },
+      );
+    } catch (error) {
+      addToast({
+        title: 'Save Failed',
+        message: formatErrorMessage(error, 'Failed to save schedules'),
+        type: 'error',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
   const renderNextRun = (nextRunStr: string | null | undefined) => {
     if (!nextRunStr) {
       return <span className="text-slate-500">Not scheduled</span>;
     }
-
     const nextRun = new Date(nextRunStr);
     const isSoon = isWithin30Minutes(nextRun);
-
     return (
       <div className="flex items-center space-x-2">
         {isSoon && (
@@ -275,47 +351,6 @@ const Scheduling: React.FC = () => {
       </div>
     );
   };
-
-  const renderScheduleEditor = (
-    label: string,
-    value: string,
-    onChange: (val: string) => void,
-    disabled?: boolean
-  ) => {
-    const presetValue = getPresetValue(value);
-    const isCustom = presetValue === '__custom__';
-
-    return (
-      <div className={`space-y-3 ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
-        <div className="flex items-center space-x-3">
-          <Select
-            label={`${label} Preset`}
-            options={CRON_PRESETS}
-            value={presetValue}
-            onChange={(val) => {
-              if (val !== '__custom__') {
-                onChange(val);
-              }
-            }}
-            className="flex-1"
-          />
-        </div>
-        {isCustom && (
-          <Input
-            label="Custom Cron Expression"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="* * * * *"
-            helperText="Format: minute hour day month weekday (e.g., 0 */2 * * * for every 2 hours)"
-          />
-        )}
-        <div className="text-sm text-slate-400">
-          Human-readable: <span className="text-slate-200">{cronToHuman(value)}</span>
-        </div>
-      </div>
-    );
-  };
-
   const renderDelayNote = (
     jobInfo:
       | {
@@ -328,7 +363,6 @@ const Scheduling: React.FC = () => {
     if (!jobInfo || jobInfo.delayMinutes <= 0) {
       return <div className="text-xs text-slate-500 mt-2">Starts directly at the scheduled time.</div>;
     }
-
     const parts: string[] = [];
     if (jobInfo.balancedDelayMinutes > 0) {
       parts.push(`auto +${jobInfo.balancedDelayMinutes}m`);
@@ -336,15 +370,13 @@ const Scheduling: React.FC = () => {
     if (jobInfo.manualDelayMinutes > 0) {
       parts.push(`manual +${jobInfo.manualDelayMinutes}m`);
     }
-
     return (
       <div className="text-xs text-slate-500 mt-2">
         Delayed after cron fire:
-        <span className="text-slate-300"> {parts.join(' • ')}</span>
+        <span className="text-slate-300"> {parts.join(' - ')}</span>
       </div>
     );
   };
-
   if (scheduleLoading || configLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -352,7 +384,6 @@ const Scheduling: React.FC = () => {
       </div>
     );
   }
-
   if (scheduleError || !scheduleInfo || !config) {
     return (
       <div className="flex flex-col items-center justify-center h-full space-y-4">
@@ -363,7 +394,6 @@ const Scheduling: React.FC = () => {
       </div>
     );
   }
-
   const isPaused = scheduleInfo.paused;
   const statusColor = isPaused ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-green-500/10 text-green-400 border-green-500/20';
   const statusText = isPaused ? 'Paused' : 'Active';
@@ -371,11 +401,10 @@ const Scheduling: React.FC = () => {
     config.scheduleBundleId,
     config.cronSchedule,
     config.reviewerSchedule,
-    config.qa.schedule,
-    config.audit.schedule,
-    config.roadmapScanner.slicerSchedule || '35 */12 * * *',
+    config.qa?.schedule || '45 2,14 * * *',
+    config.audit?.schedule || '50 3 * * 1',
+    config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
   );
-
   const formatScheduleLabel = (
     job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer',
     configuredCronExpr: string,
@@ -384,16 +413,81 @@ const Scheduling: React.FC = () => {
     if (!activeTemplate) {
       return cronToHuman(displayedCronExpr);
     }
-
     if (!isCronEquivalent(activeTemplate.schedules[job], configuredCronExpr)) {
       return cronToHuman(displayedCronExpr);
     }
-
-    return `${activeTemplate.label} • ${activeTemplate.hints[job]}`;
+    return `${activeTemplate.label} - ${activeTemplate.hints[job]}`;
   };
-
+  // Agent definitions
+  interface IAgentInfo {
+    id: string;
+    name: string;
+    description: string;
+    icon: React.ReactNode;
+    enabled: boolean;
+    schedule: string;
+    nextRun: string | null;
+    delayInfo?: {
+      delayMinutes: number;
+      manualDelayMinutes: number;
+      balancedDelayMinutes: number;
+    };
+  }
+  const agents: IAgentInfo[] = [
+    {
+      id: 'executor',
+      name: 'Executor',
+      description: 'Creates implementation PRs from PRDs',
+      icon: <Clock className="h-4 w-4" />,
+      enabled: config?.executorEnabled !== false,
+      schedule: scheduleInfo.executor.schedule,
+      nextRun: scheduleInfo.executor.nextRun,
+      delayInfo: scheduleInfo.executor,
+    },
+    {
+      id: 'reviewer',
+      name: 'Reviewer',
+      description: 'Reviews PRs and manages merge readiness',
+      icon: <Search className="h-4 w-4" />,
+      enabled: config?.reviewerEnabled ?? false,
+      schedule: scheduleInfo.reviewer.schedule,
+      nextRun: scheduleInfo.reviewer.nextRun,
+      delayInfo: scheduleInfo.reviewer,
+    },
+    {
+      id: 'qa',
+      name: 'QA',
+      description: 'Generates and runs quality checks on PRs',
+      icon: <TestTube2 className="h-4 w-4" />,
+      enabled: config?.qa?.enabled ?? false,
+      schedule: scheduleInfo.qa?.schedule,
+      nextRun: scheduleInfo.qa?.nextRun,
+      delayInfo: scheduleInfo.qa,
+    },
+    {
+      id: 'audit',
+      name: 'Auditor',
+      description: 'Runs automated audit reports',
+      icon: <ClipboardList className="h-4 w-4" />,
+      enabled: config?.audit?.enabled ?? false,
+      schedule: scheduleInfo.audit?.schedule,
+      nextRun: scheduleInfo.audit?.nextRun,
+      delayInfo: scheduleInfo.audit,
+    },
+    {
+      id: 'planner',
+      name: 'Planner',
+      description: 'Creates PRDs from audit findings and pending roadmap items',
+      icon: <ClipboardList className="h-4 w-4" />,
+      enabled: config?.roadmapScanner?.enabled ?? false,
+      schedule: scheduleInfo.planner?.schedule || config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+      nextRun: scheduleInfo.planner?.nextRun,
+      delayInfo: scheduleInfo.planner,
+    },
+  ];
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
+      {/* Section A: Global Controls */}
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-slate-100">Scheduling</h1>
         {activeTemplate && (
@@ -407,13 +501,12 @@ const Scheduling: React.FC = () => {
         )}
       </div>
 
-      {/* A. Status Banner */}
       <Card className={`p-6 border-2 ${statusColor}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Clock className="h-8 w-8" />
             <div>
-              <div className="text-sm text-slate-400">Cron Status</div>
+              <div className="text-sm text-slate-400">Automation Status</div>
               <div className="text-2xl font-bold">{statusText}</div>
               <div className="text-sm text-slate-500 mt-1">
                 Automatic balancing spreads registered projects before queueing overlaps.
@@ -441,297 +534,130 @@ const Scheduling: React.FC = () => {
         </div>
       </Card>
 
-      {/* B. Schedule Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Executor Schedule */}
-        <Card className={`p-6 ${config.executorEnabled === false ? 'opacity-50' : ''}`}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-200">Executor Schedule</h3>
-            {config.executorEnabled === false ? (
-              <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">Disabled</span>
-            ) : !editState.isEditing && (
-              <Button variant="ghost" size="sm" onClick={handleEdit}>
-                <Edit className="h-4 w-4 mr-1" />
-                Edit
-              </Button>
-            )}
-          </div>
-
-          {editState.isEditing ? (
-            renderScheduleEditor(
-              'Executor',
-              editState.executorSchedule,
-              (val) => setEditState(prev => ({ ...prev, executorSchedule: val })),
-              config.executorEnabled === false
-            )
-          ) : (
-            <>
-              <div className="space-y-4">
-                {config.executorEnabled !== false ? (
-                  <>
-                    <div>
-                      <div className="text-sm text-slate-400 mb-1">Schedule</div>
-                      <div className="text-lg text-slate-200 font-medium">
-                        {formatScheduleLabel(
-                          'executor',
-                          config.cronSchedule,
-                          scheduleInfo.executor.schedule,
-                        )}
-                      </div>
-                      <div className="text-xs text-slate-500 font-mono mt-1">
-                        {scheduleInfo.executor.schedule}
-                      </div>
-                      {renderDelayNote(scheduleInfo.executor)}
-                    </div>
-                    <div>
-                      <div className="text-sm text-slate-400 mb-1">Next Run</div>
-                      {renderNextRun(scheduleInfo.executor.nextRun)}
-                    </div>
-                    <div className={`flex items-center space-x-2 text-sm ${scheduleInfo.executor.installed ? 'text-green-400' : 'text-amber-400'}`}>
-                      <Check className="h-4 w-4" />
-                      <span>{scheduleInfo.executor.installed ? 'Installed' : 'Not installed'}</span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-slate-500 text-sm">
-                    Executor is disabled in settings.
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </Card>
-
-        {/* Reviewer Schedule */}
-        <Card className={`p-6 ${!config.reviewerEnabled ? 'opacity-50' : ''}`}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-200">Reviewer Schedule</h3>
-            {!config.reviewerEnabled && (
-              <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">Disabled</span>
-            )}
-          </div>
-
-          {editState.isEditing ? (
-            renderScheduleEditor(
-              'Reviewer',
-              editState.reviewerSchedule,
-              (val) => setEditState(prev => ({ ...prev, reviewerSchedule: val })),
-              !config.reviewerEnabled
-            )
-          ) : (
-            <>
-              <div className="space-y-4">
-                {config.reviewerEnabled ? (
-                  <>
-                    <div>
-                      <div className="text-sm text-slate-400 mb-1">Schedule</div>
-                      <div className="text-lg text-slate-200 font-medium">
-                        {formatScheduleLabel(
-                          'reviewer',
-                          config.reviewerSchedule,
-                          scheduleInfo.reviewer.schedule,
-                        )}
-                      </div>
-                      <div className="text-xs text-slate-500 font-mono mt-1">
-                        {scheduleInfo.reviewer.schedule}
-                      </div>
-                      {renderDelayNote(scheduleInfo.reviewer)}
-                    </div>
-                    <div>
-                      <div className="text-sm text-slate-400 mb-1">Next Run</div>
-                      {renderNextRun(scheduleInfo.reviewer.nextRun)}
-                    </div>
-                    <div className={`flex items-center space-x-2 text-sm ${scheduleInfo.reviewer.installed ? 'text-green-400' : 'text-amber-400'}`}>
-                      <Check className="h-4 w-4" />
-                      <span>{scheduleInfo.reviewer.installed ? 'Installed' : 'Not installed'}</span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-slate-500 text-sm">
-                    Automated reviews are disabled. Enable them in Settings to configure the reviewer schedule.
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </Card>
-      </div>
-
-      {/* C. Per-Job Enablement */}
+      {/* Section B: Agents */}
       <Card className="p-6">
-        <h3 className="text-lg font-semibold text-slate-200 mb-4">Job Enablement</h3>
+        <h3 className="text-lg font-semibold text-slate-200 mb-4">Agents</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
-            <div>
-              <div className="text-sm font-medium text-slate-200">Executor</div>
-              <div className="text-xs text-slate-500">Creates implementation PRs from PRDs</div>
+          {agents.map((agent) => (
+            <div
+              key={agent.id}
+              className={`p-4 rounded-lg border ${agent.enabled ? 'border-slate-800' : 'border-slate-800 opacity-50'}`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  {agent.icon}
+                  <h4 className="text-base font-semibold text-slate-200">{agent.name}</h4>
+                </div>
+                <Switch
+                  checked={agent.enabled}
+                  disabled={updatingJob !== null}
+                  aria-label={`Toggle ${agent.name.toLowerCase()} automation`}
+                  onChange={(checked) => handleJobToggle(agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner', checked)}
+                />
+              </div>
+
+              {agent.enabled ? (
+                <div className="space-y-3 mt-3">
+                  <div>
+                    <div className="text-sm text-slate-400">Schedule</div>
+                    <div className="text-sm text-slate-200 font-medium">
+                      {formatScheduleLabel(
+                        agent.id as 'qa' ? 'qa' : agent.id as 'audit' ? 'audit' : agent.id as 'planner' ? 'slicer' : agent.id,
+                        config?.[agent.id === 'qa' ? 'qa' : agent.id === 'audit' ? 'audit' : agent.id === 'planner' ? 'roadmapScanner' : null]?.schedule || agent.id === 'qa'
+                          ? config?.qa?.schedule
+                          : agent.id === 'audit'
+                          ? config?.audit?.schedule
+                          : agent.id === 'planner'
+                          ? config?.roadmapScanner?.slicerSchedule || '35 */12 * * *'
+                          : agent.schedule,
+                      )}
+                    </div>
+                    {renderDelayNote(agent.delayInfo)}
+                    <div>
+                      <div className="text-sm text-slate-400">Next Run</div>
+                      {renderNextRun(agent.nextRun)}
+                    </div>
+                    <div className={`flex items-center space-x-2 text-sm ${agent.enabled ? 'text-green-400' : 'text-amber-400'}`}>
+                      <Check className="h-4 w-4" />
+                      <span>{agent.enabled ? 'Active' : 'Disabled'}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                  <div className="text-slate-500 text-sm">{agent.name} is disabled.</div>
+                )}
+              </div>
             </div>
-            <Switch
-              checked={config.executorEnabled !== false}
-              disabled={updatingJob !== null}
-              aria-label="Toggle executor automation"
-              onChange={(checked) => handleJobToggle('executor', checked)}
-            />
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
-            <div>
-              <div className="text-sm font-medium text-slate-200">Reviewer</div>
-              <div className="text-xs text-slate-500">Reviews PRs and manages merge readiness</div>
-            </div>
-            <Switch
-              checked={config.reviewerEnabled}
-              disabled={updatingJob !== null}
-              aria-label="Toggle reviewer automation"
-              onChange={(checked) => handleJobToggle('reviewer', checked)}
-            />
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
-            <div>
-              <div className="text-sm font-medium text-slate-200">QA</div>
-              <div className="text-xs text-slate-500">Generates and runs quality checks on PRs</div>
-            </div>
-            <Switch
-              checked={config.qa.enabled}
-              disabled={updatingJob !== null}
-              aria-label="Toggle QA automation"
-              onChange={(checked) => handleJobToggle('qa', checked)}
-            />
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
-            <div>
-              <div className="text-sm font-medium text-slate-200">Auditor</div>
-              <div className="text-xs text-slate-500">Runs automated audit reports</div>
-            </div>
-            <Switch
-              checked={config.audit.enabled}
-              disabled={updatingJob !== null}
-              aria-label="Toggle audit automation"
-              onChange={(checked) => handleJobToggle('audit', checked)}
-            />
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40 md:col-span-2">
-            <div>
-              <div className="text-sm font-medium text-slate-200">Planner</div>
-              <div className="text-xs text-slate-500">Creates PRDs from audit findings and pending roadmap items</div>
-            </div>
-            <Switch
-              checked={config.roadmapScanner.enabled}
-              disabled={updatingJob !== null}
-              aria-label="Toggle planner automation"
-              onChange={(checked) => handleJobToggle('planner', checked)}
-            />
-          </div>
+          ))}
         </div>
       </Card>
 
-      {/* D. Background Jobs */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className={`p-6 ${!config.qa.enabled ? 'opacity-50' : ''}`}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
-              <TestTube2 className="h-4 w-4" />
-              QA
-            </h3>
-            {!config.qa.enabled && (
-              <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">Disabled</span>
-            )}
-          </div>
-          {config.qa.enabled ? (
-            <div className="space-y-4">
-              <div>
-                <div className="text-sm text-slate-400 mb-1">Schedule</div>
-                <div className="text-lg text-slate-200 font-medium">
-                  {formatScheduleLabel('qa', config.qa.schedule, scheduleInfo.qa?.schedule ?? config.qa.schedule)}
-                </div>
-                <div className="text-xs text-slate-500 font-mono mt-1">
-                  {scheduleInfo.qa?.schedule ?? config.qa.schedule}
-                </div>
-                {renderDelayNote(scheduleInfo.qa)}
-              </div>
-              <div>
-                <div className="text-sm text-slate-400 mb-1">Next Run</div>
-                {renderNextRun(scheduleInfo.qa?.nextRun)}
-              </div>
-            </div>
-          ) : (
-            <div className="text-slate-500 text-sm">QA is disabled in settings.</div>
-          )}
-        </Card>
-
-        <Card className={`p-6 ${!config.audit.enabled ? 'opacity-50' : ''}`}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
-              <Search className="h-4 w-4" />
-              Auditor
-            </h3>
-            {!config.audit.enabled && (
-              <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">Disabled</span>
-            )}
-          </div>
-          {config.audit.enabled ? (
-            <div className="space-y-4">
-              <div>
-                <div className="text-sm text-slate-400 mb-1">Schedule</div>
-                <div className="text-lg text-slate-200 font-medium">
-                  {formatScheduleLabel(
-                    'audit',
-                    config.audit.schedule,
-                    scheduleInfo.audit?.schedule ?? config.audit.schedule,
-                  )}
-                </div>
-                <div className="text-xs text-slate-500 font-mono mt-1">
-                  {scheduleInfo.audit?.schedule ?? config.audit.schedule}
-                </div>
-                {renderDelayNote(scheduleInfo.audit)}
-              </div>
-              <div>
-                <div className="text-sm text-slate-400 mb-1">Next Run</div>
-                {renderNextRun(scheduleInfo.audit?.nextRun)}
-              </div>
-            </div>
-          ) : (
-            <div className="text-slate-500 text-sm">Audit is disabled in settings.</div>
-          )}
-        </Card>
-
-        <Card className={`p-6 ${!config.roadmapScanner.enabled ? 'opacity-50' : ''}`}>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
-              <ClipboardList className="h-4 w-4" />
-              Planner
-            </h3>
-            {!config.roadmapScanner.enabled && (
-              <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">Disabled</span>
-            )}
-          </div>
-          {config.roadmapScanner.enabled ? (
-            <div className="space-y-4">
-              <div>
-                <div className="text-sm text-slate-400 mb-1">Schedule</div>
-                <div className="text-lg text-slate-200 font-medium">
-                  {formatScheduleLabel(
-                    'slicer',
-                    config.roadmapScanner.slicerSchedule,
-                    scheduleInfo.planner?.schedule ?? config.roadmapScanner.slicerSchedule,
-                  )}
-                </div>
-                <div className="text-xs text-slate-500 font-mono mt-1">
-                  {scheduleInfo.planner?.schedule ?? config.roadmapScanner.slicerSchedule}
-                </div>
-                {renderDelayNote(scheduleInfo.planner)}
-              </div>
-              <div>
-                <div className="text-sm text-slate-400 mb-1">Next Run</div>
-                {renderNextRun(scheduleInfo.planner?.nextRun)}
-              </div>
-            </div>
-          ) : (
-            <div className="text-slate-500 text-sm">Planner uses roadmap scanner scheduling.</div>
-          )}
-        </Card>
+      {/* Section C: Configure Schedules */}
+      <div>
+        <h3 className="text-lg font-semibold text-slate-200 mb-4">Configure Schedules</h3>
+        <p className="text-sm text-slate-400 mb-4">
+          Adjust schedule templates or individual cron expressions for each job type.
+        </p>
       </div>
 
-      {/* E. Active Crontab Entries */}
+      <ScheduleConfig
+        form={editState.form}
+        scheduleMode={editState.scheduleMode}
+        selectedTemplateId={editState.selectedTemplateId}
+        onFieldChange={handleFieldChange}
+        onSwitchToTemplate={switchToTemplateMode}
+        onSwitchToCustom={switchToCustomMode}
+        onApplyTemplate={applyTemplate}
+      />
+
+      <div className="flex justify-end pt-4">
+        <Button
+          variant="ghost"
+          onClick={() => {
+            if (config) {
+              setEditState({
+                form: {
+                  cronSchedule: config.cronSchedule || '5 */3 * * *',
+                  reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
+                  qa: config.qa || { schedule: '45 2,14 * * *', enabled: true },
+                  audit: config.audit || { schedule: '50 3 * * 1', enabled: true },
+                  roadmapScanner: config.roadmapScanner || { slicerSchedule: '35 */12 * * *', enabled: true },
+                  scheduleBundleId: config.scheduleBundleId ?? null,
+                  schedulingPriority: config.schedulingPriority ?? 3,
+                  cronScheduleOffset: config.cronScheduleOffset ?? 0,
+                  globalQueueEnabled: config.queue?.enabled ?? true,
+                },
+                scheduleMode: resolveActiveTemplate(
+                  config.scheduleBundleId,
+                  config.cronSchedule,
+                  config.reviewerSchedule,
+                  config.qa?.schedule || '45 2,14 * * *',
+                  config.audit?.schedule || '50 3 * * 1',
+                  config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+                ) ? 'template' : 'custom',
+                selectedTemplateId: resolveActiveTemplate(
+                  config.scheduleBundleId,
+                  config.cronSchedule,
+                  config.reviewerSchedule,
+                  config.qa?.schedule || '45 2,14 * * *',
+                  config.audit?.schedule || '50 3 * * 1',
+                  config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+                )?.id ?? '',
+                isDirty: false,
+              });
+            }
+          }}
+          disabled={!editState.isDirty}
+        >
+          Reset
+        </Button>
+        <Button onClick={handleSaveAndInstall} loading={saving} disabled={!editState.isDirty}>
+          <Check className="h-4 w-4 mr-2" />
+          Save & Install
+        </Button>
+      </div>
+
+      {/* Section D: Active Crontab Entries */}
       <Card className="p-6">
         <div className="flex items-center space-x-2 mb-4">
           <Calendar className="h-5 w-5 text-slate-400" />
@@ -749,19 +675,6 @@ const Scheduling: React.FC = () => {
           </div>
         )}
       </Card>
-
-      {/* F. Save & Install Button */}
-      {editState.isEditing && (
-        <div className="flex items-center justify-end space-x-4 pt-4 border-t border-slate-800">
-          <Button variant="ghost" onClick={handleCancelEdit}>
-            Cancel
-          </Button>
-          <Button onClick={handleSaveAndInstall} loading={saving}>
-            <Check className="h-4 w-4 mr-2" />
-            Save & Install
-          </Button>
-        </div>
-      )}
     </div>
   );
 };

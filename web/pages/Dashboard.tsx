@@ -1,22 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Activity,
   CheckCircle,
   Clock,
   ArrowRight,
-  AlertCircle,
   Calendar,
-  XCircle,
-  TestTube2,
-  Search,
-  ClipboardList,
 } from 'lucide-react';
 import Card from '../components/ui/Card';
-import Button from '../components/ui/Button';
-import { useApi, fetchStatus, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, useStatusStream, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
+import { useApi, fetchScheduleInfo, fetchBoardStatus, BOARD_COLUMNS, IBoardStatus, BoardColumnName, triggerCancel, triggerClearLock } from '../api';
 import { useStore } from '../store/useStore';
-import type { IStatusSnapshot } from '@shared/types';
+import AgentStatusBar from '../components/dashboard/AgentStatusBar';
 
 const BOARD_COLUMN_COLORS: Record<BoardColumnName, string> = {
   'Draft':       'text-slate-400  bg-slate-500/10  ring-slate-500/20',
@@ -30,9 +24,8 @@ const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [cancellingProcess, setCancellingProcess] = useState<'run' | 'review' | null>(null);
   const [clearingLock, setClearingLock] = useState(false);
-  const [streamedStatus, setStreamedStatus] = useState<IStatusSnapshot | null>(null);
-  const { setProjectName, addToast, selectedProjectId, globalModeLoading } = useStore();
-  const { data: status, loading, error, refetch } = useApi(fetchStatus, [selectedProjectId], { enabled: !globalModeLoading });
+  const { addToast, selectedProjectId, globalModeLoading } = useStore();
+  const currentStatus = useStore((s) => s.status);
   const { data: scheduleInfo } = useApi(fetchScheduleInfo, [selectedProjectId], { enabled: !globalModeLoading });
   const { data: boardStatus } = useApi<IBoardStatus | null>(
     () => fetchBoardStatus().catch(() => null),
@@ -40,57 +33,12 @@ const Dashboard: React.FC = () => {
     { enabled: !globalModeLoading },
   );
 
-  // Subscribe to SSE for real-time updates (primary path)
-  useStatusStream((snapshot) => {
-    setStreamedStatus(snapshot);
-  }, [selectedProjectId, globalModeLoading], { enabled: !globalModeLoading });
-
-  // Use streamed status when available, fall back to polled status
-  const currentStatus = streamedStatus || status;
-
-  // Update project name when status loads
-  React.useEffect(() => {
-    if (currentStatus?.projectName) {
-      setProjectName(currentStatus.projectName);
-    }
-  }, [currentStatus, setProjectName]);
-
-  // Poll for status updates as fallback (30s interval - SSE is the fast path)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      refetch();
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [refetch]);
-
-  // Refetch on window focus
-  useEffect(() => {
-    const onFocus = () => refetch();
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [refetch]);
-
-  if (globalModeLoading || loading) {
+  if (globalModeLoading || !currentStatus) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-slate-400">Loading...</div>
       </div>
     );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full space-y-4">
-        <AlertCircle className="h-12 w-12 text-red-400" />
-        <div className="text-slate-300">Failed to load dashboard data</div>
-        <div className="text-sm text-slate-500">{error.message}</div>
-        <Button onClick={() => refetch()}>Retry</Button>
-      </div>
-    );
-  }
-
-  if (!currentStatus) {
-    return null;
   }
 
   const openPrs = currentStatus.prs.length;
@@ -99,12 +47,6 @@ const Dashboard: React.FC = () => {
   // Board-derived stats
   const boardReadyCount = boardStatus?.columns['Ready']?.length ?? 0;
   const boardInProgressCount = boardStatus?.columns['In Progress']?.length ?? 0;
-
-  const executorProcess = currentStatus.processes.find(p => p.name === 'executor');
-  const reviewerProcess = currentStatus.processes.find(p => p.name === 'reviewer');
-  const qaProcess = currentStatus.processes.find(p => p.name === 'qa');
-  const auditProcess = currentStatus.processes.find(p => p.name === 'audit');
-  const plannerProcess = currentStatus.processes.find(p => p.name === 'planner');
 
   const handleCancelProcess = async (type: 'run' | 'review') => {
     setCancellingProcess(type);
@@ -124,7 +66,7 @@ const Dashboard: React.FC = () => {
       });
     } finally {
       setCancellingProcess(null);
-      refetch();
+      // No refetch needed - status auto-updates via SSE
     }
   };
 
@@ -137,7 +79,7 @@ const Dashboard: React.FC = () => {
         message: 'Stale executor state removed',
         type: 'success',
       });
-      refetch();
+      // No refetch needed - status auto-updates via SSE
     } catch (err) {
       addToast({
         title: 'Clear Failed',
@@ -159,13 +101,38 @@ const Dashboard: React.FC = () => {
       const diffMins = Math.floor(diffMs / 60000);
 
       if (diffMins < 0) return 'Running now...';
-      if (diffMins < 60) return `In ${diffMins} min`;
-      if (diffMins < 1440) return `In ${Math.floor(diffMins / 60)} hr${diffMins >= 120 ? 's' : ''}`;
-      return `In ${Math.floor(diffMins / 1440)} day${diffMins >= 2880 ? 's' : ''}`;
+      if (diffMins < 60) return `in ${diffMins} min`;
+      if (diffMins < 1440) return `in ${Math.floor(diffMins / 60)} hr${diffMins >= 120 ? 's' : ''}`;
+      return `in ${Math.floor(diffMins / 1440)} day${diffMins >= 2880 ? 's' : ''}`;
     } catch {
       return 'Unknown';
     }
   };
+
+  // Get next automation run info
+  const getNextAutomation = (): { agent: string; time: string } | null => {
+    if (scheduleInfo?.paused) return null;
+
+    const candidates: { agent: string; nextRun: string | null }[] = [
+      { agent: 'Executor', nextRun: scheduleInfo?.executor.nextRun ?? null },
+      { agent: 'Reviewer', nextRun: scheduleInfo?.reviewer.nextRun ?? null },
+      { agent: 'QA', nextRun: scheduleInfo?.qa?.nextRun ?? null },
+      { agent: 'Auditor', nextRun: scheduleInfo?.audit?.nextRun ?? null },
+      { agent: 'Planner', nextRun: scheduleInfo?.planner?.nextRun ?? null },
+    ];
+
+    let earliest: { agent: string; nextRun: string | null } | null = null;
+    for (const c of candidates) {
+      if (!c.nextRun) continue;
+      if (!earliest || new Date(c.nextRun) < new Date(earliest.nextRun!)) {
+        earliest = c;
+      }
+    }
+
+    return earliest ? { agent: earliest.agent, time: formatNextRun(earliest.nextRun) } : null;
+  };
+
+  const nextAutomation = getNextAutomation();
 
   return (
     <div className="space-y-6">
@@ -215,232 +182,68 @@ const Dashboard: React.FC = () => {
         <Card className="p-5">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-sm font-medium text-slate-500">Cron Status</p>
+              <p className="text-sm font-medium text-slate-500">Automation</p>
               <h3 className="text-3xl font-bold text-slate-100 mt-1">
-                {currentStatus.crontab.installed ? 'Active' : 'Inactive'}
+                {scheduleInfo?.paused ? 'Paused' : (currentStatus.crontab.installed ? 'Active' : 'Inactive')}
               </h3>
             </div>
-            <div className={`p-2 rounded-lg ${currentStatus.crontab.installed ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-700/50 text-slate-500'}`}>
+            <div className={`p-2 rounded-lg ${
+              scheduleInfo?.paused
+                ? 'bg-amber-500/10 text-amber-400'
+                : (currentStatus.crontab.installed ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-700/50 text-slate-500')
+            }`}>
               <Calendar className="h-5 w-5" />
             </div>
           </div>
           <p className="text-xs text-slate-500 mt-4">
-            {currentStatus.crontab.installed
-              ? `${currentStatus.crontab.entries.length} entr${currentStatus.crontab.entries.length === 1 ? 'y' : 'ies'} installed`
-              : 'No crontab entries'
+            {scheduleInfo?.paused
+              ? 'All schedules paused'
+              : (currentStatus.crontab.installed
+                ? `${currentStatus.crontab.entries.length} entr${currentStatus.crontab.entries.length === 1 ? 'y' : 'ies'} installed`
+                : 'No crontab entries')
             }
           </p>
         </Card>
       </div>
 
-      {/* System Status */}
-      <Card className="p-6">
-        <h2 className="text-base font-semibold text-slate-200 mb-4">System Status</h2>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <p className="text-xs font-medium text-slate-500 uppercase mb-1">Project</p>
-            <p className="text-sm text-slate-200">{currentStatus.projectName}</p>
-          </div>
-          <div>
-            <p className="text-xs font-medium text-slate-500 uppercase mb-1">Provider</p>
-            <p className="text-sm text-slate-200 capitalize">{currentStatus.config.provider}</p>
-          </div>
-          <div>
-            <p className="text-xs font-medium text-slate-500 uppercase mb-1">Last Updated</p>
-            <p className="text-sm text-slate-200">{new Date(currentStatus.timestamp).toLocaleString()}</p>
-          </div>
+      {/* Agent Status Bar - Compact process status */}
+      <Card className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold text-slate-200">Agents</h2>
+          <button
+            onClick={() => navigate('/logs')}
+            className="text-xs text-slate-400 hover:text-slate-300 transition-colors"
+          >
+            View logs
+          </button>
         </div>
+        <AgentStatusBar
+          processes={currentStatus.processes}
+          activePrd={currentStatus.activePrd}
+          onCancelProcess={handleCancelProcess}
+          onForceClear={handleForceClear}
+          onViewLog={() => navigate('/logs')}
+          cancellingProcess={cancellingProcess}
+          clearingLock={clearingLock}
+        />
       </Card>
 
-      {/* Bottom Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-        {/* Process Status */}
-        <Card className="p-6">
-          <h3 className="text-base font-semibold text-slate-200 mb-4">Process Status</h3>
-          <div className="space-y-4">
-             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                <div className="flex items-center space-x-3">
-                  <div className={`h-2.5 w-2.5 rounded-full ${executorProcess?.running ? 'bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-slate-700'}`}></div>
-                  <div>
-                    <div className={`font-medium ${executorProcess?.running ? 'text-slate-200' : 'text-slate-400'}`}>Executor</div>
-                    <div className="text-xs text-slate-500">
-                      {executorProcess?.running
-                        ? `PID: ${executorProcess.pid} • ${currentStatus.activePrd ?? 'Running'}`
-                        : 'Idle'
-                      }
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {executorProcess?.running && (
-                    <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300" onClick={() => handleCancelProcess('run')} disabled={cancellingProcess === 'run'}>
-                      <XCircle className="h-4 w-4 mr-1" />
-                      {cancellingProcess === 'run' ? 'Stopping...' : 'Stop'}
-                    </Button>
-                  )}
-                  {!executorProcess?.running && currentStatus.activePrd && (
-                    <Button size="sm" variant="ghost" className="text-amber-400 hover:text-amber-300" onClick={handleForceClear} disabled={clearingLock}>
-                      {clearingLock ? 'Clearing...' : 'Force Clear'}
-                    </Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>
-                </div>
-             </div>
-             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                <div className="flex items-center space-x-3">
-                  <div className={`h-2.5 w-2.5 rounded-full ${reviewerProcess?.running ? 'bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-slate-700'}`}></div>
-                  <div>
-                    <div className={`font-medium ${reviewerProcess?.running ? 'text-slate-200' : 'text-slate-400'}`}>Reviewer</div>
-                    <div className="text-xs text-slate-500">
-                      {reviewerProcess?.running
-                        ? `PID: ${reviewerProcess.pid} • Running`
-                        : 'Idle'
-                      }
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {reviewerProcess?.running && (
-                    <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300" onClick={() => handleCancelProcess('review')} disabled={cancellingProcess === 'review'}>
-                      <XCircle className="h-4 w-4 mr-1" />
-                      {cancellingProcess === 'review' ? 'Stopping...' : 'Stop'}
-                    </Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => navigate('/logs')} disabled={!reviewerProcess?.running}>View Log</Button>
-                </div>
-             </div>
-             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                <div className="flex items-center space-x-3">
-                  <div className={`h-2.5 w-2.5 rounded-full ${qaProcess?.running ? 'bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-slate-700'}`}></div>
-                  <div>
-                    <div className={`font-medium ${qaProcess?.running ? 'text-slate-200' : 'text-slate-400'}`}>QA</div>
-                    <div className="text-xs text-slate-500">
-                      {qaProcess?.running
-                        ? `PID: ${qaProcess.pid} • Running`
-                        : 'Idle'
-                      }
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>
-                </div>
-             </div>
-             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                <div className="flex items-center space-x-3">
-                  <div className={`h-2.5 w-2.5 rounded-full ${auditProcess?.running ? 'bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-slate-700'}`}></div>
-                  <div>
-                    <div className={`font-medium ${auditProcess?.running ? 'text-slate-200' : 'text-slate-400'}`}>Auditor</div>
-                    <div className="text-xs text-slate-500">
-                      {auditProcess?.running
-                        ? `PID: ${auditProcess.pid} • Running`
-                        : 'Idle'
-                      }
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>
-                </div>
-             </div>
-             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                <div className="flex items-center space-x-3">
-                  <div className={`h-2.5 w-2.5 rounded-full ${plannerProcess?.running ? 'bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-slate-700'}`}></div>
-                  <div>
-                    <div className={`font-medium ${plannerProcess?.running ? 'text-slate-200' : 'text-slate-400'}`}>Planner</div>
-                    <div className="text-xs text-slate-500">
-                      {plannerProcess?.running
-                        ? `PID: ${plannerProcess.pid} • Writing PRDs`
-                        : 'Idle'
-                      }
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>
-                </div>
-             </div>
+      {/* Next Automation Teaser */}
+      {nextAutomation && (
+        <div className="flex items-center justify-between px-4 py-3 bg-slate-900/50 rounded-lg border border-slate-800">
+          <div className="flex items-center gap-2 text-sm text-slate-400">
+            <span>Next automation:</span>
+            <span className="text-slate-200 font-medium">{nextAutomation.agent}</span>
+            <span>{nextAutomation.time}</span>
           </div>
-        </Card>
-
-        {/* Scheduling Summary */}
-        <Card className="p-6">
-           <div className="flex items-center justify-between mb-4">
-             <h3 className="text-base font-semibold text-slate-200">Scheduling</h3>
-             <button onClick={() => navigate('/scheduling')} className="text-sm text-indigo-400 hover:text-indigo-300 flex items-center transition-colors">
-               Manage Schedules <ArrowRight className="ml-1 h-3 w-3" />
-             </button>
-           </div>
-           <div className="space-y-3">
-             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                <div className="flex items-center space-x-3">
-                  <div className={`p-1.5 rounded-md ${scheduleInfo?.executor.installed ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-800 text-slate-500'}`}>
-                    <Calendar className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <div className={`text-sm font-medium ${scheduleInfo?.executor.installed ? 'text-slate-200' : 'text-slate-500'}`}>Executor</div>
-                    <div className="text-xs text-slate-500">
-                      {scheduleInfo?.paused ? 'Paused' : formatNextRun(scheduleInfo?.executor.nextRun)}
-                    </div>
-                  </div>
-                </div>
-             </div>
-             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                <div className="flex items-center space-x-3">
-                  <div className={`p-1.5 rounded-md ${scheduleInfo?.reviewer.installed ? 'bg-purple-500/10 text-purple-400' : 'bg-slate-800 text-slate-500'}`}>
-                    <Clock className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <div className={`text-sm font-medium ${scheduleInfo?.reviewer.installed ? 'text-slate-200' : 'text-slate-500'}`}>Reviewer</div>
-                    <div className="text-xs text-slate-500">
-                      {scheduleInfo?.paused ? 'Paused' : formatNextRun(scheduleInfo?.reviewer.nextRun)}
-                    </div>
-                  </div>
-                </div>
-             </div>
-             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                <div className="flex items-center space-x-3">
-                  <div className={`p-1.5 rounded-md ${scheduleInfo?.qa?.installed ? 'bg-green-500/10 text-green-400' : 'bg-slate-800 text-slate-500'}`}>
-                    <TestTube2 className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <div className={`text-sm font-medium ${scheduleInfo?.qa?.installed ? 'text-slate-200' : 'text-slate-500'}`}>QA</div>
-                    <div className="text-xs text-slate-500">
-                      {scheduleInfo?.paused ? 'Paused' : formatNextRun(scheduleInfo?.qa?.nextRun)}
-                    </div>
-                  </div>
-                </div>
-             </div>
-             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                <div className="flex items-center space-x-3">
-                  <div className={`p-1.5 rounded-md ${scheduleInfo?.audit?.installed ? 'bg-amber-500/10 text-amber-400' : 'bg-slate-800 text-slate-500'}`}>
-                    <Search className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <div className={`text-sm font-medium ${scheduleInfo?.audit?.installed ? 'text-slate-200' : 'text-slate-500'}`}>Auditor</div>
-                    <div className="text-xs text-slate-500">
-                      {scheduleInfo?.paused ? 'Paused' : formatNextRun(scheduleInfo?.audit?.nextRun)}
-                    </div>
-                  </div>
-                </div>
-             </div>
-             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                <div className="flex items-center space-x-3">
-                  <div className={`p-1.5 rounded-md ${scheduleInfo?.planner?.installed ? 'bg-cyan-500/10 text-cyan-400' : 'bg-slate-800 text-slate-500'}`}>
-                    <ClipboardList className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <div className={`text-sm font-medium ${scheduleInfo?.planner?.installed ? 'text-slate-200' : 'text-slate-500'}`}>Planner</div>
-                    <div className="text-xs text-slate-500">
-                      {scheduleInfo?.paused ? 'Paused' : formatNextRun(scheduleInfo?.planner?.nextRun)}
-                    </div>
-                  </div>
-                </div>
-             </div>
-           </div>
-        </Card>
-      </div>
+          <button
+            onClick={() => navigate('/scheduling')}
+            className="text-sm text-indigo-400 hover:text-indigo-300 flex items-center transition-colors"
+          >
+            Manage Schedules <ArrowRight className="ml-1 h-3 w-3" />
+          </button>
+        </div>
+      )}
 
       {/* Board Widget */}
       <div className="mt-6">

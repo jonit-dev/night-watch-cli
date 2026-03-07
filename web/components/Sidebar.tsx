@@ -26,14 +26,13 @@ const Sidebar: React.FC = () => {
   const openPrCount = prs?.length ?? 0;
 
   const navItems = useMemo(() => [
-    { icon: Home, label: 'Dashboard', path: '/' },
-    { icon: Kanban, label: 'Board', path: '/board' },
+    { icon: Home, label: 'Dashboard', path: '/', section: 'Overview' },
+    { icon: Terminal, label: 'Logs', path: '/logs' },
+    { icon: Kanban, label: 'Board', path: '/board', section: 'Work' },
     { icon: GitPullRequest, label: 'Pull Requests', path: '/prs', badge: openPrCount },
     { icon: Map, label: 'Roadmap', path: '/roadmap' },
-    { icon: Calendar, label: 'Scheduling', path: '/scheduling' },
-    { icon: Terminal, label: 'Logs', path: '/logs' },
-    // { icon: Users, label: 'Agents', path: '/agents' },
-    { icon: Settings, label: 'Settings', path: '/settings' },
+    { icon: Calendar, label: 'Automation', path: '/scheduling', section: 'Automation' },
+    { icon: Settings, label: 'Settings', path: '/settings', section: 'Config' },
   ], [openPrCount]);
 
   return (
@@ -86,11 +85,11 @@ const Sidebar: React.FC = () => {
         <ul className="space-y-1.5 px-4">
           {navItems.map((item) => (
             <React.Fragment key={item.path}>
-              {/* {item.path === '/agents' && !collapsed && (
-                <li className="pt-3 pb-1 px-3.5">
-                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Team</span>
+              {item.section && !collapsed && (
+                <li className="text-[10px] font-bold text-slate-600 uppercase tracking-widest px-3.5 pt-4 pb-1">
+                  {item.section}
                 </li>
-              )} */}
+              )}
               <li>
                 <NavLink
                   to={item.path}
