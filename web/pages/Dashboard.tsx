@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { useApi, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, triggerRun, triggerReview, triggerQa, triggerAudit, triggerPlanner, BOARD_COLUMNS, IBoardStatus, BoardColumnName, fetchStatus } from '../api';
+import { useApi, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, triggerRun, triggerReview, triggerQa, triggerAudit, triggerAnalytics, triggerPlanner, BOARD_COLUMNS, IBoardStatus, BoardColumnName, fetchStatus } from '../api';
 import { useStore } from '../store/useStore';
 
 const BOARD_COLUMN_COLORS: Record<BoardColumnName, string> = {
@@ -78,6 +78,7 @@ const Dashboard: React.FC = () => {
   const qaProcess = currentStatus.processes.find(p => p.name === 'qa');
   const auditProcess = currentStatus.processes.find(p => p.name === 'audit');
   const plannerProcess = currentStatus.processes.find(p => p.name === 'planner');
+  const analyticsProcess = currentStatus.processes.find(p => p.name === 'analytics');
 
   const handleCancelProcess = async (type: 'run' | 'review') => {
     setCancellingProcess(type);
@@ -340,6 +341,22 @@ const Dashboard: React.FC = () => {
                       <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('Planner', triggerPlanner)} disabled={startingProcess === 'Planner'}>
                         <Play className="h-4 w-4 mr-1" />
                         {startingProcess === 'Planner' ? 'Starting...' : 'Run'}
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>Log</Button>
+                  </>
+                ),
+              },
+              {
+                label: 'Analytics',
+                process: analyticsProcess,
+                subtitle: analyticsProcess?.running ? `PID: ${analyticsProcess.pid} • Analyzing` : 'Idle',
+                actions: (
+                  <>
+                    {!analyticsProcess?.running && (
+                      <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('Analytics', triggerAnalytics)} disabled={startingProcess === 'Analytics'}>
+                        <Play className="h-4 w-4 mr-1" />
+                        {startingProcess === 'Analytics' ? 'Starting...' : 'Run'}
                       </Button>
                     )}
                     <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>Log</Button>

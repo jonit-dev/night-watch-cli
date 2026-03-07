@@ -6,14 +6,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import {
-  INightWatchConfig,
-  IQueueConfig,
-  JobType,
-  Provider,
-} from './types.js';
+import { INightWatchConfig, IQueueConfig, JobType, Provider } from './types.js';
 import {
   CONFIG_FILE_NAME,
+  DEFAULT_ANALYTICS,
   DEFAULT_AUDIT,
   DEFAULT_AUTO_MERGE,
   DEFAULT_AUTO_MERGE_METHOD,
@@ -92,6 +88,7 @@ export function getDefaultConfig(): INightWatchConfig {
     claudeModel: DEFAULT_CLAUDE_MODEL,
     qa: { ...DEFAULT_QA },
     audit: { ...DEFAULT_AUDIT },
+    analytics: { ...DEFAULT_ANALYTICS },
     jobProviders: { ...DEFAULT_JOB_PROVIDERS },
     queue: { ...DEFAULT_QUEUE },
   };
@@ -160,7 +157,8 @@ function mergeConfigLayer(base: INightWatchConfig, layer: Partial<INightWatchCon
       _key === 'providerEnv' ||
       _key === 'boardProvider' ||
       _key === 'qa' ||
-      _key === 'audit'
+      _key === 'audit' ||
+      _key === 'analytics'
     ) {
       (base as unknown as Record<string, unknown>)[_key] = {
         ...(base[_key] as object),

@@ -5,6 +5,7 @@
 
 import {
   ClaudeModel,
+  IAnalyticsConfig,
   IAuditConfig,
   IJobProviders,
   INightWatchConfig,
@@ -17,6 +18,7 @@ import {
   QaArtifacts,
 } from './types.js';
 import {
+  DEFAULT_ANALYTICS,
   DEFAULT_AUDIT,
   DEFAULT_QA,
   DEFAULT_QUEUE,
@@ -38,9 +40,7 @@ function validateMergeMethod(value: string) {
   return VALID_MERGE_METHODS.includes(value as never) ? value : null;
 }
 
-function applyRoadmapEnv(
-  base: IRoadmapScannerConfig,
-): IRoadmapScannerConfig {
+function applyRoadmapEnv(base: IRoadmapScannerConfig): IRoadmapScannerConfig {
   return { ...base };
 }
 
@@ -124,7 +124,9 @@ export function buildEnvOverrideConfig(
       if (parsed && typeof parsed === 'object') {
         env.notifications = parsed as INotificationConfig;
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   // Roadmap scanner env vars (mutated incrementally)
@@ -219,7 +221,9 @@ export function buildEnvOverrideConfig(
     if (v !== null) env.qa = { ...qaBase(), autoInstallPlaywright: v };
   }
   if (process.env.NW_QA_BRANCH_PATTERNS) {
-    const patterns = process.env.NW_QA_BRANCH_PATTERNS.split(',').map((s) => s.trim()).filter(Boolean);
+    const patterns = process.env.NW_QA_BRANCH_PATTERNS.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (patterns.length > 0) env.qa = { ...qaBase(), branchPatterns: patterns };
   }
 
@@ -236,6 +240,26 @@ export function buildEnvOverrideConfig(
   if (process.env.NW_AUDIT_MAX_RUNTIME) {
     const v = parseInt(process.env.NW_AUDIT_MAX_RUNTIME, 10);
     if (!isNaN(v) && v > 0) env.audit = { ...auditBase(), maxRuntime: v };
+  }
+
+  // Analytics env vars
+  const analyticsBase = (): IAnalyticsConfig =>
+    env.analytics ?? fileConfig?.analytics ?? DEFAULT_ANALYTICS;
+
+  if (process.env.NW_ANALYTICS_ENABLED) {
+    const v = parseBoolean(process.env.NW_ANALYTICS_ENABLED);
+    if (v !== null) env.analytics = { ...analyticsBase(), enabled: v };
+  }
+  if (process.env.NW_ANALYTICS_SCHEDULE) {
+    env.analytics = { ...analyticsBase(), schedule: process.env.NW_ANALYTICS_SCHEDULE };
+  }
+  if (process.env.NW_ANALYTICS_MAX_RUNTIME) {
+    const v = parseInt(process.env.NW_ANALYTICS_MAX_RUNTIME, 10);
+    if (!isNaN(v) && v > 0) env.analytics = { ...analyticsBase(), maxRuntime: v };
+  }
+  if (process.env.NW_ANALYTICS_LOOKBACK_DAYS) {
+    const v = parseInt(process.env.NW_ANALYTICS_LOOKBACK_DAYS, 10);
+    if (!isNaN(v) && v > 0) env.analytics = { ...analyticsBase(), lookbackDays: v };
   }
 
   // Per-job provider overrides (NW_JOB_PROVIDER_<JOBTYPE>)
@@ -278,7 +302,9 @@ export function buildEnvOverrideConfig(
         }
         env.queue = { ...base, priority };
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   return env;
