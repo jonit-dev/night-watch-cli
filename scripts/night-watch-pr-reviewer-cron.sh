@@ -54,18 +54,17 @@ if [ "${REVIEWER_RETRY_DELAY}" -gt 300 ]; then
   REVIEWER_RETRY_DELAY="300"
 fi
 
-# Ensure NVM / Node / Claude are on PATH
-export NVM_DIR="${HOME}/.nvm"
-[ -s "${NVM_DIR}/nvm.sh" ] && . "${NVM_DIR}/nvm.sh"
-
-# NOTE: Environment variables should be set by the caller (Node.js CLI).
-# The .env.night-watch sourcing has been removed - config is now injected via env vars.
-
 mkdir -p "${LOG_DIR}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
+
+# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
+if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
+  echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
+  exit 127
+fi
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 PROVIDER_MODEL_DISPLAY=$(resolve_provider_model_display "${PROVIDER_CMD}" "${PROVIDER_LABEL}")
 GLOBAL_LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_RUNTIME_KEY}.lock"

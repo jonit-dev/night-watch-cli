@@ -2,6 +2,78 @@
 # Night Watch helper functions — shared by cron scripts.
 # Source this file, don't execute it directly.
 
+# ── Provider PATH resolution ─────────────────────────────────────────────────
+
+# Ensure AI provider CLI (claude, codex, etc.) and Node.js tooling are
+# discoverable on PATH.  Sources common Node version managers and probes
+# well-known bin directories so the script works regardless of how the
+# provider was installed (nvm, fnm, volta, npm global, Homebrew, etc.).
+# Returns 0 if the provider is found, 1 otherwise.
+ensure_provider_on_path() {
+  local provider="${1:-claude}"
+
+  # Already available — nothing to do
+  if command -v "${provider}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  # ── Node version managers ──────────────────────────────────────────────
+  # nvm
+  export NVM_DIR="${NVM_DIR:-${HOME}/.nvm}"
+  if [ -s "${NVM_DIR}/nvm.sh" ]; then
+    # shellcheck source=/dev/null
+    . "${NVM_DIR}/nvm.sh"
+    if command -v "${provider}" >/dev/null 2>&1; then return 0; fi
+  fi
+
+  # fnm (Fast Node Manager)
+  if command -v fnm >/dev/null 2>&1; then
+    eval "$(fnm env 2>/dev/null)" || true
+  elif [ -x "${HOME}/.local/share/fnm/fnm" ]; then
+    export PATH="${HOME}/.local/share/fnm:${PATH}"
+    eval "$(fnm env 2>/dev/null)" || true
+  fi
+  if command -v "${provider}" >/dev/null 2>&1; then return 0; fi
+
+  # volta
+  if [ -d "${HOME}/.volta/bin" ]; then
+    export PATH="${HOME}/.volta/bin:${PATH}"
+    if command -v "${provider}" >/dev/null 2>&1; then return 0; fi
+  fi
+
+  # mise / asdf
+  if [ -d "${HOME}/.local/share/mise/shims" ]; then
+    export PATH="${HOME}/.local/share/mise/shims:${PATH}"
+    if command -v "${provider}" >/dev/null 2>&1; then return 0; fi
+  fi
+  if [ -d "${HOME}/.asdf/shims" ]; then
+    export PATH="${HOME}/.asdf/shims:${PATH}"
+    if command -v "${provider}" >/dev/null 2>&1; then return 0; fi
+  fi
+
+  # ── Well-known bin directories ─────────────────────────────────────────
+  local candidate_dirs=(
+    "${HOME}/.npm-global/bin"
+    "${HOME}/.local/bin"
+    "${HOME}/.claude/bin"
+    "/usr/local/bin"
+    "${HOME}/.yarn/bin"
+    "${HOME}/.bun/bin"
+    "${HOME}/.local/share/pnpm"
+    "/home/linuxbrew/.linuxbrew/bin"
+    "/opt/homebrew/bin"
+  )
+
+  for dir in "${candidate_dirs[@]}"; do
+    if [ -x "${dir}/${provider}" ]; then
+      export PATH="${dir}:${PATH}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 # ── Provider validation ───────────────────────────────────────────────────────
 
 # Validates that the provider command is supported.

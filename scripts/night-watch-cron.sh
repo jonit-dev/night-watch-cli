@@ -34,19 +34,18 @@ EFFECTIVE_PROVIDER_LABEL="${PROVIDER_LABEL}"
 BRANCH_PREFIX="${NW_BRANCH_PREFIX:-night-watch}"
 SCRIPT_START_TIME=$(date +%s)
 
-# Ensure NVM / Node / Claude are on PATH
-export NVM_DIR="${HOME}/.nvm"
-[ -s "${NVM_DIR}/nvm.sh" ] && . "${NVM_DIR}/nvm.sh"
-
-# NOTE: Environment variables should be set by the caller (Node.js CLI).
-# The .env.night-watch sourcing has been removed - config is now injected via env vars.
-
 mkdir -p "${LOG_DIR}"
 
 # Load shared helpers
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
+
+# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
+if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
+  echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
+  exit 127
+fi
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 # NOTE: Lock file path must match executorLockPath() in src/utils/status-data.ts
 LOCK_FILE="/tmp/night-watch-${PROJECT_RUNTIME_KEY}.lock"
