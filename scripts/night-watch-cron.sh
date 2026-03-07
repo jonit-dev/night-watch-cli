@@ -178,9 +178,9 @@ if [ "${NW_BOARD_ENABLED:-}" = "true" ]; then
     fi
     if [ -z "${ISSUE_JSON}" ]; then
       if [ "${BOARD_DISCOVERY_STATUS}" -eq 2 ]; then
-        log "INFO: Ready board issues were found, but all are in cooldown; falling back to filesystem PRDs"
+        log "INFO: Ready board issues were found, but all are in cooldown; skipping this run"
       else
-        log "INFO: No Ready board issues found; falling back to filesystem PRDs"
+        log "INFO: No Ready board issues found; skipping this run"
       fi
     else
       ISSUE_NUMBER=$(printf '%s' "${ISSUE_JSON}" | jq -r '.number // empty' 2>/dev/null || true)
@@ -205,6 +205,11 @@ if [ "${NW_BOARD_ENABLED:-}" = "true" ]; then
 fi
 
 if [ -z "${ISSUE_NUMBER}" ]; then
+  if [ "${NW_BOARD_ENABLED:-}" = "true" ]; then
+    log "SKIP: Board mode active but no eligible Ready issues found"
+    emit_result "skip_no_eligible_prd"
+    exit 0
+  fi
   # Filesystem mode: scan PRD directory
   ELIGIBLE_PRD=$(find_eligible_prd "${PRD_DIR}" "${MAX_RUNTIME}" "${PROJECT_DIR}")
   if [ -z "${ELIGIBLE_PRD}" ]; then
@@ -698,14 +703,20 @@ elif [ ${EXIT_CODE} -eq 124 ]; then
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" timeout --exit-code 124 2>/dev/null || true
   emit_result "timeout" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
 else
+  PROVIDER_ERROR_DETAIL=$(latest_failure_detail "${LOG_FILE}")
   log "FAIL: Night watch exited with code ${EXIT_CODE} while processing ${ELIGIBLE_PRD}"
   if [ -n "${ISSUE_NUMBER}" ]; then
     "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
-    "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
-      --body "Execution failed with exit code ${EXIT_CODE} (via ${EFFECTIVE_PROVIDER_LABEL}). Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
+    FAILURE_COMMENT="Execution failed with exit code ${EXIT_CODE} after ${TOTAL_ELAPSED}s (via ${EFFECTIVE_PROVIDER_LABEL}). Moved back to Ready for retry."
+    if [ "${TOTAL_ELAPSED}" -gt 1800 ]; then
+      FAILURE_COMMENT="${FAILURE_COMMENT}
+
+This run lasted over $((TOTAL_ELAPSED / 60)) minutes before failing — likely a context overflow. Consider slicing this PRD into smaller sub-issues so each run can finish within a single session."
+    fi
+    "${NW_CLI}" board comment "${ISSUE_NUMBER}" --body "${FAILURE_COMMENT}" 2>>"${LOG_FILE}" || true
   fi
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code "${EXIT_CODE}" 1>/dev/null || true
-  emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=provider_exit|detail=$(latest_failure_detail "${LOG_FILE}")"
+  emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=provider_exit|exit_code=${EXIT_CODE}|detail=${PROVIDER_ERROR_DETAIL}"
 fi
 
 cleanup_worktrees "${PROJECT_DIR}"
