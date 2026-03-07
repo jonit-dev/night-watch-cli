@@ -698,6 +698,19 @@ check_rate_limited() {
   fi
 }
 
+# Detect context window exhaustion from Claude API logs.
+# Usage: check_context_exhausted <log_file> [start_line]
+# Returns 0 if context exhausted, 1 otherwise.
+check_context_exhausted() {
+  local log_file="${1:?log_file required}"
+  local start_line="${2:-0}"
+  if [ "${start_line}" -gt 0 ] 2>/dev/null; then
+    tail -n "+$((start_line + 1))" "${log_file}" 2>/dev/null | grep -qi "context window"
+  else
+    tail -20 "${log_file}" 2>/dev/null | grep -qi "context window"
+  fi
+}
+
 # Resolve URL host from a URL-like string.
 # Example: "https://api.z.ai/api/anthropic" -> "api.z.ai"
 extract_url_host() {

@@ -601,6 +601,74 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
     BACKOFF_MIN=$(( BACKOFF / 60 ))
     log "RATE-LIMITED: Attempt ${ATTEMPT}/${MAX_RETRIES}, retrying in ${BACKOFF_MIN}m"
     sleep "${BACKOFF}"
+  elif check_context_exhausted "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
+    # Context window exhausted — checkpoint progress and resume in a fresh session
+    ATTEMPT=$((ATTEMPT + 1))
+    if [ "${ATTEMPT}" -ge "${MAX_RETRIES}" ]; then
+      log "CONTEXT-EXHAUSTED: All ${MAX_RETRIES} resume attempts exhausted for ${ELIGIBLE_PRD}"
+      break
+    fi
+    log "CONTEXT-EXHAUSTED: Session ${ATTEMPT_NUM} hit context limit — checkpointing and resuming (${ATTEMPT}/${MAX_RETRIES})"
+    checkpoint_timeout_progress "${WORKTREE_DIR}" "${BRANCH_NAME}" "${ELIGIBLE_PRD}"
+    git -C "${WORKTREE_DIR}" push origin "${BRANCH_NAME}" --force-with-lease >> "${LOG_FILE}" 2>&1 || true
+    # Switch prompt to "continue" mode for the next attempt (fresh context)
+    if [ -n "${ISSUE_NUMBER}" ]; then
+      PROMPT="Continue implementing PRD (GitHub issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}).
+
+The previous session ran out of context window. Progress has been committed on branch ${BRANCH_NAME}.
+
+## Your task
+1. Review the current state: check git log, existing code changes, and any task list
+2. Compare against the original PRD requirements (issue #${ISSUE_NUMBER}) to identify what is already done vs remaining
+3. Continue implementing the remaining phases/tasks
+4. Do NOT redo work that is already completed and committed
+
+## Setup
+- You are already inside an isolated worktree at: ${WORKTREE_DIR}
+- Current branch is already checked out: ${BRANCH_NAME}
+- Do NOT run git checkout/switch in ${PROJECT_DIR}
+- Do NOT create or remove worktrees; the cron script manages that
+
+## Implementation — PRD Executor Workflow
+Read ${EXECUTOR_PROMPT_REF} and follow the FULL execution pipeline for remaining phases only.
+Follow all CLAUDE.md conventions (if present).
+
+## Finalize
+- Commit all changes, push, and open a PR:
+  git push -u origin ${BRANCH_NAME}
+  gh pr create --title \"feat: <short title>\" --body \"Closes #${ISSUE_NUMBER}
+
+<summary>\"
+- Do NOT process any other issues — only issue #${ISSUE_NUMBER}"
+    else
+      PROMPT="Continue implementing the PRD at ${PRD_DIR_REL}/${ELIGIBLE_PRD}
+
+The previous session ran out of context window. Progress has been committed on branch ${BRANCH_NAME}.
+
+## Your task
+1. Review the current state: check git log, existing code changes, and any task list
+2. Compare against the original PRD to identify what is already done vs remaining
+3. Continue implementing the remaining phases/tasks
+4. Do NOT redo work that is already completed and committed
+
+## Setup
+- You are already inside an isolated worktree at: ${WORKTREE_DIR}
+- Current branch is already checked out: ${BRANCH_NAME}
+- Do NOT run git checkout/switch in ${PROJECT_DIR}
+- Do NOT create or remove worktrees; the cron script manages that
+
+## Implementation — PRD Executor Workflow
+Read ${EXECUTOR_PROMPT_REF} and follow the FULL execution pipeline for remaining phases only.
+Follow all CLAUDE.md conventions (if present).
+
+## Finalize
+- Commit all changes, push, and open a PR:
+  git push -u origin ${BRANCH_NAME}
+  gh pr create --title \"feat: <short title>\" --body \"<summary referencing PRD>\"
+- Do NOT move the PRD to done/ — the cron script handles that
+- Do NOT process any other PRDs — only ${ELIGIBLE_PRD}"
+    fi
+    # No backoff — context exhaustion is not rate-limiting
   else
     # Non-retryable failure
     break
@@ -737,6 +805,18 @@ elif [ "${DOUBLE_RATE_LIMITED}" = "1" ]; then
   fi
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" rate_limited --exit-code "${EXIT_CODE}" 2>/dev/null || true
   emit_result "rate_limited" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=double_rate_limit"
+elif check_context_exhausted "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
+  # All resume attempts for context exhaustion were used up
+  log "FAIL: Context window exhausted after ${MAX_RETRIES} resume attempts for ${ELIGIBLE_PRD}"
+  checkpoint_timeout_progress "${WORKTREE_DIR}" "${BRANCH_NAME}" "${ELIGIBLE_PRD}"
+  git -C "${WORKTREE_DIR}" push origin "${BRANCH_NAME}" --force-with-lease >> "${LOG_FILE}" 2>&1 || true
+  if [ -n "${ISSUE_NUMBER}" ]; then
+    "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
+    "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
+      --body "Context window exhausted after ${MAX_RETRIES} resume attempts (${TOTAL_ELAPSED}s total, via ${EFFECTIVE_PROVIDER_LABEL}). Progress checkpointed on branch \`${BRANCH_NAME}\`. Will resume on next run." 2>>"${LOG_FILE}" || true
+  fi
+  night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" context_exhausted --exit-code "${EXIT_CODE}" 2>/dev/null || true
+  emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=context_exhausted|exit_code=${EXIT_CODE}"
 else
   PROVIDER_ERROR_DETAIL=$(latest_failure_detail "${LOG_FILE}" "${LOG_LINE_BEFORE}")
   log "FAIL: Night watch exited with code ${EXIT_CODE} while processing ${ELIGIBLE_PRD}"
