@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Activity,
@@ -15,10 +15,8 @@ import {
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { useApi, fetchStatus, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, triggerRun, triggerReview, triggerQa, triggerAudit, triggerPlanner, useStatusStream, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
+import { useApi, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, triggerRun, triggerReview, triggerQa, triggerAudit, triggerPlanner, BOARD_COLUMNS, IBoardStatus, BoardColumnName, fetchStatus } from '../api';
 import { useStore } from '../store/useStore';
-import { pickLatestSnapshot } from '../utils/status';
-import type { IStatusSnapshot } from '@shared/types';
 
 const BOARD_COLUMN_COLORS: Record<BoardColumnName, string> = {
   'Draft':       'text-slate-400  bg-slate-500/10  ring-slate-500/20',
@@ -33,9 +31,7 @@ const Dashboard: React.FC = () => {
   const [cancellingProcess, setCancellingProcess] = useState<'run' | 'review' | null>(null);
   const [clearingLock, setClearingLock] = useState(false);
   const [startingProcess, setStartingProcess] = useState<string | null>(null);
-  const [streamedStatus, setStreamedStatus] = useState<IStatusSnapshot | null>(null);
-  const { setProjectName, addToast, selectedProjectId, globalModeLoading } = useStore();
-  const { data: status, loading, error, refetch } = useApi(fetchStatus, [selectedProjectId], { enabled: !globalModeLoading });
+  const { setProjectName, addToast, selectedProjectId, globalModeLoading, status } = useStore();
   const { data: scheduleInfo } = useApi(fetchScheduleInfo, [selectedProjectId], { enabled: !globalModeLoading });
   const { data: boardStatus } = useApi<IBoardStatus | null>(
     () => fetchBoardStatus().catch(() => null),
@@ -43,13 +39,8 @@ const Dashboard: React.FC = () => {
     { enabled: !globalModeLoading },
   );
 
-  // Subscribe to SSE for real-time updates (primary path)
-  useStatusStream((snapshot) => {
-    setStreamedStatus(snapshot);
-  }, [selectedProjectId, globalModeLoading], { enabled: !globalModeLoading });
-
-  // Prefer the newest snapshot so polling can recover from a stale SSE payload.
-  const currentStatus = pickLatestSnapshot(streamedStatus, status);
+  // Read status from shared store (synced by useStatusSync in App.tsx)
+  const currentStatus = status;
 
   // Update project name when status loads
   React.useEffect(() => {
@@ -58,22 +49,7 @@ const Dashboard: React.FC = () => {
     }
   }, [currentStatus, setProjectName]);
 
-  // Poll for status updates as fallback (30s interval - SSE is the fast path)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      refetch();
-    }, 30000);
-    return () => clearInterval(interval);
-  }, [refetch]);
-
-  // Refetch on window focus
-  useEffect(() => {
-    const onFocus = () => refetch();
-    window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
-  }, [refetch]);
-
-  if (globalModeLoading || loading) {
+  if (globalModeLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-slate-400">Loading...</div>
@@ -81,19 +57,12 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  if (error) {
+  if (!currentStatus) {
     return (
-      <div className="flex flex-col items-center justify-center h-full space-y-4">
-        <AlertCircle className="h-12 w-12 text-red-400" />
-        <div className="text-slate-300">Failed to load dashboard data</div>
-        <div className="text-sm text-slate-500">{error.message}</div>
-        <Button onClick={() => refetch()}>Retry</Button>
+      <div className="flex items-center justify-center h-full">
+        <div className="text-slate-400">Loading...</div>
       </div>
     );
-  }
-
-  if (!currentStatus) {
-    return null;
   }
 
   const openPrs = currentStatus.prs.length;
@@ -278,139 +247,129 @@ const Dashboard: React.FC = () => {
         {/* Process Status */}
         <Card className="p-6">
           <h3 className="text-base font-semibold text-slate-200 mb-4">Process Status</h3>
-          <div className="space-y-4">
-             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
+          <div className="space-y-2">
+            {([
+              {
+                label: 'Executor',
+                process: executorProcess,
+                subtitle: executorProcess?.running ? `PID: ${executorProcess.pid} • ${currentStatus.activePrd ?? 'Running'}` : 'Idle',
+                actions: (
+                  <>
+                    {executorProcess?.running && (
+                      <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-400/50" onClick={() => handleCancelProcess('run')} disabled={cancellingProcess === 'run'}>
+                        <XCircle className="h-4 w-4 mr-1" />
+                        {cancellingProcess === 'run' ? 'Stopping...' : 'Stop'}
+                      </Button>
+                    )}
+                    {!executorProcess?.running && currentStatus.activePrd && (
+                      <Button size="sm" variant="ghost" className="text-amber-400 hover:text-amber-300" onClick={handleForceClear} disabled={clearingLock}>
+                        {clearingLock ? 'Clearing...' : 'Force Clear'}
+                      </Button>
+                    )}
+                    {!executorProcess?.running && !currentStatus.activePrd && (
+                      <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('Executor', triggerRun)} disabled={startingProcess === 'Executor'}>
+                        <Play className="h-4 w-4 mr-1" />
+                        {startingProcess === 'Executor' ? 'Starting...' : 'Run'}
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>Log</Button>
+                  </>
+                ),
+              },
+              {
+                label: 'Reviewer',
+                process: reviewerProcess,
+                subtitle: reviewerProcess?.running ? `PID: ${reviewerProcess.pid} • Running` : 'Idle',
+                actions: (
+                  <>
+                    {reviewerProcess?.running ? (
+                      <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-400/50" onClick={() => handleCancelProcess('review')} disabled={cancellingProcess === 'review'}>
+                        <XCircle className="h-4 w-4 mr-1" />
+                        {cancellingProcess === 'review' ? 'Stopping...' : 'Stop'}
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('Reviewer', triggerReview)} disabled={startingProcess === 'Reviewer'}>
+                        <Play className="h-4 w-4 mr-1" />
+                        {startingProcess === 'Reviewer' ? 'Starting...' : 'Run'}
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => navigate('/logs')} disabled={!reviewerProcess?.running}>Log</Button>
+                  </>
+                ),
+              },
+              {
+                label: 'QA',
+                process: qaProcess,
+                subtitle: qaProcess?.running ? `PID: ${qaProcess.pid} • Running` : 'Idle',
+                actions: (
+                  <>
+                    {!qaProcess?.running && (
+                      <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('QA', triggerQa)} disabled={startingProcess === 'QA'}>
+                        <Play className="h-4 w-4 mr-1" />
+                        {startingProcess === 'QA' ? 'Starting...' : 'Run'}
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>Log</Button>
+                  </>
+                ),
+              },
+              {
+                label: 'Auditor',
+                process: auditProcess,
+                subtitle: auditProcess?.running ? `PID: ${auditProcess.pid} • Running` : 'Idle',
+                actions: (
+                  <>
+                    {!auditProcess?.running && (
+                      <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('Auditor', triggerAudit)} disabled={startingProcess === 'Auditor'}>
+                        <Play className="h-4 w-4 mr-1" />
+                        {startingProcess === 'Auditor' ? 'Starting...' : 'Run'}
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>Log</Button>
+                  </>
+                ),
+              },
+              {
+                label: 'Planner',
+                process: plannerProcess,
+                subtitle: plannerProcess?.running ? `PID: ${plannerProcess.pid} • Writing PRDs` : 'Idle',
+                actions: (
+                  <>
+                    {!plannerProcess?.running && (
+                      <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('Planner', triggerPlanner)} disabled={startingProcess === 'Planner'}>
+                        <Play className="h-4 w-4 mr-1" />
+                        {startingProcess === 'Planner' ? 'Starting...' : 'Run'}
+                      </Button>
+                    )}
+                    <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>Log</Button>
+                  </>
+                ),
+              },
+            ] as const).sort((a, b) => (b.process?.running ? 1 : 0) - (a.process?.running ? 1 : 0))
+              .map(({ label, process, subtitle, actions }) => (
+              <div
+                key={label}
+                className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
+                  process?.running
+                    ? 'bg-green-500/5 border-green-500/40 shadow-[0_0_12px_rgba(34,197,94,0.08)]'
+                    : 'bg-slate-950/50 border-slate-800 opacity-60 hover:opacity-100'
+                }`}
+              >
                 <div className="flex items-center space-x-3">
-                  <div className={`h-2.5 w-2.5 rounded-full ${executorProcess?.running ? 'bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-slate-700'}`}></div>
+                  <div className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${process?.running ? 'bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-slate-700'}`} />
                   <div>
-                    <div className={`font-medium ${executorProcess?.running ? 'text-slate-200' : 'text-slate-400'}`}>Executor</div>
-                    <div className="text-xs text-slate-500">
-                      {executorProcess?.running
-                        ? `PID: ${executorProcess.pid} • ${currentStatus.activePrd ?? 'Running'}`
-                        : 'Idle'
-                      }
+                    <div className="flex items-center gap-2">
+                      <span className={`font-medium ${process?.running ? 'text-slate-200' : 'text-slate-400'}`}>{label}</span>
+                      {process?.running && (
+                        <span className="text-[10px] font-semibold tracking-wider uppercase px-1.5 py-0.5 rounded bg-green-500/15 text-green-400 border border-green-500/30">Live</span>
+                      )}
                     </div>
+                    <div className="text-xs text-slate-500">{subtitle}</div>
                   </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  {executorProcess?.running && (
-                    <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300" onClick={() => handleCancelProcess('run')} disabled={cancellingProcess === 'run'}>
-                      <XCircle className="h-4 w-4 mr-1" />
-                      {cancellingProcess === 'run' ? 'Stopping...' : 'Stop'}
-                    </Button>
-                  )}
-                  {!executorProcess?.running && currentStatus.activePrd && (
-                    <Button size="sm" variant="ghost" className="text-amber-400 hover:text-amber-300" onClick={handleForceClear} disabled={clearingLock}>
-                      {clearingLock ? 'Clearing...' : 'Force Clear'}
-                    </Button>
-                  )}
-                  {!executorProcess?.running && !currentStatus.activePrd && (
-                    <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('Executor', triggerRun)} disabled={startingProcess === 'Executor'}>
-                      <Play className="h-4 w-4 mr-1" />
-                      {startingProcess === 'Executor' ? 'Starting...' : 'Run'}
-                    </Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>
-                </div>
-             </div>
-             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                <div className="flex items-center space-x-3">
-                  <div className={`h-2.5 w-2.5 rounded-full ${reviewerProcess?.running ? 'bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-slate-700'}`}></div>
-                  <div>
-                    <div className={`font-medium ${reviewerProcess?.running ? 'text-slate-200' : 'text-slate-400'}`}>Reviewer</div>
-                    <div className="text-xs text-slate-500">
-                      {reviewerProcess?.running
-                        ? `PID: ${reviewerProcess.pid} • Running`
-                        : 'Idle'
-                      }
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {reviewerProcess?.running && (
-                    <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300" onClick={() => handleCancelProcess('review')} disabled={cancellingProcess === 'review'}>
-                      <XCircle className="h-4 w-4 mr-1" />
-                      {cancellingProcess === 'review' ? 'Stopping...' : 'Stop'}
-                    </Button>
-                  )}
-                  {!reviewerProcess?.running && (
-                    <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('Reviewer', triggerReview)} disabled={startingProcess === 'Reviewer'}>
-                      <Play className="h-4 w-4 mr-1" />
-                      {startingProcess === 'Reviewer' ? 'Starting...' : 'Run'}
-                    </Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => navigate('/logs')} disabled={!reviewerProcess?.running}>View Log</Button>
-                </div>
-             </div>
-             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                <div className="flex items-center space-x-3">
-                  <div className={`h-2.5 w-2.5 rounded-full ${qaProcess?.running ? 'bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-slate-700'}`}></div>
-                  <div>
-                    <div className={`font-medium ${qaProcess?.running ? 'text-slate-200' : 'text-slate-400'}`}>QA</div>
-                    <div className="text-xs text-slate-500">
-                      {qaProcess?.running
-                        ? `PID: ${qaProcess.pid} • Running`
-                        : 'Idle'
-                      }
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {!qaProcess?.running && (
-                    <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('QA', triggerQa)} disabled={startingProcess === 'QA'}>
-                      <Play className="h-4 w-4 mr-1" />
-                      {startingProcess === 'QA' ? 'Starting...' : 'Run'}
-                    </Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>
-                </div>
-             </div>
-             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                <div className="flex items-center space-x-3">
-                  <div className={`h-2.5 w-2.5 rounded-full ${auditProcess?.running ? 'bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-slate-700'}`}></div>
-                  <div>
-                    <div className={`font-medium ${auditProcess?.running ? 'text-slate-200' : 'text-slate-400'}`}>Auditor</div>
-                    <div className="text-xs text-slate-500">
-                      {auditProcess?.running
-                        ? `PID: ${auditProcess.pid} • Running`
-                        : 'Idle'
-                      }
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {!auditProcess?.running && (
-                    <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('Auditor', triggerAudit)} disabled={startingProcess === 'Auditor'}>
-                      <Play className="h-4 w-4 mr-1" />
-                      {startingProcess === 'Auditor' ? 'Starting...' : 'Run'}
-                    </Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>
-                </div>
-             </div>
-             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                <div className="flex items-center space-x-3">
-                  <div className={`h-2.5 w-2.5 rounded-full ${plannerProcess?.running ? 'bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-slate-700'}`}></div>
-                  <div>
-                    <div className={`font-medium ${plannerProcess?.running ? 'text-slate-200' : 'text-slate-400'}`}>Planner</div>
-                    <div className="text-xs text-slate-500">
-                      {plannerProcess?.running
-                        ? `PID: ${plannerProcess.pid} • Writing PRDs`
-                        : 'Idle'
-                      }
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  {!plannerProcess?.running && (
-                    <Button size="sm" variant="ghost" className="text-green-400 hover:text-green-300" onClick={() => handleStartProcess('Planner', triggerPlanner)} disabled={startingProcess === 'Planner'}>
-                      <Play className="h-4 w-4 mr-1" />
-                      {startingProcess === 'Planner' ? 'Starting...' : 'Run'}
-                    </Button>
-                  )}
-                  <Button size="sm" variant="ghost" onClick={() => navigate('/logs')}>View Log</Button>
-                </div>
-             </div>
+                <div className="flex items-center space-x-2">{actions}</div>
+              </div>
+            ))}
           </div>
         </Card>
 

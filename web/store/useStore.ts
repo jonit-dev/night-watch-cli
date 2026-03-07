@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { ProjectInfo, setCurrentProject, setGlobalMode as setApiGlobalMode } from '../api';
+import type { IStatusSnapshot } from '@shared/types';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -27,6 +28,10 @@ interface AppState {
   setProjects: (p: ProjectInfo[]) => void;
   selectedProjectId: string | null;
   selectProject: (id: string | null) => void;
+
+  // Shared status state
+  status: IStatusSnapshot | null;
+  setStatus: (status: IStatusSnapshot | null) => void;
 }
 
 const savedProjectId = typeof localStorage !== 'undefined'
@@ -77,4 +82,8 @@ export const useStore = create<AppState>((set) => ({
       };
     });
   },
+
+  // Shared status state
+  status: null,
+  setStatus: (status) => set({ status }),
 }));
