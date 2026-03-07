@@ -170,9 +170,18 @@ if [ "${NW_BOARD_ENABLED:-}" = "true" ]; then
     ISSUE_TITLE_RAW=$(printf '%s' "${ISSUE_JSON}" | jq -r '.title // empty' 2>/dev/null || true)
     ISSUE_BODY=$(printf '%s' "${ISSUE_JSON}" | jq -r '.body // empty' 2>/dev/null || true)
   else
-    ISSUE_JSON=$(find_eligible_board_issue "${PROJECT_DIR}" "${MAX_RUNTIME}") || true
+    BOARD_DISCOVERY_STATUS=0
+    if ISSUE_JSON=$(find_eligible_board_issue "${PROJECT_DIR}" "${MAX_RUNTIME}"); then
+      BOARD_DISCOVERY_STATUS=0
+    else
+      BOARD_DISCOVERY_STATUS=$?
+    fi
     if [ -z "${ISSUE_JSON}" ]; then
-      log "INFO: No eligible board issues found; falling back to filesystem PRDs"
+      if [ "${BOARD_DISCOVERY_STATUS}" -eq 2 ]; then
+        log "INFO: Ready board issues were found, but all are in cooldown; falling back to filesystem PRDs"
+      else
+        log "INFO: No Ready board issues found; falling back to filesystem PRDs"
+      fi
     else
       ISSUE_NUMBER=$(printf '%s' "${ISSUE_JSON}" | jq -r '.number // empty' 2>/dev/null || true)
       ISSUE_TITLE_RAW=$(printf '%s' "${ISSUE_JSON}" | jq -r '.title // empty' 2>/dev/null || true)
