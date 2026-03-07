@@ -618,9 +618,9 @@ check_rate_limited() {
   local log_file="${1:?log_file required}"
   local start_line="${2:-0}"
   if [ "${start_line}" -gt 0 ] 2>/dev/null; then
-    tail -n "+$((start_line + 1))" "${log_file}" 2>/dev/null | grep -q "429"
+    tail -n "+$((start_line + 1))" "${log_file}" 2>/dev/null | grep -qw "429"
   else
-    tail -20 "${log_file}" 2>/dev/null | grep -q "429"
+    tail -20 "${log_file}" 2>/dev/null | grep -qw "429"
   fi
 }
 

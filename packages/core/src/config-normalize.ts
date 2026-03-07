@@ -68,6 +68,7 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
   normalized.defaultBranch = readString(rawConfig.defaultBranch);
   normalized.prdDir = readString(rawConfig.prdDir) ?? readString(rawConfig.prdDirectory);
   normalized.maxRuntime = readNumber(rawConfig.maxRuntime);
+  normalized.sessionMaxRuntime = readNumber(rawConfig.sessionMaxRuntime);
   normalized.reviewerMaxRuntime = readNumber(rawConfig.reviewerMaxRuntime);
   normalized.branchPrefix = readString(rawConfig.branchPrefix);
   normalized.branchPatterns =

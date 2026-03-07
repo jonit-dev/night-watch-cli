@@ -22,7 +22,8 @@ else
 fi
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/executor.log"
-MAX_RUNTIME="${NW_MAX_RUNTIME:-7200}"  # 2 hours
+MAX_RUNTIME="${NW_MAX_RUNTIME:-7200}"  # 2 hours — used for cooldowns and eligibility
+SESSION_MAX_RUNTIME="${NW_SESSION_MAX_RUNTIME:-${MAX_RUNTIME}}"  # per-invocation timeout; defaults to MAX_RUNTIME
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 # Human-friendly provider label used in PR comments, board comments, and commit attribution.
@@ -533,7 +534,7 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
   case "${PROVIDER_CMD}" in
     claude)
       if (
-        cd "${WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
+        cd "${WORKTREE_DIR}" && timeout "${SESSION_MAX_RUNTIME}" \
           claude -p "${PROMPT}" \
             --dangerously-skip-permissions \
             >> "${LOG_FILE}" 2>&1
@@ -545,7 +546,7 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
       ;;
     codex)
       if (
-        cd "${WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
+        cd "${WORKTREE_DIR}" && timeout "${SESSION_MAX_RUNTIME}" \
           codex exec \
             -C "${WORKTREE_DIR}" \
             --yolo \
@@ -613,7 +614,7 @@ if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
     cd "${WORKTREE_DIR}" && \
       unset ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN \
             ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL && \
-      timeout "${MAX_RUNTIME}" \
+      timeout "${SESSION_MAX_RUNTIME}" \
         claude -p "${PROMPT}" \
           --dangerously-skip-permissions \
           --model "${FALLBACK_MODEL}" \
@@ -687,18 +688,23 @@ if [ ${EXIT_CODE} -eq 0 ]; then
     fi
   fi
 elif [ ${EXIT_CODE} -eq 124 ]; then
-  log "TIMEOUT: Night watch killed after ${MAX_RUNTIME}s while processing ${ELIGIBLE_PRD}"
+  log "TIMEOUT: Session limit hit after ${SESSION_MAX_RUNTIME}s while processing ${ELIGIBLE_PRD}"
   checkpoint_timeout_progress "${WORKTREE_DIR}" "${BRANCH_NAME}" "${ELIGIBLE_PRD}"
   if [ -n "${ISSUE_NUMBER}" ]; then
     "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
-    "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
-      --body "Execution timed out after ${MAX_RUNTIME}s (via ${EFFECTIVE_PROVIDER_LABEL}). Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
-    TIMEOUT_FOLLOWUP_COMMENT=$(build_timeout_followup_comment \
-      "${MAX_RUNTIME}" \
-      "${ELIGIBLE_PRD}" \
-      "${BRANCH_NAME}" \
-      "${ISSUE_BODY}")
-    "${NW_CLI}" board comment "${ISSUE_NUMBER}" --body "${TIMEOUT_FOLLOWUP_COMMENT}" 2>>"${LOG_FILE}" || true
+    if [ "${SESSION_MAX_RUNTIME}" != "${MAX_RUNTIME}" ]; then
+      "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
+        --body "Session paused after ${SESSION_MAX_RUNTIME}s (via ${EFFECTIVE_PROVIDER_LABEL}). Progress checkpointed on branch \`${BRANCH_NAME}\`. Will resume automatically on the next run." 2>>"${LOG_FILE}" || true
+    else
+      "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
+        --body "Execution timed out after ${SESSION_MAX_RUNTIME}s (via ${EFFECTIVE_PROVIDER_LABEL}). Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
+      TIMEOUT_FOLLOWUP_COMMENT=$(build_timeout_followup_comment \
+        "${SESSION_MAX_RUNTIME}" \
+        "${ELIGIBLE_PRD}" \
+        "${BRANCH_NAME}" \
+        "${ISSUE_BODY}")
+      "${NW_CLI}" board comment "${ISSUE_NUMBER}" --body "${TIMEOUT_FOLLOWUP_COMMENT}" 2>>"${LOG_FILE}" || true
+    fi
   fi
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" timeout --exit-code 124 2>/dev/null || true
   emit_result "timeout" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"

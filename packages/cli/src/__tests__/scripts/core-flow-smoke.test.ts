@@ -1572,7 +1572,7 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_no_eligible_prd');
     expect(fs.readFileSync(path.join(projectDir, 'logs', 'executor.log'), 'utf-8')).toContain(
-      'INFO: No Ready board issues found; falling back to filesystem PRDs',
+      'INFO: No Ready board issues found; skipping this run',
     );
   });
 
@@ -1609,7 +1609,7 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_no_eligible_prd');
     expect(fs.readFileSync(path.join(projectDir, 'logs', 'executor.log'), 'utf-8')).toContain(
-      'INFO: Ready board issues were found, but all are in cooldown; falling back to filesystem PRDs',
+      'INFO: Ready board issues were found, but all are in cooldown; skipping this run',
     );
   });
 

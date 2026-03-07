@@ -280,6 +280,9 @@ export function buildEnvVars(
 
   // Runtime
   env.NW_MAX_RUNTIME = String(config.maxRuntime);
+  if (config.sessionMaxRuntime != null) {
+    env.NW_SESSION_MAX_RUNTIME = String(config.sessionMaxRuntime);
+  }
   env.NW_PRD_DIR = config.prdDir;
   env.NW_BRANCH_PREFIX = config.branchPrefix;
 
