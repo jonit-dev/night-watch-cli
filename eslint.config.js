@@ -131,7 +131,6 @@ export default tseslint.config(
       '**/node_modules/**',
       'scripts/',
       'templates/',
-      'web/',
       '**/*.test.ts',
       '**/__tests__/**',
       // Compiled TypeScript output files that live alongside source in src/
