@@ -541,6 +541,15 @@ Action: generating QA tests and evidence."
     break
   fi
 
+  if ! assert_isolated_worktree "${PROJECT_DIR}" "${QA_WORKTREE_DIR}" "qa"; then
+    log "FAIL: QA worktree guard rejected ${QA_WORKTREE_DIR} for PR #${pr_num}"
+    FAILED_AUTOMATION_PRS_CSV=$(append_csv "${FAILED_AUTOMATION_PRS_CSV}" "#${pr_num}")
+    FAILED_PR="#${pr_num}"
+    FAILED_REASON="worktree_guard_failed"
+    EXIT_CODE=1
+    break
+  fi
+
   log "QA: Checking out PR #${pr_num} in worktree"
   # Prefer detached checkout to avoid "branch already used by worktree" failures
   # when the same branch is already checked out in another local worktree.
@@ -613,6 +622,7 @@ Action: generating QA tests and evidence."
       if (
         cd "${QA_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
           codex exec \
+            -C "${QA_WORKTREE_DIR}" \
             --yolo \
             "${QA_PROMPT}" \
             >> "${LOG_FILE}" 2>&1

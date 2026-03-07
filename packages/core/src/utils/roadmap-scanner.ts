@@ -325,9 +325,9 @@ function scanExistingPrdSlugs(prdDir: string): Set<string> {
 /**
  * Build provider CLI arguments based on provider type
  */
-function buildProviderArgs(provider: Provider, prompt: string): string[] {
+function buildProviderArgs(provider: Provider, prompt: string, workingDir: string): string[] {
   if (provider === 'codex') {
-    return ['exec', '--yolo', prompt];
+    return ['exec', '-C', workingDir, '--yolo', prompt];
   }
   // Default: claude
   return ['-p', prompt, '--dangerously-skip-permissions'];
@@ -383,7 +383,7 @@ export async function sliceRoadmapItem(
 
   // Spawn the AI provider
   const provider = resolveJobProvider(config, 'slicer');
-  const providerArgs = buildProviderArgs(provider, prompt);
+  const providerArgs = buildProviderArgs(provider, prompt, projectDir);
 
   // Create log file for stdout/stderr
   const logDir = path.join(projectDir, 'logs');

@@ -333,6 +333,10 @@ finalize_prd_done() {
   # NOTE: PRDs are moved to done/ immediately when a PR is opened (or already merged)
   # rather than waiting for reviewer/merge loops.
   if prepare_detached_worktree "${PROJECT_DIR}" "${BOOKKEEP_WORKTREE_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
+    if ! assert_isolated_worktree "${PROJECT_DIR}" "${BOOKKEEP_WORKTREE_DIR}" "executor-bookkeeping"; then
+      log "WARN: Bookkeeping worktree guard rejected ${BOOKKEEP_WORKTREE_DIR}"
+      return 1
+    fi
     if mark_prd_done "${BOOKKEEP_PRD_DIR}" "${ELIGIBLE_PRD}"; then
       night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" success --exit-code 0 2>/dev/null || true
       if [[ "${PRD_DIR_REL}" = /* ]]; then
@@ -480,6 +484,14 @@ if ! prepare_branch_worktree "${PROJECT_DIR}" "${WORKTREE_DIR}" "${BRANCH_NAME}"
   exit 1
 fi
 
+if ! assert_isolated_worktree "${PROJECT_DIR}" "${WORKTREE_DIR}" "executor"; then
+  log "FAIL: Executor worktree guard rejected ${WORKTREE_DIR}"
+  restore_issue_to_ready "Failed worktree isolation guard for branch ${BRANCH_NAME}. Moved back to Ready for retry."
+  night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
+  emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=worktree_guard_failed|detail=$(latest_failure_detail "${LOG_FILE}")"
+  exit 1
+fi
+
 # Sandbox: prevent the agent from modifying crontab during execution
 export NW_EXECUTION_CONTEXT=agent
 
@@ -521,6 +533,7 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
       if (
         cd "${WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
           codex exec \
+            -C "${WORKTREE_DIR}" \
             --yolo \
             "${PROMPT}" \
             >> "${LOG_FILE}" 2>&1

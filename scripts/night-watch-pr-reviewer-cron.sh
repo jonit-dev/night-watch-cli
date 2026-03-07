@@ -910,6 +910,12 @@ if ! prepare_detached_worktree "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}" "${DEFA
   exit 1
 fi
 
+if ! assert_isolated_worktree "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}" "reviewer"; then
+  log "FAIL: Reviewer worktree guard rejected ${REVIEW_WORKTREE_DIR}"
+  emit_result "failure" "reason=worktree_guard_failed"
+  exit 1
+fi
+
 REVIEWER_PROMPT_PATH=$(resolve_instruction_path_with_fallback "${REVIEW_WORKTREE_DIR}" "pr-reviewer.md" "night-watch-pr-reviewer.md" || true)
 if [ -z "${REVIEWER_PROMPT_PATH}" ]; then
   log "FAIL: Missing reviewer prompt file. Checked pr-reviewer.md/night-watch-pr-reviewer.md in instructions/, .claude/commands/, and bundled templates/"
@@ -1054,6 +1060,11 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
       log "RETRY: Unable to recreate reviewer worktree; aborting"
       break
     fi
+    if ! assert_isolated_worktree "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}" "reviewer"; then
+      EXIT_CODE=1
+      log "RETRY: Reviewer worktree guard rejected recreated directory; aborting"
+      break
+    fi
   fi
 
   log "RETRY: Starting attempt ${ATTEMPT}/${TOTAL_ATTEMPTS} (timeout: ${ATTEMPT_TIMEOUT}s) pr=${TARGET_PR:-all}"
@@ -1078,6 +1089,7 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
       if (
         cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" \
           codex exec \
+            -C "${REVIEW_WORKTREE_DIR}" \
             --yolo \
             "${REVIEWER_PROMPT}" \
             >> "${LOG_FILE}" 2>&1

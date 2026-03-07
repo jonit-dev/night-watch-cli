@@ -618,6 +618,8 @@ Generated: 2026-03-03T12:00:00.000Z
       const [providerCmd, providerArgs] = spawnMock.mock.calls[0] as [string, string[]];
       expect(providerCmd).toBe('codex');
       expect(providerArgs[0]).toBe('exec');
+      expect(providerArgs[1]).toBe('-C');
+      expect(providerArgs[2]).toBe(tempDir);
       expect(providerArgs).toContain('--yolo');
       expect(providerArgs).not.toContain('--quiet');
       expect(providerArgs).not.toContain('--prompt');
