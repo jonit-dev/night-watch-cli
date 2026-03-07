@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useStatusStream, fetchStatus, API_BASE, apiPath } from '../api';
+import { useStatusStream, fetchStatus } from '../api';
 import { useStore } from '../store/useStore';
 import { pickLatestSnapshot } from '../utils/status';
 import type { IStatusSnapshot } from '@shared/types';
