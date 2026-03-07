@@ -259,6 +259,9 @@ describe('Scheduling page', () => {
         schedule: '0 * * * *',
         installed: true,
         nextRun: '2026-03-06T01:00:00.000Z',
+        delayMinutes: 0,
+        manualDelayMinutes: 0,
+        balancedDelayMinutes: 0,
       },
     });
 
@@ -292,11 +295,17 @@ describe('Scheduling page', () => {
         schedule: currentConfig.cronSchedule,
         installed: true,
         nextRun: '2026-03-06T00:05:00.000Z',
+        delayMinutes: 0,
+        manualDelayMinutes: 0,
+        balancedDelayMinutes: 0,
       },
       reviewer: {
         schedule: currentConfig.reviewerSchedule,
         installed: true,
         nextRun: '2026-03-06T00:25:00.000Z',
+        delayMinutes: 0,
+        manualDelayMinutes: 0,
+        balancedDelayMinutes: 0,
       },
     });
 
