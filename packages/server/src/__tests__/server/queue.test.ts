@@ -220,6 +220,16 @@ describe('queue API routes in global mode', () => {
     expect(response.body).toHaveProperty('byProviderBucket');
   });
 
+  it('POST /api/queue/clear responds in global mode', async () => {
+    const response = await request(globalApp)
+      .post('/api/queue/clear')
+      .send({ force: true });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toHaveProperty('cleared');
+    expect(typeof response.body.cleared).toBe('number');
+  });
+
   it('GET /api/mode reports global mode', async () => {
     const response = await request(globalApp).get('/api/mode');
 

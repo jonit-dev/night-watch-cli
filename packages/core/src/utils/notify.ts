@@ -19,6 +19,9 @@ export interface INotificationContext {
   exitCode: number;
   duration?: number;
   provider: string;
+  failureReason?: string;
+  failureDetail?: string;
+  scriptStatus?: string;
   // Enriched PR details (optional — populated when gh CLI is available)
   prUrl?: string;
   prTitle?: string;
@@ -126,6 +129,15 @@ export function buildDescription(ctx: INotificationContext): string {
   }
   if (ctx.duration !== undefined) {
     lines.push(`Duration: ${ctx.duration}s`);
+  }
+  if (ctx.scriptStatus && ctx.event !== 'run_succeeded') {
+    lines.push(`Status: ${ctx.scriptStatus}`);
+  }
+  if (ctx.failureReason) {
+    lines.push(`Failure reason: ${ctx.failureReason}`);
+  }
+  if (ctx.failureDetail) {
+    lines.push(`Details: ${ctx.failureDetail}`);
   }
   if (ctx.event === 'run_timeout') {
     lines.push('Cause: Execution hit the max runtime limit and was terminated.');

@@ -248,6 +248,21 @@ describe('notification utilities', () => {
       );
     });
 
+    it('should include failure reason and detail for failed runs', () => {
+      const text = buildDescription({
+        ...baseCtx,
+        event: 'run_failed',
+        exitCode: 1,
+        scriptStatus: 'failure',
+        failureReason: 'worktree_setup_failed',
+        failureDetail: 'fatal: /tmp/my-worktree already exists',
+      });
+
+      expect(text).toContain('Status: failure');
+      expect(text).toContain('Failure reason: worktree_setup_failed');
+      expect(text).toContain('Details: fatal: /tmp/my-worktree already exists');
+    });
+
     it('should include QA screenshot summary for qa_completed events', () => {
       const text = buildDescription({
         ...baseCtx,

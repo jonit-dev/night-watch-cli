@@ -17,8 +17,7 @@ export interface IQueueRoutesDeps {
 
 /**
  * Global (non-project-scoped) queue routes for use in global server mode.
- * Mounts status and analytics endpoints that read from the shared state DB.
- * Clear is not exposed globally to avoid accidental cross-project damage.
+ * Mounts status, analytics, and clear endpoints that read from the shared state DB.
  */
 export function createGlobalQueueRoutes(): Router {
   const router = Router();
@@ -28,6 +27,19 @@ export function createGlobalQueueRoutes(): Router {
     try {
       const status = getQueueStatus();
       res.json({ ...status, enabled: true });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  // POST /api/queue/clear - Clear pending (and optionally running/dispatched) jobs from queue
+  router.post('/clear', async (req: Request, res: Response): Promise<void> => {
+    try {
+      const body = req.body as { type?: string; force?: boolean } | undefined;
+      const type = body?.type;
+      const force = body?.force === true;
+      const count = clearQueue(type as JobType | undefined, force);
+      res.json({ cleared: count });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
