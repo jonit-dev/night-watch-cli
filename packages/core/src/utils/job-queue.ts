@@ -26,6 +26,7 @@ import type {
 import { createLogger } from './logger.js';
 import { normalizeSchedulingPriority } from './scheduling.js';
 import {
+  analyticsLockPath,
   auditLockPath,
   checkLockFile,
   executorLockPath,
@@ -93,6 +94,8 @@ function getLockPathForJob(projectPath: string, jobType: JobType): string {
       return auditLockPath(projectPath);
     case 'slicer':
       return plannerLockPath(projectPath);
+    case 'analytics':
+      return analyticsLockPath(projectPath);
   }
 }
 
@@ -104,9 +107,9 @@ function getLockPathForJob(projectPath: string, jobType: JobType): string {
  * and the Scheduling UI.
  */
 function reconcileStaleRunningJobs(db: Database.Database): number {
-  const runningRows = db
-    .prepare(`SELECT * FROM job_queue WHERE status = 'running'`)
-    .all() as Array<Record<string, unknown>>;
+  const runningRows = db.prepare(`SELECT * FROM job_queue WHERE status = 'running'`).all() as Array<
+    Record<string, unknown>
+  >;
 
   if (runningRows.length === 0) {
     return 0;
@@ -145,10 +148,7 @@ function reconcileStaleRunningJobs(db: Database.Database): number {
   return staleIds.length;
 }
 
-function getProjectSchedulingPriority(
-  projectPath: string,
-  cache: Map<string, number>,
-): number {
+function getProjectSchedulingPriority(projectPath: string, cache: Map<string, number>): number {
   if (cache.has(projectPath)) {
     return cache.get(projectPath)!;
   }
@@ -404,7 +404,10 @@ function fitsProviderCapacity(
   const bucketConfig = config?.providerBuckets?.[bucketKey];
   if (!bucketConfig) {
     // Bucket not configured → no per-bucket limit; only global limit applies
-    logger.debug('Capacity check skipped: bucket not configured', { id: candidate.id, bucket: bucketKey });
+    logger.debug('Capacity check skipped: bucket not configured', {
+      id: candidate.id,
+      bucket: bucketKey,
+    });
     return true;
   }
 
@@ -457,7 +460,10 @@ export function dispatchNextJob(config?: IQueueConfig): IQueueEntry | null {
     logger.debug('Dispatch attempt', { mode, runningCount, maxConcurrency });
 
     if (runningCount >= maxConcurrency) {
-      logger.info('Dispatch skipped: global concurrency limit reached', { runningCount, maxConcurrency });
+      logger.info('Dispatch skipped: global concurrency limit reached', {
+        runningCount,
+        maxConcurrency,
+      });
       return null;
     }
 
@@ -494,15 +500,17 @@ export function dispatchNextJob(config?: IQueueConfig): IQueueEntry | null {
       return null;
     }
 
-    logger.debug('Provider-aware dispatch: evaluating candidates', { candidateCount: candidates.length });
+    logger.debug('Provider-aware dispatch: evaluating candidates', {
+      candidateCount: candidates.length,
+    });
 
     const inFlightByBucket = getInFlightCountByBucket(db);
 
     for (const candidate of candidates) {
       if (fitsProviderCapacity(candidate, config, inFlightByBucket)) {
-        db
-          .prepare(`UPDATE job_queue SET status = 'dispatched', dispatched_at = ? WHERE id = ?`)
-          .run(now, candidate.id);
+        db.prepare(
+          `UPDATE job_queue SET status = 'dispatched', dispatched_at = ? WHERE id = ?`,
+        ).run(now, candidate.id);
 
         logger.info('Job dispatched (provider-aware)', {
           id: candidate.id,
@@ -576,8 +584,7 @@ export function getQueueStatus(): IQueueStatus {
       .get(now) as { avg_wait: number | null; oldest: number | null } | undefined;
 
     const averageWaitSeconds = waitRow?.avg_wait != null ? Math.round(waitRow.avg_wait) : null;
-    const oldestPendingAge =
-      waitRow?.oldest != null ? now - waitRow.oldest : null;
+    const oldestPendingAge = waitRow?.oldest != null ? now - waitRow.oldest : null;
 
     // Get all items (pending + running, ordered by priority)
     const itemsRows = db
@@ -610,9 +617,7 @@ export function getQueueStatus(): IQueueStatus {
 export function clearQueue(filter?: JobType, force?: boolean): number {
   const db = openDb();
   try {
-    const statuses = force
-      ? `('pending', 'running', 'dispatched')`
-      : `('pending')`;
+    const statuses = force ? `('pending', 'running', 'dispatched')` : `('pending')`;
     let result;
     if (filter) {
       result = db
@@ -621,7 +626,11 @@ export function clearQueue(filter?: JobType, force?: boolean): number {
     } else {
       result = db.prepare(`DELETE FROM job_queue WHERE status IN ${statuses}`).run();
     }
-    logger.info('Queue cleared', { count: result.changes, filter: filter ?? 'all', force: force ?? false });
+    logger.info('Queue cleared', {
+      count: result.changes,
+      filter: filter ?? 'all',
+      force: force ?? false,
+    });
     return result.changes;
   } finally {
     db.close();
@@ -815,16 +824,14 @@ export function getJobRunsAnalytics(windowHours = 24): IJobRunAnalytics {
       )
       .get(windowStart) as { avg_wait: number | null } | undefined;
 
-    const averageWaitSeconds =
-      avgRow?.avg_wait != null ? Math.round(avgRow.avg_wait) : null;
+    const averageWaitSeconds = avgRow?.avg_wait != null ? Math.round(avgRow.avg_wait) : null;
 
     // Oldest pending job age
     const oldestRow = db
       .prepare(`SELECT MIN(enqueued_at) as oldest FROM job_queue WHERE status = 'pending'`)
       .get() as { oldest: number | null } | undefined;
 
-    const oldestPendingAge =
-      oldestRow?.oldest != null ? now - oldestRow.oldest : null;
+    const oldestPendingAge = oldestRow?.oldest != null ? now - oldestRow.oldest : null;
 
     return {
       recentRuns,

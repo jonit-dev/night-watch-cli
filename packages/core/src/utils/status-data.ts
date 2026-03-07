@@ -11,6 +11,7 @@ import * as fs from 'fs';
 const execAsync = promisify(exec);
 import * as path from 'path';
 import {
+  ANALYTICS_LOG_NAME,
   AUDIT_LOG_NAME,
   CLAIM_FILE_EXTENSION,
   LOCK_FILE_PREFIX,
@@ -143,6 +144,13 @@ export function auditLockPath(projectDir: string): string {
  */
 export function plannerLockPath(projectDir: string): string {
   return `${LOCK_FILE_PREFIX}slicer-${projectRuntimeKey(projectDir)}.lock`;
+}
+
+/**
+ * Compute the lock file path for the analytics job of a given project directory.
+ */
+export function analyticsLockPath(projectDir: string): string {
+  return `${LOCK_FILE_PREFIX}analytics-${projectRuntimeKey(projectDir)}.lock`;
 }
 
 /**
@@ -721,6 +729,7 @@ export function collectLogInfo(projectDir: string): ILogInfo[] {
     { name: 'qa', fileName: `${QA_LOG_NAME}.log` },
     { name: 'audit', fileName: `${AUDIT_LOG_NAME}.log` },
     { name: 'planner', fileName: `${PLANNER_LOG_NAME}.log` },
+    { name: 'analytics', fileName: `${ANALYTICS_LOG_NAME}.log` },
   ];
   return logEntries.map(({ name, fileName }) => {
     const logPath = path.join(projectDir, LOG_DIR, fileName);
@@ -766,6 +775,7 @@ export async function fetchStatusSnapshot(
   const qaLock = checkLockFile(qaLockPath(projectDir));
   const auditLock = checkLockFile(auditLockPath(projectDir));
   const plannerLock = checkLockFile(plannerLockPath(projectDir));
+  const analyticsLock = checkLockFile(analyticsLockPath(projectDir));
 
   const processes: IProcessInfo[] = [
     { name: 'executor', running: executorLock.running, pid: executorLock.pid },
@@ -773,6 +783,7 @@ export async function fetchStatusSnapshot(
     { name: 'qa', running: qaLock.running, pid: qaLock.pid },
     { name: 'audit', running: auditLock.running, pid: auditLock.pid },
     { name: 'planner', running: plannerLock.running, pid: plannerLock.pid },
+    { name: 'analytics', running: analyticsLock.running, pid: analyticsLock.pid },
   ];
 
   const prds = collectPrdInfo(projectDir, config.prdDir, config.maxRuntime);

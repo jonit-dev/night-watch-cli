@@ -90,6 +90,7 @@ function buildScheduleInfoResponse(
   const qaPlan = getSchedulingPlan(projectDir, config, 'qa');
   const auditPlan = getSchedulingPlan(projectDir, config, 'audit');
   const plannerPlan = getSchedulingPlan(projectDir, config, 'slicer');
+  const analyticsPlan = getSchedulingPlan(projectDir, config, 'analytics');
 
   const executorInstalled =
     installed && config.executorEnabled !== false && hasScheduledCommand(entries, 'run');
@@ -101,6 +102,8 @@ function buildScheduleInfoResponse(
     installed &&
     config.roadmapScanner.enabled &&
     (hasScheduledCommand(entries, 'planner') || hasScheduledCommand(entries, 'slice'));
+  const analyticsInstalled =
+    installed && config.analytics.enabled && hasScheduledCommand(entries, 'analytics');
 
   return {
     executor: {
@@ -117,7 +120,10 @@ function buildScheduleInfoResponse(
       schedule: config.reviewerSchedule,
       installed: reviewerInstalled,
       nextRun: reviewerInstalled
-        ? addDelayToIsoString(computeNextRun(config.reviewerSchedule), reviewerPlan.totalDelayMinutes)
+        ? addDelayToIsoString(
+            computeNextRun(config.reviewerSchedule),
+            reviewerPlan.totalDelayMinutes,
+          )
         : null,
       delayMinutes: reviewerPlan.totalDelayMinutes,
       manualDelayMinutes: reviewerPlan.manualDelayMinutes,
@@ -156,6 +162,19 @@ function buildScheduleInfoResponse(
       manualDelayMinutes: plannerPlan.manualDelayMinutes,
       balancedDelayMinutes: plannerPlan.balancedDelayMinutes,
     },
+    analytics: {
+      schedule: config.analytics.schedule,
+      installed: analyticsInstalled,
+      nextRun: analyticsInstalled
+        ? addDelayToIsoString(
+            computeNextRun(config.analytics.schedule),
+            analyticsPlan.totalDelayMinutes,
+          )
+        : null,
+      delayMinutes: analyticsPlan.totalDelayMinutes,
+      manualDelayMinutes: analyticsPlan.manualDelayMinutes,
+      balancedDelayMinutes: analyticsPlan.balancedDelayMinutes,
+    },
     paused: !installed,
     schedulingPriority: config.schedulingPriority,
     entries,
@@ -171,7 +190,12 @@ export function createScheduleInfoRoutes(deps: IScheduleInfoRoutesDeps): Router 
       const config = getConfig();
       const snapshot = await fetchStatusSnapshot(projectDir, config);
       res.json(
-        buildScheduleInfoResponse(projectDir, config, snapshot.crontab.entries, snapshot.crontab.installed),
+        buildScheduleInfoResponse(
+          projectDir,
+          config,
+          snapshot.crontab.entries,
+          snapshot.crontab.installed,
+        ),
       );
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
@@ -264,7 +288,12 @@ export function createProjectSseRoutes(deps: {
       const projectDir = req.projectDir!;
       const snapshot = await fetchStatusSnapshot(projectDir, config);
       res.json(
-        buildScheduleInfoResponse(projectDir, config, snapshot.crontab.entries, snapshot.crontab.installed),
+        buildScheduleInfoResponse(
+          projectDir,
+          config,
+          snapshot.crontab.entries,
+          snapshot.crontab.installed,
+        ),
       );
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
