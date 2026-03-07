@@ -550,6 +550,44 @@ prepare_detached_worktree() {
   git -C "${project_dir}" worktree add --detach "${worktree_dir}" "${base_ref}" >> "${log_file}" 2>&1
 }
 
+assert_isolated_worktree() {
+  local project_dir="${1:?project_dir required}"
+  local worktree_dir="${2:?worktree_dir required}"
+  local context_label="${3:-worktree}"
+  local project_real=""
+  local worktree_real=""
+
+  if ! project_real=$(cd "${project_dir}" && pwd -P); then
+    log "FAIL: ${context_label} guard could not resolve project directory ${project_dir}"
+    return 1
+  fi
+
+  if ! worktree_real=$(cd "${worktree_dir}" && pwd -P); then
+    log "FAIL: ${context_label} guard could not resolve worktree directory ${worktree_dir}"
+    return 1
+  fi
+
+  if [ "${project_real}" = "${worktree_real}" ]; then
+    log "FAIL: ${context_label} guard refused to run in the primary checkout ${project_real}"
+    return 1
+  fi
+
+  if [ ! -f "${worktree_dir}/.git" ]; then
+    log "FAIL: ${context_label} guard expected linked worktree metadata at ${worktree_dir}/.git"
+    return 1
+  fi
+
+  if ! git -C "${worktree_dir}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    log "FAIL: ${context_label} guard found invalid git worktree at ${worktree_real}"
+    return 1
+  fi
+
+  if ! git -C "${project_dir}" worktree list --porcelain 2>/dev/null | grep -qF "worktree ${worktree_real}"; then
+    log "FAIL: ${context_label} guard could not find registered worktree ${worktree_real}"
+    return 1
+  fi
+}
+
 # ── Mark PRD as done ─────────────────────────────────────────────────────────
 
 mark_prd_done() {
