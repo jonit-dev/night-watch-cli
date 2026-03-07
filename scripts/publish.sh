@@ -37,14 +37,16 @@ echo "==> Publishing to npm..."
 cd "$CLI_PKG"
 npm publish --access public
 
-echo "==> Installing globally (with retry for registry propagation)..."
+echo "==> Installing globally (waiting for registry propagation)..."
+echo "    Waiting 60s for npm registry to propagate..."
+sleep 60
 for attempt in 1 2 3 4 5; do
   if npm i -g "@jonit-dev/night-watch-cli@$NEW_VERSION"; then
     break
   fi
   if [[ $attempt -lt 5 ]]; then
-    echo "    Attempt $attempt failed, retrying in 30s..."
-    sleep 30
+    echo "    Attempt $attempt failed, retrying in 60s..."
+    sleep 60
   else
     echo "    All attempts failed. Install manually: npm i -g @jonit-dev/night-watch-cli@$NEW_VERSION"
     exit 1
