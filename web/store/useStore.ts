@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { IStatusSnapshot } from '@shared/types';
 import { ProjectInfo, setCurrentProject, setGlobalMode as setApiGlobalMode } from '../api';
 import type { IStatusSnapshot } from '@shared/types';
 
@@ -18,6 +19,10 @@ interface AppState {
   toasts: ToastMessage[];
   addToast: (toast: Omit<ToastMessage, 'id'>) => void;
   removeToast: (id: string) => void;
+
+  // Status state (single source of truth)
+  status: IStatusSnapshot | null;
+  setStatus: (s: IStatusSnapshot) => void;
 
   // Multi-project state
   globalModeLoading: boolean;
@@ -53,6 +58,17 @@ export const useStore = create<AppState>((set) => ({
     }, 5000);
   },
   removeToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
+
+  // Status state (single source of truth)
+  status: null,
+  setStatus: (snapshot) => set((state) => {
+    // Only update if the incoming snapshot is newer than the stored one
+    // This prevents stale SSE payload overwriting a fresher poll result
+    if (!state.status || new Date(snapshot.timestamp) > new Date(state.status.timestamp)) {
+      return { status: snapshot };
+    }
+    return state;
+  }),
 
   // Multi-project state
   globalModeLoading: true,

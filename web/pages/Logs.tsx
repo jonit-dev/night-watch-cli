@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Pause, Play, Search, ArrowDownCircle, AlertCircle } from 'lucide-react';
 import Button from '../components/ui/Button';
-import { useApi, fetchLogs, fetchStatus } from '../api';
+import { useApi, fetchLogs } from '../api';
 import { useStore } from '../store/useStore';
 
 type LogName = 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner';
@@ -12,14 +12,13 @@ const Logs: React.FC = () => {
   const [activeLog, setActiveLog] = useState<LogName>('executor');
   const scrollRef = useRef<HTMLDivElement>(null);
   const { selectedProjectId, globalModeLoading } = useStore();
+  const status = useStore((s) => s.status);
 
   const { data: logData, loading: logLoading, error: logError, refetch: refetchLogs } = useApi(
     () => fetchLogs(activeLog, 500),
     [activeLog, selectedProjectId],
     { enabled: !globalModeLoading }
   );
-
-  const { data: status } = useApi(fetchStatus, [selectedProjectId], { enabled: !globalModeLoading });
 
   const logs = logData?.lines || [];
 

@@ -8,9 +8,12 @@ import type { IStatusSnapshot } from '@shared/types';
  * Centralized status synchronization hook.
  * Subscribes to SSE for real-time updates and polls as fallback.
  * Updates the shared Zustand store so all components read from a single source.
+ *
+ * Uses pickLatestSnapshot to prevent stale SSE overwrites and includes
+ * projectName updates when status changes.
  */
 export function useStatusSync(): void {
-  const { setStatus, selectedProjectId, globalModeLoading } = useStore();
+  const { setStatus, setProjectName, selectedProjectId, globalModeLoading } = useStore();
   const statusRef = useRef<IStatusSnapshot | null>(null);
 
   // Keep ref in sync for SSE callback
@@ -82,4 +85,12 @@ export function useStatusSync(): void {
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [selectedProjectId, setStatus]);
+
+  // Update projectName when status.projectName changes (from PR #71)
+  useEffect(() => {
+    const currentStatus = useStore.getState().status;
+    if (currentStatus?.projectName) {
+      setProjectName(currentStatus.projectName);
+    }
+  }, [statusRef.current?.projectName, setProjectName]);
 }
