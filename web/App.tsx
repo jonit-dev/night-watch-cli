@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar';
 import TopBar from './components/TopBar';
 import { ToastContainer } from './components/ui/Toast';
 import { useGlobalMode } from './hooks/useGlobalMode';
+import { useStatusSync } from './hooks/useStatusSync';
 // import Agents from './pages/Agents';
 import Board from './pages/Board';
 import Dashboard from './pages/Dashboard';
@@ -15,6 +16,7 @@ import Settings from './pages/Settings';
 
 const App: React.FC = () => {
   useGlobalMode();
+  useStatusSync();
 
   return (
     <Router>

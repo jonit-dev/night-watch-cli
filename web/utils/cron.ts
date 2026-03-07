@@ -94,16 +94,16 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
   {
     id: 'always-on',
     label: 'Always On (Recommended)',
-    description: '24/7 with aggressive cadence — executor every 2h, reviewer every 3h.',
+    description: '24/7 with maximum cadence — executor every hour, reviewer every 3h.',
     schedules: {
-      executor: '5 */2 * * *',
+      executor: '5 * * * *',
       reviewer: '25 */3 * * *',
       qa: '45 2,10,18 * * *',
       audit: '50 3 * * 1',
       slicer: '35 */6 * * *',
     },
     hints: {
-      executor: 'Every 2h at :05',
+      executor: 'Every hour at :05',
       reviewer: 'Every 3h at :25',
       qa: '2:45am, 10:45am & 6:45pm',
       audit: 'Mon 3:50am',

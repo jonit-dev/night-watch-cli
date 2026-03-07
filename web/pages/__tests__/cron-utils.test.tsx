@@ -42,11 +42,11 @@ describe('cron utilities', () => {
 
     it('matches template when cron values have extra whitespace', () => {
       const detected = detectTemplate(
-        '  5   */3   * * *  ',
-        '25   */6 * * *',
-        '45 2,14 *  * *',
+        '  5   *   * * *  ',
+        '25   */3 * * *',
+        '45 2,10,18 *  * *',
         '50 3 * *   1',
-        '35 */12 * * *',
+        '35 */6 * * *',
       );
 
       expect(detected?.id).toBe('always-on');
@@ -69,11 +69,11 @@ describe('cron utilities', () => {
 
   describe('getPresetValue', () => {
     it('returns preset for canonical cron value', () => {
-      expect(getPresetValue('5 */3 * * *')).toBe('5 */3 * * *');
+      expect(getPresetValue('5 */2 * * *')).toBe('5 */2 * * *');
     });
 
     it('returns preset for cron value with extra whitespace', () => {
-      expect(getPresetValue('  5   */3 * * *  ')).toBe('5 */3 * * *');
+      expect(getPresetValue('  5   */2 * * *  ')).toBe('5 */2 * * *');
     });
 
     it('returns custom sentinel for unknown schedule', () => {
@@ -85,11 +85,11 @@ describe('cron utilities', () => {
     it('uses persisted template id when id exists and schedules match', () => {
       const resolved = resolveActiveTemplate(
         'always-on',
-        '5 */3 * * *',
-        '25 */6 * * *',
-        '45 2,14 * * *',
+        '5 * * * *',
+        '25 */3 * * *',
+        '45 2,10,18 * * *',
         '50 3 * * 1',
-        '35 */12 * * *',
+        '35 */6 * * *',
       );
 
       expect(resolved?.id).toBe('always-on');
@@ -98,11 +98,11 @@ describe('cron utilities', () => {
     it('falls back to detection when persisted template id is invalid', () => {
       const resolved = resolveActiveTemplate(
         'unknown-bundle',
-        '5 */3 * * *',
-        '25 */6 * * *',
-        '45 2,14 * * *',
+        '5 * * * *',
+        '25 */3 * * *',
+        '45 2,10,18 * * *',
         '50 3 * * 1',
-        '35 */12 * * *',
+        '35 */6 * * *',
       );
 
       expect(resolved?.id).toBe('always-on');
@@ -112,10 +112,10 @@ describe('cron utilities', () => {
       const resolved = resolveActiveTemplate(
         'always-on',
         '17 * * * *',
-        '25 */6 * * *',
-        '45 2,14 * * *',
+        '25 */3 * * *',
+        '45 2,10,18 * * *',
         '50 3 * * 1',
-        '35 */12 * * *',
+        '35 */6 * * *',
       );
 
       expect(resolved).toBeUndefined();
@@ -140,7 +140,7 @@ describe('cron utilities', () => {
 
   describe('cronToHuman', () => {
     it('returns preset label for matching expression with extra whitespace', () => {
-      expect(cronToHuman('  5   */3 * * *  ')).toBe('Balanced (recommended)');
+      expect(cronToHuman('  5   */2 * * *  ')).toBe('Balanced (recommended)');
     });
 
     it('formats common interval patterns', () => {
