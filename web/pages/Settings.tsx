@@ -1761,6 +1761,21 @@ const Settings: React.FC = () => {
                 ]}
                 helperText="Board column for created issues"
               />
+              <div className="md:col-span-2">
+                <Input
+                  label="Analysis Prompt (optional)"
+                  type="textarea"
+                  rows={4}
+                  value={form.analytics.analysisPrompt ?? ''}
+                  onChange={(e) =>
+                    updateField('analytics', {
+                      ...form.analytics,
+                      analysisPrompt: e.target.value,
+                    })
+                  }
+                  helperText="Custom prompt for AI analysis. Leave empty to use default."
+                />
+              </div>
             </div>
           )}
         </Card>
