@@ -1062,6 +1062,12 @@ const Settings: React.FC = () => {
               <h3 className="text-lg font-medium text-slate-200">Global Provider</h3>
               <p className="text-sm text-slate-400 mt-1">Default AI provider used for all jobs unless overridden below</p>
             </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
+              <p className="text-sm text-slate-300">
+                Primary and secondary fallback settings only control native Claude retry behavior after a Claude proxy rate limit.
+                To use Codex, set the global provider above or assign Codex in the per-job provider overrides below.
+              </p>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Select
                 label="Provider"
@@ -1080,7 +1086,7 @@ const Settings: React.FC = () => {
                 helperText="Human-friendly name shown in PR comments, review footers, and commit attribution"
               />
               <Select
-                label="Primary Fallback Model"
+                label="Primary Native Claude Fallback"
                 value={form.primaryFallbackModel}
                 onChange={(val) => {
                   const next = val as ClaudeModel;
@@ -1091,17 +1097,17 @@ const Settings: React.FC = () => {
                   { label: 'Sonnet (claude-sonnet-4-6)', value: 'sonnet' },
                   { label: 'Opus (claude-opus-4-6)', value: 'opus' },
                 ]}
-                helperText="First native Claude model used for direct Claude execution and the first rate-limit fallback attempt"
+                helperText="Claude-only. First native Claude model used for direct Claude execution and the first rate-limit fallback attempt"
               />
               <Select
-                label="Secondary Fallback Model"
+                label="Secondary Native Claude Fallback"
                 value={form.secondaryFallbackModel}
                 onChange={(val) => updateField('secondaryFallbackModel', val as ClaudeModel)}
                 options={[
                   { label: 'Sonnet (claude-sonnet-4-6)', value: 'sonnet' },
                   { label: 'Opus (claude-opus-4-6)', value: 'opus' },
                 ]}
-                helperText="Used only if the primary fallback model is also rate-limited"
+                helperText="Claude-only. Used only if the primary native Claude fallback is also rate-limited"
               />
               <div className="md:col-span-2">
                 <Switch
