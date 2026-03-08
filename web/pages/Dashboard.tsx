@@ -6,8 +6,6 @@ import {
   Clock,
   ArrowRight,
   Calendar,
-  XCircle,
-  Play,
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -27,7 +25,6 @@ const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [cancellingProcess, setCancellingProcess] = useState<'run' | 'review' | null>(null);
   const [clearingLock, setClearingLock] = useState(false);
-  const [startingProcess, setStartingProcess] = useState<string | null>(null);
   const { setProjectName, addToast, selectedProjectId, globalModeLoading, status, setStatus } = useStore();
   const refetch = () => fetchStatus().then(setStatus).catch(() => {});
 
@@ -111,23 +108,6 @@ const Dashboard: React.FC = () => {
       });
     } finally {
       setClearingLock(false);
-    }
-  };
-
-  const handleStartProcess = async (name: string, trigger: () => Promise<unknown>) => {
-    setStartingProcess(name);
-    try {
-      await trigger();
-      addToast({ title: `${name} Started`, message: `${name} is now running`, type: 'success' });
-      refetch();
-    } catch (err) {
-      addToast({
-        title: 'Start Failed',
-        message: err instanceof Error ? err.message : `Failed to start ${name}`,
-        type: 'error',
-      });
-    } finally {
-      setStartingProcess(null);
     }
   };
 
@@ -263,10 +243,8 @@ const Dashboard: React.FC = () => {
           onCancelProcess={handleCancelProcess}
           onForceClear={handleForceClear}
           onViewLog={() => navigate('/logs')}
-          onStartProcess={handleStartProcess}
           cancellingProcess={cancellingProcess}
           clearingLock={clearingLock}
-          startingProcess={startingProcess}
         />
       </Card>
 

@@ -94,21 +94,25 @@ const Scheduling: React.FC = () => {
         config.qa?.schedule || '45 2,14 * * *',
         config.audit?.schedule || '50 3 * * 1',
         config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
-      ) ? 'template' : 'custom';
+      );
+      const detectedTemplate = scheduleMode;
       setEditState({
         form: {
           cronSchedule: config.cronSchedule || '5 */3 * * *',
           reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
           qa: config.qa || { schedule: '45 2,14 * * *', enabled: true },
           audit: config.audit || { schedule: '50 3 * * 1', enabled: true },
-          roadmapScanner: config.roadmapScanner || { slicerSchedule: '35 */12 * * *', enabled: true },
+          roadmapScanner: {
+            enabled: config.roadmapScanner?.enabled ?? true,
+            slicerSchedule: config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+          },
           scheduleBundleId: config.scheduleBundleId ?? null,
           schedulingPriority: config.schedulingPriority ?? 3,
           cronScheduleOffset: config.cronScheduleOffset ?? 0,
           globalQueueEnabled: config.queue?.enabled ?? true,
         },
-        scheduleMode: scheduleMode ? 'template' : 'custom',
-        selectedTemplateId: scheduleMode?.id ?? '',
+        scheduleMode: detectedTemplate ? 'template' : 'custom',
+        selectedTemplateId: detectedTemplate?.id ?? '',
         isDirty: false,
       });
     }
@@ -562,31 +566,37 @@ const Scheduling: React.FC = () => {
                     <div className="text-sm text-slate-400">Schedule</div>
                     <div className="text-sm text-slate-200 font-medium">
                       {formatScheduleLabel(
-                        agent.id as 'qa' ? 'qa' : agent.id as 'audit' ? 'audit' : agent.id as 'planner' ? 'slicer' : agent.id,
-                        config?.[agent.id === 'qa' ? 'qa' : agent.id === 'audit' ? 'audit' : agent.id === 'planner' ? 'roadmapScanner' : null]?.schedule || agent.id === 'qa'
-                          ? config?.qa?.schedule
+                        agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer',
+                        agent.id === 'qa'
+                          ? config?.qa?.schedule || ''
                           : agent.id === 'audit'
-                          ? config?.audit?.schedule
+                          ? config?.audit?.schedule || ''
+                          : agent.id === 'planner'
+                          ? config?.roadmapScanner?.slicerSchedule || '35 */12 * * *'
+                          : agent.schedule,
+                        agent.id === 'qa'
+                          ? config?.qa?.schedule || ''
+                          : agent.id === 'audit'
+                          ? config?.audit?.schedule || ''
                           : agent.id === 'planner'
                           ? config?.roadmapScanner?.slicerSchedule || '35 */12 * * *'
                           : agent.schedule,
                       )}
                     </div>
-                    {renderDelayNote(agent.delayInfo)}
-                    <div>
-                      <div className="text-sm text-slate-400">Next Run</div>
-                      {renderNextRun(agent.nextRun)}
-                    </div>
-                    <div className={`flex items-center space-x-2 text-sm ${agent.enabled ? 'text-green-400' : 'text-amber-400'}`}>
-                      <Check className="h-4 w-4" />
-                      <span>{agent.enabled ? 'Active' : 'Disabled'}</span>
-                    </div>
+                  </div>
+                  {renderDelayNote(agent.delayInfo)}
+                  <div>
+                    <div className="text-sm text-slate-400">Next Run</div>
+                    {renderNextRun(agent.nextRun)}
+                  </div>
+                  <div className={`flex items-center space-x-2 text-sm ${agent.enabled ? 'text-green-400' : 'text-amber-400'}`}>
+                    <Check className="h-4 w-4" />
+                    <span>{agent.enabled ? 'Active' : 'Disabled'}</span>
                   </div>
                 </div>
               ) : (
-                  <div className="text-slate-500 text-sm">{agent.name} is disabled.</div>
-                )}
-              </div>
+                <div className="text-slate-500 text-sm">{agent.name} is disabled.</div>
+              )}
             </div>
           ))}
         </div>
@@ -621,7 +631,10 @@ const Scheduling: React.FC = () => {
                   reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
                   qa: config.qa || { schedule: '45 2,14 * * *', enabled: true },
                   audit: config.audit || { schedule: '50 3 * * 1', enabled: true },
-                  roadmapScanner: config.roadmapScanner || { slicerSchedule: '35 */12 * * *', enabled: true },
+                  roadmapScanner: {
+                    enabled: config.roadmapScanner?.enabled ?? true,
+                    slicerSchedule: config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+                  },
                   scheduleBundleId: config.scheduleBundleId ?? null,
                   schedulingPriority: config.schedulingPriority ?? 3,
                   cronScheduleOffset: config.cronScheduleOffset ?? 0,
