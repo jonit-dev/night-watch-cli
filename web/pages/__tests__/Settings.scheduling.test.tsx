@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import type { INightWatchConfig } from '../../api';
+import type { INightWatchConfig, IRoadmapScannerConfig } from '../../api';
 import Settings from '../Settings';
 
 function renderSettings() {
@@ -91,6 +91,14 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
         audit: 10,
       },
     },
+    analytics: {
+      enabled: true,
+      schedule: '15 3 * * *',
+      maxRuntime: 1800,
+      lookbackDays: 30,
+      targetColumn: 'Draft',
+      analysisPrompt: '',
+    },
   };
 
   return {
@@ -107,6 +115,10 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     audit: {
       ...base.audit,
       ...(overrides.audit ?? {}),
+    },
+    analytics: {
+      ...base.analytics,
+      ...(overrides.analytics ?? {}),
     },
   };
 }
@@ -264,6 +276,10 @@ describe('Settings schedules mode sync', () => {
         enabled: false,
         roadmapPath: 'ROADMAP.md',
         autoScanInterval: 300,
+        slicerSchedule: '35 */6 * * *',
+        slicerMaxRuntime: 600,
+        priorityMode: 'roadmap-first',
+        issueColumn: 'Draft',
       },
     });
     apiMocks.toggleRoadmapScanner.mockResolvedValue(disabledConfig);
@@ -290,6 +306,10 @@ describe('Settings schedules mode sync', () => {
         enabled: false,
         roadmapPath: 'ROADMAP.md',
         autoScanInterval: 300,
+        slicerSchedule: '35 */6 * * *',
+        slicerMaxRuntime: 600,
+        priorityMode: 'roadmap-first',
+        issueColumn: 'Draft',
       },
     });
     apiMocks.toggleRoadmapScanner.mockResolvedValue(disabledConfig);
