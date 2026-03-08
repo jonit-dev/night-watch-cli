@@ -615,15 +615,6 @@ Result: 0 open PRs matched."
   exit 0
 fi
 
-# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
-# Only check for provider after we know there are PRs to review and we're not in dry-run mode
-if [ "${NW_DRY_RUN:-0}" != "1" ]; then
-  if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
-    echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
-    exit 127
-  fi
-fi
-
 NEEDS_WORK=0
 REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || echo "")
 PRS_NEEDING_WORK=""
@@ -750,6 +741,15 @@ Result: all ${OPEN_PRS} matching PRs already pass CI and review threshold (${MIN
   fi
   emit_result "skip_all_passing"
   exit 0
+fi
+
+# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
+# Only check for provider after we know there's review work to do and we're not in dry-run mode
+if [ "${NW_DRY_RUN:-0}" != "1" ]; then
+  if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
+    echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
+    exit 127
+  fi
 fi
 
 PRS_NEEDING_WORK=$(echo "${PRS_NEEDING_WORK}" \

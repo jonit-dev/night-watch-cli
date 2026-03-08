@@ -416,13 +416,6 @@ Result: 0 open PRs matched."
   exit 0
 fi
 
-# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
-# Only check for provider after we know there are PRs to QA
-if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
-  echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
-  exit 127
-fi
-
 REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || echo "")
 
 # Collect PRs that need QA
@@ -480,6 +473,13 @@ Artifacts: ${QA_ARTIFACTS_DESC} (mode=${QA_ARTIFACTS})
 Result: All matching PRs already have QA results."
   emit_result "skip_all_qa_done"
   exit 0
+fi
+
+# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
+# Only check for provider after we know there's QA work to do
+if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
+  echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
+  exit 127
 fi
 
 PRS_NEEDING_QA=$(echo "${PRS_NEEDING_QA}" \
