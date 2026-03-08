@@ -42,10 +42,12 @@ test.describe('Scheduling - ScheduleConfig UX Revamp', () => {
     // Click back to Template
     await page.click('button:has-text("Template")');
 
-    // Should show template cards
-    await expect(page.locator('text=label')).or(
-      page.locator('button:has-text("Balanced")')
-    ).toBeVisible({ timeout: 5000 });
+    // Should show template cards - check for either label text or Balanced button
+    const hasLabelOrButton = await Promise.all([
+      page.locator('text=label').count().then(c => c > 0),
+      page.locator('button:has-text("Balanced")').count().then(c => c > 0)
+    ]);
+    expect(hasLabelOrButton.some(Boolean)).toBeTruthy();
   });
 
   test('should display schedule templates in template mode', async ({ page }) => {
@@ -140,7 +142,7 @@ test.describe('Scheduling - ScheduleConfig UX Revamp', () => {
     );
 
     // This may not be visible in all states
-    const isVisible = await delayLabel.first().isVisible().catch(() => false);
+    await delayLabel.first().isVisible().catch(() => false);
     // Don't fail if not visible
   });
 
@@ -154,10 +156,7 @@ test.describe('Scheduling - ScheduleConfig UX Revamp', () => {
     }
 
     // Look for clickable template buttons
-    const templateButtons = page.locator('button').filter(async (btn) => {
-      const text = await btn.textContent();
-      return text && text.includes('Every');
-    });
+    const templateButtons = page.locator('button').filter({ hasText: /Every/i });
 
     const count = await templateButtons.count();
     // If templates exist, they should be clickable
