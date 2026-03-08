@@ -41,11 +41,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
 
-# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
-if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
-  echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
-  exit 127
-fi
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 # NOTE: Lock file path must match executorLockPath() in src/utils/status-data.ts
 LOCK_FILE="/tmp/night-watch-${PROJECT_RUNTIME_KEY}.lock"
@@ -232,6 +227,13 @@ if [ -z "${ISSUE_NUMBER}" ]; then
   claim_prd "${PRD_DIR}" "${ELIGIBLE_PRD}"
   # Update EXIT trap to also release claim
   trap "rm -f '${LOCK_FILE}'; release_claim '${PRD_DIR}' '${ELIGIBLE_PRD}'" EXIT
+fi
+
+# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
+# Only check for provider after we know there's an eligible PRD to work on
+if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
+  echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
+  exit 127
 fi
 
 PRD_NAME="${ELIGIBLE_PRD%.md}"
