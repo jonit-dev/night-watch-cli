@@ -465,6 +465,19 @@ const Dashboard: React.FC = () => {
                   </div>
                 </div>
              </div>
+             <div className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
+                <div className="flex items-center space-x-3">
+                  <div className={`p-1.5 rounded-md ${scheduleInfo?.analytics?.installed ? 'bg-rose-500/10 text-rose-400' : 'bg-slate-800 text-slate-500'}`}>
+                    <ClipboardList className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div className={`text-sm font-medium ${scheduleInfo?.analytics?.installed ? 'text-slate-200' : 'text-slate-500'}`}>Analytics</div>
+                    <div className="text-xs text-slate-500">
+                      {scheduleInfo?.paused ? 'Paused' : formatNextRun(scheduleInfo?.analytics?.nextRun)}
+                    </div>
+                  </div>
+                </div>
+             </div>
            </div>
         </Card>
       </div>

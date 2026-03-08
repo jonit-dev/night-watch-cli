@@ -8,7 +8,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { loadConfig, getDefaultConfig, resolveJobProvider } from '../config.js';
 import { INightWatchConfig, JobType } from '../types.js';
-import type { IQaConfig, IAuditConfig } from '../types.js';
+import type { IQaConfig, IAuditConfig, IAnalyticsConfig } from '../types.js';
 
 describe('config', () => {
   let tempDir: string;
@@ -1300,6 +1300,121 @@ describe('config', () => {
       expect(config.audit.enabled).toBe(false);
       expect(config.audit.schedule).toBe('0 */6 * * *');
       expect(config.audit.maxRuntime).toBe(900);
+    });
+  });
+
+  describe('analytics config', () => {
+    it('should load analytics defaults when no analytics config present', () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.analytics).toBeDefined();
+      expect(config.analytics.enabled).toBe(false);
+      expect(config.analytics.schedule).toBe('0 6 * * 1');
+      expect(config.analytics.maxRuntime).toBe(900);
+      expect(config.analytics.lookbackDays).toBe(7);
+      expect(config.analytics.targetColumn).toBe('Draft');
+    });
+
+    it('should load analytics config from file', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          analytics: {
+            enabled: true,
+            schedule: '0 2 * * *',
+            maxRuntime: 600,
+            lookbackDays: 14,
+            targetColumn: 'Ready',
+            analysisPrompt: 'Custom prompt for analysis',
+          },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.analytics.enabled).toBe(true);
+      expect(config.analytics.schedule).toBe('0 2 * * *');
+      expect(config.analytics.maxRuntime).toBe(600);
+      expect(config.analytics.lookbackDays).toBe(14);
+      expect(config.analytics.targetColumn).toBe('Ready');
+      expect(config.analytics.analysisPrompt).toBe('Custom prompt for analysis');
+    });
+
+    it('should normalize partial analytics config with defaults', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          analytics: {
+            lookbackDays: 30,
+          },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.analytics.enabled).toBe(false);
+      expect(config.analytics.schedule).toBe('0 6 * * 1');
+      expect(config.analytics.maxRuntime).toBe(900);
+      expect(config.analytics.lookbackDays).toBe(30);
+      expect(config.analytics.targetColumn).toBe('Draft');
+    });
+
+    it('should override analytics enabled from env var', () => {
+      process.env.NW_ANALYTICS_ENABLED = 'true';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.analytics.enabled).toBe(true);
+    });
+
+    it('should override analytics schedule from env var', () => {
+      process.env.NW_ANALYTICS_SCHEDULE = '0 */4 * * *';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.analytics.schedule).toBe('0 */4 * * *');
+    });
+
+    it('should override analytics max runtime from env var', () => {
+      process.env.NW_ANALYTICS_MAX_RUNTIME = '600';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.analytics.maxRuntime).toBe(600);
+    });
+
+    it('should override analytics lookback days from env var', () => {
+      process.env.NW_ANALYTICS_LOOKBACK_DAYS = '14';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.analytics.lookbackDays).toBe(14);
+    });
+
+    it('should let env vars override analytics config from file', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          analytics: {
+            enabled: false,
+            schedule: '0 2 * * *',
+            maxRuntime: 600,
+            lookbackDays: 14,
+          },
+        }),
+      );
+
+      process.env.NW_ANALYTICS_ENABLED = 'true';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.analytics.enabled).toBe(true);
+      expect(config.analytics.schedule).toBe('0 2 * * *');
+      expect(config.analytics.maxRuntime).toBe(600);
+      expect(config.analytics.lookbackDays).toBe(14);
     });
   });
 
