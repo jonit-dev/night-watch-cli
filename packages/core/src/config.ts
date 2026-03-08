@@ -28,21 +28,21 @@ import {
   DEFAULT_MAX_RUNTIME,
   DEFAULT_MIN_REVIEW_SCORE,
   DEFAULT_NOTIFICATIONS,
-  DEFAULT_PRIMARY_FALLBACK_MODEL,
   DEFAULT_PRD_DIR,
   DEFAULT_PRD_PRIORITY,
+  DEFAULT_PRIMARY_FALLBACK_MODEL,
   DEFAULT_PROVIDER,
   DEFAULT_PROVIDER_ENV,
   DEFAULT_QA,
   DEFAULT_QUEUE,
   DEFAULT_REVIEWER_ENABLED,
-  DEFAULT_SECONDARY_FALLBACK_MODEL,
   DEFAULT_REVIEWER_MAX_RETRIES,
   DEFAULT_REVIEWER_MAX_RUNTIME,
   DEFAULT_REVIEWER_RETRY_DELAY,
   DEFAULT_REVIEWER_SCHEDULE,
   DEFAULT_ROADMAP_SCANNER,
   DEFAULT_SCHEDULING_PRIORITY,
+  DEFAULT_SECONDARY_FALLBACK_MODEL,
   DEFAULT_TEMPLATES_DIR,
 } from './constants.js';
 import { normalizeConfig } from './config-normalize.js';
@@ -195,7 +195,9 @@ function mergeConfigs(
   merged.primaryFallbackModel =
     merged.primaryFallbackModel ?? merged.claudeModel ?? DEFAULT_PRIMARY_FALLBACK_MODEL;
   merged.secondaryFallbackModel =
-    merged.secondaryFallbackModel ?? merged.primaryFallbackModel ?? DEFAULT_SECONDARY_FALLBACK_MODEL;
+    merged.secondaryFallbackModel ??
+    merged.primaryFallbackModel ??
+    DEFAULT_SECONDARY_FALLBACK_MODEL;
   merged.claudeModel = merged.primaryFallbackModel;
 
   return merged;
