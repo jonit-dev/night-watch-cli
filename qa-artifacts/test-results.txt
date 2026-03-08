@@ -1,0 +1,57 @@
+yarn run v1.22.22
+$ vitest run --reporter=verbose
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90m/home/joao/projects/night-watch-cli-nw-qa-runner/web[39m
+
+ [32m✓[39m pages/__tests__/Settings.test.tsx[2m > [22mSettings Page - PRD Coverage Verification[2m > [22mConfigForm type completeness (compile-time check)[2m > [22mshould include all fields from INightWatchConfig except _cliProviderOverride[32m 3[2mms[22m[39m
+ [32m✓[39m pages/__tests__/Settings.test.tsx[2m > [22mSettings Page - PRD Coverage Verification[2m > [22mtoFormState default values[2m > [22mshould provide default values for all new PRD fields[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/Settings.test.tsx[2m > [22mSettings Page - PRD Coverage Verification[2m > [22mSettings page tabs (from source code)[2m > [22mshould have all required tabs for PRD coverage[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/Settings.test.tsx[2m > [22mSettings Page - PRD Coverage Verification[2m > [22mRetry Settings (Phase 5 - Reviewer Retry Loop)[2m > [22mshould render retry config fields[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/Settings.test.tsx[2m > [22mSettings Page - PRD Coverage Verification[2m > [22mRetry Settings (Phase 5 - Reviewer Retry Loop)[2m > [22mshould clamp reviewerMaxRetries to valid range (0-10)[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/Settings.test.tsx[2m > [22mSettings Page - PRD Coverage Verification[2m > [22mRetry Settings (Phase 5 - Reviewer Retry Loop)[2m > [22mshould clamp reviewerRetryDelay to valid range (0-300)[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/Dashboard.snapshot.test.tsx[2m > [22mpickLatestSnapshot[2m > [22mreturns the only available snapshot[32m 1[2mms[22m[39m
+ [32m✓[39m pages/__tests__/Dashboard.snapshot.test.tsx[2m > [22mpickLatestSnapshot[2m > [22mprefers the newer fallback snapshot over an older primary snapshot[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/Dashboard.snapshot.test.tsx[2m > [22mpickLatestSnapshot[2m > [22mkeeps the primary snapshot when timestamps are equal[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22mdetectTemplate[2m > [22mdetects every built-in template by exact schedule set[32m 1[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22mdetectTemplate[2m > [22mreturns undefined when only one schedule differs[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22mdetectTemplate[2m > [22mmatches template when cron values have extra whitespace[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22mdetectTemplate[2m > [22mdetects every built-in template even with uneven whitespace[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22mgetPresetValue[2m > [22mreturns preset for canonical cron value[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22mgetPresetValue[2m > [22mreturns preset for cron value with extra whitespace[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22mgetPresetValue[2m > [22mreturns custom sentinel for unknown schedule[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22mresolveActiveTemplate[2m > [22muses persisted template id when id exists and schedules match[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22mresolveActiveTemplate[2m > [22mfalls back to detection when persisted template id is invalid[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22mresolveActiveTemplate[2m > [22mdoes not trust stale persisted template id when schedules no longer match[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22misCronEquivalent[2m > [22mreturns true for equivalent cron strings with uneven whitespace[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22misCronEquivalent[2m > [22mreturns false for different cron strings[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22mgetTemplateById[2m > [22mreturns undefined for missing template id[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22mcronToHuman[2m > [22mreturns preset label for matching expression with extra whitespace[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22mcronToHuman[2m > [22mformats common interval patterns[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22mcronToHuman[2m > [22mformats fixed-minute day and range schedules[32m 0[2mms[22m[39m
+ [32m✓[39m pages/__tests__/cron-utils.test.tsx[2m > [22mcron utilities[2m > [22mcronToHuman[2m > [22mhandles invalid cron format gracefully[32m 0[2mms[22m[39m
+ [2m[90m↓[39m[22m pages/__tests__/Scheduling.test.tsx[2m > [22mScheduling page[2m > [22mshows schedule bundle and bundle-aware labels when template matches
+ [2m[90m↓[39m[22m pages/__tests__/Scheduling.test.tsx[2m > [22mScheduling page[2m > [22mfalls back to generic cron labels when schedules are mixed/custom
+ [2m[90m↓[39m[22m pages/__tests__/Scheduling.test.tsx[2m > [22mScheduling page[2m > [22mkeeps bundle labeling when matching cron values include extra whitespace
+ [2m[90m↓[39m[22m pages/__tests__/Scheduling.test.tsx[2m > [22mScheduling page[2m > [22msaves edited schedules and reinstalls cron
+ [2m[90m↓[39m[22m pages/__tests__/Scheduling.test.tsx[2m > [22mScheduling page[2m > [22mshows effective schedules and offset note when cronScheduleOffset is active
+ [2m[90m↓[39m[22m pages/__tests__/Scheduling.test.tsx[2m > [22mScheduling page[2m > [22mwarns and refetches when cron reinstall fails after saving schedules
+ [2m[90m↓[39m[22m pages/__tests__/Scheduling.test.tsx[2m > [22mScheduling page[2m > [22mwarns and refetches when a job toggle saves but cron reinstall fails
+ [2m[90m↓[39m[22m pages/__tests__/Scheduling.test.tsx[2m > [22mScheduling page[2m > [22mrenders provider lanes from queue status
+ [2m[90m↓[39m[22m pages/__tests__/Scheduling.test.tsx[2m > [22mScheduling page[2m > [22mrenders recent provider runs inside the execution timeline
+ [2m[90m↓[39m[22m pages/__tests__/Scheduling.test.tsx[2m > [22mScheduling page[2m > [22mrenders provider bucket summary from analytics
+ [32m✓[39m pages/__tests__/Scheduling.test.tsx[2m > [22mScheduling page[2m > [22mkeeps cron controls available after dashboard refresh[32m 101[2mms[22m[39m
+ [32m✓[39m pages/__tests__/Settings.scheduling.test.tsx[2m > [22mSettings schedules mode sync[2m > [22minitializes schedule tab in template mode for a known bundle[32m 76[2mms[22m[39m
+ [32m✓[39m pages/__tests__/Settings.scheduling.test.tsx[2m > [22mSettings schedules mode sync[2m > [22mswitches to custom mode when config reload no longer matches a template[32m 61[2mms[22m[39m
+ [32m✓[39m pages/__tests__/Settings.scheduling.test.tsx[2m > [22mSettings schedules mode sync[2m > [22mpersists scheduleBundleId when saving in template mode[32m 31[2mms[22m[39m
+ [32m✓[39m pages/__tests__/Settings.scheduling.test.tsx[2m > [22mSettings schedules mode sync[2m > [22mclears scheduleBundleId when switching to custom mode and saving[32m 78[2mms[22m[39m
+ [32m✓[39m pages/__tests__/Settings.scheduling.test.tsx[2m > [22mSettings schedules mode sync[2m > [22mrecomputes template mode after reset[32m 70[2mms[22m[39m
+ [32m✓[39m pages/__tests__/Settings.scheduling.test.tsx[2m > [22mSettings schedules mode sync[2m > [22mrebinds scheduleBundleId when switching back to template mode[32m 90[2mms[22m[39m
+ [32m✓[39m pages/__tests__/Settings.scheduling.test.tsx[2m > [22mSettings schedules mode sync[2m > [22mreinstalls cron when planner is toggled from settings[32m 37[2mms[22m[39m
+ [32m✓[39m pages/__tests__/Settings.scheduling.test.tsx[2m > [22mSettings schedules mode sync[2m > [22mshows a warning when planner toggle saves but cron reinstall fails[32m 34[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m5 passed[39m[22m[90m (5)[39m
+[2m      Tests [22m [1m[32m35 passed[39m[22m[2m | [22m[33m10 skipped[39m[90m (45)[39m
+[2m   Start at [22m 03:43:19
+[2m   Duration [22m 1.24s[2m (transform 530ms, setup 749ms, import 799ms, tests 597ms, environment 1.13s)[22m
+
+Done in 1.63s.
