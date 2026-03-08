@@ -81,6 +81,8 @@ const webSrc = resolve(__dirname, '../../web/dist');
 const webDest = resolve(__dirname, 'dist/web');
 if (existsSync(webRoot)) {
   console.log('Building web UI...');
+  // Install web dependencies first since web/ is not part of yarn workspaces
+  execSync('yarn install --frozen-lockfile', { cwd: webRoot, stdio: 'inherit' });
   execSync('yarn build', { cwd: webRoot, stdio: 'inherit' });
   cpSync(webSrc, webDest, { recursive: true });
   console.log('Web UI copied: dist/web/');
