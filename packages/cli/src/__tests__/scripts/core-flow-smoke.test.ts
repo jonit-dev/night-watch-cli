@@ -919,6 +919,8 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_REVIEWER_WORKER_MODE: '0',
       NW_REVIEWER_PARALLEL: '0',
       NW_AUTO_MERGE: '0',
+      NW_QUEUE_ENABLED: '0', // Disable global queue for this test
+      NW_TARGET_PR: '', // No target PR (use global lock)
     });
 
     // Note: Reviewer script currently exits 0 on timeout (missing explicit exit code)
@@ -1046,7 +1048,11 @@ describe('core flow smoke tests (bash scripts)', () => {
     fs.writeFileSync(lockFile, String(holder.pid), 'utf-8');
 
     try {
-      const result = runScript(reviewerScript, projectDir);
+      const result = runScript(reviewerScript, projectDir, {
+        NW_QUEUE_ENABLED: '0', // Disable global queue for this test
+        NW_REVIEWER_WORKER_MODE: '0', // Not in worker mode
+        NW_TARGET_PR: '', // No target PR (use global lock)
+      });
 
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_locked');
@@ -1235,6 +1241,8 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_AUTO_MERGE: '0',
       NW_DRY_RUN: '1',
       NW_REVIEWER_PARALLEL: '0',
+      NW_QUEUE_ENABLED: '0', // Disable global queue for this test
+      NW_TARGET_PR: '', // No target PR (use global lock)
     });
 
     expect(result.status).toBe(0);
@@ -1298,6 +1306,8 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_REVIEWER_WORKER_MODE: '0',
       NW_REVIEWER_PARALLEL: '0',
       NW_AUTO_MERGE: '0',
+      NW_QUEUE_ENABLED: '0', // Disable global queue for this test
+      NW_TARGET_PR: '', // No target PR (use global lock)
     });
 
     // Note: Reviewer script currently exits 0 on failure (missing explicit exit code propagation)
@@ -1364,6 +1374,8 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_REVIEWER_PARALLEL: '0',
       NW_AUTO_MERGE: '0',
       NW_SMOKE_ARGS_FILE: argsFile,
+      NW_QUEUE_ENABLED: '0', // Disable global queue for this test
+      NW_TARGET_PR: '', // No target PR (use global lock)
     });
 
     expect(result.status).toBe(0);
@@ -1452,6 +1464,7 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_REVIEWER_WORKER_STAGGER: '0', // No stagger delay in tests
       NW_AUTO_MERGE: '0',
       NW_QUEUE_ENABLED: '0', // Disable global queue for this test
+      NW_TARGET_PR: '', // No target PR (use global lock)
     });
 
     // Note: Parallel mode calls `exit 0` at line 378 regardless of worker results
