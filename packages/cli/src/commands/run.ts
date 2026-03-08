@@ -314,8 +314,13 @@ export function buildEnvVars(
     env.NW_FALLBACK_ON_RATE_LIMIT = 'true';
   }
 
-  // Claude model used for native / fallback execution
-  env.NW_CLAUDE_MODEL_ID = CLAUDE_MODEL_IDS[config.claudeModel ?? 'sonnet'];
+  // Claude models used for native / fallback execution
+  const primaryFallbackModel = config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet';
+  const secondaryFallbackModel = config.secondaryFallbackModel ?? primaryFallbackModel;
+  env.NW_CLAUDE_PRIMARY_MODEL_ID = CLAUDE_MODEL_IDS[primaryFallbackModel];
+  env.NW_CLAUDE_SECONDARY_MODEL_ID = CLAUDE_MODEL_IDS[secondaryFallbackModel];
+  // Backward compatibility for scripts/helpers still reading the legacy env var.
+  env.NW_CLAUDE_MODEL_ID = env.NW_CLAUDE_PRIMARY_MODEL_ID;
 
   // Telegram credentials for in-script fallback warnings.
   // Export only webhooks that explicitly subscribed to rate_limit_fallback.

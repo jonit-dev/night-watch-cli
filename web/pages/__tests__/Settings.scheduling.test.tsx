@@ -38,7 +38,7 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     maxRuntime: 7200,
     reviewerMaxRuntime: 3600,
     maxLogSize: 524288,
-    cronSchedule: '5 */2 * * *',
+    cronSchedule: '5 * * * *',
     reviewerSchedule: '25 */3 * * *',
     scheduleBundleId: 'always-on',
     cronScheduleOffset: 0,
@@ -262,6 +262,8 @@ describe('Settings schedules mode sync', () => {
     const disabledConfig = makeConfig({
       roadmapScanner: {
         enabled: false,
+        roadmapPath: 'ROADMAP.md',
+        autoScanInterval: 300,
       },
     });
     apiMocks.toggleRoadmapScanner.mockResolvedValue(disabledConfig);
@@ -286,6 +288,8 @@ describe('Settings schedules mode sync', () => {
     const disabledConfig = makeConfig({
       roadmapScanner: {
         enabled: false,
+        roadmapPath: 'ROADMAP.md',
+        autoScanInterval: 300,
       },
     });
     apiMocks.toggleRoadmapScanner.mockResolvedValue(disabledConfig);

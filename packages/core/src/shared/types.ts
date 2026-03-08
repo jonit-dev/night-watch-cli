@@ -137,6 +137,8 @@ export interface INightWatchConfig {
   autoMerge?: boolean;
   autoMergeMethod?: MergeMethod;
   fallbackOnRateLimit: boolean;
+  primaryFallbackModel?: ClaudeModel;
+  secondaryFallbackModel?: ClaudeModel;
   claudeModel: ClaudeModel;
   qa: IQaConfig;
   audit: IAuditConfig;

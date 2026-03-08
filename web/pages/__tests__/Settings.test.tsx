@@ -11,7 +11,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
       // - reviewerMaxRetries, reviewerRetryDelay
       // - providerEnv, notifications, prdPriority
       // - roadmapScanner, templatesDir, boardProvider, jobProviders
-      // - autoMerge, autoMergeMethod, fallbackOnRateLimit, claudeModel
+      // - autoMerge, autoMergeMethod, fallbackOnRateLimit, primaryFallbackModel, secondaryFallbackModel, claudeModel
       // - qa, audit
 
       const requiredFields = [
@@ -44,6 +44,8 @@ describe('Settings Page - PRD Coverage Verification', () => {
         'autoMerge',
         'autoMergeMethod',
         'fallbackOnRateLimit',
+        'primaryFallbackModel',
+        'secondaryFallbackModel',
         'claudeModel',
         'qa',
         'audit',
@@ -52,6 +54,8 @@ describe('Settings Page - PRD Coverage Verification', () => {
       // Verify all new PRD fields are included
       expect(requiredFields).toContain('prdDir');
       expect(requiredFields).toContain('fallbackOnRateLimit');
+      expect(requiredFields).toContain('primaryFallbackModel');
+      expect(requiredFields).toContain('secondaryFallbackModel');
       expect(requiredFields).toContain('claudeModel');
       expect(requiredFields).toContain('qa');
       expect(requiredFields).toContain('audit');
@@ -64,8 +68,8 @@ describe('Settings Page - PRD Coverage Verification', () => {
       expect(requiredFields).toContain('reviewerMaxRetries');
       expect(requiredFields).toContain('reviewerRetryDelay');
 
-      // If we got here, all 32 fields are defined in ConfigForm
-      expect(requiredFields.length).toBe(32);
+      // If we got here, all 34 fields are defined in ConfigForm
+      expect(requiredFields.length).toBe(34);
     });
   });
 
@@ -76,6 +80,8 @@ describe('Settings Page - PRD Coverage Verification', () => {
         prdDir: 'docs/prds',
         providerLabel: '',
         fallbackOnRateLimit: true,
+        primaryFallbackModel: 'sonnet',
+        secondaryFallbackModel: 'sonnet',
         claudeModel: 'sonnet',
         cronSchedule: '5 */3 * * *',
         reviewerSchedule: '25 */6 * * *',
@@ -101,6 +107,8 @@ describe('Settings Page - PRD Coverage Verification', () => {
       expect(defaults.prdDir).toBe('docs/prds');
       expect(defaults.providerLabel).toBe('');
       expect(defaults.fallbackOnRateLimit).toBe(true);
+      expect(defaults.primaryFallbackModel).toBe('sonnet');
+      expect(defaults.secondaryFallbackModel).toBe('sonnet');
       expect(defaults.claudeModel).toBe('sonnet');
       expect(defaults.qa.artifacts).toBe('both');
       expect(defaults.audit.maxRuntime).toBe(1800);

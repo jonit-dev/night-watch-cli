@@ -133,10 +133,24 @@ export interface INightWatchConfig {
   fallbackOnRateLimit: boolean;
 
   /**
-   * Claude model to use when running natively (i.e. when no ANTHROPIC_BASE_URL proxy
-   * is set, or when falling back from a rate-limited proxy).
+   * First native Claude model to try after a proxy rate-limit.
+   * Also used as the default native Claude model for direct execution paths.
    * "sonnet" → claude-sonnet-4-6 (default)
    * "opus"   → claude-opus-4-6
+   */
+  primaryFallbackModel?: ClaudeModel;
+
+  /**
+   * Second native Claude model to try if the primary fallback model is also rate-limited.
+   * Defaults to the same model as primaryFallbackModel to preserve existing behavior
+   * until explicitly configured otherwise.
+   */
+  secondaryFallbackModel?: ClaudeModel;
+
+  /**
+   * Legacy alias for primaryFallbackModel kept for backward compatibility with
+   * older config files and tests.
+   * @deprecated Use primaryFallbackModel instead.
    */
   claudeModel: ClaudeModel;
 

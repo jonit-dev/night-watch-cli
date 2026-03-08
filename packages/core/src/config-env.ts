@@ -170,9 +170,23 @@ export function buildEnvOverrideConfig(
     const v = parseBoolean(process.env.NW_FALLBACK_ON_RATE_LIMIT);
     if (v !== null) env.fallbackOnRateLimit = v;
   }
+  if (process.env.NW_CLAUDE_PRIMARY_MODEL) {
+    const model = process.env.NW_CLAUDE_PRIMARY_MODEL;
+    if (VALID_CLAUDE_MODELS.includes(model as ClaudeModel)) {
+      env.primaryFallbackModel = model as ClaudeModel;
+      env.claudeModel = model as ClaudeModel;
+    }
+  }
+  if (process.env.NW_CLAUDE_SECONDARY_MODEL) {
+    const model = process.env.NW_CLAUDE_SECONDARY_MODEL;
+    if (VALID_CLAUDE_MODELS.includes(model as ClaudeModel)) {
+      env.secondaryFallbackModel = model as ClaudeModel;
+    }
+  }
   if (process.env.NW_CLAUDE_MODEL) {
     const model = process.env.NW_CLAUDE_MODEL;
     if (VALID_CLAUDE_MODELS.includes(model as ClaudeModel)) {
+      env.primaryFallbackModel = model as ClaudeModel;
       env.claudeModel = model as ClaudeModel;
     }
   }

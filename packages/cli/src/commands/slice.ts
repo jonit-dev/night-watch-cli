@@ -197,7 +197,8 @@ export function buildEnvVars(
 
   // Roadmap path
   env.NW_ROADMAP_PATH = config.roadmapScanner.roadmapPath;
-  env.NW_CLAUDE_MODEL_ID = CLAUDE_MODEL_IDS[config.claudeModel ?? 'sonnet'];
+  env.NW_CLAUDE_MODEL_ID =
+    CLAUDE_MODEL_IDS[config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet'];
 
   // Telegram status messages from bash scripts (start/progress/final status)
   const telegramWebhooks = getTelegramStatusWebhooks(config);

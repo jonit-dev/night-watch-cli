@@ -131,7 +131,8 @@ export function buildEnvVars(
   env.NW_MIN_REVIEW_SCORE = String(config.minReviewScore);
   env.NW_BRANCH_PATTERNS = config.branchPatterns.join(',');
   env.NW_PRD_DIR = config.prdDir;
-  env.NW_CLAUDE_MODEL_ID = CLAUDE_MODEL_IDS[config.claudeModel ?? 'sonnet'];
+  env.NW_CLAUDE_MODEL_ID =
+    CLAUDE_MODEL_IDS[config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet'];
 
   // Auto-merge configuration
   if (config.autoMerge) {

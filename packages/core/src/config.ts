@@ -32,6 +32,7 @@ import {
   DEFAULT_MAX_RUNTIME,
   DEFAULT_MIN_REVIEW_SCORE,
   DEFAULT_NOTIFICATIONS,
+  DEFAULT_PRIMARY_FALLBACK_MODEL,
   DEFAULT_PRD_DIR,
   DEFAULT_PRD_PRIORITY,
   DEFAULT_PROVIDER,
@@ -39,6 +40,7 @@ import {
   DEFAULT_QA,
   DEFAULT_QUEUE,
   DEFAULT_REVIEWER_ENABLED,
+  DEFAULT_SECONDARY_FALLBACK_MODEL,
   DEFAULT_REVIEWER_MAX_RETRIES,
   DEFAULT_REVIEWER_MAX_RUNTIME,
   DEFAULT_REVIEWER_RETRY_DELAY,
@@ -85,6 +87,8 @@ export function getDefaultConfig(): INightWatchConfig {
     autoMerge: DEFAULT_AUTO_MERGE,
     autoMergeMethod: DEFAULT_AUTO_MERGE_METHOD,
     fallbackOnRateLimit: DEFAULT_FALLBACK_ON_RATE_LIMIT,
+    primaryFallbackModel: DEFAULT_PRIMARY_FALLBACK_MODEL,
+    secondaryFallbackModel: DEFAULT_SECONDARY_FALLBACK_MODEL,
     claudeModel: DEFAULT_CLAUDE_MODEL,
     qa: { ...DEFAULT_QA },
     audit: { ...DEFAULT_AUDIT },
@@ -190,6 +194,11 @@ function mergeConfigs(
     merged.reviewerRetryDelay,
     DEFAULT_REVIEWER_RETRY_DELAY,
   );
+  merged.primaryFallbackModel =
+    merged.primaryFallbackModel ?? merged.claudeModel ?? DEFAULT_PRIMARY_FALLBACK_MODEL;
+  merged.secondaryFallbackModel =
+    merged.secondaryFallbackModel ?? merged.primaryFallbackModel ?? DEFAULT_SECONDARY_FALLBACK_MODEL;
+  merged.claudeModel = merged.primaryFallbackModel;
 
   return merged;
 }

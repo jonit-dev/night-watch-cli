@@ -832,6 +832,26 @@ describe('server API', () => {
       expect(response.body).toHaveProperty('claudeModel', 'opus');
     });
 
+    it('should validate primaryFallbackModel is valid model', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ primaryFallbackModel: 'invalid' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('primaryFallbackModel');
+    });
+
+    it('should accept primary and secondary fallback model values', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ primaryFallbackModel: 'opus', secondaryFallbackModel: 'sonnet' });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('primaryFallbackModel', 'opus');
+      expect(response.body).toHaveProperty('secondaryFallbackModel', 'sonnet');
+      expect(response.body).toHaveProperty('claudeModel', 'opus');
+    });
+
     it('should validate qa.enabled is boolean', async () => {
       const response = await request(app)
         .put('/api/config')

@@ -44,7 +44,8 @@ export function buildEnvVars(
 
   // Audit-specific settings
   env.NW_AUDIT_MAX_RUNTIME = String(config.audit.maxRuntime);
-  env.NW_CLAUDE_MODEL_ID = CLAUDE_MODEL_IDS[config.claudeModel ?? 'sonnet'];
+  env.NW_CLAUDE_MODEL_ID =
+    CLAUDE_MODEL_IDS[config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet'];
 
   // Telegram status messages from bash scripts (start/progress/final status)
   const telegramWebhooks = getTelegramStatusWebhooks(config);

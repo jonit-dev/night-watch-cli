@@ -724,12 +724,12 @@ extract_url_host() {
 # Resolve a Claude model hint from env vars.
 # Priority:
 # 1) ANTHROPIC_DEFAULT_SONNET_MODEL / ANTHROPIC_DEFAULT_OPUS_MODEL (providerEnv overrides)
-# 2) NW_CLAUDE_MODEL_ID (resolved from config.claudeModel by caller)
+# 2) NW_CLAUDE_PRIMARY_MODEL_ID / NW_CLAUDE_MODEL_ID (resolved from config fallback settings by caller)
 # 3) "default"
 resolve_claude_model_hint() {
   local sonnet="${ANTHROPIC_DEFAULT_SONNET_MODEL:-}"
   local opus="${ANTHROPIC_DEFAULT_OPUS_MODEL:-}"
-  local native_model="${NW_CLAUDE_MODEL_ID:-}"
+  local native_model="${NW_CLAUDE_PRIMARY_MODEL_ID:-${NW_CLAUDE_MODEL_ID:-}}"
 
   if [ -n "${sonnet}" ] && [ -n "${opus}" ]; then
     if [ "${sonnet}" = "${opus}" ]; then
