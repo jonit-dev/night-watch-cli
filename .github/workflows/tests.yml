@@ -25,6 +25,9 @@ jobs:
       - name: Install web dependencies
         run: cd web && yarn install --frozen-lockfile
 
+      - name: Build CLI
+        run: yarn build
+
       - name: Run tests
         run: yarn test
 
