@@ -35,11 +35,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
 
-# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
-if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
-  echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
-  exit 127
-fi
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 # NOTE: Lock file path must match qaLockPath() in src/utils/status-data.ts
 LOCK_FILE="/tmp/night-watch-qa-${PROJECT_RUNTIME_KEY}.lock"
@@ -419,6 +414,13 @@ Branch patterns: ${BRANCH_PATTERNS_RAW}
 Result: 0 open PRs matched."
   emit_result "skip_no_open_prs"
   exit 0
+fi
+
+# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
+# Only check for provider after we know there are PRs to QA
+if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
+  echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
+  exit 127
 fi
 
 REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || echo "")

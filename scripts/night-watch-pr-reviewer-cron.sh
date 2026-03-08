@@ -60,11 +60,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
 
-# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
-if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
-  echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
-  exit 127
-fi
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 PROVIDER_MODEL_DISPLAY=$(resolve_provider_model_display "${PROVIDER_CMD}" "${PROVIDER_LABEL}")
 GLOBAL_LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_RUNTIME_KEY}.lock"
@@ -586,6 +581,28 @@ else
 fi
 
 if [ "${OPEN_PRS}" -eq 0 ]; then
+  # Dry-run mode: print diagnostics even when no PRs match
+  if [ "${NW_DRY_RUN:-0}" = "1" ]; then
+    echo "=== Dry Run: PR Reviewer ==="
+    echo "Provider (model): ${PROVIDER_MODEL_DISPLAY}"
+    echo "Branch Patterns: ${BRANCH_PATTERNS_RAW}"
+    echo "Min Review Score: ${MIN_REVIEW_SCORE}"
+    echo "Auto-merge: ${AUTO_MERGE}"
+    if [ "${AUTO_MERGE}" = "1" ]; then
+      echo "Auto-merge Method: ${AUTO_MERGE_METHOD}"
+    fi
+    echo "Max Retries: ${REVIEWER_MAX_RETRIES}"
+    echo "Retry Delay: ${REVIEWER_RETRY_DELAY}s"
+    echo "Open PRs needing work: none"
+    echo "Default Branch: ${DEFAULT_BRANCH}"
+    echo "Target PR: ${TARGET_PR:-all}"
+    if [ -n "${TARGET_PR}" ]; then
+      echo "Worker Mode: ${WORKER_MODE}"
+    fi
+    echo "Timeout: ${MAX_RUNTIME}s"
+    exit 0
+  fi
+
   log "SKIP: No open PRs matching branch patterns (${BRANCH_PATTERNS_RAW})"
   if [ "${WORKER_MODE}" != "1" ]; then
     send_telegram_status_message "🔍 Night Watch Reviewer: no matching PRs" "Project: ${PROJECT_NAME}
@@ -596,6 +613,15 @@ Result: 0 open PRs matched."
   fi
   emit_result "skip_no_open_prs"
   exit 0
+fi
+
+# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
+# Only check for provider after we know there are PRs to review and we're not in dry-run mode
+if [ "${NW_DRY_RUN:-0}" != "1" ]; then
+  if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
+    echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
+    exit 127
+  fi
 fi
 
 NEEDS_WORK=0
