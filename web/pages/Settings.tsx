@@ -63,6 +63,8 @@ type ConfigForm = {
   autoMerge: boolean;
   autoMergeMethod: MergeMethod;
   fallbackOnRateLimit: boolean;
+  primaryFallbackModel: ClaudeModel;
+  secondaryFallbackModel: ClaudeModel;
   claudeModel: ClaudeModel;
   qa: IQaConfig;
   audit: IAuditConfig;
@@ -108,7 +110,10 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   autoMerge: config.autoMerge ?? false,
   autoMergeMethod: config.autoMergeMethod ?? 'squash',
   fallbackOnRateLimit: config.fallbackOnRateLimit ?? true,
-  claudeModel: config.claudeModel ?? 'sonnet',
+  primaryFallbackModel: config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet',
+  secondaryFallbackModel:
+    config.secondaryFallbackModel ?? config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet',
+  claudeModel: config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet',
   qa: config.qa || {
     enabled: true,
     schedule: '45 2,14 * * *',
@@ -860,7 +865,9 @@ const Settings: React.FC = () => {
         autoMerge: form.autoMerge,
         autoMergeMethod: form.autoMergeMethod,
         fallbackOnRateLimit: form.fallbackOnRateLimit,
-        claudeModel: form.claudeModel,
+        primaryFallbackModel: form.primaryFallbackModel,
+        secondaryFallbackModel: form.secondaryFallbackModel,
+        claudeModel: form.primaryFallbackModel,
         qa: form.qa,
         audit: form.audit,
         queue: form.queue,
@@ -1073,14 +1080,28 @@ const Settings: React.FC = () => {
                 helperText="Human-friendly name shown in PR comments, review footers, and commit attribution"
               />
               <Select
-                label="Claude Model"
-                value={form.claudeModel}
-                onChange={(val) => updateField('claudeModel', val as ClaudeModel)}
+                label="Primary Fallback Model"
+                value={form.primaryFallbackModel}
+                onChange={(val) => {
+                  const next = val as ClaudeModel;
+                  updateField('primaryFallbackModel', next);
+                  updateField('claudeModel', next);
+                }}
                 options={[
                   { label: 'Sonnet (claude-sonnet-4-6)', value: 'sonnet' },
                   { label: 'Opus (claude-opus-4-6)', value: 'opus' },
                 ]}
-                helperText="Model used for native Claude execution (when no proxy is set or after fallback)"
+                helperText="First native Claude model used for direct Claude execution and the first rate-limit fallback attempt"
+              />
+              <Select
+                label="Secondary Fallback Model"
+                value={form.secondaryFallbackModel}
+                onChange={(val) => updateField('secondaryFallbackModel', val as ClaudeModel)}
+                options={[
+                  { label: 'Sonnet (claude-sonnet-4-6)', value: 'sonnet' },
+                  { label: 'Opus (claude-opus-4-6)', value: 'opus' },
+                ]}
+                helperText="Used only if the primary fallback model is also rate-limited"
               />
               <div className="md:col-span-2">
                 <Switch
@@ -1089,7 +1110,7 @@ const Settings: React.FC = () => {
                   onChange={(checked) => updateField('fallbackOnRateLimit', checked)}
                 />
                 <p className="text-xs text-slate-500 mt-2">
-                  When enabled, automatically fall back to native Claude API after rate-limit on proxy provider
+                  When enabled, Night Watch retries with the primary native Claude fallback model, then the secondary one if the primary is also rate-limited
                 </p>
               </div>
             </div>

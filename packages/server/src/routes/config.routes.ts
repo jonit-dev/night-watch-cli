@@ -329,6 +329,18 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
   if (changes.claudeModel !== undefined && !VALID_CLAUDE_MODELS.includes(changes.claudeModel)) {
     return `Invalid claudeModel. Must be one of: ${VALID_CLAUDE_MODELS.join(', ')}`;
   }
+  if (
+    changes.primaryFallbackModel !== undefined &&
+    !VALID_CLAUDE_MODELS.includes(changes.primaryFallbackModel)
+  ) {
+    return `Invalid primaryFallbackModel. Must be one of: ${VALID_CLAUDE_MODELS.join(', ')}`;
+  }
+  if (
+    changes.secondaryFallbackModel !== undefined &&
+    !VALID_CLAUDE_MODELS.includes(changes.secondaryFallbackModel)
+  ) {
+    return `Invalid secondaryFallbackModel. Must be one of: ${VALID_CLAUDE_MODELS.join(', ')}`;
+  }
 
   // QA configuration validation
   if (changes.qa !== undefined) {

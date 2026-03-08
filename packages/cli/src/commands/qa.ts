@@ -99,7 +99,8 @@ export function buildEnvVars(
   env.NW_QA_SKIP_LABEL = config.qa.skipLabel;
   env.NW_QA_ARTIFACTS = config.qa.artifacts;
   env.NW_QA_AUTO_INSTALL_PLAYWRIGHT = config.qa.autoInstallPlaywright ? '1' : '0';
-  env.NW_CLAUDE_MODEL_ID = CLAUDE_MODEL_IDS[config.claudeModel ?? 'sonnet'];
+  env.NW_CLAUDE_MODEL_ID =
+    CLAUDE_MODEL_IDS[config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet'];
 
   // Telegram status messages from bash scripts (start/progress/final status)
   const telegramWebhooks = getTelegramStatusWebhooks(config);

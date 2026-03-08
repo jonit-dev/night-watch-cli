@@ -1841,6 +1841,79 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.stdout).toContain(`branch=${branchName}`);
   });
 
+  it('executor should retry with the secondary fallback model when the primary fallback is also rate-limited', () => {
+    const projectDir = mkTempDir('nw-smoke-executor-secondary-rate-limit-fallback-');
+    initGitRepo(projectDir);
+    createPrd(projectDir, '01-smoke-secondary-rate-limit-fallback');
+    commitAll(projectDir, 'add PRD');
+
+    const fakeBin = mkTempDir('nw-smoke-bin-secondary-rate-limit-fallback-');
+    const branchName = 'night-watch/01-smoke-secondary-rate-limit-fallback';
+    const readyFlag = path.join(projectDir, '.smoke-pr-open');
+    const invocationLog = path.join(projectDir, '.claude-invocations.log');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' +
+        'echo "${ANTHROPIC_BASE_URL:-native}|$*" >> "$NW_SMOKE_CLAUDE_INVOCATIONS"\n' +
+        'if [[ -n "${ANTHROPIC_BASE_URL:-}" ]]; then\n' +
+        "  echo 'Error: HTTP 429 Too Many Requests' >&2\n" +
+        '  exit 1\n' +
+        'fi\n' +
+        'if [[ "$*" == *"--model claude-sonnet-4-6"* ]]; then\n' +
+        "  echo 'Error: HTTP 429 Too Many Requests' >&2\n" +
+        "  echo 'Rate limit exceeded' >&2\n" +
+        '  exit 1\n' +
+        'fi\n' +
+        'touch "$NW_SMOKE_PR_READY_FILE"\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  state=""\n' +
+        '  for ((i=1; i<=$#; i++)); do\n' +
+        '    if [[ "${!i}" == "--state" ]]; then\n' +
+        '      j=$((i+1))\n' +
+        '      state="${!j}"\n' +
+        '    fi\n' +
+        '  done\n' +
+        '  if [[ "$state" == "open" && -f "$NW_SMOKE_PR_READY_FILE" ]]; then\n' +
+        '    echo "$NW_SMOKE_BRANCH"\n' +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(executorScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_PRD_DIR: 'docs/PRDs/night-watch',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_FALLBACK_ON_RATE_LIMIT: 'true',
+      NW_CLAUDE_PRIMARY_MODEL_ID: 'claude-sonnet-4-6',
+      NW_CLAUDE_SECONDARY_MODEL_ID: 'claude-opus-4-6',
+      ANTHROPIC_BASE_URL: 'https://proxy.example.com',
+      NW_SMOKE_PR_READY_FILE: readyFlag,
+      NW_SMOKE_BRANCH: branchName,
+      NW_SMOKE_CLAUDE_INVOCATIONS: invocationLog,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success_open_pr');
+    expect(result.stdout).toContain('rate_limit_fallback=1');
+
+    const invocations = fs.readFileSync(invocationLog, 'utf-8');
+    expect(invocations).toContain('https://proxy.example.com');
+    expect(invocations).toContain('--model claude-sonnet-4-6');
+    expect(invocations).toContain('--model claude-opus-4-6');
+  });
+
   it('executor should emit rate_limited when 429 occurs and fallback is disabled', () => {
     const projectDir = mkTempDir('nw-smoke-executor-rate-limited-no-fallback-');
     initGitRepo(projectDir);

@@ -63,6 +63,8 @@ export const DEFAULT_FALLBACK_ON_RATE_LIMIT = true;
 
 // Claude model selection (for native / fallback execution)
 export const DEFAULT_CLAUDE_MODEL: ClaudeModel = 'sonnet';
+export const DEFAULT_PRIMARY_FALLBACK_MODEL: ClaudeModel = DEFAULT_CLAUDE_MODEL;
+export const DEFAULT_SECONDARY_FALLBACK_MODEL: ClaudeModel = DEFAULT_PRIMARY_FALLBACK_MODEL;
 export const VALID_CLAUDE_MODELS: ClaudeModel[] = ['sonnet', 'opus'];
 /** Full Anthropic model IDs used in the --model flag */
 export const CLAUDE_MODEL_IDS: Record<ClaudeModel, string> = {

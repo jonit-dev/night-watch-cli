@@ -188,9 +188,21 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
   }
 
   normalized.fallbackOnRateLimit = readBoolean(rawConfig.fallbackOnRateLimit);
-  const claudeModelRaw = readString(rawConfig.claudeModel);
-  if (claudeModelRaw && VALID_CLAUDE_MODELS.includes(claudeModelRaw as ClaudeModel)) {
-    normalized.claudeModel = claudeModelRaw as ClaudeModel;
+  const primaryFallbackModelRaw =
+    readString(rawConfig.primaryFallbackModel) ?? readString(rawConfig.claudeModel);
+  if (
+    primaryFallbackModelRaw &&
+    VALID_CLAUDE_MODELS.includes(primaryFallbackModelRaw as ClaudeModel)
+  ) {
+    normalized.primaryFallbackModel = primaryFallbackModelRaw as ClaudeModel;
+    normalized.claudeModel = primaryFallbackModelRaw as ClaudeModel;
+  }
+  const secondaryFallbackModelRaw = readString(rawConfig.secondaryFallbackModel);
+  if (
+    secondaryFallbackModelRaw &&
+    VALID_CLAUDE_MODELS.includes(secondaryFallbackModelRaw as ClaudeModel)
+  ) {
+    normalized.secondaryFallbackModel = secondaryFallbackModelRaw as ClaudeModel;
   }
 
   normalized.autoMerge = readBoolean(rawConfig.autoMerge);

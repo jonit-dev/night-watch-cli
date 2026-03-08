@@ -679,40 +679,54 @@ done
 # When the proxy returns 429 and fallbackOnRateLimit is enabled, re-run the
 # same prompt with native Claude (OAuth), bypassing the proxy entirely.
 if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
-  FALLBACK_MODEL="${NW_CLAUDE_MODEL_ID:-claude-sonnet-4-6}"
-  log "RATE-LIMIT-FALLBACK: Running native Claude (${FALLBACK_MODEL}) prd=${ELIGIBLE_PRD}"
+  PRIMARY_FALLBACK_MODEL="${NW_CLAUDE_PRIMARY_MODEL_ID:-${NW_CLAUDE_MODEL_ID:-claude-sonnet-4-6}}"
+  SECONDARY_FALLBACK_MODEL="${NW_CLAUDE_SECONDARY_MODEL_ID:-}"
 
-  # Send immediate Telegram warning (fire-and-forget)
-  send_rate_limit_fallback_warning "${FALLBACK_MODEL}" "$(basename "${PROJECT_DIR}")"
+  run_native_fallback() {
+    local model="$1"
+    local log_line_before="$2"
+
+    log "RATE-LIMIT-FALLBACK: Running native Claude (${model}) prd=${ELIGIBLE_PRD}"
+    send_rate_limit_fallback_warning "${model}" "$(basename "${PROJECT_DIR}")"
+
+    FALLBACK_START_TIME=$(date +%s)
+    if (
+      cd "${WORKTREE_DIR}" && \
+        unset ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN \
+              ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL && \
+        timeout "${SESSION_MAX_RUNTIME}" \
+          claude -p "${PROMPT}" \
+            --dangerously-skip-permissions \
+            --model "${model}" \
+            2>&1 | tee -a "${LOG_FILE}"
+    ); then
+      EXIT_CODE=0
+    else
+      EXIT_CODE=$?
+    fi
+
+    FALLBACK_ELAPSED=$(( $(date +%s) - FALLBACK_START_TIME ))
+    log "RATE-LIMIT-FALLBACK: Native Claude (${model}) exited with code ${EXIT_CODE} elapsed=${FALLBACK_ELAPSED}s"
+    EFFECTIVE_PROVIDER_LABEL="Claude ${model} (fallback)"
+    LAST_FALLBACK_LOG_LINE_BEFORE="${log_line_before}"
+  }
 
   LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
-  FALLBACK_START_TIME=$(date +%s)
+  run_native_fallback "${PRIMARY_FALLBACK_MODEL}" "${LOG_LINE_BEFORE}"
 
-  if (
-    cd "${WORKTREE_DIR}" && \
-      unset ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN \
-            ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL && \
-      timeout "${SESSION_MAX_RUNTIME}" \
-        claude -p "${PROMPT}" \
-          --dangerously-skip-permissions \
-          --model "${FALLBACK_MODEL}" \
-          2>&1 | tee -a "${LOG_FILE}"
-  ); then
-    EXIT_CODE=0
-  else
-    EXIT_CODE=$?
+  if [ ${EXIT_CODE} -ne 0 ] && [ -n "${SECONDARY_FALLBACK_MODEL}" ] && [ "${SECONDARY_FALLBACK_MODEL}" != "${PRIMARY_FALLBACK_MODEL}" ]; then
+    if check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
+      log "RATE-LIMIT-FALLBACK: Primary native Claude fallback was rate-limited; trying secondary model (${SECONDARY_FALLBACK_MODEL})"
+      LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
+      run_native_fallback "${SECONDARY_FALLBACK_MODEL}" "${LOG_LINE_BEFORE}"
+    fi
   fi
-
-  FALLBACK_ELAPSED=$(( $(date +%s) - FALLBACK_START_TIME ))
-  log "RATE-LIMIT-FALLBACK: Native Claude exited with code ${EXIT_CODE} elapsed=${FALLBACK_ELAPSED}s"
-  # Update effective provider label to reflect actual executor used
-  EFFECTIVE_PROVIDER_LABEL="Claude ${FALLBACK_MODEL} (fallback)"
 fi
 
 # Detect double rate-limit: both proxy AND native Claude exhausted
 DOUBLE_RATE_LIMITED=0
 if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ] && [ ${EXIT_CODE} -ne 0 ]; then
-  if check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
+  if check_rate_limited "${LOG_FILE}" "${LAST_FALLBACK_LOG_LINE_BEFORE:-${LOG_LINE_BEFORE:-0}}"; then
     DOUBLE_RATE_LIMITED=1
     log "RATE-LIMITED: Both proxy and native Claude are rate-limited for ${ELIGIBLE_PRD}"
   fi
