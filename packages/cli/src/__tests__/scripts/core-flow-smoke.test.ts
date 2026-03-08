@@ -112,7 +112,16 @@ describe('core flow smoke tests (bash scripts)', () => {
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
     fs.mkdirSync(path.join(projectDir, 'docs', 'PRDs', 'night-watch', 'done'), { recursive: true });
 
-    const result = runScript(executorScript, projectDir);
+    const fakeBin = mkTempDir('nw-smoke-bin-skip-');
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
+    const result = runScript(executorScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+    });
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_no_eligible_prd');
@@ -122,7 +131,16 @@ describe('core flow smoke tests (bash scripts)', () => {
     const projectDir = mkTempDir('nw-smoke-reviewer-skip-');
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
 
-    const result = runScript(reviewerScript, projectDir);
+    const fakeBin = mkTempDir('nw-smoke-bin-reviewer-skip-');
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
+    const result = runScript(reviewerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+    });
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_no_open_prs');
@@ -310,7 +328,16 @@ describe('core flow smoke tests (bash scripts)', () => {
     const projectDir = mkTempDir('nw-smoke-qa-skip-');
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
 
-    const result = runScript(qaScript, projectDir);
+    const fakeBin = mkTempDir('nw-smoke-bin-qa-skip-');
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
+    const result = runScript(qaScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+    });
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_no_open_prs');
@@ -322,6 +349,11 @@ describe('core flow smoke tests (bash scripts)', () => {
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
 
     const fakeBin = mkTempDir('nw-smoke-qa-all-done-bin-');
+
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
 
     fs.writeFileSync(
       path.join(fakeBin, 'gh'),
@@ -1016,12 +1048,22 @@ describe('core flow smoke tests (bash scripts)', () => {
     const runtimeKey = `${projectName}-${projectHash}`;
     const lockFile = `/tmp/night-watch-${runtimeKey}.lock`;
 
+    // Create fake provider binary
+    const fakeBin = mkTempDir('nw-smoke-bin-locked-');
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
     // Start a long-running process to hold the lock
     const holder = spawn('sleep', ['infinity'], { detached: true, stdio: 'ignore' });
     fs.writeFileSync(lockFile, String(holder.pid), 'utf-8');
 
     try {
-      const result = runScript(executorScript, projectDir);
+      const result = runScript(executorScript, projectDir, {
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        NW_PROVIDER_CMD: 'claude',
+      });
 
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_locked');
@@ -1043,12 +1085,21 @@ describe('core flow smoke tests (bash scripts)', () => {
     const runtimeKey = `${projectName}-${projectHash}`;
     const lockFile = `/tmp/night-watch-pr-reviewer-${runtimeKey}.lock`;
 
+    // Create fake provider binary
+    const fakeBin = mkTempDir('nw-smoke-bin-reviewer-locked-');
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
     // Start a long-running process to hold the lock
     const holder = spawn('sleep', ['infinity'], { detached: true, stdio: 'ignore' });
     fs.writeFileSync(lockFile, String(holder.pid), 'utf-8');
 
     try {
       const result = runScript(reviewerScript, projectDir, {
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        NW_PROVIDER_CMD: 'claude',
         NW_QUEUE_ENABLED: '0', // Disable global queue for this test
         NW_REVIEWER_WORKER_MODE: '0', // Not in worker mode
         NW_TARGET_PR: '', // No target PR (use global lock)
@@ -1074,12 +1125,22 @@ describe('core flow smoke tests (bash scripts)', () => {
     const runtimeKey = `${projectName}-${projectHash}`;
     const lockFile = `/tmp/night-watch-qa-${runtimeKey}.lock`;
 
+    // Create fake provider binary
+    const fakeBin = mkTempDir('nw-smoke-bin-qa-locked-');
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
     // Start a long-running process to hold the lock
     const holder = spawn('sleep', ['infinity'], { detached: true, stdio: 'ignore' });
     fs.writeFileSync(lockFile, String(holder.pid), 'utf-8');
 
     try {
-      const result = runScript(qaScript, projectDir);
+      const result = runScript(qaScript, projectDir, {
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        NW_PROVIDER_CMD: 'claude',
+      });
 
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_locked');
@@ -1102,12 +1163,22 @@ describe('core flow smoke tests (bash scripts)', () => {
     const runtimeKey = `${projectName}-${projectHash}`;
     const lockFile = `/tmp/night-watch-audit-${runtimeKey}.lock`;
 
+    // Create fake provider binary
+    const fakeBin = mkTempDir('nw-smoke-bin-audit-locked-');
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
     // Start a long-running process to hold the lock
     const holder = spawn('sleep', ['infinity'], { detached: true, stdio: 'ignore' });
     fs.writeFileSync(lockFile, String(holder.pid), 'utf-8');
 
     try {
-      const result = runScript(auditScript, projectDir);
+      const result = runScript(auditScript, projectDir, {
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        NW_PROVIDER_CMD: 'claude',
+      });
 
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_locked');
@@ -1163,6 +1234,11 @@ describe('core flow smoke tests (bash scripts)', () => {
         'exit 0\n',
       { encoding: 'utf-8', mode: 0o755 },
     );
+
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
 
     const result = runScript(reviewerScript, projectDir, {
       PATH: `${fakeBin}:${process.env.PATH}`,
@@ -1231,6 +1307,11 @@ describe('core flow smoke tests (bash scripts)', () => {
         'exit 0\n',
       { encoding: 'utf-8', mode: 0o755 },
     );
+
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
 
     const result = runScript(reviewerScript, projectDir, {
       PATH: `${fakeBin}:${process.env.PATH}`,
@@ -1574,6 +1655,11 @@ describe('core flow smoke tests (bash scripts)', () => {
       { encoding: 'utf-8', mode: 0o755 },
     );
 
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
     const result = runScript(executorScript, projectDir, {
       PATH: `${fakeBin}:${process.env.PATH}`,
       NW_PROVIDER_CMD: 'claude',
@@ -1610,6 +1696,11 @@ describe('core flow smoke tests (bash scripts)', () => {
         'exit 0\n',
       { encoding: 'utf-8', mode: 0o755 },
     );
+
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
 
     const result = runScript(executorScript, projectDir, {
       PATH: `${fakeBin}:${process.env.PATH}`,
@@ -1989,7 +2080,14 @@ describe('core flow smoke tests (bash scripts)', () => {
     initGitRepo(projectDir);
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
 
+    const fakeBin = mkTempDir('nw-smoke-bin-audit-dry-run-');
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
     const result = runScript(auditScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
       NW_PROVIDER_CMD: 'claude',
       NW_DEFAULT_BRANCH: 'main',
       NW_DRY_RUN: '1',
@@ -2016,12 +2114,19 @@ describe('core flow smoke tests (bash scripts)', () => {
     }
     const tempTemplatePaths = templatePaths.map((p) => `${p}.bak`);
 
+    const fakeBin = mkTempDir('nw-smoke-bin-audit-missing-prompt-');
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
     try {
       for (let i = 0; i < templatePaths.length; i += 1) {
         fs.renameSync(templatePaths[i], tempTemplatePaths[i]);
       }
 
       const result = runScript(auditScript, projectDir, {
+        PATH: `${fakeBin}:${process.env.PATH}`,
         NW_PROVIDER_CMD: 'claude',
         NW_DEFAULT_BRANCH: 'main',
       });
@@ -2059,6 +2164,11 @@ describe('core flow smoke tests (bash scripts)', () => {
         'exec "$REAL_GIT" "$@"\n',
       { encoding: 'utf-8', mode: 0o755 },
     );
+
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
 
     const result = runScript(auditScript, projectDir, {
       PATH: `${fakeBin}:${process.env.PATH}`,
