@@ -81,7 +81,7 @@ const webSrc = resolve(__dirname, '../../web/dist');
 const webDest = resolve(__dirname, 'dist/web');
 if (existsSync(webRoot)) {
   console.log('Building web UI...');
-  execSync('yarn build', { cwd: webRoot, stdio: 'inherit' });
+  execSync('yarn install --frozen-lockfile && yarn build', { cwd: webRoot, stdio: 'inherit' });
   cpSync(webSrc, webDest, { recursive: true });
   console.log('Web UI copied: dist/web/');
 } else {
