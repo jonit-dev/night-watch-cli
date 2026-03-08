@@ -39,5 +39,8 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
+      - name: Build CLI
+        run: yarn build
+
       - name: Run core flow smoke tests
         run: yarn vitest run packages/cli/src/__tests__/scripts/core-flow-smoke.test.ts
