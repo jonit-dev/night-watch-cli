@@ -47,12 +47,6 @@ if ! validate_provider "${PROVIDER_CMD}"; then
   exit 1
 fi
 
-# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
-if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
-  echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
-  emit_result "failure" "reason=provider_not_found"
-  exit 1
-fi
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 # NOTE: Lock file path must match auditLockPath() in src/utils/status-data.ts
 LOCK_FILE="/tmp/night-watch-audit-${PROJECT_RUNTIME_KEY}.lock"
@@ -113,6 +107,13 @@ Failure reason: missing_prompt_template
 Missing prompt template:
 ${AUDIT_PROMPT_TEMPLATE}"
   emit_result "failure_missing_prompt"
+  exit 1
+fi
+
+# Now that we've confirmed there's work to do, ensure provider CLI is available
+if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
+  echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
+  emit_result "failure" "reason=provider_not_found"
   exit 1
 fi
 
