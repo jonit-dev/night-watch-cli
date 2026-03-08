@@ -310,4 +310,22 @@ describe('Settings schedules mode sync', () => {
       });
     });
   });
+
+  it('explains that fallback selectors are Claude-only when Codex is the main provider', async () => {
+    currentConfig = makeConfig({ provider: 'codex' });
+
+    renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: 'Providers' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          /Primary and secondary fallback settings only control native Claude retry behavior/i,
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByLabelText('Primary Native Claude Fallback')).toBeInTheDocument();
+      expect(screen.getByLabelText('Secondary Native Claude Fallback')).toBeInTheDocument();
+      expect(screen.getByText(/To use Codex, set the global provider above/i)).toBeInTheDocument();
+    });
+  });
 });

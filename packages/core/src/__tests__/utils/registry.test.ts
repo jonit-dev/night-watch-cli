@@ -36,6 +36,21 @@ describe("registry", () => {
     it("should return empty array when no projects registered", () => {
       expect(loadRegistry()).toEqual([]);
     });
+
+    it("should hydrate SQLite from legacy projects.json when registry is empty", () => {
+      const legacyEntries = [
+        { name: "legacy-one", path: "/tmp/legacy-one" },
+        { name: "legacy-two", path: "/tmp/legacy-two" },
+      ];
+
+      fs.writeFileSync(
+        path.join(tmpDir, "projects.json"),
+        JSON.stringify(legacyEntries, null, 2),
+      );
+
+      expect(loadRegistry()).toEqual(legacyEntries);
+      expect(loadRegistry()).toEqual(legacyEntries);
+    });
   });
 
   describe("registerProject", () => {
@@ -52,6 +67,18 @@ describe("registry", () => {
       expect(second.path).toBe(first.path);
       expect(second.name).toBe(first.name);
       expect(loadRegistry()).toHaveLength(1);
+    });
+
+    it("should respect legacy entries when detecting already-registered projects", () => {
+      fs.writeFileSync(
+        path.join(tmpDir, "projects.json"),
+        JSON.stringify([{ name: "legacy-project", path: tmpDir }], null, 2),
+      );
+
+      const entry = registerProject(tmpDir);
+
+      expect(entry).toEqual({ name: "legacy-project", path: tmpDir });
+      expect(loadRegistry()).toEqual([{ name: "legacy-project", path: tmpDir }]);
     });
 
     it("should handle name collision by appending directory basename", () => {
@@ -88,6 +115,16 @@ describe("registry", () => {
     it("should return false when project is not registered", () => {
       const removed = unregisterProject("/nonexistent/path");
       expect(removed).toBe(false);
+    });
+
+    it("should remove projects that exist only in legacy projects.json after hydration", () => {
+      fs.writeFileSync(
+        path.join(tmpDir, "projects.json"),
+        JSON.stringify([{ name: "legacy-project", path: tmpDir }], null, 2),
+      );
+
+      expect(unregisterProject(tmpDir)).toBe(true);
+      expect(loadRegistry()).toEqual([]);
     });
   });
 
