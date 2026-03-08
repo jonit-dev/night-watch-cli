@@ -1870,10 +1870,10 @@ const Settings: React.FC = () => {
               <Select
                 label="Target Column"
                 value={form.analytics.targetColumn}
-                onChange={(e) =>
+                onChange={(value) =>
                   updateField('analytics', {
                     ...form.analytics,
-                    targetColumn: e.target.value as IAnalyticsConfig['targetColumn'],
+                    targetColumn: value as IAnalyticsConfig['targetColumn'],
                   })
                 }
                 options={[
@@ -1886,9 +1886,8 @@ const Settings: React.FC = () => {
                 helperText="Board column for created issues"
               />
               <div className="md:col-span-2">
-                <Input
-                  label="Analysis Prompt (optional)"
-                  type="textarea"
+                <label className="block text-sm font-medium text-slate-400 mb-1.5">Analysis Prompt (optional)</label>
+                <textarea
                   rows={4}
                   value={form.analytics.analysisPrompt ?? ''}
                   onChange={(e) =>
@@ -1897,8 +1896,10 @@ const Settings: React.FC = () => {
                       analysisPrompt: e.target.value,
                     })
                   }
-                  helperText="Custom prompt for AI analysis. Leave empty to use default."
+                  placeholder="Custom prompt for AI analysis. Leave empty to use default."
+                  className="w-full bg-slate-950/50 border border-white/10 text-slate-200 rounded-lg px-3 py-2.5 text-sm placeholder-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 resize-y"
                 />
+                <p className="mt-1.5 text-xs text-slate-500">Custom prompt for AI analysis. Leave empty to use default.</p>
               </div>
             </div>
           )}

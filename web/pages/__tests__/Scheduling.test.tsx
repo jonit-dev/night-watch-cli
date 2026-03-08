@@ -94,6 +94,14 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
         audit: 10,
       },
     },
+    analytics: {
+      enabled: true,
+      schedule: '15 3 * * *',
+      maxRuntime: 1800,
+      lookbackDays: 30,
+      targetColumn: 'Draft',
+      analysisPrompt: '',
+    },
   };
 
   return {
@@ -110,6 +118,10 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     audit: {
       ...base.audit,
       ...(overrides.audit ?? {}),
+    },
+    analytics: {
+      ...base.analytics,
+      ...(overrides.analytics ?? {}),
     },
   };
 }
@@ -259,6 +271,9 @@ describe('Scheduling page', () => {
         schedule: '0 * * * *',
         installed: true,
         nextRun: '2026-03-06T01:00:00.000Z',
+        delayMinutes: 0,
+        manualDelayMinutes: 0,
+        balancedDelayMinutes: 0,
       },
     });
 
@@ -292,11 +307,17 @@ describe('Scheduling page', () => {
         schedule: currentConfig.cronSchedule,
         installed: true,
         nextRun: '2026-03-06T00:05:00.000Z',
+        delayMinutes: 0,
+        manualDelayMinutes: 0,
+        balancedDelayMinutes: 0,
       },
       reviewer: {
         schedule: currentConfig.reviewerSchedule,
         installed: true,
         nextRun: '2026-03-06T00:25:00.000Z',
+        delayMinutes: 0,
+        manualDelayMinutes: 0,
+        balancedDelayMinutes: 0,
       },
     });
 

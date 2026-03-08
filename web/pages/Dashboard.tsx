@@ -363,7 +363,7 @@ const Dashboard: React.FC = () => {
                   </>
                 ),
               },
-            ] as const).sort((a, b) => (b.process?.running ? 1 : 0) - (a.process?.running ? 1 : 0))
+            ]).sort((a, b) => (b.process?.running ? 1 : 0) - (a.process?.running ? 1 : 0))
               .map(({ label, process, subtitle, actions }) => (
               <div
                 key={label}
