@@ -95,6 +95,14 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
         audit: 10,
       },
     },
+    analytics: {
+      enabled: true,
+      schedule: '15 3 * * *',
+      maxRuntime: 1800,
+      lookbackDays: 30,
+      targetColumn: 'Draft',
+      analysisPrompt: '',
+    },
   };
 
   return {
@@ -111,6 +119,10 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     audit: {
       ...base.audit,
       ...(overrides.audit ?? {}),
+    },
+    analytics: {
+      ...base.analytics,
+      ...(overrides.analytics ?? {}),
     },
   };
 }
