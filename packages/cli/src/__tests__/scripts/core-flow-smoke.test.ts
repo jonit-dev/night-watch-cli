@@ -22,12 +22,14 @@ function mkTempDir(prefix: string): string {
 }
 
 function runScript(scriptPath: string, projectDir: string, env: NodeJS.ProcessEnv = {}) {
+  const combinedEnv = { ...process.env, ...env };
+  // Clear NW_TARGET_PR unless explicitly set in env parameter
+  if (!('NW_TARGET_PR' in env)) {
+    delete combinedEnv.NW_TARGET_PR;
+  }
   return spawnSync('bash', [scriptPath, projectDir], {
     cwd: repoRoot,
-    env: {
-      ...process.env,
-      ...env,
-    },
+    env: combinedEnv,
     encoding: 'utf-8',
   });
 }
@@ -41,13 +43,15 @@ function runScriptAsync(
   stdout: string;
   stderr: string;
 }> {
+  const combinedEnv = { ...process.env, ...env };
+  // Clear NW_TARGET_PR unless explicitly set in env parameter
+  if (!('NW_TARGET_PR' in env)) {
+    delete combinedEnv.NW_TARGET_PR;
+  }
   return new Promise((resolve) => {
     const child = spawn('bash', [scriptPath, projectDir], {
       cwd: repoRoot,
-      env: {
-        ...process.env,
-        ...env,
-      },
+      env: combinedEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
