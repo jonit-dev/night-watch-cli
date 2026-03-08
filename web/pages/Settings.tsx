@@ -1203,7 +1203,10 @@ const Settings: React.FC = () => {
             reviewerSchedule: form.reviewerSchedule,
             qa: form.qa,
             audit: form.audit,
-            roadmapScanner: form.roadmapScanner,
+            roadmapScanner: {
+              enabled: form.roadmapScanner.enabled,
+              slicerSchedule: form.roadmapScanner.slicerSchedule || '35 */12 * * *',
+            },
             scheduleBundleId: form.scheduleBundleId,
             schedulingPriority: form.schedulingPriority,
             cronScheduleOffset: form.cronScheduleOffset,
