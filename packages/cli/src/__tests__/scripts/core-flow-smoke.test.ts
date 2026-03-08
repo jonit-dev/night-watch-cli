@@ -323,6 +323,12 @@ describe('core flow smoke tests (bash scripts)', () => {
 
     const fakeBin = mkTempDir('nw-smoke-qa-all-done-bin-');
 
+    // Mock provider (required by qa-cron.sh after we know there's QA work to do)
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
     fs.writeFileSync(
       path.join(fakeBin, 'gh'),
       '#!/usr/bin/env bash\n' +
@@ -919,6 +925,7 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_REVIEWER_WORKER_MODE: '0',
       NW_REVIEWER_PARALLEL: '0',
       NW_AUTO_MERGE: '0',
+      NW_QUEUE_ENABLED: '0',
     });
 
     // Note: Reviewer script currently exits 0 on timeout (missing explicit exit code)
@@ -1119,6 +1126,12 @@ describe('core flow smoke tests (bash scripts)', () => {
 
     const fakeBin = mkTempDir('nw-smoke-reviewer-all-passing-bin-');
 
+    // Mock provider (required by reviewer-cron.sh after we know there's review work to do)
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
     fs.writeFileSync(
       path.join(fakeBin, 'gh'),
       '#!/usr/bin/env bash\n' +
@@ -1235,6 +1248,7 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_AUTO_MERGE: '0',
       NW_DRY_RUN: '1',
       NW_REVIEWER_PARALLEL: '0',
+      NW_QUEUE_ENABLED: '0',
     });
 
     expect(result.status).toBe(0);
@@ -1298,6 +1312,7 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_REVIEWER_WORKER_MODE: '0',
       NW_REVIEWER_PARALLEL: '0',
       NW_AUTO_MERGE: '0',
+      NW_QUEUE_ENABLED: '0',
     });
 
     // Note: Reviewer script currently exits 0 on failure (missing explicit exit code propagation)
@@ -1364,6 +1379,7 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_REVIEWER_PARALLEL: '0',
       NW_AUTO_MERGE: '0',
       NW_SMOKE_ARGS_FILE: argsFile,
+      NW_QUEUE_ENABLED: '0',
     });
 
     expect(result.status).toBe(0);
@@ -2029,7 +2045,20 @@ describe('core flow smoke tests (bash scripts)', () => {
     initGitRepo(projectDir);
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
 
+    // Create audit template (required for audit-cron.sh to proceed)
+    const templatesDir = path.join(projectDir, 'templates');
+    fs.mkdirSync(templatesDir, { recursive: true });
+    fs.writeFileSync(path.join(templatesDir, 'audit.md'), '# Audit Prompt\n\nRun a code audit.', {
+      encoding: 'utf-8',
+    });
+
     const fakeBin = mkTempDir('nw-smoke-audit-worktree-fail-bin-');
+
+    // Mock provider (required by audit-cron.sh before worktree setup)
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
 
     // Mock git to fail on worktree add
     fs.writeFileSync(
