@@ -15,5 +15,6 @@ jobs:
           node-version: 22
           cache: yarn
       - run: yarn install --frozen-lockfile
+      - run: cd web && yarn install --frozen-lockfile
       - run: yarn verify
       - run: yarn test
