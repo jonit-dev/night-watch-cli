@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Square, FileText } from 'lucide-react';
+import { Square, FileText } from 'lucide-react';
 import { IProcessInfo } from '@/api';
 
 interface IAgentStatusBarProps {
