@@ -6,12 +6,12 @@ import { Request, Response, Router } from 'express';
 import { CronExpressionParser } from 'cron-parser';
 
 import {
+  BUILT_IN_PRESET_IDS,
   INightWatchConfig,
+  IProviderPreset,
   JobType,
-  Provider,
   VALID_CLAUDE_MODELS,
   VALID_JOB_TYPES,
-  VALID_PROVIDERS,
   loadConfig,
   saveConfig,
   validateWebhook,
@@ -41,16 +41,22 @@ function validateCronField(fieldName: string, value: unknown): string | null {
 
 /**
  * Validates config changes and returns an error string if invalid, null if valid.
+ * @param changes The config changes to validate
+ * @param currentConfig Optional current config for delete protection checks
  */
-function validateConfigChanges(changes: Partial<INightWatchConfig>): string | null {
+function validateConfigChanges(
+  changes: Partial<INightWatchConfig>,
+  currentConfig?: INightWatchConfig | null,
+): string | null {
   if (typeof changes !== 'object' || changes === null) {
     return 'Invalid request body';
   }
 
+  // Provider validation: accept any non-empty string as preset ID
+  // Actual existence check happens at resolution time via resolvePreset()
   if (changes.provider !== undefined) {
-    const validProviders = ['claude', 'codex'];
-    if (!validProviders.includes(changes.provider)) {
-      return `Invalid provider. Must be one of: ${validProviders.join(', ')}`;
+    if (typeof changes.provider !== 'string' || changes.provider.trim().length === 0) {
+      return 'provider must be a non-empty string (preset ID)';
     }
   }
 
@@ -274,9 +280,56 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
       if (
         provider !== null &&
         provider !== undefined &&
-        !VALID_PROVIDERS.includes(provider as Provider)
+        (typeof provider !== 'string' || provider.trim().length === 0)
       ) {
-        return `Invalid provider in jobProviders.${jobType}: ${provider}. Must be one of: ${VALID_PROVIDERS.join(', ')}`;
+        return `Invalid provider in jobProviders.${jobType}: ${provider}. Must be a non-empty string (preset ID)`;
+      }
+    }
+  }
+
+  // providerPresets validation
+  if (changes.providerPresets !== undefined) {
+    if (typeof changes.providerPresets !== 'object' || changes.providerPresets === null) {
+      return 'providerPresets must be an object';
+    }
+
+    for (const [presetId, presetVal] of Object.entries(changes.providerPresets)) {
+      // Validate preset ID
+      if (typeof presetId !== 'string' || presetId.trim().length === 0) {
+        return 'providerPresets keys must be non-empty strings';
+      }
+
+      // presetVal can be null/undefined to delete a preset (checked later for delete protection)
+      if (presetVal === null || presetVal === undefined) {
+        continue;
+      }
+
+      if (typeof presetVal !== 'object') {
+        return `providerPresets.${presetId} must be an object`;
+      }
+
+      const preset = presetVal as Partial<IProviderPreset>;
+
+      // name is required
+      if (typeof preset.name !== 'string' || preset.name.trim().length === 0) {
+        return `providerPresets.${presetId}.name must be a non-empty string`;
+      }
+
+      // command is required
+      if (typeof preset.command !== 'string' || preset.command.trim().length === 0) {
+        return `providerPresets.${presetId}.command must be a non-empty string`;
+      }
+
+      // envVars must be string-valued if present
+      if (preset.envVars !== undefined) {
+        if (typeof preset.envVars !== 'object' || preset.envVars === null) {
+          return `providerPresets.${presetId}.envVars must be an object`;
+        }
+        for (const [envKey, envVal] of Object.entries(preset.envVars)) {
+          if (typeof envVal !== 'string') {
+            return `providerPresets.${presetId}.envVars.${envKey} must be a string`;
+          }
+        }
       }
     }
   }
@@ -490,6 +543,67 @@ function validateConfigChanges(changes: Partial<INightWatchConfig>): string | nu
     }
   }
 
+  // Delete protection: prevent deleting presets that are still in use
+  if (changes.providerPresets !== undefined && currentConfig) {
+    // Determine which preset IDs are being removed (explicitly set to null/undefined or missing from new set)
+    const currentPresetIds = new Set(Object.keys(currentConfig.providerPresets || {}));
+    const newPresetIds = new Set<string>();
+
+    for (const [presetId, presetVal] of Object.entries(changes.providerPresets)) {
+      if (presetVal !== null && presetVal !== undefined) {
+        newPresetIds.add(presetId);
+      }
+    }
+
+    // Also keep track of preset IDs from the current config that are NOT in changes.providerPresets
+    // (those are being preserved, not deleted)
+    for (const presetId of currentPresetIds) {
+      if (!(presetId in changes.providerPresets)) {
+        newPresetIds.add(presetId);
+      }
+    }
+
+    // Find deleted preset IDs (were in current, not in new)
+    const deletedPresetIds = [...currentPresetIds].filter((id) => !newPresetIds.has(id));
+
+    if (deletedPresetIds.length > 0) {
+      // Check if any deleted preset is still referenced
+      const presetReferences: Array<{ presetId: string; references: string[] }> = [];
+
+      for (const deletedId of deletedPresetIds) {
+        const references: string[] = [];
+
+        // Check global provider
+        const effectiveProvider = changes.provider ?? currentConfig.provider;
+        if (effectiveProvider === deletedId) {
+          references.push('provider (global)');
+        }
+
+        // Check jobProviders
+        const effectiveJobProviders = {
+          ...currentConfig.jobProviders,
+          ...(changes.jobProviders || {}),
+        };
+        for (const [jobType, provider] of Object.entries(effectiveJobProviders)) {
+          if (provider === deletedId) {
+            references.push(`jobProviders.${jobType}`);
+          }
+        }
+
+        if (references.length > 0) {
+          presetReferences.push({ presetId: deletedId, references });
+        }
+      }
+
+      if (presetReferences.length > 0) {
+        const details = presetReferences
+          .map(({ presetId, references }) => `"${presetId}" is used by: ${references.join(', ')}`)
+          .join('; ');
+        return `Cannot delete preset(s) that are still in use. ${details}`;
+      }
+    }
+  }
+
   return null;
 }
 
@@ -514,7 +628,7 @@ export function createConfigRoutes(deps: IConfigRoutesDeps): Router {
   router.put('/', (req: Request, res: Response): void => {
     try {
       const changes = req.body as Partial<INightWatchConfig>;
-      const validationError = validateConfigChanges(changes);
+      const validationError = validateConfigChanges(changes, getConfig());
       if (validationError) {
         res.status(400).json({ error: validationError });
         return;
@@ -555,7 +669,7 @@ export function createProjectConfigRoutes(): Router {
 
     try {
       const changes = req.body as Partial<INightWatchConfig>;
-      const validationError = validateConfigChanges(changes);
+      const validationError = validateConfigChanges(changes, req.projectConfig);
       if (validationError) {
         res.status(400).json({ error: validationError });
         return;

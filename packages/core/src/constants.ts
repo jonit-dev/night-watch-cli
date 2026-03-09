@@ -8,6 +8,7 @@ import {
   IAuditConfig,
   IJobProviders,
   INotificationConfig,
+  IProviderPreset,
   IQaConfig,
   IQueueConfig,
   IRoadmapScannerConfig,
@@ -142,7 +143,7 @@ export const DEFAULT_AUDIT: IAuditConfig = {
 export const AUDIT_LOG_NAME = 'audit';
 export const PLANNER_LOG_NAME = 'slicer';
 
-// Valid providers
+// Valid providers (backward compat - derived from built-in presets)
 export const VALID_PROVIDERS: Provider[] = ['claude', 'codex'];
 
 // Valid job types for per-job provider configuration
@@ -151,10 +152,33 @@ export const VALID_JOB_TYPES: JobType[] = ['executor', 'reviewer', 'qa', 'audit'
 // Default per-job provider configuration (empty = use global provider)
 export const DEFAULT_JOB_PROVIDERS: IJobProviders = {};
 
-// Provider commands configuration
-export const PROVIDER_COMMANDS: Record<Provider, string> = {
-  claude: 'claude',
-  codex: 'codex',
+/**
+ * Built-in provider presets. These are the default configurations for known providers.
+ * Users can override these or add custom presets via config.providerPresets.
+ */
+export const BUILT_IN_PRESETS: Record<string, IProviderPreset> = {
+  claude: {
+    name: 'Claude',
+    command: 'claude',
+    promptFlag: '-p',
+    autoApproveFlag: '--dangerously-skip-permissions',
+  },
+  codex: {
+    name: 'Codex',
+    command: 'codex',
+    subcommand: 'exec',
+    autoApproveFlag: '--yolo',
+    workdirFlag: '-C',
+  },
+};
+
+/** Built-in preset IDs for convenience */
+export const BUILT_IN_PRESET_IDS = Object.keys(BUILT_IN_PRESETS) as readonly string[];
+
+// Provider commands configuration (derived from built-in presets for backward compat)
+export const PROVIDER_COMMANDS: Record<string, string> = {
+  claude: BUILT_IN_PRESETS.claude!.command,
+  codex: BUILT_IN_PRESETS.codex!.command,
 };
 
 // File Names and Paths

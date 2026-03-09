@@ -541,39 +541,15 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
   # previous runs that would cause false-positive rate-limit retries).
   LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
 
-  case "${PROVIDER_CMD}" in
-    claude)
-      if (
-        cd "${WORKTREE_DIR}" && timeout "${SESSION_MAX_RUNTIME}" \
-          claude -p "${PROMPT}" \
-            --dangerously-skip-permissions \
-            2>&1 | tee -a "${LOG_FILE}"
-      ); then
-        EXIT_CODE=0
-      else
-        EXIT_CODE=$?
-      fi
-      ;;
-    codex)
-      if (
-        cd "${WORKTREE_DIR}" && timeout "${SESSION_MAX_RUNTIME}" \
-          codex exec \
-            -C "${WORKTREE_DIR}" \
-            --yolo \
-            "${PROMPT}" \
-            2>&1 | tee -a "${LOG_FILE}"
-      ); then
-        EXIT_CODE=0
-      else
-        EXIT_CODE=$?
-      fi
-      ;;
-    *)
-      log "ERROR: Unknown provider: ${PROVIDER_CMD}"
-      emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=unknown_provider|detail=$(sanitize_result_value "Unknown provider: ${PROVIDER_CMD}")"
-      exit 1
-      ;;
-  esac
+  # Build provider command array using generic helper
+  mapfile -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${WORKTREE_DIR}" "${PROMPT}")
+
+  # Execute — always cd into worktree so provider tools resolve project files correctly
+  if (cd "${WORKTREE_DIR}" && timeout "${SESSION_MAX_RUNTIME}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
+    EXIT_CODE=0
+  else
+    EXIT_CODE=$?
+  fi
 
   ATTEMPT_ELAPSED=$(( $(date +%s) - ATTEMPT_START_TIME ))
   log "ATTEMPT: ${ATTEMPT_NUM}/${MAX_RETRIES} finished exit_code=${EXIT_CODE} elapsed=${ATTEMPT_ELAPSED}s prd=${ELIGIBLE_PRD}"

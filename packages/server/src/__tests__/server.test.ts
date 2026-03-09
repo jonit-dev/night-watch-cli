@@ -473,8 +473,17 @@ describe('server API', () => {
       expect(response.body).toHaveProperty('provider', 'codex');
     });
 
-    it('should validate provider', async () => {
-      const response = await request(app).put('/api/config').send({ provider: 'invalid' });
+    it('should accept any non-empty string as provider (preset ID)', async () => {
+      // Provider is now a preset ID, so any non-empty string is valid
+      // Actual preset resolution happens at runtime via resolvePreset()
+      const response = await request(app).put('/api/config').send({ provider: 'custom-preset' });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('provider', 'custom-preset');
+    });
+
+    it('should reject empty provider', async () => {
+      const response = await request(app).put('/api/config').send({ provider: '' });
 
       expect(response.status).toBe(400);
       expect(response.body).toHaveProperty('error');
@@ -742,10 +751,20 @@ describe('server API', () => {
       expect(response.body.jobProviders.reviewer).toBe('codex');
     });
 
-    it('should reject invalid provider in jobProviders', async () => {
+    it('should accept any non-empty string as preset ID in jobProviders', async () => {
+      // Provider values are now preset IDs (any non-empty string)
       const response = await request(app)
         .put('/api/config')
-        .send({ jobProviders: { reviewer: 'invalid' } });
+        .send({ jobProviders: { reviewer: 'custom-preset' } });
+
+      expect(response.status).toBe(200);
+      expect(response.body.jobProviders.reviewer).toBe('custom-preset');
+    });
+
+    it('should reject empty provider in jobProviders', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ jobProviders: { reviewer: '' } });
 
       expect(response.status).toBe(400);
       expect(response.body.error).toContain('jobProviders');
@@ -1153,6 +1172,128 @@ describe('server API', () => {
       expect(response.body.boardProvider.provider).toBe('github');
       expect(response.body.boardProvider.projectNumber).toBe(12);
       expect(response.body.boardProvider.repo).toBe('owner/repo');
+    });
+
+    it('should accept custom preset ID in jobProviders via providerPresets', async () => {
+      // First create the preset so deletion protection doesn't apply
+      const createResponse = await request(app)
+        .put('/api/config')
+        .send({
+          providerPresets: {
+            'my-llm': {
+              name: 'My LLM',
+              command: 'my-llm-cli',
+            },
+          },
+          jobProviders: { executor: 'my-llm' },
+        });
+
+      expect(createResponse.status).toBe(200);
+      expect(createResponse.body.jobProviders.executor).toBe('my-llm');
+      expect(createResponse.body.providerPresets['my-llm']).toBeDefined();
+      expect(createResponse.body.providerPresets['my-llm'].name).toBe('My LLM');
+      expect(createResponse.body.providerPresets['my-llm'].command).toBe('my-llm-cli');
+    });
+
+    it('should reject providerPresets entry missing name', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerPresets: {
+            'no-name': {
+              command: 'some-cli',
+            },
+          },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('providerPresets.no-name.name');
+    });
+
+    it('should reject providerPresets entry missing command', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerPresets: {
+            'no-command': {
+              name: 'No Command',
+            },
+          },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('providerPresets.no-command.command');
+    });
+
+    it('should reject providerPresets envVars with non-string values', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerPresets: {
+            'bad-env': {
+              name: 'Bad Env',
+              command: 'some-cli',
+              envVars: { KEY: 123 },
+            },
+          },
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('providerPresets.bad-env.envVars.KEY');
+    });
+
+    it('should block deletion of in-use preset', async () => {
+      // First, set up a preset and reference it in jobProviders
+      await request(app)
+        .put('/api/config')
+        .send({
+          providerPresets: {
+            architect: {
+              name: 'Architect',
+              command: 'architect-cli',
+            },
+          },
+          jobProviders: { executor: 'architect', qa: 'architect' },
+        });
+
+      // Now try to delete the preset while it is still referenced
+      const deleteResponse = await request(app)
+        .put('/api/config')
+        .send({
+          providerPresets: {
+            architect: null,
+          },
+        });
+
+      expect(deleteResponse.status).toBe(400);
+      expect(deleteResponse.body.error).toContain('architect');
+    });
+
+    it('should allow deletion of preset not referenced by any job', async () => {
+      // Create a preset that is not assigned to any job
+      await request(app)
+        .put('/api/config')
+        .send({
+          providerPresets: {
+            'unused-preset': {
+              name: 'Unused',
+              command: 'unused-cli',
+            },
+          },
+          // Clear any jobProviders references to ensure it's unused
+          jobProviders: {},
+        });
+
+      // Deleting an unused preset should succeed
+      const deleteResponse = await request(app)
+        .put('/api/config')
+        .send({
+          providerPresets: {
+            'unused-preset': null,
+          },
+        });
+
+      expect(deleteResponse.status).toBe(200);
     });
   });
 

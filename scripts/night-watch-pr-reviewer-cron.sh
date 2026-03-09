@@ -1075,38 +1075,15 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
   REVIEWER_ATTEMPT_START=$(date +%s)
   REVIEWER_PROMPT="${REVIEWER_PROMPT_BASE}${TARGET_SCOPE_PROMPT}${PRD_CONTEXT_PROMPT}"
 
-  case "${PROVIDER_CMD}" in
-    claude)
-      if (
-        cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" \
-          claude -p "${REVIEWER_PROMPT}" \
-            --dangerously-skip-permissions \
-            2>&1 | tee -a "${LOG_FILE}"
-      ); then
-        EXIT_CODE=0
-      else
-        EXIT_CODE=$?
-      fi
-      ;;
-    codex)
-      if (
-        cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" \
-          codex exec \
-            -C "${REVIEW_WORKTREE_DIR}" \
-            --yolo \
-            "${REVIEWER_PROMPT}" \
-            2>&1 | tee -a "${LOG_FILE}"
-      ); then
-        EXIT_CODE=0
-      else
-        EXIT_CODE=$?
-      fi
-      ;;
-    *)
-      log "ERROR: Unknown provider: ${PROVIDER_CMD}"
-      exit 1
-      ;;
-  esac
+  # Build provider command array using generic helper
+  mapfile -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${REVIEW_WORKTREE_DIR}" "${REVIEWER_PROMPT}")
+
+  # Execute — always cd into worktree so provider tools resolve project files correctly
+  if (cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
+    EXIT_CODE=0
+  else
+    EXIT_CODE=$?
+  fi
 
   REVIEWER_ATTEMPT_ELAPSED=$(( $(date +%s) - REVIEWER_ATTEMPT_START ))
   log "RETRY: Attempt ${ATTEMPT}/${TOTAL_ATTEMPTS} finished exit_code=${EXIT_CODE} elapsed=${REVIEWER_ATTEMPT_ELAPSED}s pr=${TARGET_PR:-all}"

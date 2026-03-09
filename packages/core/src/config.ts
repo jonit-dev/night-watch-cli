@@ -8,11 +8,12 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import {
   INightWatchConfig,
+  IProviderPreset,
   IQueueConfig,
   JobType,
-  Provider,
 } from './types.js';
 import {
+  BUILT_IN_PRESETS,
   CONFIG_FILE_NAME,
   DEFAULT_AUDIT,
   DEFAULT_AUTO_MERGE,
@@ -32,21 +33,21 @@ import {
   DEFAULT_MAX_RUNTIME,
   DEFAULT_MIN_REVIEW_SCORE,
   DEFAULT_NOTIFICATIONS,
-  DEFAULT_PRIMARY_FALLBACK_MODEL,
   DEFAULT_PRD_DIR,
   DEFAULT_PRD_PRIORITY,
+  DEFAULT_PRIMARY_FALLBACK_MODEL,
   DEFAULT_PROVIDER,
   DEFAULT_PROVIDER_ENV,
   DEFAULT_QA,
   DEFAULT_QUEUE,
   DEFAULT_REVIEWER_ENABLED,
-  DEFAULT_SECONDARY_FALLBACK_MODEL,
   DEFAULT_REVIEWER_MAX_RETRIES,
   DEFAULT_REVIEWER_MAX_RUNTIME,
   DEFAULT_REVIEWER_RETRY_DELAY,
   DEFAULT_REVIEWER_SCHEDULE,
   DEFAULT_ROADMAP_SCANNER,
   DEFAULT_SCHEDULING_PRIORITY,
+  DEFAULT_SECONDARY_FALLBACK_MODEL,
   DEFAULT_TEMPLATES_DIR,
 } from './constants.js';
 import { normalizeConfig } from './config-normalize.js';
@@ -218,11 +219,31 @@ export function loadConfig(projectDir: string): INightWatchConfig {
 /**
  * Resolve the provider for a specific job type.
  * Precedence: CLI override > job-specific provider > global provider.
+ * Returns the preset ID (string) that should be used.
  */
-export function resolveJobProvider(config: INightWatchConfig, jobType: JobType): Provider {
+export function resolveJobProvider(config: INightWatchConfig, jobType: JobType): string {
   if (config._cliProviderOverride) return config._cliProviderOverride;
   if (config.jobProviders[jobType]) return config.jobProviders[jobType]!;
   return config.provider;
+}
+
+/**
+ * Resolve a provider preset by ID.
+ * Looks up custom presets from config first, then falls back to built-in presets.
+ * Throws if the preset ID is not found.
+ */
+export function resolvePreset(config: INightWatchConfig, presetId: string): IProviderPreset {
+  // Check custom presets first (allows overriding built-ins)
+  if (config.providerPresets?.[presetId]) {
+    return config.providerPresets[presetId];
+  }
+
+  // Fall back to built-in presets
+  if (BUILT_IN_PRESETS[presetId]) {
+    return BUILT_IN_PRESETS[presetId];
+  }
+
+  throw new Error(`Unknown provider preset: "${presetId}"`);
 }
 
 /**

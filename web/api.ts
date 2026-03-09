@@ -13,6 +13,7 @@ import type {
     INightWatchConfig,
     INotificationConfig,
     IPrdInfo,
+    IProviderPreset,
     IPrInfo,
     IProcessInfo,
     IQaConfig,
@@ -29,7 +30,7 @@ import { DependencyList, useEffect, useRef, useState } from 'react';
 // Re-export shared types so consumers can import from either place
 export type {
     ClaudeModel, IAuditConfig, IBoardProviderConfig, IJobProviders, ILogInfo, INightWatchConfig,
-    INotificationConfig, IPrdInfo, IPrInfo, IProcessInfo, IQaConfig, IRoadmapItem, IRoadmapScannerConfig, IRoadmapStatus, IStatusSnapshot, IWebhookConfig, MergeMethod, QaArtifacts
+    INotificationConfig, IPrdInfo, IProviderPreset, IPrInfo, IProcessInfo, IQaConfig, IRoadmapItem, IRoadmapScannerConfig, IRoadmapStatus, IStatusSnapshot, IWebhookConfig, MergeMethod, QaArtifacts
 };
 
 export type PrdWithContent = IPrdInfo & { content: string };
