@@ -90,6 +90,14 @@ emit_result() {
   fi
 }
 
+extract_review_score_from_text() {
+  local review_text="${1:-}"
+  printf '%s' "${review_text}" \
+    | grep -oP '(?:Overall\s+)?Score:\*?\*?\s*\d+/100' \
+    | tail -1 \
+    | grep -oP '\d+(?=/100)' || echo ""
+}
+
 # ── Global Job Queue Gate ────────────────────────────────────────────────────
 # Acquire global gate before per-project lock to serialize jobs across projects.
 # When gate is busy, enqueue the job and exit cleanly.
@@ -393,10 +401,7 @@ get_pr_score() {
       fi
     } | sort -u
   )
-  echo "${all_comments}" \
-    | grep -oP 'Overall Score:\*?\*?\s*(\d+)/100' \
-    | tail -1 \
-    | grep -oP '\d+(?=/100)' || echo ""
+  extract_review_score_from_text "${all_comments}"
 }
 
 # Count failed CI checks for a PR.
@@ -645,10 +650,7 @@ while IFS=$'\t' read -r pr_number pr_branch; do
       fi
     } | sort -u
   )
-  LATEST_SCORE=$(echo "${ALL_COMMENTS}" \
-    | grep -oP 'Overall Score:\*?\*?\s*(\d+)/100' \
-    | tail -1 \
-    | grep -oP '\d+(?=/100)' || echo "")
+  LATEST_SCORE=$(extract_review_score_from_text "${ALL_COMMENTS}")
   if [ -n "${LATEST_SCORE}" ] && [ "${LATEST_SCORE}" -lt "${MIN_REVIEW_SCORE}" ]; then
     log "INFO: PR #${pr_number} (${pr_branch}) has review score ${LATEST_SCORE}/100 (threshold: ${MIN_REVIEW_SCORE})"
     NEEDS_WORK=1
@@ -686,10 +688,7 @@ if [ "${NEEDS_WORK}" -eq 0 ]; then
           fi
         } | sort -u
       )
-      PR_SCORE=$(echo "${PR_COMMENTS}" \
-        | grep -oP 'Overall Score:\*?\*?\s*(\d+)/100' \
-        | tail -1 \
-        | grep -oP '\d+(?=/100)' || echo "")
+      PR_SCORE=$(extract_review_score_from_text "${PR_COMMENTS}")
 
       # Skip PRs without a score or with score below threshold
       [ -z "${PR_SCORE}" ] && continue
@@ -915,9 +914,14 @@ if ! assert_isolated_worktree "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}" "reviewe
   exit 1
 fi
 
-REVIEWER_PROMPT_PATH=$(resolve_instruction_path_with_fallback "${REVIEW_WORKTREE_DIR}" "pr-reviewer.md" "night-watch-pr-reviewer.md" || true)
+SHARED_REVIEW_PROMPT_PATH="${REVIEW_WORKTREE_DIR}/.github/prompts/pr-review.md"
+if [ -f "${SHARED_REVIEW_PROMPT_PATH}" ]; then
+  REVIEWER_PROMPT_PATH="${SHARED_REVIEW_PROMPT_PATH}"
+else
+  REVIEWER_PROMPT_PATH=$(resolve_instruction_path_with_fallback "${REVIEW_WORKTREE_DIR}" "pr-reviewer.md" "night-watch-pr-reviewer.md" || true)
+fi
 if [ -z "${REVIEWER_PROMPT_PATH}" ]; then
-  log "FAIL: Missing reviewer prompt file. Checked pr-reviewer.md/night-watch-pr-reviewer.md in instructions/, .claude/commands/, and bundled templates/"
+  log "FAIL: Missing reviewer prompt file. Checked .github/prompts/pr-review.md plus pr-reviewer.md/night-watch-pr-reviewer.md in instructions/, .claude/commands/, and bundled templates/"
   emit_result "failure" "reason=missing_reviewer_prompt"
   exit 1
 fi
@@ -1225,10 +1229,7 @@ if [ "${AUTO_MERGE}" = "1" ] && [ ${EXIT_CODE} -eq 0 ]; then
         fi
       } | sort -u
     )
-    LATEST_SCORE=$(echo "${ALL_COMMENTS}" \
-      | grep -oP 'Overall Score:\*?\*?\s*(\d+)/100' \
-      | tail -1 \
-      | grep -oP '\d+(?=/100)' || echo "")
+    LATEST_SCORE=$(extract_review_score_from_text "${ALL_COMMENTS}")
 
     # Skip PRs without a score
     if [ -z "${LATEST_SCORE}" ]; then

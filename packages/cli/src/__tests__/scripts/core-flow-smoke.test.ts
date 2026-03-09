@@ -1253,6 +1253,61 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_all_passing');
   });
 
+  it('reviewer should accept plain Score comments when applying min review score threshold', () => {
+    const projectDir = mkTempDir('nw-smoke-reviewer-score-threshold-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-reviewer-score-threshold-bin-');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'args="$*"\n' +
+        'if [[ "$1" == "repo" && "$2" == "view" ]]; then\n' +
+        "  echo 'owner/repo'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ "$args" == *"mergeStateStatus"* ]]; then\n' +
+        "    echo 'CLEAN'\n" +
+        '  else\n' +
+        '    echo \'{"number":1}\'\n' +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  if [[ "$args" == *"number,headRefName"* ]]; then\n' +
+        "    printf '1\\tnight-watch/score-format\\n'\n" +
+        '  else\n' +
+        "    echo 'night-watch/score-format'\n" +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "checks" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "api" ]]; then\n' +
+        '  echo \'[{"body": "Score: 85/100"}]\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(reviewerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BRANCH_PATTERNS: 'night-watch/',
+      NW_MIN_REVIEW_SCORE: '80',
+      NW_AUTO_MERGE: '0',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_all_passing');
+  });
+
   it('reviewer should treat failed executor/qa/audit checks as needing work', () => {
     const projectDir = mkTempDir('nw-smoke-reviewer-nonstandard-ci-fail-');
     initGitRepo(projectDir);
