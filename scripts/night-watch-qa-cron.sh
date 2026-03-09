@@ -591,64 +591,29 @@ Action: generating QA tests and evidence."
   QA_ATTEMPT_START=$(date +%s)
   log "QA: PR #${pr_num} — starting provider=${PROVIDER_CMD} timeout=${MAX_RUNTIME}s"
   PROVIDER_OK=0
-  case "${PROVIDER_CMD}" in
-    claude)
-      if (
-        cd "${QA_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
-          claude -p "${QA_PROMPT}" \
-            --dangerously-skip-permissions \
-            2>&1 | tee -a "${LOG_FILE}"
-      ); then
-        PROVIDER_OK=1
-      else
-        local_exit=$?
-        QA_ATTEMPT_ELAPSED=$(( $(date +%s) - QA_ATTEMPT_START ))
-        log "QA: PR #${pr_num} — provider exited with code ${local_exit} elapsed=${QA_ATTEMPT_ELAPSED}s"
-        if [ ${local_exit} -eq 124 ]; then
-          FAILED_AUTOMATION_PRS_CSV=$(append_csv "${FAILED_AUTOMATION_PRS_CSV}" "#${pr_num}")
-          FAILED_PR="#${pr_num}"
-          FAILED_REASON="timeout"
-          EXIT_CODE=124
-          break
-        fi
-        FAILED_AUTOMATION_PRS_CSV=$(append_csv "${FAILED_AUTOMATION_PRS_CSV}" "#${pr_num}")
-        FAILED_PR="#${pr_num}"
-        FAILED_REASON="provider_exit_${local_exit}"
-        EXIT_CODE=${local_exit}
-      fi
-      ;;
-    codex)
-      if (
-        cd "${QA_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
-          codex exec \
-            -C "${QA_WORKTREE_DIR}" \
-            --yolo \
-            "${QA_PROMPT}" \
-            2>&1 | tee -a "${LOG_FILE}"
-      ); then
-        PROVIDER_OK=1
-      else
-        local_exit=$?
-        QA_ATTEMPT_ELAPSED=$(( $(date +%s) - QA_ATTEMPT_START ))
-        log "QA: PR #${pr_num} — provider exited with code ${local_exit} elapsed=${QA_ATTEMPT_ELAPSED}s"
-        if [ ${local_exit} -eq 124 ]; then
-          FAILED_AUTOMATION_PRS_CSV=$(append_csv "${FAILED_AUTOMATION_PRS_CSV}" "#${pr_num}")
-          FAILED_PR="#${pr_num}"
-          FAILED_REASON="timeout"
-          EXIT_CODE=124
-          break
-        fi
-        FAILED_AUTOMATION_PRS_CSV=$(append_csv "${FAILED_AUTOMATION_PRS_CSV}" "#${pr_num}")
-        FAILED_PR="#${pr_num}"
-        FAILED_REASON="provider_exit_${local_exit}"
-        EXIT_CODE=${local_exit}
-      fi
-      ;;
-    *)
-      log "ERROR: Unknown provider: ${PROVIDER_CMD}"
-      exit 1
-      ;;
-  esac
+
+  # Build provider command array using generic helper
+  mapfile -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${QA_WORKTREE_DIR}" "${QA_PROMPT}")
+
+  # Execute — always cd into worktree so provider tools resolve project files correctly
+  if (cd "${QA_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
+    PROVIDER_OK=1
+  else
+    local_exit=$?
+    QA_ATTEMPT_ELAPSED=$(( $(date +%s) - QA_ATTEMPT_START ))
+    log "QA: PR #${pr_num} — provider exited with code ${local_exit} elapsed=${QA_ATTEMPT_ELAPSED}s"
+    if [ ${local_exit} -eq 124 ]; then
+      FAILED_AUTOMATION_PRS_CSV=$(append_csv "${FAILED_AUTOMATION_PRS_CSV}" "#${pr_num}")
+      FAILED_PR="#${pr_num}"
+      FAILED_REASON="timeout"
+      EXIT_CODE=124
+      break
+    fi
+    FAILED_AUTOMATION_PRS_CSV=$(append_csv "${FAILED_AUTOMATION_PRS_CSV}" "#${pr_num}")
+    FAILED_PR="#${pr_num}"
+    FAILED_REASON="provider_exit_${local_exit}"
+    EXIT_CODE=${local_exit}
+  fi
 
   if [ "${PROVIDER_OK}" -eq 1 ]; then
     QA_ATTEMPT_ELAPSED=$(( $(date +%s) - QA_ATTEMPT_START ))

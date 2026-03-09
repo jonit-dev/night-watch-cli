@@ -161,8 +161,13 @@ describe("validate_provider", () => {
     expect(result.status).toBe(0);
   });
 
-  it("returns 1 for unknown provider", () => {
+  it("returns 0 for any non-empty provider (preset system)", () => {
     const result = sourceHelpersAndRun(`validate_provider "unknown"`);
+    expect(result.status).toBe(0);
+  });
+
+  it("returns 1 for empty provider", () => {
+    const result = sourceHelpersAndRun(`validate_provider ""`);
     expect(result.status).toBe(1);
   });
 });

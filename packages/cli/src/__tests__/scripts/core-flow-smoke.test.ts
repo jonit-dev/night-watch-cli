@@ -289,6 +289,12 @@ describe('core flow smoke tests (bash scripts)', () => {
     const result = runScript(executorScript, projectDir, {
       PATH: `${fakeBin}:${process.env.PATH}`,
       NW_PROVIDER_CMD: 'codex',
+      NW_PROVIDER_SUBCOMMAND: 'exec',
+      NW_PROVIDER_APPROVE_FLAG: '--yolo',
+      NW_PROVIDER_WORKDIR_FLAG: '-C',
+      NW_PROVIDER_PROMPT_FLAG: '',
+      NW_PROVIDER_MODEL_FLAG: '',
+      NW_PROVIDER_MODEL: '',
       NW_PRD_DIR: 'docs/PRDs/night-watch',
       NW_DEFAULT_BRANCH: 'main',
       NW_SMOKE_ARGS_FILE: argsFile,
@@ -1413,6 +1419,12 @@ describe('core flow smoke tests (bash scripts)', () => {
     const result = runScript(reviewerScript, projectDir, {
       PATH: `${fakeBin}:${process.env.PATH}`,
       NW_PROVIDER_CMD: 'codex',
+      NW_PROVIDER_SUBCOMMAND: 'exec',
+      NW_PROVIDER_APPROVE_FLAG: '--yolo',
+      NW_PROVIDER_WORKDIR_FLAG: '-C',
+      NW_PROVIDER_PROMPT_FLAG: '',
+      NW_PROVIDER_MODEL_FLAG: '',
+      NW_PROVIDER_MODEL: '',
       NW_DEFAULT_BRANCH: 'main',
       NW_BRANCH_PATTERNS: 'night-watch/',
       NW_REVIEWER_WORKER_MODE: '0',
@@ -2023,7 +2035,7 @@ describe('core flow smoke tests (bash scripts)', () => {
     });
 
     expect(result.status).toBe(1);
-    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure|reason=unknown_provider');
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure|reason=provider_not_found');
   });
 
   it('audit should emit skip_dry_run when NW_DRY_RUN is set to 1', () => {

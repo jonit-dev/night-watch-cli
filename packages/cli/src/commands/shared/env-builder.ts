@@ -6,23 +6,28 @@
 import {
   DEFAULT_QUEUE,
   INightWatchConfig,
+  IProviderPreset,
   IQueueEntry,
   IWebhookConfig,
-  PROVIDER_COMMANDS,
   getSchedulingPlan,
   loadConfig,
   resolveJobProvider,
+  resolvePreset,
 } from '@night-watch/core';
 import type { JobType } from '@night-watch/core';
 
 /**
  * Derive a human-friendly provider label for display in PR bodies, comments, and commits.
- * Uses config.providerLabel if set (e.g. "GLM-5"), otherwise auto-derives from provider/env.
+ * Uses the preset's name field as the primary source, falls back to config.providerLabel
+ * for backward compat, then auto-derives from provider/env.
  */
-function deriveProviderLabel(config: INightWatchConfig, jobType: JobType): string {
+function deriveProviderLabel(config: INightWatchConfig, preset: IProviderPreset): string {
+  // Primary: use preset name
+  if (preset.name) return preset.name;
+  // Backward compat: use deprecated providerLabel
   if (config.providerLabel) return config.providerLabel;
-  const provider = resolveJobProvider(config, jobType);
-  if (provider === 'codex') return 'Codex';
+  // Fallback: derive from command
+  if (preset.command === 'codex') return 'Codex';
   // claude provider: check if a proxy base URL is configured
   if (config.providerEnv?.ANTHROPIC_BASE_URL) return 'Claude (proxy)';
   return 'Claude';
@@ -31,10 +36,20 @@ function deriveProviderLabel(config: INightWatchConfig, jobType: JobType): strin
 /**
  * Build the base environment variables shared by all job types.
  * Sets provider, queue, execution-context, and optional dry-run/default-branch env vars.
+ *
+ * Provider env vars (from preset):
  * - NW_PROVIDER_CMD: the CLI binary for the resolved provider
+ * - NW_PROVIDER_SUBCOMMAND: optional subcommand (e.g. "exec" for codex)
+ * - NW_PROVIDER_PROMPT_FLAG: flag for passing the prompt (e.g. "-p")
+ * - NW_PROVIDER_APPROVE_FLAG: flag for auto-approve mode
+ * - NW_PROVIDER_WORKDIR_FLAG: flag for working directory
+ * - NW_PROVIDER_MODEL_FLAG: flag for model selection
+ * - NW_PROVIDER_MODEL: model value to use
  * - NW_PROVIDER_LABEL: human-friendly provider name for PR/comment attribution
+ *
+ * Other env vars:
  * - NW_DEFAULT_BRANCH: optional default branch
- * - providerEnv: merged into env
+ * - providerEnv: merged into env (preset.envVars takes precedence)
  * - NW_QUEUE_*: queue configuration for bash scripts
  * - NW_DRY_RUN: '1' when isDryRun is true
  * - NW_EXECUTION_CONTEXT: always 'agent'
@@ -46,11 +61,27 @@ export function buildBaseEnvVars(
 ): Record<string, string> {
   const env: Record<string, string> = {};
 
+  // Resolve the preset for this job type
+  const presetId = resolveJobProvider(config, jobType);
+  const preset = resolvePreset(config, presetId);
+
   // Provider command - the actual CLI binary to call
-  env.NW_PROVIDER_CMD = PROVIDER_COMMANDS[resolveJobProvider(config, jobType)];
+  env.NW_PROVIDER_CMD = preset.command;
+
+  // Provider subcommand (e.g. "exec" for codex)
+  env.NW_PROVIDER_SUBCOMMAND = preset.subcommand ?? '';
+
+  // Provider flags (empty string if not set)
+  env.NW_PROVIDER_PROMPT_FLAG = preset.promptFlag ?? '';
+  env.NW_PROVIDER_APPROVE_FLAG = preset.autoApproveFlag ?? '';
+  env.NW_PROVIDER_WORKDIR_FLAG = preset.workdirFlag ?? '';
+  env.NW_PROVIDER_MODEL_FLAG = preset.modelFlag ?? '';
+
+  // Provider model (empty string if not set)
+  env.NW_PROVIDER_MODEL = preset.model ?? '';
 
   // Human-friendly provider label for attribution in PRs, comments, commits
-  env.NW_PROVIDER_LABEL = deriveProviderLabel(config, jobType);
+  env.NW_PROVIDER_LABEL = deriveProviderLabel(config, preset);
 
   // Default branch (empty = auto-detect in bash script)
   if (config.defaultBranch) {
@@ -58,8 +89,13 @@ export function buildBaseEnvVars(
   }
 
   // Provider environment variables (API keys, base URLs, etc.)
+  // First apply config.providerEnv for backward compat
   if (config.providerEnv) {
     Object.assign(env, config.providerEnv);
+  }
+  // Then apply preset.envVars (takes precedence over config.providerEnv)
+  if (preset.envVars) {
+    Object.assign(env, preset.envVars);
   }
 
   // Queue configuration

@@ -6,8 +6,37 @@
 
 // ==================== Provider ====================
 
-/** Supported AI providers */
-export type Provider = 'claude' | 'codex';
+/**
+ * Supported AI providers (string to allow custom presets)
+ * Backward compatible: 'claude' | 'codex' are still valid string values
+ */
+// eslint-disable-next-line sonarjs/redundant-type-aliases
+export type Provider = string;
+
+/**
+ * A fully-configured provider preset that defines how to invoke an AI provider CLI.
+ * Presets can be built-in (claude, codex) or user-defined in night-watch.config.json.
+ */
+export interface IProviderPreset {
+  /** Human-friendly display name (e.g., "Claude", "GLM-5", "Codex") */
+  name: string;
+  /** Base command to execute (e.g., "claude", "codex", "npx") */
+  command: string;
+  /** Optional subcommand after the base command (e.g., "exec" for "codex exec") */
+  subcommand?: string;
+  /** Flag to pass the prompt (e.g., "-p" for claude) */
+  promptFlag?: string;
+  /** Flag to enable auto-approve/yolo mode (e.g., "--dangerously-skip-permissions") */
+  autoApproveFlag?: string;
+  /** Flag to set working directory (e.g., "-C" for codex) */
+  workdirFlag?: string;
+  /** Flag to specify the model (e.g., "--model") */
+  modelFlag?: string;
+  /** Default model to use if modelFlag is set (e.g., "claude-sonnet-4-6") */
+  model?: string;
+  /** Additional environment variables to set when invoking the provider */
+  envVars?: Record<string, string>;
+}
 
 // ==================== Merge Method ====================
 
@@ -19,11 +48,11 @@ export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer';
 
 /** Per-job provider configuration */
 export interface IJobProviders {
-  executor?: Provider;
-  reviewer?: Provider;
-  qa?: Provider;
-  audit?: Provider;
-  slicer?: Provider;
+  executor?: string;
+  reviewer?: string;
+  qa?: string;
+  audit?: string;
+  slicer?: string;
 }
 
 // ==================== Provider Strategy ====================
@@ -128,6 +157,8 @@ export interface INightWatchConfig {
   executorEnabled?: boolean;
   reviewerEnabled: boolean;
   providerEnv: Record<string, string>;
+  /** Named provider presets that define how to invoke AI provider CLIs */
+  providerPresets?: Record<string, IProviderPreset>;
   notifications: INotificationConfig;
   prdPriority: string[];
   roadmapScanner: IRoadmapScannerConfig;

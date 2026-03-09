@@ -1,4 +1,4 @@
-import { Activity, AlertCircle, Check, Edit2, Eye, EyeOff, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react';
+import { Activity, AlertCircle, AlertTriangle, Check, Edit2, Eye, EyeOff, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react';
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import {
@@ -11,6 +11,7 @@ import {
   IJobProviders,
   INightWatchConfig,
   INotificationConfig,
+  IProviderPreset,
   IQaConfig,
   IRoadmapScannerConfig,
   IWebhookConfig,
@@ -21,6 +22,9 @@ import {
   updateConfig,
   useApi
 } from '../api';
+import PresetCard from '../components/providers/PresetCard.js';
+import PresetFormModal from '../components/providers/PresetFormModal.js';
+import ProviderEnvEditor from '../components/providers/ProviderEnvEditor.js';
 import ScheduleTimeline from '../components/scheduling/ScheduleTimeline';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -32,9 +36,13 @@ import Tabs from '../components/ui/Tabs';
 import { useStore } from '../store/useStore';
 import { IScheduleTemplate, resolveActiveTemplate, SCHEDULE_TEMPLATES } from '../utils/cron.js';
 
+/** Built-in preset IDs that cannot be deleted */
+const BUILT_IN_PRESET_IDS = ['claude', 'codex'];
+
 type ConfigForm = {
   provider: INightWatchConfig['provider'];
   providerLabel: string;
+  providerPresets: Record<string, IProviderPreset>;
   defaultBranch: string;
   prdDir: string;
   branchPrefix: string;
@@ -74,6 +82,7 @@ type ConfigForm = {
 const toFormState = (config: INightWatchConfig): ConfigForm => ({
   provider: config.provider,
   providerLabel: config.providerLabel ?? '',
+  providerPresets: config.providerPresets ?? {},
   defaultBranch: config.defaultBranch,
   prdDir: config.prdDir || 'docs/prds',
   branchPrefix: config.branchPrefix,
@@ -162,201 +171,6 @@ const resolveScheduleUiState = (form: ConfigForm): ScheduleUiState => {
   }
 
   return { mode: 'custom', selectedTemplateId: '' };
-};
-
-// Helper to check if a value looks sensitive
-const isSensitiveKey = (key: string): boolean => {
-  const sensitivePatterns = ['TOKEN', 'SECRET', 'KEY', 'PASSWORD', 'AUTH', 'API_KEY'];
-  return sensitivePatterns.some((pattern) => key.toUpperCase().includes(pattern));
-};
-
-// Masked value display component
-const MaskedValue: React.FC<{ value: string; isSensitive: boolean }> = ({ value, isSensitive }) => {
-  const [show, setShow] = React.useState(false);
-
-  if (!isSensitive) {
-    return <span className="text-sm text-slate-300 font-mono truncate max-w-xs">{value}</span>;
-  }
-
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-sm text-slate-300 font-mono">
-        {show ? value : '••••••••••••'}
-      </span>
-      <button
-        type="button"
-        onClick={() => setShow(!show)}
-        className="text-slate-500 hover:text-slate-300"
-        aria-label={show ? 'Hide sensitive value' : 'Show sensitive value'}
-        title={show ? 'Hide sensitive value' : 'Show sensitive value'}
-      >
-        {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-      </button>
-    </div>
-  );
-};
-
-// Provider Env Editor Component
-const ProviderEnvEditor: React.FC<{
-  envVars: Record<string, string>;
-  onChange: (envVars: Record<string, string>) => void;
-}> = ({ envVars, onChange }) => {
-  const [newKey, setNewKey] = React.useState('');
-  const [newValue, setNewValue] = React.useState('');
-  const [editingKey, setEditingKey] = React.useState<string | null>(null);
-  const [editingValue, setEditingValue] = React.useState('');
-
-  const handleAdd = () => {
-    if (!newKey.trim()) return;
-
-    // Validate key format (uppercase, underscores, numbers)
-    if (!/^[A-Z_][A-Z0-9_]*$/.test(newKey)) {
-      alert('Key must be uppercase with underscores (e.g., API_KEY)');
-      return;
-    }
-
-    onChange({
-      ...envVars,
-      [newKey]: newValue,
-    });
-    setNewKey('');
-    setNewValue('');
-  };
-
-  const handleDelete = (key: string) => {
-    const updated = { ...envVars };
-    delete updated[key];
-    onChange(updated);
-  };
-
-  const handleStartEdit = (key: string) => {
-    setEditingKey(key);
-    setEditingValue(envVars[key]);
-  };
-
-  const handleSaveEdit = () => {
-    if (editingKey) {
-      onChange({
-        ...envVars,
-        [editingKey]: editingValue,
-      });
-      setEditingKey(null);
-      setEditingValue('');
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditingKey(null);
-    setEditingValue('');
-  };
-
-  const entries = Object.entries(envVars);
-
-  return (
-    <div className="space-y-4">
-      <div className="text-sm text-slate-400 mb-4">
-        Configure environment variables passed to the provider CLI (API keys, base URLs)
-      </div>
-
-      {/* Existing variables list */}
-      <div className="space-y-2">
-        {entries.length === 0 ? (
-          <p className="text-slate-500 text-sm italic">No provider environment variables configured.</p>
-        ) : (
-          entries.map(([key, value]) => (
-            <div
-              key={key}
-              className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40"
-            >
-              <div className="flex items-center gap-4 flex-1 min-w-0">
-                <span className="text-sm font-mono text-indigo-400 w-48 truncate">{key}</span>
-                {editingKey === key ? (
-                  <div className="flex items-center gap-2 flex-1">
-                    <input
-                      type="text"
-                      value={editingValue}
-                      onChange={(e) => setEditingValue(e.target.value)}
-                      className="flex-1 bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm text-slate-200"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSaveEdit}
-                      className="p-1 text-green-400 hover:text-green-300"
-                      aria-label={`Save ${key} value`}
-                      title={`Save ${key} value`}
-                    >
-                      <Check className="h-4 w-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCancelEdit}
-                      className="p-1 text-slate-400 hover:text-slate-300"
-                      aria-label={`Cancel editing ${key}`}
-                      title={`Cancel editing ${key}`}
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                ) : (
-                  <MaskedValue value={value} isSensitive={isSensitiveKey(key)} />
-                )}
-              </div>
-              {editingKey !== key && (
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleStartEdit(key)}
-                    className="p-1 text-slate-400 hover:text-slate-200"
-                    aria-label={`Edit ${key}`}
-                    title={`Edit ${key}`}
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(key)}
-                    className="p-1 text-red-400 hover:text-red-300"
-                    aria-label={`Delete ${key}`}
-                    title={`Delete ${key}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
-            </div>
-          ))
-        )}
-      </div>
-
-      {/* Add new variable form */}
-      <div className="flex items-end gap-3 pt-4 border-t border-slate-800">
-        <div className="flex-1">
-          <label className="block text-xs font-medium text-slate-500 mb-1">Key</label>
-          <input
-            type="text"
-            value={newKey}
-            onChange={(e) => setNewKey(e.target.value.toUpperCase())}
-            placeholder="e.g., ANTHROPIC_BASE_URL"
-            className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 placeholder-slate-500"
-          />
-        </div>
-        <div className="flex-1">
-          <label className="block text-xs font-medium text-slate-500 mb-1">Value</label>
-          <input
-            type="text"
-            value={newValue}
-            onChange={(e) => setNewValue(e.target.value)}
-            placeholder="e.g., https://api.example.com"
-            className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 placeholder-slate-500"
-          />
-        </div>
-        <Button onClick={handleAdd} disabled={!newKey.trim()}>
-          <Plus className="h-4 w-4 mr-1" />
-          Add
-        </Button>
-      </div>
-    </div>
-  );
 };
 
 // Webhook Editor Component
@@ -669,6 +483,12 @@ const Settings: React.FC = () => {
   const [activeSettingsTab, setActiveSettingsTab] = React.useState<string>('general');
   const location = useLocation();
 
+  // Preset modal state
+  const [presetModalOpen, setPresetModalOpen] = React.useState(false);
+  const [editingPresetId, setEditingPresetId] = React.useState<string | null>(null);
+  const [editingPreset, setEditingPreset] = React.useState<IProviderPreset | null>(null);
+  const [deleteWarning, setDeleteWarning] = React.useState<{ presetId: string; presetName: string; references: string[] } | null>(null);
+
   const {
     data: config,
     loading: configLoading,
@@ -828,7 +648,7 @@ const Settings: React.FC = () => {
     const cleanedJobProviders: IJobProviders = {};
     for (const [jobType, provider] of Object.entries(form.jobProviders)) {
       if (provider !== undefined && provider !== null && provider !== '') {
-        cleanedJobProviders[jobType as keyof IJobProviders] = provider as 'claude' | 'codex';
+        cleanedJobProviders[jobType as keyof IJobProviders] = provider;
       }
     }
 
@@ -837,6 +657,7 @@ const Settings: React.FC = () => {
       const savedConfig = await updateConfig({
         provider: form.provider,
         providerLabel: form.providerLabel.trim(),
+        providerPresets: Object.keys(form.providerPresets).length > 0 ? form.providerPresets : undefined,
         defaultBranch: form.defaultBranch,
         prdDir: form.prdDir,
         branchPrefix: form.branchPrefix,
@@ -967,6 +788,179 @@ const Settings: React.FC = () => {
     }
   };
 
+  // Get default built-in preset configuration
+  const getDefaultBuiltInPreset = (presetId: string): IProviderPreset | null => {
+    const builtIn: Record<string, IProviderPreset> = {
+      claude: { name: 'Claude', command: 'claude', promptFlag: '-p', autoApproveFlag: '--dangerously-skip-permissions' },
+      codex: { name: 'Codex', command: 'codex', subcommand: 'exec', autoApproveFlag: '--yolo', workdirFlag: '-C' },
+    };
+    return builtIn[presetId] ?? null;
+  };
+
+  // Get all available presets (built-in + custom)
+  const getAllPresets = (): Record<string, IProviderPreset> => {
+    const builtIn: Record<string, IProviderPreset> = {
+      claude: { name: 'Claude', command: 'claude', promptFlag: '-p', autoApproveFlag: '--dangerously-skip-permissions' },
+      codex: { name: 'Codex', command: 'codex', subcommand: 'exec', autoApproveFlag: '--yolo', workdirFlag: '-C' },
+    };
+    return { ...builtIn, ...form?.providerPresets };
+  };
+
+  // Get preset options for select dropdowns (includes built-ins)
+  const getPresetOptions = (customPresets: Record<string, IProviderPreset>): Array<{ label: string; value: string }> => {
+    const allPresets = getAllPresets();
+    return Object.entries(allPresets).map(([id, preset]) => ({
+      label: preset.name,
+      value: id,
+    }));
+  };
+
+  // Check if a preset is referenced by any job assignment
+  const getPresetReferences = (presetId: string, formData: ConfigForm): string[] => {
+    const references: string[] = [];
+
+    // Check global provider
+    if (formData.provider === presetId) {
+      references.push('Global Provider');
+    }
+
+    // Check job providers
+    const jobLabels: Record<string, string> = {
+      executor: 'Executor',
+      reviewer: 'Reviewer',
+      qa: 'QA',
+      audit: 'Audit',
+      slicer: 'Planner',
+    };
+
+    for (const [jobType, provider] of Object.entries(formData.jobProviders)) {
+      if (provider === presetId) {
+        references.push(jobLabels[jobType] ?? jobType);
+      }
+    }
+
+    return references;
+  };
+
+  // Open preset modal for adding new preset
+  const handleAddPreset = () => {
+    setEditingPresetId(null);
+    setEditingPreset(null);
+    setPresetModalOpen(true);
+  };
+
+  // Open preset modal for editing existing preset
+  const handleEditPreset = (presetId: string) => {
+    const allPresets = getAllPresets();
+    const preset = allPresets[presetId];
+    if (preset) {
+      setEditingPresetId(presetId);
+      setEditingPreset(preset);
+      setPresetModalOpen(true);
+    }
+  };
+
+  // Save preset (add or update)
+  const handleSavePreset = (presetId: string, preset: IProviderPreset) => {
+    if (!form) return;
+
+    const updatedPresets = { ...form.providerPresets, [presetId]: preset };
+    updateField('providerPresets', updatedPresets);
+
+    // If this is a new preset, set it as the global provider
+    if (!editingPresetId) {
+      addToast({
+        title: 'Preset Added',
+        message: `${preset.name} has been added. You can now assign it to jobs.`,
+        type: 'success',
+      });
+    }
+  };
+
+  // Delete preset with protection check
+  const handleDeletePreset = (presetId: string) => {
+    if (!form) return;
+
+    // Prevent deletion of built-in presets
+    if (BUILT_IN_PRESET_IDS.includes(presetId)) {
+      addToast({
+        title: 'Cannot Delete',
+        message: 'Built-in presets cannot be deleted.',
+        type: 'error',
+      });
+      return;
+    }
+
+    // Check if preset is in use
+    const references = getPresetReferences(presetId, form);
+    if (references.length > 0) {
+      setDeleteWarning({
+        presetId,
+        presetName: getAllPresets()[presetId]?.name ?? presetId,
+        references,
+      });
+      return;
+    }
+
+    // Safe to delete
+    const updatedPresets = { ...form.providerPresets };
+    delete updatedPresets[presetId];
+    updateField('providerPresets', updatedPresets);
+
+    addToast({
+      title: 'Preset Deleted',
+      message: `${getAllPresets()[presetId]?.name ?? presetId} has been removed.`,
+      type: 'success',
+    });
+  };
+
+  // Reset built-in preset to defaults
+  const handleResetPreset = (presetId: string) => {
+    if (!form) return;
+
+    // Remove any custom override for this preset
+    const updatedPresets = { ...form.providerPresets };
+    delete updatedPresets[presetId];
+    updateField('providerPresets', updatedPresets);
+
+    addToast({
+      title: 'Preset Reset',
+      message: `${presetId} has been reset to built-in defaults.`,
+      type: 'success',
+    });
+  };
+
+  // Confirm deletion despite warnings (shouldn't happen with proper UI, but just in case)
+  const handleConfirmDelete = () => {
+    if (!deleteWarning || !form) return;
+
+    const { presetId } = deleteWarning;
+    const updatedPresets = { ...form.providerPresets };
+    delete updatedPresets[presetId];
+    updateField('providerPresets', updatedPresets);
+
+    // Also clear any job assignments that reference this preset
+    const newJobProviders = { ...form.jobProviders };
+    for (const key of Object.keys(newJobProviders)) {
+      if (newJobProviders[key as keyof IJobProviders] === presetId) {
+        delete newJobProviders[key as keyof IJobProviders];
+      }
+    }
+    updateField('jobProviders', newJobProviders);
+
+    // Clear global provider if it was this preset
+    if (form.provider === presetId) {
+      updateField('provider', 'claude');
+    }
+
+    setDeleteWarning(null);
+    addToast({
+      title: 'Preset Deleted',
+      message: `${deleteWarning.presetName} has been removed and all references cleared.`,
+      type: 'success',
+    });
+  };
+
   if (configLoading || !form) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -1057,79 +1051,88 @@ const Settings: React.FC = () => {
       label: 'Providers',
       content: (
         <div className="space-y-6">
+          {/* Provider Presets Card */}
           <Card className="p-6 space-y-6">
-            <div>
-              <h3 className="text-lg font-medium text-slate-200">Global Provider</h3>
-              <p className="text-sm text-slate-400 mt-1">Default AI provider used for all jobs unless overridden below</p>
-            </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-              <p className="text-sm text-slate-300">
-                Primary and secondary fallback settings only control native Claude retry behavior after a Claude proxy rate limit.
-                To use Codex, set the global provider above or assign Codex in the per-job provider overrides below.
-              </p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Select
-                label="Provider"
-                value={form.provider}
-                onChange={(val) => updateField('provider', val as ConfigForm['provider'])}
-                options={[
-                  { label: 'Anthropic (Claude)', value: 'claude' },
-                  { label: 'OpenAI (Codex)', value: 'codex' },
-                ]}
-              />
-              <Input
-                label="Provider Label"
-                value={form.providerLabel}
-                onChange={(e) => updateField('providerLabel', e.target.value)}
-                placeholder="e.g. GLM-5 (auto-derived if blank)"
-                helperText="Human-friendly name shown in PR comments, review footers, and commit attribution"
-              />
-              <Select
-                label="Primary Native Claude Fallback"
-                value={form.primaryFallbackModel}
-                onChange={(val) => {
-                  const next = val as ClaudeModel;
-                  updateField('primaryFallbackModel', next);
-                  updateField('claudeModel', next);
-                }}
-                options={[
-                  { label: 'Sonnet (claude-sonnet-4-6)', value: 'sonnet' },
-                  { label: 'Opus (claude-opus-4-6)', value: 'opus' },
-                ]}
-                helperText="Claude-only. First native Claude model used for direct Claude execution and the first rate-limit fallback attempt"
-              />
-              <Select
-                label="Secondary Native Claude Fallback"
-                value={form.secondaryFallbackModel}
-                onChange={(val) => updateField('secondaryFallbackModel', val as ClaudeModel)}
-                options={[
-                  { label: 'Sonnet (claude-sonnet-4-6)', value: 'sonnet' },
-                  { label: 'Opus (claude-opus-4-6)', value: 'opus' },
-                ]}
-                helperText="Claude-only. Used only if the primary native Claude fallback is also rate-limited"
-              />
-              <div className="md:col-span-2">
-                <Switch
-                  label="Fallback on Rate Limit"
-                  checked={form.fallbackOnRateLimit}
-                  onChange={(checked) => updateField('fallbackOnRateLimit', checked)}
-                />
-                <p className="text-xs text-slate-500 mt-2">
-                  When enabled, Night Watch retries with the primary native Claude fallback model, then the secondary one if the primary is also rate-limited
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium text-slate-200">Provider Presets</h3>
+                <p className="text-sm text-slate-400 mt-1">
+                  Configure AI provider presets with custom commands, models, and environment variables
                 </p>
               </div>
+              <Button
+                onClick={() => {
+                  setEditingPresetId(null);
+                  setEditingPreset(null);
+                  setPresetModalOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Provider
+              </Button>
+            </div>
+
+            {/* Preset Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Built-in presets */}
+              {BUILT_IN_PRESET_IDS.map((presetId) => {
+                const customPreset = form.providerPresets[presetId];
+                const preset = customPreset || getDefaultBuiltInPreset(presetId);
+                if (!preset) return null;
+
+                return (
+                  <PresetCard
+                    key={presetId}
+                    presetId={presetId}
+                    preset={preset}
+                    isBuiltIn
+                    onEdit={() => handleEditPreset(presetId)}
+                    onReset={() => handleResetPreset(presetId)}
+                  />
+                );
+              })}
+
+              {/* Custom presets */}
+              {Object.entries(form.providerPresets)
+                .filter(([id]) => !BUILT_IN_PRESET_IDS.includes(id))
+                .map(([presetId, preset]) => (
+                  <PresetCard
+                    key={presetId}
+                    presetId={presetId}
+                    preset={preset}
+                    isBuiltIn={false}
+                    onEdit={() => handleEditPreset(presetId)}
+                    onDelete={() => handleDeletePreset(presetId)}
+                  />
+                ))}
             </div>
           </Card>
 
+          {/* Job Assignments Card */}
           <Card className="p-6 space-y-6">
             <div>
-              <h3 className="text-lg font-medium text-slate-200">Per-Job Provider Overrides</h3>
+              <h3 className="text-lg font-medium text-slate-200">Job Assignments</h3>
               <p className="text-sm text-slate-400 mt-1">
-                Override the AI provider for specific job types. Leave as &quot;Use Global&quot; to use the default provider.
+                Assign provider presets to specific job types. Jobs without an assignment use the global provider.
               </p>
             </div>
             <div className="space-y-4">
+              {/* Global Provider Selector */}
+              <div className="flex items-center justify-between p-4 rounded-md border border-indigo-500/30 bg-indigo-500/5 gap-4">
+                <div>
+                  <span className="text-sm font-medium text-slate-200">Global Provider</span>
+                  <p className="text-xs text-slate-500 mt-1">Default preset for all jobs without a specific assignment</p>
+                </div>
+                <div className="w-64">
+                  <Select
+                    value={form.provider}
+                    onChange={(val) => updateField('provider', val)}
+                    options={getPresetOptions(form.providerPresets)}
+                  />
+                </div>
+              </div>
+
+              {/* Per-Job Provider Overrides */}
               {([
                 { key: 'executor', label: 'Executor' },
                 { key: 'reviewer', label: 'Reviewer' },
@@ -1150,14 +1153,13 @@ const Settings: React.FC = () => {
                         if (val === '') {
                           delete newJobProviders[key];
                         } else {
-                          newJobProviders[key] = val as 'claude' | 'codex';
+                          newJobProviders[key] = val;
                         }
                         updateField('jobProviders', newJobProviders);
                       }}
                       options={[
                         { label: 'Use Global (default)', value: '' },
-                        { label: 'Anthropic (Claude)', value: 'claude' },
-                        { label: 'OpenAI (Codex)', value: 'codex' },
+                        ...getPresetOptions(form.providerPresets),
                       ]}
                     />
                   </div>
@@ -1166,8 +1168,64 @@ const Settings: React.FC = () => {
             </div>
           </Card>
 
+          {/* Rate Limit Fallback Card (Claude-specific) */}
+          <Card className="p-6 space-y-6">
+            <div>
+              <h3 className="text-lg font-medium text-slate-200">Rate Limit Fallback</h3>
+              <p className="text-sm text-slate-400 mt-1">
+                Native Claude fallback settings for when a Claude proxy is rate-limited
+              </p>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
+              <p className="text-sm text-slate-300">
+                These settings control native Claude retry behavior after a Claude proxy rate limit.
+                They apply globally regardless of which preset is assigned.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Select
+                label="Primary Native Claude Fallback"
+                value={form.primaryFallbackModel}
+                onChange={(val) => {
+                  const next = val as ClaudeModel;
+                  updateField('primaryFallbackModel', next);
+                  updateField('claudeModel', next);
+                }}
+                options={[
+                  { label: 'Sonnet (claude-sonnet-4-6)', value: 'sonnet' },
+                  { label: 'Opus (claude-opus-4-6)', value: 'opus' },
+                ]}
+                helperText="First native Claude model used for the rate-limit fallback attempt"
+              />
+              <Select
+                label="Secondary Native Claude Fallback"
+                value={form.secondaryFallbackModel}
+                onChange={(val) => updateField('secondaryFallbackModel', val as ClaudeModel)}
+                options={[
+                  { label: 'Sonnet (claude-sonnet-4-6)', value: 'sonnet' },
+                  { label: 'Opus (claude-opus-4-6)', value: 'opus' },
+                ]}
+                helperText="Used only if the primary native Claude fallback is also rate-limited"
+              />
+              <div className="md:col-span-2">
+                <Switch
+                  label="Fallback on Rate Limit"
+                  checked={form.fallbackOnRateLimit}
+                  onChange={(checked) => updateField('fallbackOnRateLimit', checked)}
+                />
+                <p className="text-xs text-slate-500 mt-2">
+                  When enabled, Night Watch retries with the primary native Claude fallback model, then the secondary one if the primary is also rate-limited
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          {/* Provider Environment Variables Card */}
           <Card className="p-6">
-            <h3 className="text-lg font-medium text-slate-200 mb-2">Provider Environment Variables</h3>
+            <h3 className="text-lg font-medium text-slate-200 mb-2">Global Provider Environment Variables</h3>
+            <p className="text-sm text-slate-400 mb-4">
+              Environment variables passed to all provider CLIs. Preset-level env vars take precedence.
+            </p>
             <ProviderEnvEditor
               envVars={form.providerEnv}
               onChange={(envVars) => updateField('providerEnv', envVars)}
@@ -1877,6 +1935,61 @@ const Settings: React.FC = () => {
           )}
         </Card>
       </div>
+
+      {/* Preset Form Modal */}
+      <PresetFormModal
+        isOpen={presetModalOpen}
+        onClose={() => {
+          setPresetModalOpen(false);
+          setEditingPresetId(null);
+          setEditingPreset(null);
+        }}
+        onSave={handleSavePreset}
+        presetId={editingPresetId}
+        preset={editingPreset}
+        isBuiltIn={editingPresetId ? BUILT_IN_PRESET_IDS.includes(editingPresetId) : false}
+        existingIds={Object.keys(getAllPresets())}
+      />
+
+      {/* Delete Warning Modal */}
+      {deleteWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setDeleteWarning(null)}
+            aria-hidden="true"
+          />
+          <div className="relative w-full max-w-md transform rounded-xl bg-slate-900 border border-slate-800 shadow-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertTriangle className="h-6 w-6 text-amber-400" />
+              <h3 className="text-lg font-semibold text-slate-100">Cannot Delete Preset</h3>
+            </div>
+            <p className="text-sm text-slate-300 mb-4">
+              <strong>{deleteWarning.presetName}</strong> is currently assigned to the following jobs:
+            </p>
+            <ul className="list-disc list-inside text-sm text-slate-400 mb-4">
+              {deleteWarning.references.map((ref) => (
+                <li key={ref}>{ref}</li>
+              ))}
+            </ul>
+            <p className="text-sm text-slate-400 mb-6">
+              Please remove these assignments before deleting the preset, or use &quot;Force Delete&quot; to remove the preset and clear all references.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button variant="ghost" onClick={() => setDeleteWarning(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={handleConfirmDelete}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Force Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

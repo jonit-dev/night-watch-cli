@@ -164,39 +164,15 @@ for AUDIT_ATTEMPT in $(seq 1 "${AUDIT_MAX_RETRIES}"); do
   AUDIT_ATTEMPT_START=$(date +%s)
   log "AUDIT: Attempt ${AUDIT_ATTEMPT}/${AUDIT_MAX_RETRIES} starting provider=${PROVIDER_CMD} timeout=${MAX_RUNTIME}s"
 
-  case "${PROVIDER_CMD}" in
-    claude)
-      if (
-        cd "${AUDIT_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
-          claude -p "${AUDIT_PROMPT}" \
-            --dangerously-skip-permissions \
-            2>&1 | tee -a "${LOG_FILE}"
-      ); then
-        EXIT_CODE=0
-      else
-        EXIT_CODE=$?
-      fi
-      ;;
-    codex)
-      if (
-        cd "${AUDIT_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" \
-          codex exec \
-            -C "${AUDIT_WORKTREE_DIR}" \
-            --yolo \
-            "${AUDIT_PROMPT}" \
-            2>&1 | tee -a "${LOG_FILE}"
-      ); then
-        EXIT_CODE=0
-      else
-        EXIT_CODE=$?
-      fi
-      ;;
-    *)
-      log "ERROR: Unknown provider: ${PROVIDER_CMD}"
-      emit_result "failure" "reason=unknown_provider"
-      exit 1
-      ;;
-  esac
+  # Build provider command array using generic helper
+  mapfile -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${AUDIT_WORKTREE_DIR}" "${AUDIT_PROMPT}")
+
+  # Execute — always cd into worktree so provider tools resolve project files correctly
+  if (cd "${AUDIT_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
+    EXIT_CODE=0
+  else
+    EXIT_CODE=$?
+  fi
 
   AUDIT_ATTEMPT_ELAPSED=$(( $(date +%s) - AUDIT_ATTEMPT_START ))
   log "AUDIT: Attempt ${AUDIT_ATTEMPT}/${AUDIT_MAX_RETRIES} finished exit_code=${EXIT_CODE} elapsed=${AUDIT_ATTEMPT_ELAPSED}s"
