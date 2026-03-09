@@ -139,7 +139,9 @@ describe('install command', () => {
     expect(result.entries).toHaveLength(2);
 
     const executorEntry = result.entries[0];
-    expect(executorEntry).toContain('export PATH="/usr/local/bin:/opt/night-watch/bin:$PATH" && ');
+    // process.execPath is used to determine the node bin dir (stable across restarts)
+    const nodeBinDir = path.dirname(process.execPath);
+    expect(executorEntry).toContain(`export PATH="${nodeBinDir}:/opt/night-watch/bin:$PATH" && `);
     expect(executorEntry).toContain("export NW_CLI_BIN='/opt/night-watch/bin/night-watch' && ");
 
     expect(writeCrontab).toHaveBeenCalledTimes(1);
