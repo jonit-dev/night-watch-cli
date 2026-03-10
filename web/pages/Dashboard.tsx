@@ -6,7 +6,6 @@ import {
   Clock,
   ArrowRight,
   Calendar,
-  Play,
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import { useApi, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, triggerRun, triggerReview, triggerQa, triggerAudit, triggerPlanner, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
@@ -258,30 +257,9 @@ const Dashboard: React.FC = () => {
           onViewLog={() => navigate('/logs')}
           cancellingProcess={cancellingProcess}
           clearingLock={clearingLock}
+          onTriggerJob={handleTriggerJob}
+          triggeringJob={triggeringJob}
         />
-        <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-800">
-          {([
-            { id: 'executor', label: 'Executor' },
-            { id: 'reviewer', label: 'Reviewer' },
-            { id: 'qa', label: 'QA' },
-            { id: 'audit', label: 'Auditor' },
-            { id: 'planner', label: 'Planner' },
-          ] as const).map(({ id, label }) => (
-            <button
-              key={id}
-              disabled={triggeringJob !== null}
-              onClick={() => handleTriggerJob(id)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-slate-300 bg-slate-800 hover:bg-green-500/20 hover:text-green-400 border border-slate-700 hover:border-green-500/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              {triggeringJob === id ? (
-                <div className="h-3 w-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <Play className="h-3 w-3" />
-              )}
-              {label}
-            </button>
-          ))}
-        </div>
       </Card>
 
       {/* Next Automation Teaser */}

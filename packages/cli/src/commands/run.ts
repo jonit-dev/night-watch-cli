@@ -328,9 +328,12 @@ export function buildEnvVars(
     try {
       const fallbackPreset = resolvePreset(config, config.primaryFallbackPreset);
       env.NW_FALLBACK_PRIMARY_PRESET_CMD = fallbackPreset.command;
-      if (fallbackPreset.promptFlag) env.NW_FALLBACK_PRIMARY_PRESET_PROMPT_FLAG = fallbackPreset.promptFlag;
-      if (fallbackPreset.autoApproveFlag) env.NW_FALLBACK_PRIMARY_PRESET_AUTO_APPROVE_FLAG = fallbackPreset.autoApproveFlag;
-      if (fallbackPreset.modelFlag) env.NW_FALLBACK_PRIMARY_PRESET_MODEL_FLAG = fallbackPreset.modelFlag;
+      if (fallbackPreset.promptFlag)
+        env.NW_FALLBACK_PRIMARY_PRESET_PROMPT_FLAG = fallbackPreset.promptFlag;
+      if (fallbackPreset.autoApproveFlag)
+        env.NW_FALLBACK_PRIMARY_PRESET_AUTO_APPROVE_FLAG = fallbackPreset.autoApproveFlag;
+      if (fallbackPreset.modelFlag)
+        env.NW_FALLBACK_PRIMARY_PRESET_MODEL_FLAG = fallbackPreset.modelFlag;
       if (fallbackPreset.model) env.NW_FALLBACK_PRIMARY_PRESET_MODEL = fallbackPreset.model;
       if (fallbackPreset.envVars && Object.keys(fallbackPreset.envVars).length > 0) {
         env.NW_FALLBACK_PRIMARY_PRESET_ENV = JSON.stringify(fallbackPreset.envVars);
@@ -343,9 +346,12 @@ export function buildEnvVars(
     try {
       const fallbackPreset = resolvePreset(config, config.secondaryFallbackPreset);
       env.NW_FALLBACK_SECONDARY_PRESET_CMD = fallbackPreset.command;
-      if (fallbackPreset.promptFlag) env.NW_FALLBACK_SECONDARY_PRESET_PROMPT_FLAG = fallbackPreset.promptFlag;
-      if (fallbackPreset.autoApproveFlag) env.NW_FALLBACK_SECONDARY_PRESET_AUTO_APPROVE_FLAG = fallbackPreset.autoApproveFlag;
-      if (fallbackPreset.modelFlag) env.NW_FALLBACK_SECONDARY_PRESET_MODEL_FLAG = fallbackPreset.modelFlag;
+      if (fallbackPreset.promptFlag)
+        env.NW_FALLBACK_SECONDARY_PRESET_PROMPT_FLAG = fallbackPreset.promptFlag;
+      if (fallbackPreset.autoApproveFlag)
+        env.NW_FALLBACK_SECONDARY_PRESET_AUTO_APPROVE_FLAG = fallbackPreset.autoApproveFlag;
+      if (fallbackPreset.modelFlag)
+        env.NW_FALLBACK_SECONDARY_PRESET_MODEL_FLAG = fallbackPreset.modelFlag;
       if (fallbackPreset.model) env.NW_FALLBACK_SECONDARY_PRESET_MODEL = fallbackPreset.model;
       if (fallbackPreset.envVars && Object.keys(fallbackPreset.envVars).length > 0) {
         env.NW_FALLBACK_SECONDARY_PRESET_ENV = JSON.stringify(fallbackPreset.envVars);
@@ -597,6 +603,18 @@ export function runCommand(program: Command): void {
         console.log();
 
         process.exit(0);
+      }
+
+      // Send run_started notification (fire-and-forget; skip for cross-project fallback re-entries)
+      if (process.env.NW_CROSS_PROJECT_FALLBACK_ACTIVE !== '1') {
+        sendNotifications(config, {
+          event: 'run_started',
+          projectName: path.basename(projectDir),
+          exitCode: 0,
+          provider: config.provider,
+        }).catch(() => {
+          /* ignore */
+        });
       }
 
       // Execute the script with spinner

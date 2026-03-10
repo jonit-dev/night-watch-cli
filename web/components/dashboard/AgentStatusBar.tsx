@@ -1,5 +1,5 @@
 import React from 'react';
-import { Square, FileText } from 'lucide-react';
+import { Square, FileText, Play } from 'lucide-react';
 import { IProcessInfo } from '@/api';
 
 interface IAgentStatusBarProps {
@@ -10,23 +10,26 @@ interface IAgentStatusBarProps {
   onViewLog: () => void;
   cancellingProcess: 'run' | 'review' | null;
   clearingLock: boolean;
+  onTriggerJob: (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner') => void;
+  triggeringJob: string | null;
 }
 
 interface IAgentConfig {
   name: string;
   displayName: string;
   processName: string;
+  triggerId: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner';
   cancelType?: 'run' | 'review';
   runningLabel: string;
   idleLabel: string;
 }
 
 const AGENTS: IAgentConfig[] = [
-  { name: 'executor', displayName: 'Executor', processName: 'executor', cancelType: 'run', runningLabel: 'Running', idleLabel: 'Idle' },
-  { name: 'reviewer', displayName: 'Reviewer', processName: 'reviewer', cancelType: 'review', runningLabel: 'Running', idleLabel: 'Idle' },
-  { name: 'qa', displayName: 'QA', processName: 'qa', runningLabel: 'Running', idleLabel: 'Idle' },
-  { name: 'auditor', displayName: 'Auditor', processName: 'audit', runningLabel: 'Running', idleLabel: 'Idle' },
-  { name: 'planner', displayName: 'Planner', processName: 'planner', runningLabel: 'Writing PRDs', idleLabel: 'Idle' },
+  { name: 'executor', displayName: 'Executor', processName: 'executor', triggerId: 'executor', cancelType: 'run', runningLabel: 'Running', idleLabel: 'Idle' },
+  { name: 'reviewer', displayName: 'Reviewer', processName: 'reviewer', triggerId: 'reviewer', cancelType: 'review', runningLabel: 'Running', idleLabel: 'Idle' },
+  { name: 'qa', displayName: 'QA', processName: 'qa', triggerId: 'qa', runningLabel: 'Running', idleLabel: 'Idle' },
+  { name: 'auditor', displayName: 'Auditor', processName: 'audit', triggerId: 'audit', runningLabel: 'Running', idleLabel: 'Idle' },
+  { name: 'planner', displayName: 'Planner', processName: 'planner', triggerId: 'planner', runningLabel: 'Writing PRDs', idleLabel: 'Idle' },
 ];
 
 const AgentStatusBar: React.FC<IAgentStatusBarProps> = ({
@@ -37,6 +40,8 @@ const AgentStatusBar: React.FC<IAgentStatusBarProps> = ({
   onViewLog,
   cancellingProcess,
   clearingLock,
+  onTriggerJob,
+  triggeringJob,
 }) => {
   const getProcess = (processName: string) => processes.find(p => p.name === processName);
 
@@ -129,6 +134,20 @@ const AgentStatusBar: React.FC<IAgentStatusBarProps> = ({
                   title="View log"
                 >
                   <FileText className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {!isRunning && !showForceClear && (
+                <button
+                  onClick={() => onTriggerJob(agent.triggerId)}
+                  disabled={triggeringJob !== null}
+                  className="p-1 text-slate-500 hover:text-green-400 hover:bg-green-500/10 rounded transition-colors disabled:opacity-50"
+                  title={`Run ${agent.displayName}`}
+                >
+                  {triggeringJob === agent.triggerId ? (
+                    <div className="h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Play className="h-3.5 w-3.5" />
+                  )}
                 </button>
               )}
             </div>
