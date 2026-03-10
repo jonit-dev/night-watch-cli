@@ -1076,7 +1076,7 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
   REVIEWER_PROMPT="${REVIEWER_PROMPT_BASE}${TARGET_SCOPE_PROMPT}${PRD_CONTEXT_PROMPT}"
 
   # Build provider command array using generic helper
-  mapfile -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${REVIEW_WORKTREE_DIR}" "${REVIEWER_PROMPT}")
+  mapfile -d '' -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${REVIEW_WORKTREE_DIR}" "${REVIEWER_PROMPT}")
 
   # Execute — always cd into worktree so provider tools resolve project files correctly
   if (cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then

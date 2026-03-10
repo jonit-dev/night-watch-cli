@@ -323,11 +323,15 @@ describe('core flow smoke tests (bash scripts)', () => {
 
     const argv = fs.readFileSync(argsFile, 'utf-8').split('\0').filter(Boolean);
     const cdIndex = argv.indexOf('-C');
+    const promptArg = argv.at(-1);
 
     expect(argv[0]).toBe('exec');
     expect(argv).toContain('--yolo');
     expect(cdIndex).toBeGreaterThan(-1);
     expect(argv[cdIndex + 1]).toBe(expectedWorktreeDir);
+    expect(promptArg).toContain('## Setup');
+    expect(promptArg).toContain('\n- You are already inside an isolated worktree at:');
+    expect(promptArg).toContain('\n- Do NOT process any other PRDs');
   });
 
   it('qa should emit skip marker when no open PRs', () => {

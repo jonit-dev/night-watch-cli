@@ -165,7 +165,7 @@ for AUDIT_ATTEMPT in $(seq 1 "${AUDIT_MAX_RETRIES}"); do
   log "AUDIT: Attempt ${AUDIT_ATTEMPT}/${AUDIT_MAX_RETRIES} starting provider=${PROVIDER_CMD} timeout=${MAX_RUNTIME}s"
 
   # Build provider command array using generic helper
-  mapfile -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${AUDIT_WORKTREE_DIR}" "${AUDIT_PROMPT}")
+  mapfile -d '' -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${AUDIT_WORKTREE_DIR}" "${AUDIT_PROMPT}")
 
   # Execute — always cd into worktree so provider tools resolve project files correctly
   if (cd "${AUDIT_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then

@@ -542,7 +542,7 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
   LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
 
   # Build provider command array using generic helper
-  mapfile -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${WORKTREE_DIR}" "${PROMPT}")
+  mapfile -d '' -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${WORKTREE_DIR}" "${PROMPT}")
 
   # Execute — always cd into worktree so provider tools resolve project files correctly
   if (cd "${WORKTREE_DIR}" && timeout "${SESSION_MAX_RUNTIME}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
