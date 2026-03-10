@@ -27,7 +27,7 @@ const Dashboard: React.FC = () => {
   const { setProjectName, addToast, selectedProjectId, globalModeLoading, status } = useStore();
 
   const { data: scheduleInfo } = useApi(fetchScheduleInfo, [selectedProjectId], { enabled: !globalModeLoading });
-  const { data: boardStatus } = useApi<IBoardStatus | null>(
+  const { data: boardStatus, loading: boardLoading } = useApi<IBoardStatus | null>(
     () => fetchBoardStatus().catch(() => null),
     [selectedProjectId],
     { enabled: !globalModeLoading },
@@ -272,7 +272,11 @@ const Dashboard: React.FC = () => {
           </button>
         </div>
         <Card className="p-4">
-          {!boardStatus ? (
+          {boardLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-slate-400 text-sm">Loading board...</div>
+            </div>
+          ) : !boardStatus ? (
             <p className="text-sm text-slate-500 italic">
               Board not configured — run <code className="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-indigo-300 text-xs">night-watch board setup</code> to enable.
             </p>
