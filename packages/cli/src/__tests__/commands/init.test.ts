@@ -229,6 +229,43 @@ describe('init command', () => {
       const logsCount = (content.match(/\/logs\//g) || []).length;
       expect(logsCount).toBe(1);
     });
+
+    it('should add night-watch.config.json to .gitignore', () => {
+      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
+
+      execSync(`${TSX_CMD} init --provider claude`, {
+        encoding: 'utf-8',
+        cwd: tempDir,
+        stdio: 'pipe',
+        timeout: 15000,
+      });
+
+      const gitignorePath = path.join(tempDir, '.gitignore');
+      const content = fs.readFileSync(gitignorePath, 'utf-8');
+      expect(content).toContain('night-watch.config.json');
+    });
+
+    it('should not duplicate night-watch.config.json in .gitignore if already present', () => {
+      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
+
+      const gitignorePath = path.join(tempDir, '.gitignore');
+      fs.writeFileSync(gitignorePath, 'node_modules\nnight-watch.config.json\n');
+
+      execSync(`${TSX_CMD} init --provider claude`, {
+        encoding: 'utf-8',
+        cwd: tempDir,
+        stdio: 'pipe',
+        timeout: 15000,
+      });
+
+      const content = fs.readFileSync(gitignorePath, 'utf-8');
+      const count = (content.match(/night-watch\.config\.json/g) || []).length;
+      expect(count).toBe(1);
+    });
   });
 
   describeIfExternalTools('should create logs directory', () => {
