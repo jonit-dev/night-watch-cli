@@ -1,6 +1,6 @@
 # Night Watch CLI
 
-[![npm version](https://img.shields.io/npm/v/night-watch-cli.svg)](https://www.npmjs.com/package/night-watch-cli)
+[![npm version](https://img.shields.io/npm/v/%40jonit-dev%2Fnight-watch-cli.svg)](https://www.npmjs.com/package/%40jonit-dev%2Fnight-watch-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 
@@ -30,7 +30,7 @@ Night Watch is built for AI-native solo developers, maintainers, and small teams
 
 ```bash
 # 1. Install globally
-npm install -g night-watch-cli
+npm install -g @jonit-dev/night-watch-cli
 
 # 2. Initialize in your project
 cd your-project
@@ -117,13 +117,13 @@ See [Configuration > Provider Environment](docs/configuration.md#provider-enviro
 ### npm (Recommended)
 
 ```bash
-npm install -g night-watch-cli
+npm install -g @jonit-dev/night-watch-cli
 ```
 
 ### npx (No install)
 
 ```bash
-npx night-watch-cli init
+npx @jonit-dev/night-watch-cli init
 ```
 
 ### From Source
@@ -131,7 +131,7 @@ npx night-watch-cli init
 ```bash
 git clone https://github.com/jonit-dev/night-watch-cli.git
 cd night-watch-cli
-npm install && npm run build && npm link
+yarn install && yarn build && npm link
 ```
 
 ---
@@ -143,7 +143,7 @@ npm install && npm run build && npm link
 | [Commands Reference](docs/commands.md)     | All CLI commands and their options                                          |
 | [Configuration](docs/configuration.md)     | Config file, environment variables, CLI flags, `providerEnv`, notifications |
 | [PRD Format](docs/prd-format.md)           | How to write PRDs, dependencies, lifecycle                                  |
-| [Architecture](docs/architecture.md)       | System design, execution flows, project structure                           |
+| [Architecture](docs/architecture-overview.md) | System design, execution flows, project structure                        |
 | [Troubleshooting](docs/troubleshooting.md) | Common errors and how to fix them                                           |
 | [Local Testing](docs/local-testing.md)     | Test the CLI locally without publishing                                     |
 | [Contributing](docs/contributing.md)       | Development setup, building, testing, publishing                            |
