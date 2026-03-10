@@ -264,6 +264,10 @@ describe('Settings schedules mode sync', () => {
         enabled: false,
         roadmapPath: 'ROADMAP.md',
         autoScanInterval: 300,
+        slicerSchedule: '35 */6 * * *',
+        slicerMaxRuntime: 600,
+        priorityMode: 'roadmap-first',
+        issueColumn: 'Draft',
       },
     });
     apiMocks.toggleRoadmapScanner.mockResolvedValue(disabledConfig);
@@ -290,6 +294,10 @@ describe('Settings schedules mode sync', () => {
         enabled: false,
         roadmapPath: 'ROADMAP.md',
         autoScanInterval: 300,
+        slicerSchedule: '35 */6 * * *',
+        slicerMaxRuntime: 600,
+        priorityMode: 'roadmap-first',
+        issueColumn: 'Draft',
       },
     });
     apiMocks.toggleRoadmapScanner.mockResolvedValue(disabledConfig);

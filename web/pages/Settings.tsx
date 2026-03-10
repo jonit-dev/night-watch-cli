@@ -1,9 +1,7 @@
 import { Activity, AlertCircle, AlertTriangle, Check, Edit2, Eye, EyeOff, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react';
 import React from 'react';
-import { useLocation } from 'react-router-dom';
 import {
   ClaudeModel,
-  fetchAllConfigs,
   fetchConfig,
   fetchDoctor,
   IAuditConfig,
@@ -17,24 +15,24 @@ import {
   IWebhookConfig,
   MergeMethod,
   QaArtifacts,
-  toggleRoadmapScanner,
   triggerInstallCron,
+  toggleRoadmapScanner,
   updateConfig,
-  useApi
+  useApi,
 } from '../api';
 import PresetCard from '../components/providers/PresetCard.js';
 import PresetFormModal from '../components/providers/PresetFormModal.js';
 import ProviderEnvEditor from '../components/providers/ProviderEnvEditor.js';
-import ScheduleTimeline from '../components/scheduling/ScheduleTimeline';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import CronScheduleInput from '../components/ui/CronScheduleInput';
+import { IScheduleTemplate, resolveActiveTemplate } from '../utils/cron.js';
 import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Switch from '../components/ui/Switch';
 import Tabs from '../components/ui/Tabs';
 import { useStore } from '../store/useStore';
-import { IScheduleTemplate, resolveActiveTemplate, SCHEDULE_TEMPLATES } from '../utils/cron.js';
+import ScheduleConfig from '../components/scheduling/ScheduleConfig.js';
 
 /** Built-in preset IDs that cannot be deleted */
 const BUILT_IN_PRESET_IDS = ['claude', 'codex'];
@@ -289,8 +287,8 @@ const WebhookEditor: React.FC<{
               type="button"
               onClick={() => onChange({ ...webhook, events: toggleEvent(webhook.events, opt.value) })}
               className={`px-3 py-1.5 rounded-md text-sm transition-colors ${webhook.events.includes(opt.value)
-                ? 'bg-indigo-600 text-white'
-                : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
                 }`}
             >
               {opt.label}
@@ -480,8 +478,6 @@ const Settings: React.FC = () => {
   const skipNextFormResetRef = React.useRef(false);
   const [scheduleMode, setScheduleMode] = React.useState<'template' | 'custom'>('template');
   const [selectedTemplateId, setSelectedTemplateId] = React.useState<string>('always-on');
-  const [activeSettingsTab, setActiveSettingsTab] = React.useState<string>('general');
-  const location = useLocation();
 
   // Preset modal state
   const [presetModalOpen, setPresetModalOpen] = React.useState(false);
@@ -497,29 +493,6 @@ const Settings: React.FC = () => {
   } = useApi(fetchConfig, [selectedProjectId], { enabled: !globalModeLoading });
   const { data: doctorChecksData, loading: doctorLoading, refetch: refetchDoctor } = useApi(fetchDoctor, [selectedProjectId], { enabled: !globalModeLoading });
   const doctorChecks = doctorChecksData ?? [];
-
-  React.useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const tab = params.get('tab');
-    const mode = params.get('mode');
-
-    if (tab) {
-      setActiveSettingsTab(tab);
-    }
-    if (mode === 'custom') {
-      setScheduleMode('custom');
-    } else if (mode === 'template') {
-      setScheduleMode('template');
-    }
-
-    const jobTypeParam = params.get('jobType');
-    if (jobTypeParam && tab === 'schedules') {
-      // Small delay to ensure the tab and mode have settled
-      setTimeout(() => {
-        handleEditJob('current', jobTypeParam);
-      }, 300);
-    }
-  }, [location.search, config]); // config dependency ensures we wait for data before trying to scroll
 
   const applyScheduleUiState = React.useCallback((formState: ConfigForm) => {
     const scheduleUiState = resolveScheduleUiState(formState);
@@ -538,45 +511,6 @@ const Settings: React.FC = () => {
       }
     }
   }, [config, applyScheduleUiState]);
-
-  const [allProjectConfigs, setAllProjectConfigs] = React.useState<Array<{ projectId: string; config: INightWatchConfig }>>([]);
-
-  React.useEffect(() => {
-    fetchAllConfigs().then(setAllProjectConfigs).catch(console.error);
-  }, [config]);
-
-  const handleEditJob = (projectId: string, jobType: string) => {
-    // If it's the current project, scroll to the custom mode tab and focus the input
-    if (projectId === projectName || projectId === 'current') {
-      if (scheduleMode !== 'custom') {
-        switchToCustomMode();
-      }
-
-      // Give it a tick to render custom mode if needed
-      setTimeout(() => {
-        const idMap: Record<string, string> = {
-          executor: 'job-schedule-executor',
-          reviewer: 'job-schedule-reviewer',
-          qa: 'job-schedule-qa',
-          audit: 'job-schedule-audit',
-          slicer: 'job-schedule-slicer',
-        };
-        const el = document.getElementById(idMap[jobType] || '');
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.classList.add('ring-2', 'ring-indigo-500', 'ring-offset-2', 'ring-offset-slate-900', 'rounded-lg');
-          setTimeout(() => el.classList.remove('ring-2', 'ring-indigo-500', 'ring-offset-2', 'ring-offset-slate-900'), 2000);
-        }
-      }, 50);
-    } else {
-      // In global mode, maybe we'd want to navigate to that project's settings?
-      addToast({
-        title: 'Project Switch Required',
-        message: `To edit ${projectId}, please switch to that project in the sidebar.`,
-        type: 'info',
-      });
-    }
-  };
 
   const updateField = <K extends keyof ConfigForm>(key: K, value: ConfigForm[K]) => {
     setForm((prev) => {
@@ -642,7 +576,7 @@ const Settings: React.FC = () => {
       form.audit.schedule !== config?.audit.schedule ||
       form.roadmapScanner.enabled !== (config?.roadmapScanner?.enabled ?? true) ||
       (form.roadmapScanner.slicerSchedule || '35 */12 * * *') !==
-      (config?.roadmapScanner?.slicerSchedule || '35 */12 * * *');
+        (config?.roadmapScanner?.slicerSchedule || '35 */12 * * *');
 
     // Filter out empty/undefined job provider values
     const cleanedJobProviders: IJobProviders = {};
@@ -769,15 +703,15 @@ const Settings: React.FC = () => {
       addToast(
         cronInstallFailedMessage
           ? {
-            title: 'Planner Saved (Cron Reinstall Failed)',
-            message: cronInstallFailedMessage,
-            type: 'warning',
-          }
+              title: 'Planner Saved (Cron Reinstall Failed)',
+              message: cronInstallFailedMessage,
+              type: 'warning',
+            }
           : {
-            title: enabled ? 'Roadmap Scanner Enabled' : 'Roadmap Scanner Disabled',
-            message: `Roadmap scanner has been ${enabled ? 'enabled' : 'disabled'}.`,
-            type: 'success',
-          },
+              title: enabled ? 'Roadmap Scanner Enabled' : 'Roadmap Scanner Disabled',
+              message: `Roadmap scanner has been ${enabled ? 'enabled' : 'disabled'}.`,
+              type: 'success',
+            },
       );
     } catch (err) {
       addToast({
@@ -1321,186 +1255,34 @@ const Settings: React.FC = () => {
       id: 'schedules',
       label: 'Schedules',
       content: (
-        <Card className="p-6 space-y-6">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-medium text-slate-200 mb-1">Job Schedules</h3>
-              <p className="text-sm text-slate-400">
-                Configure when automated jobs run using a preset template or custom cron expressions
-              </p>
-            </div>
-            <div className="flex rounded-lg border border-slate-700 overflow-hidden shrink-0">
-              <button
-                type="button"
-                className={`px-4 py-1.5 text-sm font-medium transition-colors ${scheduleMode === 'template'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                onClick={switchToTemplateMode}
-              >
-                Template
-              </button>
-              <button
-                type="button"
-                className={`px-4 py-1.5 text-sm font-medium transition-colors ${scheduleMode === 'custom'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                onClick={switchToCustomMode}
-              >
-                Custom
-              </button>
-            </div>
-          </div>
-
-          <ScheduleTimeline
-            configs={allProjectConfigs}
-            currentProjectId={selectedProjectId}
-            onEditJob={handleEditJob}
-          />
-
-          {scheduleMode === 'template' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {SCHEDULE_TEMPLATES.map((tpl) => {
-                const active = selectedTemplateId === tpl.id;
-                return (
-                  <button
-                    key={tpl.id}
-                    type="button"
-                    onClick={() => applyTemplate(tpl)}
-                    className={`text-left p-4 rounded-lg border transition-colors ${active
-                      ? 'border-indigo-500 bg-indigo-950/40'
-                      : 'border-slate-700 bg-slate-800/30 hover:border-slate-600'
-                      }`}
-                  >
-                    <div className="font-medium text-slate-200 mb-1">{tpl.label}</div>
-                    <p className="text-xs text-slate-400 mb-3">{tpl.description}</p>
-                    <div className="space-y-0.5">
-                      {(
-                        [
-                          ['Executor', tpl.hints.executor],
-                          ['Reviewer', tpl.hints.reviewer],
-                          ['QA', tpl.hints.qa],
-                          ['Audit', tpl.hints.audit],
-                          ['Slicer', tpl.hints.slicer],
-                        ] as [string, string][]
-                      ).map(([name, hint]) => (
-                        <div key={name} className="flex items-center gap-2">
-                          <span className="text-xs text-slate-500 w-16 shrink-0">{name}</span>
-                          <span className="text-xs text-slate-400">{hint}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div id="job-schedule-executor">
-                <CronScheduleInput
-                  label="PRD Execution Schedule"
-                  value={form.cronSchedule}
-                  onChange={(val) => updateField('cronSchedule', val)}
-                />
-              </div>
-              <div id="job-schedule-reviewer">
-                <CronScheduleInput
-                  label="PR Review Schedule"
-                  value={form.reviewerSchedule}
-                  onChange={(val) => updateField('reviewerSchedule', val)}
-                />
-              </div>
-              <div id="job-schedule-qa">
-                <CronScheduleInput
-                  label="QA Schedule"
-                  value={form.qa.schedule}
-                  onChange={(val) =>
-                    updateField('qa', {
-                      ...form.qa,
-                      schedule: val,
-                    })
-                  }
-                />
-              </div>
-              <div id="job-schedule-audit">
-                <CronScheduleInput
-                  label="Audit Schedule"
-                  value={form.audit.schedule}
-                  onChange={(val) =>
-                    updateField('audit', {
-                      ...form.audit,
-                      schedule: val,
-                    })
-                  }
-                />
-              </div>
-              {form.roadmapScanner.enabled && (
-                <div id="job-schedule-slicer">
-                  <CronScheduleInput
-                    label="Planner Schedule"
-                    value={form.roadmapScanner.slicerSchedule || '35 */12 * * *'}
-                    onChange={(val) =>
-                      updateField('roadmapScanner', {
-                        ...form.roadmapScanner,
-                        slicerSchedule: val,
-                      })
-                    }
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="pt-4 border-t border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Select
-              label="Scheduling Priority"
-              value={String(form.schedulingPriority)}
-              onChange={(val) => updateField('schedulingPriority', Number(val))}
-              options={[
-                { label: '1 · Lowest', value: '1' },
-                { label: '2 · Low', value: '2' },
-                { label: '3 · Balanced', value: '3' },
-                { label: '4 · High', value: '4' },
-                { label: '5 · Highest', value: '5' },
-              ]}
-              helperText="Higher-priority projects get earlier balanced start slots and win queue tie-breakers first."
-            />
-
-            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-sm font-medium text-slate-200">Global Queue</div>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Queue overlapping jobs across projects instead of letting them burst the provider API.
-                  </p>
-                </div>
-                <Switch
-                  checked={form.queue.enabled}
-                  onChange={(enabled) =>
-                    updateField('queue', {
-                      ...form.queue,
-                      enabled,
-                    })
-                  }
-                />
-              </div>
-            </div>
-
-            <Input
-              label="Extra Start Delay"
-              type="number"
-              min="0"
-              max="59"
-              value={String(form.cronScheduleOffset)}
-              onChange={(e) => {
-                const val = Math.min(59, Math.max(0, Number(e.target.value || 0)));
-                updateField('cronScheduleOffset', val);
-              }}
-              helperText="Manual delay in minutes added before cron jobs start. This stacks on top of automatic balancing."
-            />
-          </div>
-        </Card>
+        <ScheduleConfig
+          form={{
+            cronSchedule: form.cronSchedule,
+            reviewerSchedule: form.reviewerSchedule,
+            qa: form.qa,
+            audit: form.audit,
+            roadmapScanner: {
+              enabled: form.roadmapScanner.enabled,
+              slicerSchedule: form.roadmapScanner.slicerSchedule || '35 */12 * * *',
+            },
+            scheduleBundleId: form.scheduleBundleId,
+            schedulingPriority: form.schedulingPriority,
+            cronScheduleOffset: form.cronScheduleOffset,
+            globalQueueEnabled: form.queue.enabled,
+          }}
+          scheduleMode={scheduleMode}
+          selectedTemplateId={selectedTemplateId}
+          onFieldChange={(field, value) => {
+            if (field === 'globalQueueEnabled') {
+              updateField('queue', { ...form.queue, enabled: value as boolean });
+            } else {
+              updateField(field as keyof ConfigForm, value as ConfigForm[keyof ConfigForm]);
+            }
+          }}
+          onSwitchToTemplate={switchToTemplateMode}
+          onSwitchToCustom={switchToCustomMode}
+          onApplyTemplate={applyTemplate}
+        />
       ),
     },
     {
@@ -1889,7 +1671,7 @@ const Settings: React.FC = () => {
     <div className="max-w-4xl mx-auto pb-10">
       <h2 className="text-2xl font-bold text-slate-100 mb-6">Settings</h2>
 
-      <Tabs tabs={tabs} activeTab={activeSettingsTab} onChange={setActiveSettingsTab} />
+      <Tabs tabs={tabs} />
 
       <div className="flex items-center justify-end space-x-4 pt-6 mt-6 border-t border-slate-800">
         <Button variant="ghost" className="text-slate-400 hover:text-slate-300" onClick={handleReset}>
