@@ -61,6 +61,9 @@ export function resolveRunNotificationEvent(
   if (!scriptStatus || scriptStatus === 'success_open_pr') {
     return 'run_succeeded';
   }
+  if (scriptStatus?.startsWith('skip_')) {
+    return 'run_no_work';
+  }
   return null;
 }
 

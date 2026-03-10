@@ -378,9 +378,9 @@ describe('run command', () => {
       expect(resolveRunNotificationEvent(0, 'success_open_pr')).toBe('run_succeeded');
     });
 
-    it('should suppress notifications for skip/no-op statuses', () => {
-      expect(resolveRunNotificationEvent(0, 'skip_no_eligible_prd')).toBeNull();
-      expect(resolveRunNotificationEvent(0, 'success_already_merged')).toBeNull();
+    it('should return run_no_work for skip/no-op statuses', () => {
+      expect(resolveRunNotificationEvent(0, 'skip_no_eligible_prd')).toBe('run_no_work');
+      expect(resolveRunNotificationEvent(0, 'skip_locked')).toBe('run_no_work');
     });
   });
 
@@ -612,17 +612,17 @@ describe('run command', () => {
   });
 
   describe('action-path: notification suppression', () => {
-    // Tests for notification suppression based on resolveRunNotificationEvent
-    // Notifications are suppressed (returns null) for skip_* and success_already_merged
+    // Tests for notification behavior based on resolveRunNotificationEvent
+    // skip_* statuses now return run_no_work for notifications
 
-    it('should suppress notification for skip_no_eligible_prd', () => {
+    it('should send run_no_work notification for skip_no_eligible_prd', () => {
       const event = resolveRunNotificationEvent(0, 'skip_no_eligible_prd');
-      expect(event).toBeNull();
+      expect(event).toBe('run_no_work');
     });
 
-    it('should suppress notification for skip_locked', () => {
+    it('should send run_no_work notification for skip_locked', () => {
       const event = resolveRunNotificationEvent(0, 'skip_locked');
-      expect(event).toBeNull();
+      expect(event).toBe('run_no_work');
     });
 
     it('should suppress notification for success_already_merged', () => {
