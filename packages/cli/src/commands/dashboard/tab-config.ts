@@ -5,8 +5,8 @@
 
 import blessed from 'blessed';
 import {
-  BUILT_IN_PRESET_IDS,
   BUILT_IN_PRESETS,
+  BUILT_IN_PRESET_IDS,
   INightWatchConfig,
   IWebhookConfig,
   NotificationEvent,

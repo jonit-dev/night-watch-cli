@@ -8,10 +8,10 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import * as readline from 'readline';
 import {
+  BUILT_IN_PRESET_IDS,
   CONFIG_FILE_NAME,
   DEFAULT_PRD_DIR,
   INightWatchConfig,
-  BUILT_IN_PRESET_IDS,
   LOG_DIR,
   Provider,
   checkGhCli,

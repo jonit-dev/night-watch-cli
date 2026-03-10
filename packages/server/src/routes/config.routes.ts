@@ -6,7 +6,6 @@ import { Request, Response, Router } from 'express';
 import { CronExpressionParser } from 'cron-parser';
 
 import {
-  BUILT_IN_PRESET_IDS,
   INightWatchConfig,
   IProviderPreset,
   JobType,
