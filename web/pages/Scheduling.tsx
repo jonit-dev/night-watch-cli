@@ -576,26 +576,12 @@ const Scheduling: React.FC = () => {
                       {agent.icon}
                       <h4 className="text-base font-semibold text-slate-200">{agent.name}</h4>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        title={`Run ${agent.name} now`}
-                        disabled={triggeringJob !== null}
-                        onClick={() => handleTriggerJob(agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner')}
-                        className="p-1.5 rounded-md text-slate-400 hover:text-green-400 hover:bg-green-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {triggeringJob === agent.id ? (
-                          <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <Play className="h-4 w-4" />
-                        )}
-                      </button>
-                      <Switch
-                        checked={agent.enabled}
-                        disabled={updatingJob !== null}
-                        aria-label={`Toggle ${agent.name.toLowerCase()} automation`}
-                        onChange={(checked) => handleJobToggle(agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner', checked)}
-                      />
-                    </div>
+                    <Switch
+                      checked={agent.enabled}
+                      disabled={updatingJob !== null}
+                      aria-label={`Toggle ${agent.name.toLowerCase()} automation`}
+                      onChange={(checked) => handleJobToggle(agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner', checked)}
+                    />
                   </div>
 
                   {agent.enabled ? (
@@ -627,9 +613,23 @@ const Scheduling: React.FC = () => {
                         <div className="text-sm text-slate-400">Next Run</div>
                         {renderNextRun(agent.nextRun)}
                       </div>
-                      <div className={`flex items-center space-x-2 text-sm ${agent.enabled ? 'text-green-400' : 'text-amber-400'}`}>
-                        <Check className="h-4 w-4" />
-                        <span>{agent.enabled ? 'Active' : 'Disabled'}</span>
+                      <div className="flex items-center justify-between">
+                        <div className={`flex items-center space-x-2 text-sm ${agent.enabled ? 'text-green-400' : 'text-amber-400'}`}>
+                          <Check className="h-4 w-4" />
+                          <span>{agent.enabled ? 'Active' : 'Disabled'}</span>
+                        </div>
+                        <button
+                          disabled={triggeringJob !== null}
+                          onClick={() => handleTriggerJob(agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner')}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-green-400 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 hover:border-green-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {triggeringJob === agent.id ? (
+                            <div className="h-3 w-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <Play className="h-3 w-3 fill-current" />
+                          )}
+                          Run now
+                        </button>
                       </div>
                     </div>
                   ) : (
