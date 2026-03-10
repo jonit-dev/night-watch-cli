@@ -23,6 +23,11 @@ import {
   updateConfig,
   triggerInstallCron,
   triggerUninstallCron,
+  triggerRun,
+  triggerReview,
+  triggerQa,
+  triggerAudit,
+  triggerPlanner,
   useApi,
 } from '../api';
 import {
@@ -48,6 +53,7 @@ const Scheduling: React.FC = () => {
   const [toggling, setToggling] = useState(false);
   const [saving, setSaving] = useState(false);
   const [updatingJob, setUpdatingJob] = useState<string | null>(null);
+  const [triggeringJob, setTriggeringJob] = useState<string | null>(null);
 
   const [editState, setEditState] = useState<IScheduleEditState>({
     form: {
@@ -208,6 +214,33 @@ const Scheduling: React.FC = () => {
       });
     } finally {
       setUpdatingJob(null);
+    }
+  };
+  const handleTriggerJob = async (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner') => {
+    setTriggeringJob(job);
+    try {
+      const triggerMap = {
+        executor: triggerRun,
+        reviewer: triggerReview,
+        qa: triggerQa,
+        audit: triggerAudit,
+        planner: triggerPlanner,
+      };
+      await triggerMap[job]();
+      addToast({
+        title: 'Job Triggered',
+        message: `${job[0].toUpperCase() + job.slice(1)} job has been queued.`,
+        type: 'success',
+      });
+      refetchSchedule();
+    } catch (error) {
+      addToast({
+        title: 'Trigger Failed',
+        message: formatErrorMessage(error, `Failed to trigger ${job} job`),
+        type: 'error',
+      });
+    } finally {
+      setTriggeringJob(null);
     }
   };
   const handleFieldChange = (field: string, value: unknown) => {
@@ -543,12 +576,26 @@ const Scheduling: React.FC = () => {
                       {agent.icon}
                       <h4 className="text-base font-semibold text-slate-200">{agent.name}</h4>
                     </div>
-                    <Switch
-                      checked={agent.enabled}
-                      disabled={updatingJob !== null}
-                      aria-label={`Toggle ${agent.name.toLowerCase()} automation`}
-                      onChange={(checked) => handleJobToggle(agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner', checked)}
-                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        title={`Run ${agent.name} now`}
+                        disabled={triggeringJob !== null}
+                        onClick={() => handleTriggerJob(agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner')}
+                        className="p-1.5 rounded-md text-slate-400 hover:text-green-400 hover:bg-green-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {triggeringJob === agent.id ? (
+                          <div className="h-4 w-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Play className="h-4 w-4" />
+                        )}
+                      </button>
+                      <Switch
+                        checked={agent.enabled}
+                        disabled={updatingJob !== null}
+                        aria-label={`Toggle ${agent.name.toLowerCase()} automation`}
+                        onChange={(checked) => handleJobToggle(agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner', checked)}
+                      />
+                    </div>
                   </div>
 
                   {agent.enabled ? (
