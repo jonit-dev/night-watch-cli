@@ -1,5 +1,5 @@
-import { execFile } from "child_process";
-import { promisify } from "util";
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import {
   BOARD_COLUMNS,
   BoardColumnName,
@@ -9,8 +9,8 @@ import {
   IBoardProvider,
   IBoardProviderConfig,
   ICreateIssueInput,
-} from "@/board/types.js";
-import { getRepoNwo, getViewerLogin, graphql } from "./github-graphql.js";
+} from '@/board/types.js';
+import { getRepoNwo, getViewerLogin, graphql } from './github-graphql.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -48,7 +48,7 @@ interface IRepositoryOwnerData {
   repository: {
     id: string;
     owner: {
-      __typename: "User" | "Organization" | string;
+      __typename: 'User' | 'Organization' | string;
       id: string;
       login: string;
     };
@@ -58,7 +58,7 @@ interface IRepositoryOwnerData {
 interface IRepoOwnerInfo {
   id: string;
   login: string;
-  type: "User" | "Organization";
+  type: 'User' | 'Organization';
 }
 
 interface IListUserProjectsData {
@@ -113,6 +113,9 @@ interface IProjectItemNode {
     body?: string;
     url?: string;
     id?: string;
+    repository?: {
+      nameWithOwner?: string;
+    };
     labels?: { nodes: Array<{ name: string }> };
     assignees?: { nodes: Array<{ login: string }> };
   } | null;
@@ -168,6 +171,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
   private cachedOptionIds: Map<string, string> = new Map();
   private cachedOwner: IRepoOwnerInfo | null = null;
   private cachedRepositoryId: string | null = null;
+  private cachedRepoNameWithOwner: string | null = null;
 
   constructor(config: IBoardProviderConfig, cwd: string) {
     this.config = config;
@@ -179,16 +183,34 @@ export class GitHubProjectsProvider implements IBoardProvider {
   // -------------------------------------------------------------------------
 
   private async getRepo(): Promise<string> {
-    return this.config.repo ?? getRepoNwo(this.cwd);
+    if (this.cachedRepoNameWithOwner) {
+      return this.cachedRepoNameWithOwner;
+    }
+
+    this.cachedRepoNameWithOwner = this.config.repo ?? (await getRepoNwo(this.cwd));
+    return this.cachedRepoNameWithOwner;
   }
 
   private async getRepoParts(): Promise<{ owner: string; name: string }> {
     const repo = await this.getRepo();
-    const [owner, name] = repo.split("/");
+    const [owner, name] = repo.split('/');
     if (!owner || !name) {
       throw new Error(`Invalid repository slug: "${repo}". Expected "owner/repo".`);
     }
     return { owner, name };
+  }
+
+  private normalizeRepoName(repo: string): string {
+    return repo.trim().toLowerCase();
+  }
+
+  private isCurrentRepoItem(content: IProjectItemNode['content'], repo: string): boolean {
+    const repoNameWithOwner = content?.repository?.nameWithOwner;
+    if (!repoNameWithOwner) {
+      return true;
+    }
+
+    return this.normalizeRepoName(repoNameWithOwner) === this.normalizeRepoName(repo);
   }
 
   private async getRepoOwnerLogin(): Promise<string> {
@@ -202,18 +224,20 @@ export class GitHubProjectsProvider implements IBoardProvider {
 
     const { owner, name } = await this.getRepoParts();
     const data = await graphql<IRepositoryOwnerData>(
-      `query ResolveRepoOwner($owner: String!, $name: String!) {
-        repository(owner: $owner, name: $name) {
-          id
-          owner {
-            __typename
+      `
+        query ResolveRepoOwner($owner: String!, $name: String!) {
+          repository(owner: $owner, name: $name) {
             id
-            login
+            owner {
+              __typename
+              id
+              login
+            }
           }
         }
-      }`,
+      `,
       { owner, name },
-      this.cwd
+      this.cwd,
     );
 
     if (!data.repository) {
@@ -223,7 +247,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
     const ownerNode = data.repository.owner;
     if (
       !ownerNode ||
-      (ownerNode.__typename !== "User" && ownerNode.__typename !== "Organization")
+      (ownerNode.__typename !== 'User' && ownerNode.__typename !== 'Organization')
     ) {
       throw new Error(`Failed to resolve repository owner for ${owner}/${name}.`);
     }
@@ -252,20 +276,24 @@ export class GitHubProjectsProvider implements IBoardProvider {
     const repositoryId = await this.getRepositoryNodeId();
     try {
       await graphql<{ linkProjectV2ToRepository: { repository: { id: string } } }>(
-        `mutation LinkProjectToRepository($projectId: ID!, $repositoryId: ID!) {
-          linkProjectV2ToRepository(input: { projectId: $projectId, repositoryId: $repositoryId }) {
-            repository {
-              id
+        `
+          mutation LinkProjectToRepository($projectId: ID!, $repositoryId: ID!) {
+            linkProjectV2ToRepository(
+              input: { projectId: $projectId, repositoryId: $repositoryId }
+            ) {
+              repository {
+                id
+              }
             }
           }
-        }`,
+        `,
         { projectId, repositoryId },
-        this.cwd
+        this.cwd,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const normalized = message.toLowerCase();
-      if (normalized.includes("already") && normalized.includes("project")) {
+      if (normalized.includes('already') && normalized.includes('project')) {
         return;
       }
       throw err;
@@ -277,30 +305,32 @@ export class GitHubProjectsProvider implements IBoardProvider {
     optionIds: Map<string, string>;
   }> {
     const fieldData = await graphql<IStatusFieldData>(
-      `query GetStatusField($projectId: ID!) {
-        node(id: $projectId) {
-          ... on ProjectV2 {
-            field(name: "Status") {
-              ... on ProjectV2SingleSelectField {
-                id
-                options {
+      `
+        query GetStatusField($projectId: ID!) {
+          node(id: $projectId) {
+            ... on ProjectV2 {
+              field(name: "Status") {
+                ... on ProjectV2SingleSelectField {
                   id
-                  name
+                  options {
+                    id
+                    name
+                  }
                 }
               }
             }
           }
         }
-      }`,
+      `,
       { projectId },
-      this.cwd
+      this.cwd,
     );
 
     const field = fieldData.node?.field;
     if (!field) {
       throw new Error(
         `Status field not found on project ${projectId}. ` +
-          `Run \`night-watch board setup\` to create it.`
+          `Run \`night-watch board setup\` to create it.`,
       );
     }
 
@@ -344,9 +374,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
 
     const projectNumber = this.config.projectNumber;
     if (!projectNumber) {
-      throw new Error(
-        "No projectNumber configured. Run `night-watch board setup` first."
-      );
+      throw new Error('No projectNumber configured. Run `night-watch board setup` first.');
     }
 
     const ownerLogins = new Set<string>([await this.getRepoOwnerLogin()]);
@@ -366,7 +394,7 @@ export class GitHubProjectsProvider implements IBoardProvider {
 
     if (!projectNode) {
       throw new Error(
-        `GitHub Project #${projectNumber} not found for repository owner "${await this.getRepoOwnerLogin()}".`
+        `GitHub Project #${projectNumber} not found for repository owner "${await this.getRepoOwnerLogin()}".`,
       );
     }
 
@@ -385,22 +413,24 @@ export class GitHubProjectsProvider implements IBoardProvider {
   /** Try user query first, fall back to org query. */
   private async fetchProjectNode(
     login: string,
-    projectNumber: number
+    projectNumber: number,
   ): Promise<IProjectV2Node | null> {
     try {
       const userData = await graphql<IGetUserProjectData>(
-        `query GetProject($login: String!, $number: Int!) {
-          user(login: $login) {
-            projectV2(number: $number) {
-              id
-              number
-              title
-              url
+        `
+          query GetProject($login: String!, $number: Int!) {
+            user(login: $login) {
+              projectV2(number: $number) {
+                id
+                number
+                title
+                url
+              }
             }
           }
-        }`,
+        `,
         { login, number: projectNumber },
-        this.cwd
+        this.cwd,
       );
 
       if (userData.user?.projectV2) {
@@ -412,18 +442,20 @@ export class GitHubProjectsProvider implements IBoardProvider {
 
     try {
       const orgData = await graphql<IGetOrgProjectData>(
-        `query GetOrgProject($login: String!, $number: Int!) {
-          organization(login: $login) {
-            projectV2(number: $number) {
-              id
-              number
-              title
-              url
+        `
+          query GetOrgProject($login: String!, $number: Int!) {
+            organization(login: $login) {
+              projectV2(number: $number) {
+                id
+                number
+                title
+                url
+              }
             }
           }
-        }`,
+        `,
         { login, number: projectNumber },
-        this.cwd
+        this.cwd,
       );
 
       if (orgData.organization?.projectV2) {
@@ -440,16 +472,20 @@ export class GitHubProjectsProvider implements IBoardProvider {
    * Parse a raw project item node into IBoardIssue, returning null for items
    * that are not issues.
    */
-  private parseItem(item: IProjectItemNode): IBoardIssue | null {
+  private parseItem(item: IProjectItemNode, repo: string): IBoardIssue | null {
     const content = item.content;
     if (!content || content.number === undefined) {
+      return null;
+    }
+
+    if (!this.isCurrentRepoItem(content, repo)) {
       return null;
     }
 
     // Find the Status column value from the field values
     let column: BoardColumnName | null = null;
     for (const fv of item.fieldValues.nodes) {
-      if (fv.field?.name === "Status" && fv.name) {
+      if (fv.field?.name === 'Status' && fv.name) {
         const candidate = fv.name as BoardColumnName;
         if (BOARD_COLUMNS.includes(candidate)) {
           column = candidate;
@@ -460,9 +496,9 @@ export class GitHubProjectsProvider implements IBoardProvider {
     return {
       id: content.id ?? item.id,
       number: content.number,
-      title: content.title ?? "",
-      body: content.body ?? "",
-      url: content.url ?? "",
+      title: content.title ?? '',
+      body: content.body ?? '',
+      url: content.url ?? '',
       column,
       labels: content.labels?.nodes.map((l) => l.name) ?? [],
       assignees: content.assignees?.nodes.map((a) => a.login) ?? [],
@@ -496,6 +532,9 @@ export class GitHubProjectsProvider implements IBoardProvider {
                   body
                   url
                   id
+                  repository {
+                    nameWithOwner
+                  }
                   labels(first: 10) { nodes { name } }
                   assignees(first: 10) { nodes { login } }
                 }
@@ -554,6 +593,9 @@ export class GitHubProjectsProvider implements IBoardProvider {
               content {
                 ... on Issue {
                   number
+                  repository {
+                    nameWithOwner
+                  }
                 }
               }
               fieldValues(first: 10) {
@@ -596,33 +638,50 @@ export class GitHubProjectsProvider implements IBoardProvider {
    * Find an existing project by title among the repository owner's first 50 projects.
    * Returns null if not found.
    */
-  private async findExistingProject(owner: IRepoOwnerInfo, title: string): Promise<IProjectV2Node | null> {
+  private async findExistingProject(
+    owner: IRepoOwnerInfo,
+    title: string,
+  ): Promise<IProjectV2Node | null> {
     try {
-      if (owner.type === "User") {
+      if (owner.type === 'User') {
         const data = await graphql<IListUserProjectsData>(
-          `query ListUserProjects($login: String!) {
-            user(login: $login) {
-              projectsV2(first: 50) {
-                nodes { id number title url }
+          `
+            query ListUserProjects($login: String!) {
+              user(login: $login) {
+                projectsV2(first: 50) {
+                  nodes {
+                    id
+                    number
+                    title
+                    url
+                  }
+                }
               }
             }
-          }`,
+          `,
           { login: owner.login },
-          this.cwd
+          this.cwd,
         );
         return data.user?.projectsV2.nodes.find((p) => p.title === title) ?? null;
       }
 
       const data = await graphql<IListOrgProjectsData>(
-        `query ListOrgProjects($login: String!) {
-          organization(login: $login) {
-            projectsV2(first: 50) {
-              nodes { id number title url }
+        `
+          query ListOrgProjects($login: String!) {
+            organization(login: $login) {
+              projectsV2(first: 50) {
+                nodes {
+                  id
+                  number
+                  title
+                  url
+                }
+              }
             }
           }
-        }`,
+        `,
         { login: owner.login },
-        this.cwd
+        this.cwd,
       );
       return data.organization?.projectsV2.nodes.find((p) => p.title === title) ?? null;
     } catch {
@@ -636,27 +695,32 @@ export class GitHubProjectsProvider implements IBoardProvider {
    */
   private async ensureStatusColumns(projectId: string): Promise<void> {
     const fieldData = await graphql<IStatusFieldData>(
-      `query GetStatusField($projectId: ID!) {
-        node(id: $projectId) {
-          ... on ProjectV2 {
-            field(name: "Status") {
-              ... on ProjectV2SingleSelectField {
-                id
-                options { id name }
+      `
+        query GetStatusField($projectId: ID!) {
+          node(id: $projectId) {
+            ... on ProjectV2 {
+              field(name: "Status") {
+                ... on ProjectV2SingleSelectField {
+                  id
+                  options {
+                    id
+                    name
+                  }
+                }
               }
             }
           }
         }
-      }`,
+      `,
       { projectId },
-      this.cwd
+      this.cwd,
     );
 
     const field = fieldData.node?.field;
     if (!field) return;
 
     const existing = new Set(field.options.map((o) => o.name));
-    const required = ["Draft", "Ready", "In Progress", "Review", "Done"];
+    const required = ['Draft', 'Ready', 'In Progress', 'Review', 'Done'];
     const missing = required.filter((n) => !existing.has(n));
     if (missing.length === 0) return;
 
@@ -667,39 +731,46 @@ export class GitHubProjectsProvider implements IBoardProvider {
       };
     }
     const colorMap: Record<string, string> = {
-      Draft: "GRAY",
-      Ready: "BLUE",
-      "In Progress": "YELLOW",
-      Review: "ORANGE",
-      Done: "GREEN",
+      Draft: 'GRAY',
+      Ready: 'BLUE',
+      'In Progress': 'YELLOW',
+      Review: 'ORANGE',
+      Done: 'GREEN',
     };
     const allOptions = required.map((name) => ({
       name,
       color: colorMap[name],
-      description: "",
+      description: '',
     }));
     await graphql<IUpdateFieldData>(
-      `mutation UpdateField($fieldId: ID!) {
-        updateProjectV2Field(input: {
-          fieldId: $fieldId,
-          singleSelectOptions: [
-            { name: "Draft",       color: GRAY,   description: "" },
-            { name: "Ready",       color: BLUE,   description: "" },
-            { name: "In Progress", color: YELLOW, description: "" },
-            { name: "Review",      color: ORANGE, description: "" },
-            { name: "Done",        color: GREEN,  description: "" }
-          ]
-        }) {
-          projectV2Field {
-            ... on ProjectV2SingleSelectField {
-              id
-              options { id name }
+      `
+        mutation UpdateField($fieldId: ID!) {
+          updateProjectV2Field(
+            input: {
+              fieldId: $fieldId
+              singleSelectOptions: [
+                { name: "Draft", color: GRAY, description: "" }
+                { name: "Ready", color: BLUE, description: "" }
+                { name: "In Progress", color: YELLOW, description: "" }
+                { name: "Review", color: ORANGE, description: "" }
+                { name: "Done", color: GREEN, description: "" }
+              ]
+            }
+          ) {
+            projectV2Field {
+              ... on ProjectV2SingleSelectField {
+                id
+                options {
+                  id
+                  name
+                }
+              }
             }
           }
         }
-      }`,
+      `,
       { fieldId: field.id, allOptions },
-      this.cwd
+      this.cwd,
     );
   }
 
@@ -717,18 +788,20 @@ export class GitHubProjectsProvider implements IBoardProvider {
 
     // Create the project
     const createData = await graphql<ICreateProjectData>(
-      `mutation CreateProject($ownerId: ID!, $title: String!) {
-        createProjectV2(input: { ownerId: $ownerId, title: $title }) {
-          projectV2 {
-            id
-            number
-            url
-            title
+      `
+        mutation CreateProject($ownerId: ID!, $title: String!) {
+          createProjectV2(input: { ownerId: $ownerId, title: $title }) {
+            projectV2 {
+              id
+              number
+              url
+              title
+            }
           }
         }
-      }`,
+      `,
       { ownerId: owner.id, title },
-      this.cwd
+      this.cwd,
     );
 
     const project = createData.createProjectV2.projectV2;
@@ -746,34 +819,41 @@ export class GitHubProjectsProvider implements IBoardProvider {
       this.cachedOptionIds = refreshed.optionIds;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (!message.includes("Status field not found")) {
+      if (!message.includes('Status field not found')) {
         throw err;
       }
 
       const createFieldData = await graphql<ICreateFieldData>(
-        `mutation CreateStatusField($projectId: ID!) {
-          createProjectV2Field(input: {
-            projectId: $projectId,
-            dataType: SINGLE_SELECT,
-            name: "Status",
-            singleSelectOptions: [
-              { name: "Draft",       color: GRAY,   description: "" },
-              { name: "Ready",       color: BLUE,   description: "" },
-              { name: "In Progress", color: YELLOW, description: "" },
-              { name: "Review",      color: ORANGE, description: "" },
-              { name: "Done",        color: GREEN,  description: "" }
-            ]
-          }) {
-            projectV2Field {
-              ... on ProjectV2SingleSelectField {
-                id
-                options { id name }
+        `
+          mutation CreateStatusField($projectId: ID!) {
+            createProjectV2Field(
+              input: {
+                projectId: $projectId
+                dataType: SINGLE_SELECT
+                name: "Status"
+                singleSelectOptions: [
+                  { name: "Draft", color: GRAY, description: "" }
+                  { name: "Ready", color: BLUE, description: "" }
+                  { name: "In Progress", color: YELLOW, description: "" }
+                  { name: "Review", color: ORANGE, description: "" }
+                  { name: "Done", color: GREEN, description: "" }
+                ]
+              }
+            ) {
+              projectV2Field {
+                ... on ProjectV2SingleSelectField {
+                  id
+                  options {
+                    id
+                    name
+                  }
+                }
               }
             }
           }
-        }`,
+        `,
         { projectId: project.id },
-        this.cwd
+        this.cwd,
       );
 
       const field = createFieldData.createProjectV2Field.projectV2Field;
@@ -828,37 +908,37 @@ export class GitHubProjectsProvider implements IBoardProvider {
 
     // Create the issue via gh CLI (outputs URL, e.g. https://github.com/owner/repo/issues/123)
     const issueArgs = [
-      "issue",
-      "create",
-      "--title",
+      'issue',
+      'create',
+      '--title',
       input.title,
-      "--body",
+      '--body',
       input.body,
-      "--repo",
+      '--repo',
       repo,
     ];
 
     if (input.labels && input.labels.length > 0) {
-      issueArgs.push("--label", input.labels.join(","));
+      issueArgs.push('--label', input.labels.join(','));
     }
 
-    const { stdout: issueUrlRaw } = await execFileAsync("gh", issueArgs, {
+    const { stdout: issueUrlRaw } = await execFileAsync('gh', issueArgs, {
       cwd: this.cwd,
-      encoding: "utf-8",
+      encoding: 'utf-8',
     });
     const issueUrl = issueUrlRaw.trim();
 
-    const issueNumber = parseInt(issueUrl.split("/").pop() ?? "", 10);
+    const issueNumber = parseInt(issueUrl.split('/').pop() ?? '', 10);
     if (!issueNumber) {
       throw new Error(`Failed to parse issue number from URL: ${issueUrl}`);
     }
 
     // Fetch the node ID needed for the GraphQL project mutation
-    const [owner, repoName] = repo.split("/");
+    const [owner, repoName] = repo.split('/');
     const { stdout: nodeIdRaw } = await execFileAsync(
-      "gh",
-      ["api", `repos/${owner}/${repoName}/issues/${issueNumber}`, "--jq", ".node_id"],
-      { cwd: this.cwd, encoding: "utf-8" }
+      'gh',
+      ['api', `repos/${owner}/${repoName}/issues/${issueNumber}`, '--jq', '.node_id'],
+      { cwd: this.cwd, encoding: 'utf-8' },
     );
     const nodeIdOutput = nodeIdRaw.trim();
 
@@ -866,42 +946,48 @@ export class GitHubProjectsProvider implements IBoardProvider {
 
     // Add the issue to the project board
     const addData = await graphql<IAddItemData>(
-      `mutation AddProjectItem($projectId: ID!, $contentId: ID!) {
-        addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
-          item {
-            id
+      `
+        mutation AddProjectItem($projectId: ID!, $contentId: ID!) {
+          addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+            item {
+              id
+            }
           }
         }
-      }`,
+      `,
       { projectId, contentId: issueJson.id },
-      this.cwd
+      this.cwd,
     );
 
     const itemId = addData.addProjectV2ItemById.item.id;
-    const targetColumn = input.column ?? "Draft";
+    const targetColumn = input.column ?? 'Draft';
     const optionId = optionIds.get(targetColumn);
 
     if (optionId) {
       await graphql<IUpdateItemFieldData>(
-        `mutation UpdateItemField(
-          $projectId: ID!,
-          $itemId: ID!,
-          $fieldId: ID!,
-          $optionId: String!
-        ) {
-          updateProjectV2ItemFieldValue(input: {
-            projectId: $projectId,
-            itemId: $itemId,
-            fieldId: $fieldId,
-            value: { singleSelectOptionId: $optionId }
-          }) {
-            projectV2Item {
-              id
+        `
+          mutation UpdateItemField(
+            $projectId: ID!
+            $itemId: ID!
+            $fieldId: ID!
+            $optionId: String!
+          ) {
+            updateProjectV2ItemFieldValue(
+              input: {
+                projectId: $projectId
+                itemId: $itemId
+                fieldId: $fieldId
+                value: { singleSelectOptionId: $optionId }
+              }
+            ) {
+              projectV2Item {
+                id
+              }
             }
           }
-        }`,
+        `,
         { projectId, itemId, fieldId, optionId },
-        this.cwd
+        this.cwd,
       );
     }
 
@@ -929,17 +1015,17 @@ export class GitHubProjectsProvider implements IBoardProvider {
     let rawIssue: IRawIssue;
     try {
       const { stdout: output } = await execFileAsync(
-        "gh",
+        'gh',
         [
-          "issue",
-          "view",
+          'issue',
+          'view',
           String(issueNumber),
-          "--repo",
+          '--repo',
           repo,
-          "--json",
-          "number,title,body,url,id,labels,assignees",
+          '--json',
+          'number,title,body,url,id,labels,assignees',
         ],
-        { cwd: this.cwd, encoding: "utf-8" }
+        { cwd: this.cwd, encoding: 'utf-8' },
       );
       rawIssue = JSON.parse(output) as IRawIssue;
     } catch {
@@ -976,12 +1062,13 @@ export class GitHubProjectsProvider implements IBoardProvider {
   }
 
   async getAllIssues(): Promise<IBoardIssue[]> {
+    const repo = await this.getRepo();
     const { projectId } = await this.ensureProjectCache();
     const allNodes = await this.fetchAllProjectItems(projectId);
 
     const results: IBoardIssue[] = [];
     for (const item of allNodes) {
-      const parsed = this.parseItem(item);
+      const parsed = this.parseItem(item, repo);
       if (parsed) {
         results.push(parsed);
       }
@@ -989,17 +1076,17 @@ export class GitHubProjectsProvider implements IBoardProvider {
     return results;
   }
 
-  async moveIssue(
-    issueNumber: number,
-    targetColumn: BoardColumnName
-  ): Promise<void> {
+  async moveIssue(issueNumber: number, targetColumn: BoardColumnName): Promise<void> {
+    const repo = await this.getRepo();
     const { projectId, fieldId, optionIds } = await this.ensureProjectCache();
 
     // Fetch all project items (paginated) to find the item node ID for the target issue
     const allNodes = await this.fetchAllProjectItemsForMove(projectId);
 
     // Find the project item for this issue number
-    const itemNode = allNodes.find((n) => n.content?.number === issueNumber);
+    const itemNode = allNodes.find(
+      (n) => n.content?.number === issueNumber && this.isCurrentRepoItem(n.content, repo),
+    );
     if (!itemNode) {
       throw new Error(`Issue #${issueNumber} not found on the project board.`);
     }
@@ -1010,43 +1097,41 @@ export class GitHubProjectsProvider implements IBoardProvider {
     }
 
     await graphql<IUpdateItemFieldData>(
-      `mutation UpdateItemField(
-        $projectId: ID!,
-        $itemId: ID!,
-        $fieldId: ID!,
-        $optionId: String!
-      ) {
-        updateProjectV2ItemFieldValue(input: {
-          projectId: $projectId,
-          itemId: $itemId,
-          fieldId: $fieldId,
-          value: { singleSelectOptionId: $optionId }
-        }) {
-          projectV2Item {
-            id
+      `
+        mutation UpdateItemField($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+          updateProjectV2ItemFieldValue(
+            input: {
+              projectId: $projectId
+              itemId: $itemId
+              fieldId: $fieldId
+              value: { singleSelectOptionId: $optionId }
+            }
+          ) {
+            projectV2Item {
+              id
+            }
           }
         }
-      }`,
+      `,
       { projectId, itemId: itemNode.id, fieldId, optionId },
-      this.cwd
+      this.cwd,
     );
   }
 
   async closeIssue(issueNumber: number): Promise<void> {
     const repo = await this.getRepo();
-    await execFileAsync(
-      "gh",
-      ["issue", "close", String(issueNumber), "--repo", repo],
-      { cwd: this.cwd, encoding: "utf-8" }
-    );
+    await execFileAsync('gh', ['issue', 'close', String(issueNumber), '--repo', repo], {
+      cwd: this.cwd,
+      encoding: 'utf-8',
+    });
   }
 
   async commentOnIssue(issueNumber: number, body: string): Promise<void> {
     const repo = await this.getRepo();
     await execFileAsync(
-      "gh",
-      ["issue", "comment", String(issueNumber), "--repo", repo, "--body", body],
-      { cwd: this.cwd, encoding: "utf-8" }
+      'gh',
+      ['issue', 'comment', String(issueNumber), '--repo', repo, '--body', body],
+      { cwd: this.cwd, encoding: 'utf-8' },
     );
   }
 }
