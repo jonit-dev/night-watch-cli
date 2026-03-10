@@ -14,6 +14,8 @@ import {
   INightWatchConfig,
   LOG_DIR,
   Provider,
+  checkNodeVersion,
+  checkProviderCli,
   checkGhCli,
   checkGitRepo,
   createBoardProvider,
@@ -28,6 +30,7 @@ import {
   step,
   success,
   error as uiError,
+  warn,
 } from '@night-watch/core';
 
 // Get templates directory path.
@@ -61,6 +64,11 @@ interface IGeneratedInitConfig extends Omit<INightWatchConfig, '_cliProviderOver
   $schema: string;
   projectName: string;
   providerLabel: string;
+}
+
+interface IGitHubRemoteStatus {
+  hasGitHubRemote: boolean;
+  remoteUrl: string | null;
 }
 
 function hasPlaywrightDependency(cwd: string): boolean {
@@ -140,6 +148,37 @@ function promptYesNo(question: string, defaultNo: boolean = true): Promise<boole
       resolve(normalized === 'y' || normalized === 'yes');
     });
   });
+}
+
+export function isInteractiveInitSession(): boolean {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
+export function chooseProviderForNonInteractive(providers: Provider[]): Provider {
+  if (providers.includes('claude')) {
+    return 'claude';
+  }
+  return providers[0];
+}
+
+export function getGitHubRemoteStatus(cwd: string): IGitHubRemoteStatus {
+  try {
+    const remoteUrl = execSync('git remote get-url origin', {
+      cwd,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+
+    return {
+      hasGitHubRemote: remoteUrl.includes('github.com'),
+      remoteUrl: remoteUrl || null,
+    };
+  } catch {
+    return {
+      hasGitHubRemote: false,
+      remoteUrl: null,
+    };
+  }
 }
 
 function installPlaywrightForQa(cwd: string): boolean {
@@ -441,13 +480,23 @@ export function initCommand(program: Command): void {
       const cwd = process.cwd();
       const force = options.force || false;
       const prdDir = options.prdDir || DEFAULT_PRD_DIR;
-      const totalSteps = 11;
+      const totalSteps = 12;
+      const interactive = isInteractiveInitSession();
 
       console.log();
       header('Night Watch CLI - Initializing');
 
-      // Step 1: Verify git repository
-      step(1, totalSteps, 'Checking git repository...');
+      // Step 1: Verify Node.js version
+      step(1, totalSteps, 'Checking Node.js version...');
+      const nodeCheck = checkNodeVersion(22);
+      if (!nodeCheck.passed) {
+        uiError(nodeCheck.message);
+        process.exit(1);
+      }
+      success(nodeCheck.message);
+
+      // Step 2: Verify git repository
+      step(2, totalSteps, 'Checking git repository...');
       const gitCheck = checkGitRepo(cwd);
       if (!gitCheck.passed) {
         uiError(gitCheck.message);
@@ -455,15 +504,6 @@ export function initCommand(program: Command): void {
         process.exit(1);
       }
       success(gitCheck.message);
-
-      // Step 2: Verify gh CLI
-      step(2, totalSteps, 'Checking GitHub CLI (gh)...');
-      const ghCheck = checkGhCli();
-      if (!ghCheck.passed) {
-        uiError(ghCheck.message);
-        process.exit(1);
-      }
-      success(ghCheck.message);
 
       // Step 3: Detect AI providers
       step(3, totalSteps, 'Detecting AI providers...');
@@ -477,6 +517,14 @@ export function initCommand(program: Command): void {
           process.exit(1);
         }
         selectedProvider = options.provider as Provider;
+        const providerCheck = checkProviderCli(selectedProvider);
+        if (!providerCheck.passed) {
+          uiError(providerCheck.message);
+          console.log(
+            `Install the ${selectedProvider} CLI or rerun with --provider ${detectProviders()[0] ?? 'claude'}.`,
+          );
+          process.exit(1);
+        }
         info(`Using provider from flag: ${selectedProvider}`);
       } else {
         // Auto-detect providers
@@ -492,20 +540,41 @@ export function initCommand(program: Command): void {
           selectedProvider = detectedProviders[0];
           info(`Auto-detected provider: ${selectedProvider}`);
         } else {
-          // Multiple providers - prompt user
-          try {
-            selectedProvider = await promptProviderSelection(detectedProviders);
-            info(`Selected provider: ${selectedProvider}`);
-          } catch (err) {
-            uiError(`${err instanceof Error ? err.message : String(err)}`);
-            process.exit(1);
+          if (!interactive) {
+            selectedProvider = chooseProviderForNonInteractive(detectedProviders);
+            info(
+              `Multiple providers detected in a non-interactive shell; defaulting to ${selectedProvider}. Use --provider to override.`,
+            );
+          } else {
+            try {
+              selectedProvider = await promptProviderSelection(detectedProviders);
+              info(`Selected provider: ${selectedProvider}`);
+            } catch (err) {
+              uiError(`${err instanceof Error ? err.message : String(err)}`);
+              process.exit(1);
+            }
           }
         }
       }
 
-      // Step 4: Detect test frameworks for QA bootstrap
-      step(4, totalSteps, 'Detecting test frameworks...');
+      // Step 4: Check optional GitHub integration prerequisites
+      step(4, totalSteps, 'Checking GitHub integration prerequisites...');
+      const remoteStatus = getGitHubRemoteStatus(cwd);
+      const ghCheck = checkGhCli();
+      const ghAuthenticated = ghCheck.passed;
+
+      if (!remoteStatus.hasGitHubRemote) {
+        info('No GitHub remote detected. Board setup will be skipped for now.');
+      } else if (!ghAuthenticated) {
+        warn(`${ghCheck.message}. Board setup will be skipped during init.`);
+      } else {
+        success(ghCheck.message);
+      }
+
+      // Step 5: Detect test frameworks for QA bootstrap
+      step(5, totalSteps, 'Detecting test frameworks...');
       const playwrightDetected = detectPlaywright(cwd);
+      let playwrightStatus = playwrightDetected ? 'detected' : 'not installed';
       if (playwrightDetected) {
         info('Playwright: detected');
       } else {
@@ -513,8 +582,10 @@ export function initCommand(program: Command): void {
         const installPlaywright = await promptYesNo('Install Playwright for QA now?', true);
         if (installPlaywright) {
           if (installPlaywrightForQa(cwd)) {
+            playwrightStatus = 'installed during init';
             success('Installed Playwright test runner and Chromium browser.');
           } else {
+            playwrightStatus = 'install failed';
             console.warn(
               '  Warning: Failed to install Playwright automatically. You can install it later.',
             );
@@ -546,16 +617,16 @@ export function initCommand(program: Command): void {
         '${DEFAULT_BRANCH}': defaultBranch,
       };
 
-      // Step 5: Create PRD directory structure
-      step(5, totalSteps, 'Creating PRD directory structure...');
+      // Step 6: Create PRD directory structure
+      step(6, totalSteps, 'Creating PRD directory structure...');
       const prdDirPath = path.join(cwd, prdDir);
       const doneDirPath = path.join(prdDirPath, 'done');
       ensureDir(doneDirPath);
       success(`Created ${prdDirPath}/`);
       success(`Created ${doneDirPath}/`);
 
-      // Step 6: Create logs directory
-      step(6, totalSteps, 'Creating logs directory...');
+      // Step 7: Create logs directory
+      step(7, totalSteps, 'Creating logs directory...');
       const logsPath = path.join(cwd, LOG_DIR);
       ensureDir(logsPath);
       success(`Created ${logsPath}/`);
@@ -563,8 +634,8 @@ export function initCommand(program: Command): void {
       // Add /logs/ to .gitignore
       addToGitignore(cwd);
 
-      // Step 7: Create instructions directory and copy templates
-      step(7, totalSteps, 'Creating instructions directory...');
+      // Step 8: Create instructions directory and copy templates
+      step(8, totalSteps, 'Creating instructions directory...');
       const instructionsDir = path.join(cwd, 'instructions');
       ensureDir(instructionsDir);
       success(`Created ${instructionsDir}/`);
@@ -643,8 +714,8 @@ export function initCommand(program: Command): void {
       );
       templateSources.push({ name: 'audit.md', source: auditResult.source });
 
-      // Step 8: Create config file
-      step(8, totalSteps, 'Creating configuration file...');
+      // Step 9: Create config file
+      step(9, totalSteps, 'Creating configuration file...');
       const configPath = path.join(cwd, CONFIG_FILE_NAME);
 
       if (fs.existsSync(configPath) && !force) {
@@ -661,33 +732,26 @@ export function initCommand(program: Command): void {
         success(`Created ${configPath}`);
       }
 
-      // Step 9: Create GitHub Project board (only when repo has a GitHub remote)
-      step(9, totalSteps, 'Setting up GitHub Project board...');
+      // Step 10: Create GitHub Project board (only when repo has a GitHub remote)
+      step(10, totalSteps, 'Setting up GitHub Project board...');
       const existingRaw = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<
         string,
         unknown
       >;
       const existingBoard = existingRaw.boardProvider as { projectNumber?: number } | undefined;
+      let boardSetupStatus = 'Skipped';
       if (existingBoard?.projectNumber && !force) {
+        boardSetupStatus = `Already configured (#${existingBoard.projectNumber})`;
         info(`Board already configured (#${existingBoard.projectNumber}), skipping.`);
       } else {
-        // Check for a GitHub remote before attempting board setup
-        let hasGitHubRemote = false;
-        try {
-          const remoteUrl = execSync('git remote get-url origin', {
-            cwd,
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-          }).trim();
-          hasGitHubRemote = remoteUrl.includes('github.com');
-        } catch {
-          /* no remote */
-        }
-
-        if (!hasGitHubRemote) {
+        if (!remoteStatus.hasGitHubRemote) {
+          boardSetupStatus = 'Skipped (no GitHub remote)';
           info(
             'No GitHub remote detected — skipping board setup. Run `night-watch board setup` manually.',
           );
+        } else if (!ghAuthenticated) {
+          boardSetupStatus = 'Skipped (gh auth required)';
+          info('GitHub CLI is not authenticated — run `gh auth login`, then `night-watch board setup`.');
         } else {
           try {
             const provider = createBoardProvider({ enabled: true, provider: 'github' }, cwd);
@@ -704,8 +768,10 @@ export function initCommand(program: Command): void {
               projectNumber: board.number,
             };
             fs.writeFileSync(configPath, JSON.stringify(rawConfig, null, 2) + '\n');
+            boardSetupStatus = `Created (#${board.number})`;
             success(`GitHub Project board "${boardTitle}" ready (#${board.number})`);
           } catch (boardErr) {
+            boardSetupStatus = 'Failed (manual setup required)';
             console.warn(
               `  Warning: Could not set up GitHub Project board: ${boardErr instanceof Error ? boardErr.message : String(boardErr)}`,
             );
@@ -714,8 +780,8 @@ export function initCommand(program: Command): void {
         }
       }
 
-      // Step 10: Register in global registry
-      step(10, totalSteps, 'Registering project in global registry...');
+      // Step 11: Register in global registry
+      step(11, totalSteps, 'Registering project in global registry...');
       try {
         const { registerProject } = await import('@night-watch/core');
         const entry = registerProject(cwd);
@@ -726,8 +792,8 @@ export function initCommand(program: Command): void {
         );
       }
 
-      // Step 11: Print summary
-      step(11, totalSteps, 'Initialization complete!');
+      // Print summary
+      step(12, totalSteps, 'Initialization complete!');
 
       // Summary with table
       header('Initialization Complete');
@@ -740,6 +806,7 @@ export function initCommand(program: Command): void {
       filesTable.push(['', `instructions/qa.md (${templateSources[3].source})`]);
       filesTable.push(['', `instructions/audit.md (${templateSources[4].source})`]);
       filesTable.push(['Config File', CONFIG_FILE_NAME]);
+      filesTable.push(['Board Setup', boardSetupStatus]);
       filesTable.push(['Global Registry', '~/.night-watch/projects.json']);
       console.log(filesTable.toString());
 
@@ -747,13 +814,15 @@ export function initCommand(program: Command): void {
       header('Configuration');
       label('Provider', selectedProvider);
       label('Reviewer', reviewerEnabled ? 'Enabled' : 'Disabled');
+      label('Playwright', playwrightStatus);
       console.log();
 
       // Next steps
       header('Next Steps');
       info(`1. Add your PRD files to ${prdDir}/`);
       info('2. Run `night-watch install` to set up cron jobs');
-      info('3. Or run `night-watch run` to execute PRDs manually');
+      info('3. Run `night-watch doctor` to verify the full setup');
+      info('4. Or run `night-watch run` to execute PRDs manually');
       console.log();
     });
 }

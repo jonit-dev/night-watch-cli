@@ -4,7 +4,7 @@
 
 ## `night-watch init`
 
-Initialize Night Watch in your project. Creates all necessary directories, configuration files, and provider slash commands.
+Initialize Night Watch in your project. Creates the working directories, instruction files, and config needed for first run.
 
 ```bash
 night-watch init            # Initialize with defaults
@@ -17,15 +17,27 @@ night-watch init --provider codex     # Use codex provider
 
 - PRD directory (configurable via `--prd-dir`) — Directory for PRD files
 - `logs/` — Log files directory (added to .gitignore)
-- `.claude/commands/night-watch.md` — Claude slash command for PRD execution
-- `.claude/commands/night-watch-pr-reviewer.md` — Claude slash command for PR review
+- `instructions/executor.md` — Executor instructions
+- `instructions/prd-executor.md` — PRD execution instructions
+- `instructions/pr-reviewer.md` — PR review instructions
+- `instructions/qa.md` — QA instructions
+- `instructions/audit.md` — Audit instructions
 - `night-watch.config.json` — Configuration file
 
 **Prerequisites:**
 
+- Node.js 22+
 - Git repository
-- GitHub CLI (`gh`) authenticated
-- Provider CLI installed (Claude CLI or Codex)
+- At least one provider CLI installed (`claude` or `codex`)
+- GitHub CLI (`gh`) authenticated only if you want `init` to auto-create the GitHub Project board
+
+**Onboarding behavior:**
+
+- Auto-detects installed provider CLIs
+- Uses the single detected provider automatically
+- Prompts when multiple providers are detected in an interactive shell
+- Defaults to `claude` in non-interactive shells when both `claude` and `codex` are installed
+- Detects Playwright and offers to install it for QA when running interactively
 
 ---
 
