@@ -608,18 +608,6 @@ export function runCommand(program: Command): void {
         process.exit(0);
       }
 
-      // Send run_started notification (fire-and-forget; skip for cross-project fallback re-entries)
-      if (process.env.NW_CROSS_PROJECT_FALLBACK_ACTIVE !== '1') {
-        sendNotifications(config, {
-          event: 'run_started',
-          projectName: path.basename(projectDir),
-          exitCode: 0,
-          provider: config.provider,
-        }).catch(() => {
-          /* ignore */
-        });
-      }
-
       // Execute the script with spinner
       const spinner = createSpinner('Running PRD executor...');
       spinner.start();
@@ -648,7 +636,23 @@ export function runCommand(program: Command): void {
           spinner.fail(`PRD executor exited with code ${exitCode}`);
         }
 
-        // Send notifications (fire-and-forget, failures do not affect exit code)
+        // Send run_started notification if there's actual work (skip cross-project fallback re-entries)
+        if (
+          process.env.NW_CROSS_PROJECT_FALLBACK_ACTIVE !== '1' &&
+          !scriptResult?.status?.startsWith('skip_') &&
+          scriptResult?.status !== 'success_already_merged'
+        ) {
+          sendNotifications(config, {
+            event: 'run_started',
+            projectName: path.basename(projectDir),
+            exitCode: 0,
+            provider: config.provider,
+          }).catch(() => {
+            /* ignore */
+          });
+        }
+
+        // Send completion notifications (fire-and-forget, failures do not affect exit code)
         if (!options.dryRun) {
           await sendRunCompletionNotifications(config, projectDir, options, exitCode, scriptResult);
         }
