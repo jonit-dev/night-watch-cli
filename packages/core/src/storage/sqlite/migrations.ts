@@ -137,22 +137,44 @@ export function runMigrations(db: Database.Database): void {
   }
 
   // Phase 2 cleanup: drop slack_channel_id column from projects (no longer needed)
-  // SQLite does not support DROP COLUMN before version 3.35.0; use a safe recreate approach.
-  try {
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS projects_new (
-        id         INTEGER PRIMARY KEY,
-        name       TEXT    NOT NULL,
-        path       TEXT    NOT NULL UNIQUE,
-        created_at INTEGER NOT NULL
-      );
-      INSERT OR IGNORE INTO projects_new (id, name, path, created_at)
-        SELECT id, name, path, created_at FROM projects;
-      DROP TABLE projects;
-      ALTER TABLE projects_new RENAME TO projects;
-    `);
-  } catch {
-    // Projects table already in clean shape — no-op
+  // Guarded by schema_meta so this destructive recreation runs exactly once.
+  // Without the guard, every server restart would DROP TABLE projects, creating a
+  // race window where concurrent queries get "no such table: projects".
+  const projectsSchemaV2Done = db
+    .prepare<[], { value: string }>(
+      "SELECT value FROM schema_meta WHERE key = 'projects_schema_v2'",
+    )
+    .get();
+
+  if (!projectsSchemaV2Done) {
+    const columns = db
+      .prepare<[], { name: string }>('PRAGMA table_info(projects)')
+      .all();
+
+    if (columns.some((c) => c.name === 'slack_channel_id')) {
+      // Only recreate if the old column is actually present
+      db.transaction(() => {
+        db.prepare(`
+          CREATE TABLE projects_new (
+            id         INTEGER PRIMARY KEY,
+            name       TEXT    NOT NULL,
+            path       TEXT    NOT NULL UNIQUE,
+            created_at INTEGER NOT NULL
+          )
+        `).run();
+        db.prepare(
+          `INSERT OR IGNORE INTO projects_new (id, name, path, created_at)
+           SELECT id, name, path, created_at FROM projects`,
+        ).run();
+        db.prepare('DROP TABLE projects').run();
+        db.prepare('ALTER TABLE projects_new RENAME TO projects').run();
+      })();
+    }
+
+    db.prepare(
+      `INSERT INTO schema_meta (key, value) VALUES ('projects_schema_v2', '1')
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    ).run();
   }
 
   // Upsert the current schema version into schema_meta

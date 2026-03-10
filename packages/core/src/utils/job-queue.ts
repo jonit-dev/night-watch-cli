@@ -23,6 +23,7 @@ import type {
   JobType,
   QueueEntryStatus,
 } from '../types.js';
+import { runMigrations } from '../storage/sqlite/migrations.js';
 import { createLogger } from './logger.js';
 import { normalizeSchedulingPriority } from './scheduling.js';
 import {
@@ -35,6 +36,9 @@ import {
 } from './status-data.js';
 
 const logger = createLogger('job-queue');
+
+/** Tracks whether migrations have been applied in this process. */
+let _migrationsApplied = false;
 
 /**
  * Get the path to the state database (respects NIGHT_WATCH_HOME override for tests)
@@ -53,12 +57,17 @@ export function getQueueLockPath(): string {
 }
 
 /**
- * Open the state database
+ * Open the state database, running migrations on first call in this process.
  */
 function openDb(): Database.Database {
   const dbPath = getStateDbPath();
   const db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
+  db.pragma('busy_timeout = 5000');
+  if (!_migrationsApplied) {
+    runMigrations(db);
+    _migrationsApplied = true;
+  }
   return db;
 }
 
