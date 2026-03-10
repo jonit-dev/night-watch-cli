@@ -90,8 +90,9 @@ validate_provider() {
 # ── Generic Provider Command Builder ──────────────────────────────────────────
 
 # Build a provider command from NW_PROVIDER_* environment variables.
-# Outputs one argument per line so callers can capture it as an array via mapfile.
-# This enables generic provider invocation without hardcoded case statements.
+# Outputs one NUL-delimited argument so callers can capture it as an array via
+# `mapfile -d ''`. This preserves multiline prompt arguments verbatim instead of
+# splitting them into multiple argv entries.
 #
 # Required env vars:
 #   NW_PROVIDER_CMD - CLI binary (e.g., "claude", "codex")
@@ -105,44 +106,44 @@ validate_provider() {
 #   NW_PROVIDER_MODEL         - Model value (e.g., "claude-opus-4-6")
 #
 # Usage:
-#   mapfile -t CMD_PARTS < <(build_provider_cmd "/path/to/worktree" "Your prompt here")
+#   mapfile -d '' -t CMD_PARTS < <(build_provider_cmd "/path/to/worktree" "Your prompt here")
 #   "${CMD_PARTS[@]}"
 #
-# Returns: One argument per line (safe for mapfile array capture)
+# Returns: One NUL-delimited argument per entry (safe for mapfile -d '' array capture)
 build_provider_cmd() {
   local workdir="${1:?workdir required}"
   local prompt="${2:?prompt required}"
 
   # Binary
-  printf '%s\n' "${NW_PROVIDER_CMD}"
+  printf '%s\0' "${NW_PROVIDER_CMD}"
 
   # Optional subcommand (e.g., "exec" for codex)
   if [ -n "${NW_PROVIDER_SUBCOMMAND:-}" ]; then
-    printf '%s\n' "${NW_PROVIDER_SUBCOMMAND}"
+    printf '%s\0' "${NW_PROVIDER_SUBCOMMAND}"
   fi
 
   # Working directory flag (if provider supports it)
   if [ -n "${NW_PROVIDER_WORKDIR_FLAG:-}" ]; then
-    printf '%s\n' "${NW_PROVIDER_WORKDIR_FLAG}"
-    printf '%s\n' "${workdir}"
+    printf '%s\0' "${NW_PROVIDER_WORKDIR_FLAG}"
+    printf '%s\0' "${workdir}"
   fi
 
   # Auto-approve flag
   if [ -n "${NW_PROVIDER_APPROVE_FLAG:-}" ]; then
-    printf '%s\n' "${NW_PROVIDER_APPROVE_FLAG}"
+    printf '%s\0' "${NW_PROVIDER_APPROVE_FLAG}"
   fi
 
   # Model selection (only if both flag and value are set)
   if [ -n "${NW_PROVIDER_MODEL_FLAG:-}" ] && [ -n "${NW_PROVIDER_MODEL:-}" ]; then
-    printf '%s\n' "${NW_PROVIDER_MODEL_FLAG}"
-    printf '%s\n' "${NW_PROVIDER_MODEL}"
+    printf '%s\0' "${NW_PROVIDER_MODEL_FLAG}"
+    printf '%s\0' "${NW_PROVIDER_MODEL}"
   fi
 
   # Prompt - either with flag or positional
   if [ -n "${NW_PROVIDER_PROMPT_FLAG:-}" ]; then
-    printf '%s\n' "${NW_PROVIDER_PROMPT_FLAG}"
+    printf '%s\0' "${NW_PROVIDER_PROMPT_FLAG}"
   fi
-  printf '%s\n' "${prompt}"
+  printf '%s\0' "${prompt}"
 }
 
 # Check if the provider uses a working directory flag (vs requiring cd).

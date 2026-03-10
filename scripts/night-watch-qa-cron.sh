@@ -593,7 +593,7 @@ Action: generating QA tests and evidence."
   PROVIDER_OK=0
 
   # Build provider command array using generic helper
-  mapfile -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${QA_WORKTREE_DIR}" "${QA_PROMPT}")
+  mapfile -d '' -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${QA_WORKTREE_DIR}" "${QA_PROMPT}")
 
   # Execute — always cd into worktree so provider tools resolve project files correctly
   if (cd "${QA_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
