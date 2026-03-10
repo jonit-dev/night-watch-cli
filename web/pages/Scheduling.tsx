@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Pause,
   Play,
@@ -439,7 +439,7 @@ const Scheduling: React.FC = () => {
       balancedDelayMinutes: number;
     };
   }
-  const agents: IAgentInfo[] = useMemo(() => [
+  const agents: IAgentInfo[] = [
     {
       id: 'executor',
       name: 'Executor',
@@ -490,7 +490,7 @@ const Scheduling: React.FC = () => {
       nextRun: scheduleInfo.planner?.nextRun,
       delayInfo: scheduleInfo.planner,
     },
-  ], [config, scheduleInfo]);
+  ];
   const tabs = [
     {
       id: 'overview',
