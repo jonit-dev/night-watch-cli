@@ -6,9 +6,10 @@ import {
   Clock,
   ArrowRight,
   Calendar,
+  Play,
 } from 'lucide-react';
 import Card from '../components/ui/Card';
-import { useApi, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
+import { useApi, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, triggerRun, triggerReview, triggerQa, triggerAudit, triggerPlanner, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
 import { useStore } from '../store/useStore';
 import AgentStatusBar from '../components/dashboard/AgentStatusBar';
 
@@ -24,6 +25,7 @@ const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [cancellingProcess, setCancellingProcess] = useState<'run' | 'review' | null>(null);
   const [clearingLock, setClearingLock] = useState(false);
+  const [triggeringJob, setTriggeringJob] = useState<string | null>(null);
   const { setProjectName, addToast, selectedProjectId, globalModeLoading, status } = useStore();
 
   const { data: scheduleInfo } = useApi(fetchScheduleInfo, [selectedProjectId], { enabled: !globalModeLoading });
@@ -106,6 +108,19 @@ const Dashboard: React.FC = () => {
       });
     } finally {
       setClearingLock(false);
+    }
+  };
+
+  const handleTriggerJob = async (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner') => {
+    setTriggeringJob(job);
+    try {
+      const triggerMap = { executor: triggerRun, reviewer: triggerReview, qa: triggerQa, audit: triggerAudit, planner: triggerPlanner };
+      await triggerMap[job]();
+      addToast({ title: 'Job Triggered', message: `${job[0].toUpperCase() + job.slice(1)} job has been queued.`, type: 'success' });
+    } catch (err) {
+      addToast({ title: 'Trigger Failed', message: err instanceof Error ? err.message : `Failed to trigger ${job}`, type: 'error' });
+    } finally {
+      setTriggeringJob(null);
     }
   };
 
@@ -244,6 +259,29 @@ const Dashboard: React.FC = () => {
           cancellingProcess={cancellingProcess}
           clearingLock={clearingLock}
         />
+        <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-800">
+          {([
+            { id: 'executor', label: 'Executor' },
+            { id: 'reviewer', label: 'Reviewer' },
+            { id: 'qa', label: 'QA' },
+            { id: 'audit', label: 'Auditor' },
+            { id: 'planner', label: 'Planner' },
+          ] as const).map(({ id, label }) => (
+            <button
+              key={id}
+              disabled={triggeringJob !== null}
+              onClick={() => handleTriggerJob(id)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-slate-300 bg-slate-800 hover:bg-green-500/20 hover:text-green-400 border border-slate-700 hover:border-green-500/40 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {triggeringJob === id ? (
+                <div className="h-3 w-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Play className="h-3 w-3" />
+              )}
+              {label}
+            </button>
+          ))}
+        </div>
       </Card>
 
       {/* Next Automation Teaser */}
