@@ -181,7 +181,6 @@ yarn install && yarn build && npm link
 | [Core Package](docs/core-package.md)                     | Domain logic, DI container, repositories, config loader   |
 | [Server & API](docs/server-api.md)                       | REST endpoints, SSE, middleware, multi-project mode       |
 | [Scheduler Architecture](docs/scheduler-architecture.md) | Global job queue, dispatch modes, cross-project balancing |
-| [Persona System](docs/persona-memory-system.md)          | AI personas, soul compiler, avatar generation             |
 | [Build Pipeline](docs/build-pipeline.md)                 | TypeScript → esbuild bundling, CI/CD, publishing          |
 | [Bash Scripts](docs/bash-scripts.md)                     | Cron execution scripts and worktree management            |
 
