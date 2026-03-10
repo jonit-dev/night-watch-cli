@@ -378,6 +378,18 @@ function validateConfigChanges(
     return 'fallbackOnRateLimit must be a boolean';
   }
 
+  if (changes.primaryFallbackPreset !== undefined && changes.primaryFallbackPreset !== null) {
+    if (typeof changes.primaryFallbackPreset !== 'string' || changes.primaryFallbackPreset.trim().length === 0) {
+      return 'primaryFallbackPreset must be a non-empty string (preset ID)';
+    }
+  }
+
+  if (changes.secondaryFallbackPreset !== undefined && changes.secondaryFallbackPreset !== null) {
+    if (typeof changes.secondaryFallbackPreset !== 'string' || changes.secondaryFallbackPreset.trim().length === 0) {
+      return 'secondaryFallbackPreset must be a non-empty string (preset ID)';
+    }
+  }
+
   // claudeModel validation
   if (changes.claudeModel !== undefined && !VALID_CLAUDE_MODELS.includes(changes.claudeModel)) {
     return `Invalid claudeModel. Must be one of: ${VALID_CLAUDE_MODELS.join(', ')}`;
@@ -619,6 +631,7 @@ export function createConfigRoutes(deps: IConfigRoutesDeps): Router {
 
   router.get('/', (_req: Request, res: Response): void => {
     try {
+      reloadConfig();
       res.json(getConfig());
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });

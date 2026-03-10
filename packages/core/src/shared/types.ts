@@ -170,6 +170,8 @@ export interface INightWatchConfig {
   fallbackOnRateLimit: boolean;
   primaryFallbackModel?: ClaudeModel;
   secondaryFallbackModel?: ClaudeModel;
+  primaryFallbackPreset?: string;
+  secondaryFallbackPreset?: string;
   claudeModel: ClaudeModel;
   qa: IQaConfig;
   audit: IAuditConfig;

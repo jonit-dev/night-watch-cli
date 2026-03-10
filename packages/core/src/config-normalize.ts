@@ -249,6 +249,8 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
   ) {
     normalized.secondaryFallbackModel = secondaryFallbackModelRaw as ClaudeModel;
   }
+  normalized.primaryFallbackPreset = readString(rawConfig.primaryFallbackPreset);
+  normalized.secondaryFallbackPreset = readString(rawConfig.secondaryFallbackPreset);
 
   normalized.autoMerge = readBoolean(rawConfig.autoMerge);
   const mergeMethod = readString(rawConfig.autoMergeMethod);

@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import React from 'react';
 
 import type { IProviderPreset } from '../../api.js';
@@ -7,6 +7,7 @@ import Input from '../ui/Input.js';
 import Modal from '../ui/Modal.js';
 import Select from '../ui/Select.js';
 import ProviderEnvEditor from './ProviderEnvEditor.js';
+import { isMissingGlmApiKey } from './providerWarnings.js';
 
 /** Built-in preset templates for quick setup */
 const PRESET_TEMPLATES: Record<string, Partial<IProviderPreset>> = {
@@ -32,7 +33,7 @@ const PRESET_TEMPLATES: Record<string, Partial<IProviderPreset>> = {
 interface IPresetFormModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (presetId: string, preset: IProviderPreset) => void;
+  onSave: (presetId: string, preset: IProviderPreset) => void | Promise<void>;
   /** Existing preset ID for editing (null for new preset) */
   presetId: string | null;
   /** Existing preset data for editing */
@@ -67,6 +68,7 @@ const PresetFormModal: React.FC<IPresetFormModalProps> = ({
   const [showAdvanced, setShowAdvanced] = React.useState(false);
   const [selectedTemplate, setSelectedTemplate] = React.useState<string>('custom');
   const [error, setError] = React.useState<string | null>(null);
+  const showGlmApiKeyWarning = isMissingGlmApiKey(presetId ?? formId, formData);
 
   // Initialize form when modal opens with preset data
   React.useEffect(() => {
@@ -109,7 +111,8 @@ const PresetFormModal: React.FC<IPresetFormModalProps> = ({
         setSelectedTemplate('custom');
       }
       setError(null);
-      setShowAdvanced(false);
+      // Auto-expand advanced section if the preset has env vars
+      setShowAdvanced(!!(preset?.envVars && Object.keys(preset.envVars).length > 0));
     }
   }, [isOpen, presetId, preset]);
 
@@ -196,6 +199,20 @@ const PresetFormModal: React.FC<IPresetFormModalProps> = ({
         {error && (
           <div className="p-3 rounded-md bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
             {error}
+          </div>
+        )}
+
+        {showGlmApiKeyWarning && (
+          <div className="p-3 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-300 text-sm">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-medium">GLM presets require `ANTHROPIC_API_KEY`.</div>
+                <div className="text-amber-200/80">
+                  Add `ANTHROPIC_API_KEY` in Environment Variables before using this preset.
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

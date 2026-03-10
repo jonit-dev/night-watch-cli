@@ -35,7 +35,7 @@ import { useStore } from '../store/useStore';
 import ScheduleConfig from '../components/scheduling/ScheduleConfig.js';
 
 /** Built-in preset IDs that cannot be deleted */
-const BUILT_IN_PRESET_IDS = ['claude', 'codex'];
+const BUILT_IN_PRESET_IDS = ['claude', 'claude-sonnet-4-6', 'claude-opus-4-6', 'codex', 'glm-47', 'glm-5'];
 
 type ConfigForm = {
   provider: INightWatchConfig['provider'];
@@ -71,6 +71,8 @@ type ConfigForm = {
   fallbackOnRateLimit: boolean;
   primaryFallbackModel: ClaudeModel;
   secondaryFallbackModel: ClaudeModel;
+  primaryFallbackPreset: string;
+  secondaryFallbackPreset: string;
   claudeModel: ClaudeModel;
   qa: IQaConfig;
   audit: IAuditConfig;
@@ -120,6 +122,8 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   primaryFallbackModel: config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet',
   secondaryFallbackModel:
     config.secondaryFallbackModel ?? config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet',
+  primaryFallbackPreset: config.primaryFallbackPreset ?? '',
+  secondaryFallbackPreset: config.secondaryFallbackPreset ?? '',
   claudeModel: config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet',
   qa: config.qa || {
     enabled: true,
@@ -484,6 +488,7 @@ const Settings: React.FC = () => {
   const [editingPresetId, setEditingPresetId] = React.useState<string | null>(null);
   const [editingPreset, setEditingPreset] = React.useState<IProviderPreset | null>(null);
   const [deleteWarning, setDeleteWarning] = React.useState<{ presetId: string; presetName: string; references: string[] } | null>(null);
+  const [fallbackType, setFallbackType] = React.useState<'preset' | 'native'>('native');
 
   const {
     data: config,
@@ -508,6 +513,7 @@ const Settings: React.FC = () => {
         const newForm = toFormState(config);
         setForm(newForm);
         applyScheduleUiState(newForm);
+        setFallbackType(config.primaryFallbackPreset ? 'preset' : 'native');
       }
     }
   }, [config, applyScheduleUiState]);
@@ -622,6 +628,8 @@ const Settings: React.FC = () => {
         fallbackOnRateLimit: form.fallbackOnRateLimit,
         primaryFallbackModel: form.primaryFallbackModel,
         secondaryFallbackModel: form.secondaryFallbackModel,
+        primaryFallbackPreset: form.primaryFallbackPreset || undefined,
+        secondaryFallbackPreset: form.secondaryFallbackPreset || undefined,
         claudeModel: form.primaryFallbackModel,
         qa: form.qa,
         audit: form.audit,
@@ -723,10 +731,15 @@ const Settings: React.FC = () => {
   };
 
   // Get default built-in preset configuration
+  // TODO: expose BUILT_IN_PRESETS from server API to avoid this duplication with constants.ts
   const getDefaultBuiltInPreset = (presetId: string): IProviderPreset | null => {
     const builtIn: Record<string, IProviderPreset> = {
       claude: { name: 'Claude', command: 'claude', promptFlag: '-p', autoApproveFlag: '--dangerously-skip-permissions' },
+      'claude-sonnet-4-6': { name: 'Claude Sonnet 4.6', command: 'claude', promptFlag: '-p', autoApproveFlag: '--dangerously-skip-permissions', modelFlag: '--model', model: 'claude-sonnet-4-6' },
+      'claude-opus-4-6': { name: 'Claude Opus 4.6', command: 'claude', promptFlag: '-p', autoApproveFlag: '--dangerously-skip-permissions', modelFlag: '--model', model: 'claude-opus-4-6' },
       codex: { name: 'Codex', command: 'codex', subcommand: 'exec', autoApproveFlag: '--yolo', workdirFlag: '-C' },
+      'glm-47': { name: 'GLM-4.7', command: 'claude', promptFlag: '-p', autoApproveFlag: '--dangerously-skip-permissions', modelFlag: '--model', model: 'glm-4.7', envVars: { ANTHROPIC_BASE_URL: 'https://api.z.ai/api/anthropic', API_TIMEOUT_MS: '3000000', ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-4.7', ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-4.7' } },
+      'glm-5': { name: 'GLM-5', command: 'claude', promptFlag: '-p', autoApproveFlag: '--dangerously-skip-permissions', modelFlag: '--model', model: 'glm-5', envVars: { ANTHROPIC_BASE_URL: 'https://api.z.ai/api/anthropic', API_TIMEOUT_MS: '3000000', ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-5', ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-5' } },
     };
     return builtIn[presetId] ?? null;
   };
@@ -735,7 +748,11 @@ const Settings: React.FC = () => {
   const getAllPresets = (): Record<string, IProviderPreset> => {
     const builtIn: Record<string, IProviderPreset> = {
       claude: { name: 'Claude', command: 'claude', promptFlag: '-p', autoApproveFlag: '--dangerously-skip-permissions' },
+      'claude-sonnet-4-6': { name: 'Claude Sonnet 4.6', command: 'claude', promptFlag: '-p', autoApproveFlag: '--dangerously-skip-permissions', modelFlag: '--model', model: 'claude-sonnet-4-6' },
+      'claude-opus-4-6': { name: 'Claude Opus 4.6', command: 'claude', promptFlag: '-p', autoApproveFlag: '--dangerously-skip-permissions', modelFlag: '--model', model: 'claude-opus-4-6' },
       codex: { name: 'Codex', command: 'codex', subcommand: 'exec', autoApproveFlag: '--yolo', workdirFlag: '-C' },
+      'glm-47': { name: 'GLM-4.7', command: 'claude', promptFlag: '-p', autoApproveFlag: '--dangerously-skip-permissions', modelFlag: '--model', model: 'glm-4.7', envVars: { ANTHROPIC_BASE_URL: 'https://api.z.ai/api/anthropic', API_TIMEOUT_MS: '3000000', ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-4.7', ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-4.7' } },
+      'glm-5': { name: 'GLM-5', command: 'claude', promptFlag: '-p', autoApproveFlag: '--dangerously-skip-permissions', modelFlag: '--model', model: 'glm-5', envVars: { ANTHROPIC_BASE_URL: 'https://api.z.ai/api/anthropic', API_TIMEOUT_MS: '3000000', ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-5', ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-5' } },
     };
     return { ...builtIn, ...form?.providerPresets };
   };
@@ -794,20 +811,31 @@ const Settings: React.FC = () => {
     }
   };
 
-  // Save preset (add or update)
-  const handleSavePreset = (presetId: string, preset: IProviderPreset) => {
+  // Save preset (add or update) — immediately persists to server
+  const handleSavePreset = async (presetId: string, preset: IProviderPreset) => {
     if (!form) return;
 
+    const isNew = !editingPresetId;
     const updatedPresets = { ...form.providerPresets, [presetId]: preset };
     updateField('providerPresets', updatedPresets);
 
-    // If this is a new preset, set it as the global provider
-    if (!editingPresetId) {
+    try {
+      await updateConfig({ providerPresets: { [presetId]: preset } });
       addToast({
-        title: 'Preset Added',
-        message: `${preset.name} has been added. You can now assign it to jobs.`,
+        title: isNew ? 'Preset Added' : 'Preset Updated',
+        message: isNew
+          ? `${preset.name} has been added. You can now assign it to jobs.`
+          : `${preset.name} has been saved.`,
         type: 'success',
       });
+    } catch (err) {
+      addToast({
+        title: 'Save Failed',
+        message: err instanceof Error ? err.message : 'Failed to save preset',
+        type: 'error',
+      });
+      // Revert local state on failure
+      updateField('providerPresets', form.providerPresets);
     }
   };
 
@@ -1102,56 +1130,122 @@ const Settings: React.FC = () => {
             </div>
           </Card>
 
-          {/* Rate Limit Fallback Card (Claude-specific) */}
+          {/* Rate Limit Fallback Card */}
           <Card className="p-6 space-y-6">
             <div>
               <h3 className="text-lg font-medium text-slate-200">Rate Limit Fallback</h3>
               <p className="text-sm text-slate-400 mt-1">
-                Native Claude fallback settings for when a Claude proxy is rate-limited
+                Fallback settings for when a provider is rate-limited
               </p>
             </div>
             <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
               <p className="text-sm text-slate-300">
-                These settings control native Claude retry behavior after a Claude proxy rate limit.
+                These settings control retry behavior after a provider rate limit.
                 They apply globally regardless of which preset is assigned.
               </p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Select
-                label="Primary Native Claude Fallback"
-                value={form.primaryFallbackModel}
-                onChange={(val) => {
-                  const next = val as ClaudeModel;
-                  updateField('primaryFallbackModel', next);
-                  updateField('claudeModel', next);
-                }}
-                options={[
-                  { label: 'Sonnet (claude-sonnet-4-6)', value: 'sonnet' },
-                  { label: 'Opus (claude-opus-4-6)', value: 'opus' },
-                ]}
-                helperText="First native Claude model used for the rate-limit fallback attempt"
+            <div className="md:col-span-2">
+              <Switch
+                label="Fallback on Rate Limit"
+                checked={form.fallbackOnRateLimit}
+                onChange={(checked) => updateField('fallbackOnRateLimit', checked)}
               />
-              <Select
-                label="Secondary Native Claude Fallback"
-                value={form.secondaryFallbackModel}
-                onChange={(val) => updateField('secondaryFallbackModel', val as ClaudeModel)}
-                options={[
-                  { label: 'Sonnet (claude-sonnet-4-6)', value: 'sonnet' },
-                  { label: 'Opus (claude-opus-4-6)', value: 'opus' },
-                ]}
-                helperText="Used only if the primary native Claude fallback is also rate-limited"
-              />
-              <div className="md:col-span-2">
-                <Switch
-                  label="Fallback on Rate Limit"
-                  checked={form.fallbackOnRateLimit}
-                  onChange={(checked) => updateField('fallbackOnRateLimit', checked)}
-                />
-                <p className="text-xs text-slate-500 mt-2">
-                  When enabled, Night Watch retries with the primary native Claude fallback model, then the secondary one if the primary is also rate-limited
-                </p>
-              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                When enabled, Night Watch retries with the configured fallback after a rate limit
+              </p>
             </div>
+            {form.fallbackOnRateLimit && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-slate-400 mb-2">Fallback Type</label>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFallbackType('preset');
+                      }}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        fallbackType === 'preset'
+                          ? 'bg-violet-600 text-white'
+                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                      }`}
+                    >
+                      Preset Fallback
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFallbackType('native');
+                      }}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        fallbackType === 'native'
+                          ? 'bg-violet-600 text-white'
+                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                      }`}
+                    >
+                      Native Claude Fallback
+                    </button>
+                  </div>
+                </div>
+                {fallbackType === 'preset' ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Select
+                      label="Primary Fallback Preset"
+                      value={form.primaryFallbackPreset}
+                      onChange={(val) => updateField('primaryFallbackPreset', val)}
+                      options={[
+                        { label: '— None —', value: '' },
+                        ...Object.entries(getAllPresets()).map(([id, preset]) => ({
+                          label: preset.name,
+                          value: id,
+                        })),
+                      ]}
+                      helperText="Preset to use as the primary rate-limit fallback"
+                    />
+                    <Select
+                      label="Secondary Fallback Preset"
+                      value={form.secondaryFallbackPreset}
+                      onChange={(val) => updateField('secondaryFallbackPreset', val)}
+                      options={[
+                        { label: '— None —', value: '' },
+                        ...Object.entries(getAllPresets()).map(([id, preset]) => ({
+                          label: preset.name,
+                          value: id,
+                        })),
+                      ]}
+                      helperText="Used only if the primary fallback preset is also rate-limited"
+                    />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Select
+                      label="Primary Native Claude Fallback"
+                      value={form.primaryFallbackModel}
+                      onChange={(val) => {
+                        const next = val as ClaudeModel;
+                        updateField('primaryFallbackModel', next);
+                        updateField('claudeModel', next);
+                      }}
+                      options={[
+                        { label: 'Sonnet (claude-sonnet-4-6)', value: 'sonnet' },
+                        { label: 'Opus (claude-opus-4-6)', value: 'opus' },
+                      ]}
+                      helperText="First native Claude model used for the rate-limit fallback attempt"
+                    />
+                    <Select
+                      label="Secondary Native Claude Fallback"
+                      value={form.secondaryFallbackModel}
+                      onChange={(val) => updateField('secondaryFallbackModel', val as ClaudeModel)}
+                      options={[
+                        { label: 'Sonnet (claude-sonnet-4-6)', value: 'sonnet' },
+                        { label: 'Opus (claude-opus-4-6)', value: 'opus' },
+                      ]}
+                      helperText="Used only if the primary native Claude fallback is also rate-limited"
+                    />
+                  </div>
+                )}
+              </>
+            )}
           </Card>
 
           {/* Provider Environment Variables Card */}
