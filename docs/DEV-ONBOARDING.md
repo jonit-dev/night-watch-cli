@@ -187,14 +187,14 @@ beforeEach(() => {
 
 ### File Naming
 
-- **kebab-case** everywhere: `agent-persona.repository.ts`, `soul-compiler.ts`
+- **kebab-case** everywhere: `kanban-issue.repository.ts`, `job-queue.ts`
 - Tests: `*.test.ts` in `src/__tests__/`
 
 ### TypeScript
 
 - **Strict mode** enabled
 - Use `interface` (not `type`) for object shapes — enforced by ESLint
-- Prefix interfaces with `I`: `IAgentPersona`, `INightWatchConfig`
+- Prefix interfaces with `I`: `IKanbanIssue`, `INightWatchConfig`
 - Unused vars: prefix with `_` to suppress warnings
 - Prefer const arrays over enums: `['claude', 'codex'] as const`
 
@@ -229,7 +229,6 @@ For detailed technical docs on each subsystem:
 | [CLI Package](cli-package.md)                     | All 24 commands, command pattern, script execution  |
 | [Server & API](server-api.md)                     | REST endpoints, SSE, middleware, multi-project mode |
 | [Build Pipeline](build-pipeline.md)               | TypeScript → esbuild bundling, CI/CD, publishing    |
-| [Persona & Memory](persona-memory-system.md)      | Soul compiler, two-tier memory, reflection, avatars |
 | [Architecture Overview](architecture-overview.md) | High-level diagrams and flows                       |
 | [Configuration](configuration.md)                 | All config fields, env vars, webhooks               |
 | [Commands Reference](commands.md)                 | CLI command usage examples                          |
@@ -259,10 +258,6 @@ For detailed technical docs on each subsystem:
 1. Create or edit a route file in `packages/server/src/routes/`
 2. Wire it in `packages/server/src/index.ts` (both `createApp` and `createGlobalApp`)
 3. Add corresponding API function in `web/api.ts`
-
-### Add a New Agent Persona
-
-Default personas are seeded from `packages/core/src/storage/repositories/sqlite/agent-persona.defaults.ts`. You can also create personas via the REST API (`POST /api/agents`) or the web UI.
 
 ### Modify the Build
 

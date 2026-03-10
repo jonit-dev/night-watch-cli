@@ -1,6 +1,6 @@
 # Night Watch CLI - Architecture Overview
 
-> Related: [DEV-ONBOARDING](DEV-ONBOARDING.md) | [Core Package](core-package.md) | [CLI Package](cli-package.md) | [Server API](server-api.md) | [Build Pipeline](build-pipeline.md) | [Persona & Memory](persona-memory-system.md)
+> Related: [DEV-ONBOARDING](DEV-ONBOARDING.md) | [Core Package](core-package.md) | [CLI Package](cli-package.md) | [Server API](server-api.md) | [Build Pipeline](build-pipeline.md)
 
 Night Watch CLI is a cron-driven PRD execution system for well-scoped engineering work. It uses AI provider CLIs (Claude, Codex) plus scheduled automation to implement queued work, open pull requests, and close the loop with review, QA, and audit workflows.
 
@@ -346,7 +346,6 @@ flowchart LR
 | Config hierarchy     | Defaults < File < Env < Flags | Standard precedence, 12-factor friendly                   |
 | Persistence layer    | SQLite via repository pattern | Structured state with enforced architectural boundary     |
 | DI container         | tsyringe                      | Decorator-based, TypeScript-native                        |
-| AI personas          | Soul/Style/Skill compiler     | Composable prompt layers per agent                        |
 
 ---
 

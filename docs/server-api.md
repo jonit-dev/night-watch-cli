@@ -24,7 +24,6 @@ graph TB
 
         subgraph "Routes"
             Status["/api/status"]
-            Agents["/api/agents"]
             Actions["/api/actions"]
             Config["/api/config"]
             Board["/api/board"]
@@ -52,7 +51,7 @@ graph TB
     WebUI -->|HTTP/SSE| Express
     ExtClient -->|HTTP| Express
     Express --> CORS --> JSON
-    Express --> Status & Agents & Actions & Config & Board & Roadmap & Logs & Doctor & PRs
+    Express --> Status & Actions & Config & Board & Roadmap & Logs & Doctor & PRs
     Express --> ErrH
     Express --> GS
     Status --> SSE
@@ -128,21 +127,6 @@ data: {"executor":{"running":false},"reviewer":{"running":false},"prds":{"pendin
 ```
 
 The server polls every 2 seconds and broadcasts `status_changed` events when the snapshot differs from the previous one.
-
-### Agents (Personas)
-
-| Method   | Path                        | Purpose                            |
-| -------- | --------------------------- | ---------------------------------- |
-| `GET`    | `/api/agents`               | List all personas (secrets masked) |
-| `GET`    | `/api/agents/:id`           | Get persona by ID                  |
-| `GET`    | `/api/agents/:id/prompt`    | Compile persona system prompt      |
-| `POST`   | `/api/agents`               | Create new persona                 |
-| `PUT`    | `/api/agents/:id`           | Update persona fields              |
-| `DELETE` | `/api/agents/:id`           | Delete persona                     |
-| `POST`   | `/api/agents/:id/avatar`    | Update avatar URL                  |
-| `POST`   | `/api/agents/seed-defaults` | Seed default personas              |
-
-Model config secrets (`envVars`) are masked with `***` before returning.
 
 ### Actions
 
@@ -287,14 +271,13 @@ sequenceDiagram
     participant CLI as serve command
     participant Boot as bootContainer()
     participant DI as DI Container
-    participant Repo as PersonaRepository
+    participant Repos as Repository Layer
     participant App as Express App
     participant GS as Graceful Shutdown
 
     CLI->>Boot: bootContainer()
     Boot->>DI: initContainer(dbPath)
-    Boot->>Repo: seedDefaultsOnFirstRun()
-    Boot->>Repo: patchDefaultAvatarUrls()
+    Boot->>Repos: Seed repositories on first run
     CLI->>App: createApp(projectDir) or createGlobalApp()
     CLI->>App: listen(port)
     CLI->>GS: setupGracefulShutdown(server)
@@ -307,10 +290,10 @@ sequenceDiagram
 | Code  | Usage                              |
 | ----- | ---------------------------------- |
 | `200` | Success                            |
-| `201` | Created (new persona, issue)       |
+| `201` | Created (new issue)                |
 | `204` | No Content (delete)                |
 | `400` | Validation failure                 |
-| `404` | Not found (persona, project, log)  |
+| `404` | Not found (project, log)           |
 | `409` | Conflict (process already running) |
 | `410` | Gone (deprecated PRD endpoints)    |
 | `500` | Server error                       |

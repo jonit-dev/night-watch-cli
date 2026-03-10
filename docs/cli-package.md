@@ -198,16 +198,16 @@ Bin:     night-watch → ./bin/night-watch.mjs
 
 ### Key Dependencies
 
-| Dependency           | Purpose                                 |
-| -------------------- | --------------------------------------- |
-| `commander`          | CLI framework                           |
-| `better-sqlite3`     | Native SQLite (kept external in bundle) |
-| `blessed`            | Terminal UI                             |
-| `chalk`              | Colored output                          |
-| `ora`                | Spinners                                |
-| `express`            | Web server                              |
-| `@slack/socket-mode` | Slack webhook notifications             |
-| `tsyringe`           | Dependency injection                    |
+| Dependency       | Purpose                                 |
+| ---------------- | --------------------------------------- |
+| `commander`      | CLI framework                           |
+| `better-sqlite3` | Native SQLite (kept external in bundle) |
+| `blessed`        | Terminal UI                             |
+| `chalk`          | Colored output                          |
+| `ora`            | Spinners                                |
+| `express`        | Web server                              |
+| `tsyringe`       | Dependency injection                    |
+| `tsyringe`       | Dependency injection                    |
 
 ---
 
