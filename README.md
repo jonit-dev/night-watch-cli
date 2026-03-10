@@ -17,6 +17,7 @@ Night Watch is built for AI-native solo developers, maintainers, and small teams
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [5-Minute Walkthrough](#5-minute-walkthrough)
 - [Who It's For](#who-its-for)
 - [Supported Providers](#supported-providers)
 - [Using GLM-5 or Custom Endpoints](#using-glm-5-or-custom-endpoints)
@@ -39,12 +40,29 @@ night-watch init
 # 3. Check provider detection
 night-watch run --dry-run
 
-# 4. Add a well-scoped PRD
-echo "# My First PRD\n\nImplement feature X..." > docs/prds/my-feature.md
+# 4. Add a well-scoped ticket (board mode) or PRD (file mode)
+night-watch board create-prd "Implement feature X" --priority P1
+# OR: echo "# My First PRD\n\nImplement feature X..." > docs/prds/my-feature.md
 
 # 5. Run or install cron
 night-watch run           # Run once
 night-watch install       # Setup automated cron
+```
+
+---
+
+## 5-Minute Walkthrough
+
+New to Night Watch? Follow our [**5-Minute Walkthrough**](docs/walkthrough.md) to go from zero to your first AI-generated PR.
+
+```bash
+# Quick start
+npm install -g @jonit-dev/night-watch-cli
+cd your-project
+night-watch init
+night-watch doctor
+echo "# My First PRD\n\n## Problem\n..." > docs/prds/01-my-feature.md
+night-watch run
 ```
 
 ---
@@ -138,15 +156,48 @@ yarn install && yarn build && npm link
 
 ## Documentation
 
-| Document                                   | Description                                                                 |
-| ------------------------------------------ | --------------------------------------------------------------------------- |
-| [Commands Reference](docs/commands.md)     | All CLI commands and their options                                          |
-| [Configuration](docs/configuration.md)     | Config file, environment variables, CLI flags, `providerEnv`, notifications |
-| [PRD Format](docs/prd-format.md)           | How to write PRDs, dependencies, lifecycle                                  |
-| [Architecture](docs/architecture-overview.md) | System design, execution flows, project structure                        |
-| [Troubleshooting](docs/troubleshooting.md) | Common errors and how to fix them                                           |
-| [Local Testing](docs/local-testing.md)     | Test the CLI locally without publishing                                     |
-| [Contributing](docs/contributing.md)       | Development setup, building, testing, publishing                            |
+### Getting Started
+
+| Document                                    | Description                             |
+| ------------------------------------------- | --------------------------------------- |
+| [5-Minute Walkthrough](docs/walkthrough.md) | From zero to your first AI-generated PR |
+| [Troubleshooting](docs/troubleshooting.md)  | Common errors and how to fix them       |
+| [Commands Reference](docs/commands.md)      | All CLI commands and their options      |
+
+### How-To Guides
+
+| Document                                | Description                                                             |
+| --------------------------------------- | ----------------------------------------------------------------------- |
+| [Ticket/PRD Format](docs/prd-format.md) | Board tickets and PRD files, dependencies, lifecycle                    |
+| [Configuration](docs/configuration.md)  | Config file, env vars, CLI flags, providerEnv, notifications, schedules |
+| [Web UI](docs/WEB-UI.md)                | Dashboard pages and interface reference                                 |
+
+### Architecture & Deep Dives
+
+| Document                                                 | Description                                               |
+| -------------------------------------------------------- | --------------------------------------------------------- |
+| [Architecture Overview](docs/architecture-overview.md)   | System design, execution flows, data persistence          |
+| [CLI Package](docs/cli-package.md)                       | Command structure and integration                         |
+| [Core Package](docs/core-package.md)                     | Domain logic, DI container, repositories, config loader   |
+| [Server & API](docs/server-api.md)                       | REST endpoints, SSE, middleware, multi-project mode       |
+| [Scheduler Architecture](docs/scheduler-architecture.md) | Global job queue, dispatch modes, cross-project balancing |
+| [Persona System](docs/persona-memory-system.md)          | AI personas, soul compiler, avatar generation             |
+| [Build Pipeline](docs/build-pipeline.md)                 | TypeScript → esbuild bundling, CI/CD, publishing          |
+| [Bash Scripts](docs/bash-scripts.md)                     | Cron execution scripts and worktree management            |
+
+### Developer Guides
+
+| Document                                 | Description                                   |
+| ---------------------------------------- | --------------------------------------------- |
+| [Dev Onboarding](docs/DEV-ONBOARDING.md) | Getting started as a contributor              |
+| [Local Testing](docs/local-testing.md)   | Test CLI locally without publishing           |
+| [Contributing](docs/contributing.md)     | Development workflow, conventions, PR process |
+
+### Analysis
+
+| Document                                                 | Description                                      |
+| -------------------------------------------------------- | ------------------------------------------------ |
+| [AI-Driven Org Analysis](docs/AI-DRIVEN-ORG-ANALYSIS.md) | How Night Watch maps to AI-driven org principles |
 
 ---
 

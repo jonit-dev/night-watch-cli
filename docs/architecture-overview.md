@@ -397,3 +397,250 @@ rg -n "SELECT|INSERT|UPDATE|DELETE|better-sqlite3" packages/core/src --glob '!pa
 ```
 
 This should return zero results.
+
+---
+
+## Complete System Workflow
+
+```mermaid
+flowchart TB
+    subgraph Input["Work Input"]
+        PRDs["PRD Files<br/>(docs/prds/*.md)"]
+        Board["GitHub Projects<br/>(Board Mode)"]
+    end
+
+    subgraph Scheduler["Scheduling Layer"]
+        Cron["Cron Daemon"]
+        Queue["Global Queue<br/>(SQLite)"]
+    end
+
+    subgraph Executor["Execution Layer"]
+        Run["night-watch run"]
+        Review["night-watch review"]
+        QA["night-watch qa"]
+        Audit["night-watch audit"]
+    end
+
+    subgraph Scripts["Bash Scripts"]
+        CronScript["night-watch-cron.sh"]
+        ReviewScript["night-watch-pr-reviewer-cron.sh"]
+        QAScript["night-watch-qa-cron.sh"]
+        AuditScript["night-watch-audit-cron.sh"]
+    end
+
+    subgraph AI["AI Providers"]
+        Claude["claude CLI"]
+        Codex["codex CLI"]
+    end
+
+    subgraph Output["Output"]
+        PR["Pull Requests"]
+        Logs["Log Files"]
+        Notify["Webhook Notifications"]
+    end
+
+    PRDs --> Run
+    Board --> Run
+    Cron --> Run
+    Cron --> Review
+    Cron --> QA
+    Cron --> Audit
+
+    Run --> Queue
+    Review --> Queue
+    QA --> Queue
+    Audit --> Queue
+
+    Queue --> CronScript
+    Queue --> ReviewScript
+    Queue --> QAScript
+    Queue --> AuditScript
+
+    CronScript --> Claude
+    CronScript --> Codex
+    ReviewScript --> Claude
+    QAScript --> Claude
+    AuditScript --> Claude
+
+    Claude --> PR
+    Codex --> PR
+    Claude --> Logs
+    Claude --> Notify
+```
+
+---
+
+## Board Mode Architecture
+
+```mermaid
+flowchart LR
+    subgraph GitHub["GitHub Projects V2"]
+        Project["Project Board"]
+        Issues["Issues"]
+    end
+
+    subgraph CLI["night-watch board"]
+        Setup["board setup"]
+        Create["board create-prd"]
+        Status["board status"]
+        Move["board move-issue"]
+        Close["board close-issue"]
+    end
+
+    subgraph Core["Core Logic"]
+        Provider["Board Provider<br/>(GitHub/Local)"]
+        Discovery["Issue Discovery"]
+        Transitions["Column Transitions"]
+    end
+
+    subgraph Executor["Execution"]
+        Run["night-watch run<br/>(board mode)"]
+        CronScript["night-watch-cron.sh"]
+    end
+
+    Project --> Provider
+    Issues --> Provider
+
+    Setup --> Provider
+    Create --> Provider
+    Status --> Provider
+    Move --> Provider
+    Close --> Provider
+
+    Provider --> Discovery
+    Provider --> Transitions
+
+    Discovery --> Run
+    Run --> CronScript
+    CronScript --> Transitions
+```
+
+### Board Mode Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Board as GitHub Projects
+    participant CLI as night-watch CLI
+    participant Executor as Executor Script
+    participant AI as AI Provider
+    participant PR as Pull Request
+
+    User->>Board: Create issue in "Ready" column
+    User->>CLI: night-watch run
+
+    CLI->>Board: Fetch Ready issues (sorted by priority)
+    Board-->>CLI: Issue #123 (top priority)
+
+    CLI->>Board: Move #123 to "In Progress"
+
+    CLI->>Executor: Spawn with issue body as prompt
+    Executor->>AI: Implement issue #123
+    AI->>PR: Create pull request
+
+    alt Success
+        Executor->>Board: Comment "PR opened: url"
+        Executor->>Board: Close issue, move to "Done"
+    else Failure
+        Executor->>Board: Comment with error
+        Executor->>Board: Move back to "Ready"
+    end
+```
+
+---
+
+## Global Queue System
+
+```mermaid
+flowchart TB
+    subgraph Projects["Multiple Projects"]
+        P1["Project A"]
+        P2["Project B"]
+        P3["Project C"]
+    end
+
+    subgraph Queue["Global Queue"]
+        Gate["flock Gate<br/>(queue.lock)"]
+        DB[(SQLite Queue)]
+        Dispatcher["Queue Dispatcher"]
+    end
+
+    subgraph Workers["Execution"]
+        W1["Worker 1"]
+        W2["Worker 2"]
+    end
+
+    P1 -->|try acquire| Gate
+    P2 -->|try acquire| Gate
+    P3 -->|try acquire| Gate
+
+    Gate -->|acquired| W1
+    Gate -->|busy| DB
+
+    DB --> Dispatcher
+    Dispatcher --> W2
+
+    W1 -->|complete| Gate
+    W2 -->|complete| Dispatcher
+```
+
+### Queue States
+
+| State        | Meaning                     |
+| ------------ | --------------------------- |
+| `pending`    | Waiting in queue            |
+| `dispatched` | Spawned but not yet running |
+| `running`    | Currently executing         |
+| `completed`  | Finished successfully       |
+| `failed`     | Execution failed            |
+| `expired`    | Wait time exceeded max      |
+
+---
+
+## Notification Flow
+
+```mermaid
+flowchart LR
+    subgraph Events["Notification Events"]
+        E1["run_started"]
+        E2["run_completed"]
+        E3["run_failed"]
+        E4["rate_limit_fallback"]
+        E5["pr_opened"]
+        E6["pr_merged"]
+    end
+
+    subgraph CLI["night-watch notify"]
+        Notify["notify command"]
+    end
+
+    subgraph Destinations["Webhook Destinations"]
+        Slack["Slack<br/>(incoming webhook)"]
+        Telegram["Telegram<br/>(bot API)"]
+        Discord["Discord<br/>(webhook)"]
+    end
+
+    E1 --> Notify
+    E2 --> Notify
+    E3 --> Notify
+    E4 --> Notify
+    E5 --> Notify
+    E6 --> Notify
+
+    Notify --> Slack
+    Notify --> Telegram
+    Notify --> Discord
+```
+
+---
+
+## Key Design Decisions
+
+| Decision                    | Rationale                                |
+| --------------------------- | ---------------------------------------- |
+| Bash scripts for execution  | Battle-tested, easy to debug, portable   |
+| SQLite for state            | Zero-config, single-file, fast           |
+| Git worktrees for isolation | Parallel execution without conflicts     |
+| flock for global queue      | Kernel-level locking, no race conditions |
+| Provider presets in config  | Extensible without code changes          |
+| Webhook-only notifications  | No bot infrastructure required           |
