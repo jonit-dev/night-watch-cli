@@ -150,7 +150,8 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
   },
 ];
 
-export function normalizeCronExpression(expr: string): string {
+export function normalizeCronExpression(expr: string | undefined): string {
+  if (!expr) return '';
   return expr.trim().replace(/\s+/g, ' ');
 }
 

@@ -31,7 +31,7 @@ const Sidebar: React.FC = () => {
     { icon: Kanban, label: 'Board', path: '/board', section: 'Work' },
     { icon: GitPullRequest, label: 'Pull Requests', path: '/prs', badge: openPrCount },
     { icon: Map, label: 'Roadmap', path: '/roadmap' },
-    { icon: Calendar, label: 'Automation', path: '/scheduling', section: 'Automation' },
+    { icon: Calendar, label: 'Schedules', path: '/scheduling', section: 'Automation' },
     { icon: Settings, label: 'Settings', path: '/settings', section: 'Config' },
   ], [openPrCount]);
 
