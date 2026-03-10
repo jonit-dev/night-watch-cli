@@ -6,12 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import {
-  INightWatchConfig,
-  IProviderPreset,
-  IQueueConfig,
-  JobType,
-} from './types.js';
+import { INightWatchConfig, IProviderPreset, IQueueConfig, JobType } from './types.js';
 import {
   BUILT_IN_PRESETS,
   CONFIG_FILE_NAME,
@@ -198,7 +193,9 @@ function mergeConfigs(
   merged.primaryFallbackModel =
     merged.primaryFallbackModel ?? merged.claudeModel ?? DEFAULT_PRIMARY_FALLBACK_MODEL;
   merged.secondaryFallbackModel =
-    merged.secondaryFallbackModel ?? merged.primaryFallbackModel ?? DEFAULT_SECONDARY_FALLBACK_MODEL;
+    merged.secondaryFallbackModel ??
+    merged.primaryFallbackModel ??
+    DEFAULT_SECONDARY_FALLBACK_MODEL;
   merged.claudeModel = merged.primaryFallbackModel;
 
   return merged;
