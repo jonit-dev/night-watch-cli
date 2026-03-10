@@ -11,9 +11,9 @@ import {
   CONFIG_FILE_NAME,
   DEFAULT_PRD_DIR,
   INightWatchConfig,
+  BUILT_IN_PRESET_IDS,
   LOG_DIR,
   Provider,
-  VALID_PROVIDERS,
   checkGhCli,
   checkGitRepo,
   createBoardProvider,
@@ -471,9 +471,9 @@ export function initCommand(program: Command): void {
 
       if (options.provider) {
         // Validate provider flag
-        if (!VALID_PROVIDERS.includes(options.provider as Provider)) {
+        if (!BUILT_IN_PRESET_IDS.includes(options.provider as Provider)) {
           uiError(`Invalid provider "${options.provider}".`);
-          console.log(`Valid providers: ${VALID_PROVIDERS.join(', ')}`);
+          console.log(`Valid providers: ${BUILT_IN_PRESET_IDS.join(', ')}`);
           process.exit(1);
         }
         selectedProvider = options.provider as Provider;

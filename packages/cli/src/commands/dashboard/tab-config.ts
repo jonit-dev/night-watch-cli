@@ -5,10 +5,11 @@
 
 import blessed from 'blessed';
 import {
+  BUILT_IN_PRESET_IDS,
+  BUILT_IN_PRESETS,
   INightWatchConfig,
   IWebhookConfig,
   NotificationEvent,
-  VALID_PROVIDERS,
   WebhookType,
   saveConfig,
 } from '@night-watch/core';
@@ -73,18 +74,8 @@ const NOTIFICATION_EVENTS: NotificationEvent[] = [
   'qa_completed',
 ];
 
-/**
- * GLM-5 default provider environment configuration
- */
-const GLM5_DEFAULTS: Record<string, string> = {
-  ANTHROPIC_BASE_URL: 'https://api.z.ai/api/anthropic',
-  API_TIMEOUT_MS: '3000000',
-  ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-5',
-  ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-5',
-};
-
 export const CONFIG_FIELDS: IConfigField[] = [
-  { key: 'provider', label: 'Provider', type: 'enum', options: [...VALID_PROVIDERS] },
+  { key: 'provider', label: 'Provider', type: 'enum', options: [...BUILT_IN_PRESET_IDS] },
   { key: 'reviewerEnabled', label: 'Reviewer Enabled', type: 'boolean' },
   { key: 'defaultBranch', label: 'Default Branch', type: 'string' },
   { key: 'prdDir', label: 'PRD Directory', type: 'string' },
@@ -694,10 +685,16 @@ export function createConfigTab(): ITab {
         return;
       }
 
-      pendingChanges.providerEnv = {
-        ANTHROPIC_API_KEY: apiKey,
-        ANTHROPIC_AUTH_TOKEN: apiKey,
-        ...GLM5_DEFAULTS,
+      pendingChanges.provider = 'glm-5';
+      pendingChanges.providerPresets = {
+        'glm-5': {
+          ...BUILT_IN_PRESETS['glm-5']!,
+          envVars: {
+            ...BUILT_IN_PRESETS['glm-5']!.envVars,
+            ANTHROPIC_API_KEY: apiKey,
+            ANTHROPIC_AUTH_TOKEN: apiKey,
+          },
+        },
       };
 
       ctx.showMessage('GLM-5 configured. Press s to save.', 'success');

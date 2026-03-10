@@ -183,6 +183,18 @@ export interface INightWatchConfig {
   secondaryFallbackModel?: ClaudeModel;
 
   /**
+   * Preset ID to use as the primary fallback when rate-limited.
+   * Takes precedence over primaryFallbackModel when set.
+   * Example: 'glm-47' to fall back from glm-5 to glm-47 on rate limit.
+   */
+  primaryFallbackPreset?: string;
+
+  /**
+   * Preset ID to use as the secondary fallback if the primary fallback preset is also rate-limited.
+   */
+  secondaryFallbackPreset?: string;
+
+  /**
    * Legacy alias for primaryFallbackModel kept for backward compatibility with
    * older config files and tests.
    * @deprecated Use primaryFallbackModel instead.

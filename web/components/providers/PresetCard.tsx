@@ -1,4 +1,4 @@
-import { Edit2, RotateCcw, Trash2 } from 'lucide-react';
+import { AlertTriangle, Edit2, RotateCcw, Trash2 } from 'lucide-react';
 import React from 'react';
 
 import type { IProviderPreset } from '../../api.js';
@@ -28,6 +28,8 @@ const PresetCard: React.FC<IPresetCardProps> = ({
   onReset,
 }) => {
   const envVarCount = preset.envVars ? Object.keys(preset.envVars).length : 0;
+  const isGlmPreset = presetId.startsWith('glm-') || preset.model?.startsWith('glm-');
+  const missingRequiredApiKey = isGlmPreset && !preset.envVars?.ANTHROPIC_API_KEY?.trim();
 
   return (
     <div className="flex flex-col p-4 rounded-lg border border-slate-800 bg-slate-950/40 hover:border-slate-700 transition-colors">
@@ -39,6 +41,15 @@ const PresetCard: React.FC<IPresetCardProps> = ({
             <Badge variant="info" className="text-[10px]">
               Built-in
             </Badge>
+          )}
+          {missingRequiredApiKey && (
+            <span
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-amber-900/40 text-amber-400 border border-amber-800/50"
+              title="GLM presets require ANTHROPIC_API_KEY in env vars"
+            >
+              <AlertTriangle className="h-3 w-3" />
+              Missing ANTHROPIC_API_KEY
+            </span>
           )}
         </div>
         <div className="flex items-center gap-1">
