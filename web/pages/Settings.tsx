@@ -488,7 +488,6 @@ const Settings: React.FC = () => {
   const [editingPresetId, setEditingPresetId] = React.useState<string | null>(null);
   const [editingPreset, setEditingPreset] = React.useState<IProviderPreset | null>(null);
   const [deleteWarning, setDeleteWarning] = React.useState<{ presetId: string; presetName: string; references: string[] } | null>(null);
-  const [fallbackType, setFallbackType] = React.useState<'preset' | 'native'>('native');
 
   const {
     data: config,
@@ -513,7 +512,6 @@ const Settings: React.FC = () => {
         const newForm = toFormState(config);
         setForm(newForm);
         applyScheduleUiState(newForm);
-        setFallbackType(config.primaryFallbackPreset ? 'preset' : 'native');
       }
     }
   }, [config, applyScheduleUiState]);
@@ -1135,117 +1133,37 @@ const Settings: React.FC = () => {
             <div>
               <h3 className="text-lg font-medium text-slate-200">Rate Limit Fallback</h3>
               <p className="text-sm text-slate-400 mt-1">
-                Fallback settings for when a provider is rate-limited
+                Preset to use when the active provider is rate-limited
               </p>
             </div>
-            <div className="rounded-xl border border-slate-800 bg-slate-950/70 p-4">
-              <p className="text-sm text-slate-300">
-                These settings control retry behavior after a provider rate limit.
-                They apply globally regardless of which preset is assigned.
-              </p>
-            </div>
-            <div className="md:col-span-2">
-              <Switch
-                label="Fallback on Rate Limit"
-                checked={form.fallbackOnRateLimit}
-                onChange={(checked) => updateField('fallbackOnRateLimit', checked)}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Select
+                label="Primary Fallback Preset"
+                value={form.primaryFallbackPreset}
+                onChange={(val) => updateField('primaryFallbackPreset', val)}
+                options={[
+                  { label: '— None —', value: '' },
+                  ...Object.entries(getAllPresets()).map(([id, preset]) => ({
+                    label: preset.name,
+                    value: id,
+                  })),
+                ]}
+                helperText="Preset to use as the primary rate-limit fallback"
               />
-              <p className="text-xs text-slate-500 mt-2">
-                When enabled, Night Watch retries with the configured fallback after a rate limit
-              </p>
+              <Select
+                label="Secondary Fallback Preset"
+                value={form.secondaryFallbackPreset}
+                onChange={(val) => updateField('secondaryFallbackPreset', val)}
+                options={[
+                  { label: '— None —', value: '' },
+                  ...Object.entries(getAllPresets()).map(([id, preset]) => ({
+                    label: preset.name,
+                    value: id,
+                  })),
+                ]}
+                helperText="Used only if the primary fallback preset is also rate-limited"
+              />
             </div>
-            {form.fallbackOnRateLimit && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-2">Fallback Type</label>
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFallbackType('preset');
-                      }}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        fallbackType === 'preset'
-                          ? 'bg-violet-600 text-white'
-                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                      }`}
-                    >
-                      Preset Fallback
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFallbackType('native');
-                      }}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        fallbackType === 'native'
-                          ? 'bg-violet-600 text-white'
-                          : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                      }`}
-                    >
-                      Native Claude Fallback
-                    </button>
-                  </div>
-                </div>
-                {fallbackType === 'preset' ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Select
-                      label="Primary Fallback Preset"
-                      value={form.primaryFallbackPreset}
-                      onChange={(val) => updateField('primaryFallbackPreset', val)}
-                      options={[
-                        { label: '— None —', value: '' },
-                        ...Object.entries(getAllPresets()).map(([id, preset]) => ({
-                          label: preset.name,
-                          value: id,
-                        })),
-                      ]}
-                      helperText="Preset to use as the primary rate-limit fallback"
-                    />
-                    <Select
-                      label="Secondary Fallback Preset"
-                      value={form.secondaryFallbackPreset}
-                      onChange={(val) => updateField('secondaryFallbackPreset', val)}
-                      options={[
-                        { label: '— None —', value: '' },
-                        ...Object.entries(getAllPresets()).map(([id, preset]) => ({
-                          label: preset.name,
-                          value: id,
-                        })),
-                      ]}
-                      helperText="Used only if the primary fallback preset is also rate-limited"
-                    />
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <Select
-                      label="Primary Native Claude Fallback"
-                      value={form.primaryFallbackModel}
-                      onChange={(val) => {
-                        const next = val as ClaudeModel;
-                        updateField('primaryFallbackModel', next);
-                        updateField('claudeModel', next);
-                      }}
-                      options={[
-                        { label: 'Sonnet (claude-sonnet-4-6)', value: 'sonnet' },
-                        { label: 'Opus (claude-opus-4-6)', value: 'opus' },
-                      ]}
-                      helperText="First native Claude model used for the rate-limit fallback attempt"
-                    />
-                    <Select
-                      label="Secondary Native Claude Fallback"
-                      value={form.secondaryFallbackModel}
-                      onChange={(val) => updateField('secondaryFallbackModel', val as ClaudeModel)}
-                      options={[
-                        { label: 'Sonnet (claude-sonnet-4-6)', value: 'sonnet' },
-                        { label: 'Opus (claude-opus-4-6)', value: 'opus' },
-                      ]}
-                      helperText="Used only if the primary native Claude fallback is also rate-limited"
-                    />
-                  </div>
-                )}
-              </>
-            )}
           </Card>
 
           {/* Provider Environment Variables Card */}
