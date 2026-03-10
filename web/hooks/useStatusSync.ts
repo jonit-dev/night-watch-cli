@@ -13,7 +13,7 @@ import type { IStatusSnapshot } from '@shared/types';
  * projectName updates when status changes.
  */
 export function useStatusSync(): void {
-  const { setStatus, setProjectName, selectedProjectId, globalModeLoading } = useStore();
+  const { setStatus, setProjectName, selectedProjectId, globalModeLoading, status } = useStore();
   const statusRef = useRef<IStatusSnapshot | null>(null);
 
   // Keep ref in sync for SSE callback
@@ -86,11 +86,10 @@ export function useStatusSync(): void {
     return () => window.removeEventListener('focus', onFocus);
   }, [selectedProjectId, setStatus]);
 
-  // Update projectName when status.projectName changes (from PR #71)
+  // Update projectName when status.projectName changes
   useEffect(() => {
-    const currentStatus = useStore.getState().status;
-    if (currentStatus?.projectName) {
-      setProjectName(currentStatus.projectName);
+    if (status?.projectName) {
+      setProjectName(status.projectName);
     }
-  }, [statusRef.current?.projectName, setProjectName]);
+  }, [status?.projectName, setProjectName]);
 }

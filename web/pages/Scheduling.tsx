@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Pause,
   Play,
@@ -13,6 +13,7 @@ import {
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Switch from '../components/ui/Switch';
+import Tabs from '../components/ui/Tabs';
 import ScheduleConfig from '../components/scheduling/ScheduleConfig.js';
 import type { IScheduleConfigForm } from '../components/scheduling/ScheduleConfig.js';
 import { useStore } from '../store/useStore';
@@ -43,6 +44,7 @@ interface IScheduleEditState {
 
 const Scheduling: React.FC = () => {
   const { addToast, selectedProjectId, globalModeLoading } = useStore();
+  const [activeTab, setActiveTab] = useState('overview');
   const [toggling, setToggling] = useState(false);
   const [saving, setSaving] = useState(false);
   const [updatingJob, setUpdatingJob] = useState<string | null>(null);
@@ -437,7 +439,7 @@ const Scheduling: React.FC = () => {
       balancedDelayMinutes: number;
     };
   }
-  const agents: IAgentInfo[] = [
+  const agents: IAgentInfo[] = useMemo(() => [
     {
       id: 'executor',
       name: 'Executor',
@@ -488,10 +490,198 @@ const Scheduling: React.FC = () => {
       nextRun: scheduleInfo.planner?.nextRun,
       delayInfo: scheduleInfo.planner,
     },
+  ], [config, scheduleInfo]);
+  const tabs = [
+    {
+      id: 'overview',
+      label: 'Overview',
+      content: (
+        <div className="space-y-6">
+          <Card className={`p-6 border-2 ${statusColor}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <Clock className="h-8 w-8" />
+                <div>
+                  <div className="text-sm text-slate-400">Automation Status</div>
+                  <div className="text-2xl font-bold">{statusText}</div>
+                  <div className="text-sm text-slate-500 mt-1">
+                    Automatic balancing spreads registered projects before queueing overlaps.
+                  </div>
+                </div>
+              </div>
+              <Button
+                variant={isPaused ? 'primary' : 'outline'}
+                size="lg"
+                onClick={handlePauseResume}
+                loading={toggling}
+              >
+                {isPaused ? (
+                  <>
+                    <Play className="h-5 w-5 mr-2" />
+                    Resume
+                  </>
+                ) : (
+                  <>
+                    <Pause className="h-5 w-5 mr-2" />
+                    Pause
+                  </>
+                )}
+              </Button>
+            </div>
+          </Card>
+
+          <Card className="p-6">
+            <h3 className="text-lg font-semibold text-slate-200 mb-4">Agents</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {agents.map((agent) => (
+                <div
+                  key={agent.id}
+                  className={`p-4 rounded-lg border ${agent.enabled ? 'border-slate-800' : 'border-slate-800 opacity-50'}`}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      {agent.icon}
+                      <h4 className="text-base font-semibold text-slate-200">{agent.name}</h4>
+                    </div>
+                    <Switch
+                      checked={agent.enabled}
+                      disabled={updatingJob !== null}
+                      aria-label={`Toggle ${agent.name.toLowerCase()} automation`}
+                      onChange={(checked) => handleJobToggle(agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner', checked)}
+                    />
+                  </div>
+
+                  {agent.enabled ? (
+                    <div className="space-y-3 mt-3">
+                      <div>
+                        <div className="text-sm text-slate-400">Schedule</div>
+                        <div className="text-sm text-slate-200 font-medium">
+                          {formatScheduleLabel(
+                            (agent.id === 'planner' ? 'slicer' : agent.id) as 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer',
+                            agent.id === 'qa'
+                              ? config?.qa?.schedule || ''
+                              : agent.id === 'audit'
+                              ? config?.audit?.schedule || ''
+                              : agent.id === 'planner'
+                              ? config?.roadmapScanner?.slicerSchedule || '35 */12 * * *'
+                              : agent.schedule,
+                            agent.id === 'qa'
+                              ? config?.qa?.schedule || ''
+                              : agent.id === 'audit'
+                              ? config?.audit?.schedule || ''
+                              : agent.id === 'planner'
+                              ? config?.roadmapScanner?.slicerSchedule || '35 */12 * * *'
+                              : agent.schedule,
+                          )}
+                        </div>
+                      </div>
+                      {renderDelayNote(agent.delayInfo)}
+                      <div>
+                        <div className="text-sm text-slate-400">Next Run</div>
+                        {renderNextRun(agent.nextRun)}
+                      </div>
+                      <div className={`flex items-center space-x-2 text-sm ${agent.enabled ? 'text-green-400' : 'text-amber-400'}`}>
+                        <Check className="h-4 w-4" />
+                        <span>{agent.enabled ? 'Active' : 'Disabled'}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-slate-500 text-sm">{agent.name} is disabled.</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      ),
+    },
+    {
+      id: 'schedules',
+      label: 'Schedules',
+      content: (
+        <div className="space-y-6">
+          <ScheduleConfig
+            form={editState.form}
+            scheduleMode={editState.scheduleMode}
+            selectedTemplateId={editState.selectedTemplateId}
+            onFieldChange={handleFieldChange}
+            onSwitchToTemplate={switchToTemplateMode}
+            onSwitchToCustom={switchToCustomMode}
+            onApplyTemplate={applyTemplate}
+          />
+          <div className="flex justify-end pt-4">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                if (config) {
+                  const resetTemplate = resolveActiveTemplate(
+                    config.scheduleBundleId,
+                    config.cronSchedule,
+                    config.reviewerSchedule,
+                    config.qa?.schedule || '45 2,14 * * *',
+                    config.audit?.schedule || '50 3 * * 1',
+                    config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+                  );
+                  setEditState({
+                    form: {
+                      cronSchedule: config.cronSchedule || '5 */3 * * *',
+                      reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
+                      qa: config.qa || { schedule: '45 2,14 * * *', enabled: true },
+                      audit: config.audit || { schedule: '50 3 * * 1', enabled: true },
+                      roadmapScanner: {
+                        enabled: config.roadmapScanner?.enabled ?? true,
+                        slicerSchedule: config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+                      },
+                      scheduleBundleId: config.scheduleBundleId ?? null,
+                      schedulingPriority: config.schedulingPriority ?? 3,
+                      cronScheduleOffset: config.cronScheduleOffset ?? 0,
+                      globalQueueEnabled: config.queue?.enabled ?? true,
+                    },
+                    scheduleMode: resetTemplate ? 'template' : 'custom',
+                    selectedTemplateId: resetTemplate?.id ?? '',
+                    isDirty: false,
+                  });
+                }
+              }}
+              disabled={!editState.isDirty}
+            >
+              Reset
+            </Button>
+            <Button onClick={handleSaveAndInstall} loading={saving} disabled={!editState.isDirty}>
+              <Check className="h-4 w-4 mr-2" />
+              Save & Install
+            </Button>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: 'crontab',
+      label: 'Crontab',
+      content: (
+        <Card className="p-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <Calendar className="h-5 w-5 text-slate-400" />
+            <h3 className="text-lg font-semibold text-slate-200">Active Crontab Entries</h3>
+          </div>
+          {scheduleInfo.entries.length === 0 ? (
+            <div className="text-slate-500 text-sm">No crontab entries found.</div>
+          ) : (
+            <div className="space-y-2">
+              {scheduleInfo.entries.map((entry, idx) => (
+                <div key={idx} className="bg-slate-950/50 rounded-lg p-3 font-mono text-sm text-slate-300 border border-slate-800">
+                  {entry}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      ),
+    },
   ];
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
-      {/* Section A: Global Controls */}
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-slate-100">Scheduling</h1>
         {activeTemplate && (
@@ -505,189 +695,7 @@ const Scheduling: React.FC = () => {
         )}
       </div>
 
-      <Card className={`p-6 border-2 ${statusColor}`}>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Clock className="h-8 w-8" />
-            <div>
-              <div className="text-sm text-slate-400">Automation Status</div>
-              <div className="text-2xl font-bold">{statusText}</div>
-              <div className="text-sm text-slate-500 mt-1">
-                Automatic balancing spreads registered projects before queueing overlaps.
-              </div>
-            </div>
-          </div>
-          <Button
-            variant={isPaused ? 'primary' : 'outline'}
-            size="lg"
-            onClick={handlePauseResume}
-            loading={toggling}
-          >
-            {isPaused ? (
-              <>
-                <Play className="h-5 w-5 mr-2" />
-                Resume
-              </>
-            ) : (
-              <>
-                <Pause className="h-5 w-5 mr-2" />
-                Pause
-              </>
-            )}
-          </Button>
-        </div>
-      </Card>
-
-      {/* Section B: Agents */}
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold text-slate-200 mb-4">Agents</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {agents.map((agent) => (
-            <div
-              key={agent.id}
-              className={`p-4 rounded-lg border ${agent.enabled ? 'border-slate-800' : 'border-slate-800 opacity-50'}`}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  {agent.icon}
-                  <h4 className="text-base font-semibold text-slate-200">{agent.name}</h4>
-                </div>
-                <Switch
-                  checked={agent.enabled}
-                  disabled={updatingJob !== null}
-                  aria-label={`Toggle ${agent.name.toLowerCase()} automation`}
-                  onChange={(checked) => handleJobToggle(agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner', checked)}
-                />
-              </div>
-
-              {agent.enabled ? (
-                <div className="space-y-3 mt-3">
-                  <div>
-                    <div className="text-sm text-slate-400">Schedule</div>
-                    <div className="text-sm text-slate-200 font-medium">
-                      {formatScheduleLabel(
-                        agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer',
-                        agent.id === 'qa'
-                          ? config?.qa?.schedule || ''
-                          : agent.id === 'audit'
-                          ? config?.audit?.schedule || ''
-                          : agent.id === 'planner'
-                          ? config?.roadmapScanner?.slicerSchedule || '35 */12 * * *'
-                          : agent.schedule,
-                        agent.id === 'qa'
-                          ? config?.qa?.schedule || ''
-                          : agent.id === 'audit'
-                          ? config?.audit?.schedule || ''
-                          : agent.id === 'planner'
-                          ? config?.roadmapScanner?.slicerSchedule || '35 */12 * * *'
-                          : agent.schedule,
-                      )}
-                    </div>
-                  </div>
-                  {renderDelayNote(agent.delayInfo)}
-                  <div>
-                    <div className="text-sm text-slate-400">Next Run</div>
-                    {renderNextRun(agent.nextRun)}
-                  </div>
-                  <div className={`flex items-center space-x-2 text-sm ${agent.enabled ? 'text-green-400' : 'text-amber-400'}`}>
-                    <Check className="h-4 w-4" />
-                    <span>{agent.enabled ? 'Active' : 'Disabled'}</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="text-slate-500 text-sm">{agent.name} is disabled.</div>
-              )}
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      {/* Section C: Configure Schedules */}
-      <div>
-        <h3 className="text-lg font-semibold text-slate-200 mb-4">Configure Schedules</h3>
-        <p className="text-sm text-slate-400 mb-4">
-          Adjust schedule templates or individual cron expressions for each job type.
-        </p>
-      </div>
-
-      <ScheduleConfig
-        form={editState.form}
-        scheduleMode={editState.scheduleMode}
-        selectedTemplateId={editState.selectedTemplateId}
-        onFieldChange={handleFieldChange}
-        onSwitchToTemplate={switchToTemplateMode}
-        onSwitchToCustom={switchToCustomMode}
-        onApplyTemplate={applyTemplate}
-      />
-
-      <div className="flex justify-end pt-4">
-        <Button
-          variant="ghost"
-          onClick={() => {
-            if (config) {
-              setEditState({
-                form: {
-                  cronSchedule: config.cronSchedule || '5 */3 * * *',
-                  reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
-                  qa: config.qa || { schedule: '45 2,14 * * *', enabled: true },
-                  audit: config.audit || { schedule: '50 3 * * 1', enabled: true },
-                  roadmapScanner: {
-                    enabled: config.roadmapScanner?.enabled ?? true,
-                    slicerSchedule: config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
-                  },
-                  scheduleBundleId: config.scheduleBundleId ?? null,
-                  schedulingPriority: config.schedulingPriority ?? 3,
-                  cronScheduleOffset: config.cronScheduleOffset ?? 0,
-                  globalQueueEnabled: config.queue?.enabled ?? true,
-                },
-                scheduleMode: resolveActiveTemplate(
-                  config.scheduleBundleId,
-                  config.cronSchedule,
-                  config.reviewerSchedule,
-                  config.qa?.schedule || '45 2,14 * * *',
-                  config.audit?.schedule || '50 3 * * 1',
-                  config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
-                ) ? 'template' : 'custom',
-                selectedTemplateId: resolveActiveTemplate(
-                  config.scheduleBundleId,
-                  config.cronSchedule,
-                  config.reviewerSchedule,
-                  config.qa?.schedule || '45 2,14 * * *',
-                  config.audit?.schedule || '50 3 * * 1',
-                  config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
-                )?.id ?? '',
-                isDirty: false,
-              });
-            }
-          }}
-          disabled={!editState.isDirty}
-        >
-          Reset
-        </Button>
-        <Button onClick={handleSaveAndInstall} loading={saving} disabled={!editState.isDirty}>
-          <Check className="h-4 w-4 mr-2" />
-          Save & Install
-        </Button>
-      </div>
-
-      {/* Section D: Active Crontab Entries */}
-      <Card className="p-6">
-        <div className="flex items-center space-x-2 mb-4">
-          <Calendar className="h-5 w-5 text-slate-400" />
-          <h3 className="text-lg font-semibold text-slate-200">Active Crontab Entries</h3>
-        </div>
-        {scheduleInfo.entries.length === 0 ? (
-          <div className="text-slate-500 text-sm">No crontab entries found.</div>
-        ) : (
-          <div className="space-y-2">
-            {scheduleInfo.entries.map((entry, idx) => (
-              <div key={idx} className="bg-slate-950/50 rounded-lg p-3 font-mono text-sm text-slate-300 border border-slate-800">
-                {entry}
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
+      <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
     </div>
   );
 };
