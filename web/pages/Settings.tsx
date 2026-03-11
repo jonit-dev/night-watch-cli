@@ -480,6 +480,8 @@ const Settings: React.FC = () => {
   const [form, setForm] = React.useState<ConfigForm | null>(null);
   // Prevents refetchConfig from overwriting the form after a save (form was already set from PUT response)
   const skipNextFormResetRef = React.useRef(false);
+  // Tracks when jobProviders was changed by user (to trigger auto-save)
+  const jobProvidersChangedRef = React.useRef(false);
   const [scheduleMode, setScheduleMode] = React.useState<'template' | 'custom'>('template');
   const [selectedTemplateId, setSelectedTemplateId] = React.useState<string>('always-on');
 
@@ -515,6 +517,14 @@ const Settings: React.FC = () => {
       }
     }
   }, [config, applyScheduleUiState]);
+
+  // Auto-save when jobProviders changes from user input
+  React.useEffect(() => {
+    if (form && jobProvidersChangedRef.current) {
+      jobProvidersChangedRef.current = false;
+      handleSave();
+    }
+  }, [form?.jobProviders]);
 
   const updateField = <K extends keyof ConfigForm>(key: K, value: ConfigForm[K]) => {
     setForm((prev) => {
@@ -1115,6 +1125,7 @@ const Settings: React.FC = () => {
                         } else {
                           newJobProviders[key] = val;
                         }
+                        jobProvidersChangedRef.current = true;
                         updateField('jobProviders', newJobProviders);
                       }}
                       options={[
