@@ -399,7 +399,7 @@ get_pr_score() {
       if [ -n "${REPO:-}" ]; then
         gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
       fi
-    } | sort -u
+    } | awk '!seen[$0]++'
   )
   extract_review_score_from_text "${all_comments}"
 }
@@ -648,7 +648,7 @@ while IFS=$'\t' read -r pr_number pr_branch; do
       if [ -n "${REPO}" ]; then
         gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
       fi
-    } | sort -u
+    } | awk '!seen[$0]++'
   )
   LATEST_SCORE=$(extract_review_score_from_text "${ALL_COMMENTS}")
   if [ -n "${LATEST_SCORE}" ] && [ "${LATEST_SCORE}" -lt "${MIN_REVIEW_SCORE}" ]; then
@@ -686,7 +686,7 @@ if [ "${NEEDS_WORK}" -eq 0 ]; then
           if [ -n "${REPO}" ]; then
             gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
           fi
-        } | sort -u
+        } | awk '!seen[$0]++'
       )
       PR_SCORE=$(extract_review_score_from_text "${PR_COMMENTS}")
 
@@ -1204,7 +1204,7 @@ if [ "${AUTO_MERGE}" = "1" ] && [ ${EXIT_CODE} -eq 0 ]; then
         if [ -n "${REPO}" ]; then
           gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
         fi
-      } | sort -u
+      } | awk '!seen[$0]++'
     )
     LATEST_SCORE=$(extract_review_score_from_text "${ALL_COMMENTS}")
 

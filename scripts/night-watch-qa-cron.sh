@@ -446,7 +446,7 @@ while IFS=$'\t' read -r pr_number pr_branch pr_title pr_labels; do
       if [ -n "${REPO}" ]; then
         gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
       fi
-    } | sort -u
+    } | awk '!seen[$0]++'
   )
   if echo "${ALL_COMMENTS}" | grep -q '<!-- night-watch-qa-marker -->'; then
     log "SKIP-QA: PR #${pr_number} (${pr_branch}) already has QA comment"

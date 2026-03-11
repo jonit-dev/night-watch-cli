@@ -153,8 +153,9 @@ Parse the review score from the comment body. Look for patterns like:
    - Re-run local equivalents of the failing jobs before pushing to confirm the CI issues are fixed.
 
    e. **Run verification**: Run the project's test/lint commands (e.g., `npm test`, `npm run lint`, `npm run verify` or equivalent). Fix until it passes.
+   - **Do NOT paste verification command output anywhere** — not in the PR comment, not in the commit message. Only note pass/fail.
 
-   f. **Commit and push** the fixes (only if there are staged changes beyond the rebase):
+   f. **Commit and push** the fixes (required whenever any code changes were made):
 
    ```
    git add <files>
@@ -197,10 +198,12 @@ Parse the review score from the comment body. Look for patterns like:
    <If CI was fixed>### CI Failures Fixed:
    - <job>: <what was wrong and how it was fixed><end>
 
-   \`npm run verify\` passes locally. Ready for re-review.
+   Verification: ✅ passes locally. Ready for re-review.
 
    Night Watch PR Reviewer"
    ```
+
+   **Important**: Do NOT paste any command output (verify, lint, test logs) into the PR comment. Keep comments concise — bullet points only, no terminal output.
 
    h. **Do not manage worktrees directly**:
    - Do **not** run `git worktree add`, `git worktree remove`, or `git worktree prune`.
