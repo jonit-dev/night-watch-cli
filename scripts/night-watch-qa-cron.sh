@@ -379,12 +379,6 @@ cd "${PROJECT_DIR}"
 PROVIDER_MODEL_DISPLAY=$(resolve_provider_model_display "${PROVIDER_CMD}" "${PROVIDER_LABEL}")
 QA_ARTIFACTS_DESC=$(describe_qa_artifacts "${QA_ARTIFACTS}")
 
-send_telegram_status_message "🧪 Night Watch QA: started" "Project: ${PROJECT_NAME}
-Provider (model): ${PROVIDER_MODEL_DISPLAY}
-Artifacts: ${QA_ARTIFACTS_DESC} (mode=${QA_ARTIFACTS})
-Branch patterns: ${BRANCH_PATTERNS_RAW}
-Scanning open PRs for QA candidates."
-
 # Convert comma-separated branch prefixes into a regex that matches branch starts.
 BRANCH_REGEX=""
 IFS=',' read -r -a BRANCH_PATTERNS <<< "${BRANCH_PATTERNS_RAW}"
@@ -413,10 +407,6 @@ OPEN_PRS=$(
 
 if [ "${OPEN_PRS}" -eq 0 ]; then
   log "SKIP: No open PRs matching branch patterns (${BRANCH_PATTERNS_RAW})"
-  send_telegram_status_message "🧪 Night Watch QA: no matching PRs" "Project: ${PROJECT_NAME}
-Provider (model): ${PROVIDER_MODEL_DISPLAY}
-Branch patterns: ${BRANCH_PATTERNS_RAW}
-Result: 0 open PRs matched."
   emit_result "skip_no_open_prs"
   exit 0
 fi
@@ -472,10 +462,6 @@ done < <(
 
 if [ "${QA_NEEDED}" -eq 0 ]; then
   log "SKIP: All ${OPEN_PRS} open PR(s) matching patterns already have QA comments"
-  send_telegram_status_message "🧪 Night Watch QA: nothing to do" "Project: ${PROJECT_NAME}
-Provider (model): ${PROVIDER_MODEL_DISPLAY}
-Artifacts: ${QA_ARTIFACTS_DESC} (mode=${QA_ARTIFACTS})
-Result: All matching PRs already have QA results."
   emit_result "skip_all_qa_done"
   exit 0
 fi
@@ -525,10 +511,7 @@ QA_SCREENSHOT_SUMMARY=""
 for pr_ref in ${PRS_NEEDING_QA}; do
   pr_num="${pr_ref#\#}"
   PROCESSED_PRS_CSV=$(append_csv "${PROCESSED_PRS_CSV}" "#${pr_num}")
-  send_telegram_status_message "🧪 Night Watch QA: processing PR #${pr_num}" "Project: ${PROJECT_NAME}
-Provider (model): ${PROVIDER_MODEL_DISPLAY}
-Artifacts: ${QA_ARTIFACTS_DESC} (mode=${QA_ARTIFACTS})
-Action: generating QA tests and evidence."
+  log "QA: Processing PR #${pr_num}"
 
   cleanup_worktrees "${PROJECT_DIR}"
   if ! prepare_detached_worktree "${PROJECT_DIR}" "${QA_WORKTREE_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
