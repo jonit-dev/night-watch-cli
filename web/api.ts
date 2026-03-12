@@ -312,6 +312,27 @@ export function triggerPlanner(): Promise<ActionResult> {
   });
 }
 
+/**
+ * Generic job trigger using the web job registry.
+ * Prefer this over per-job triggerRun/triggerReview/etc. for new code.
+ */
+export function triggerJob(jobId: string): Promise<ActionResult> {
+  // Map job IDs to their API action endpoints
+  const endpointMap: Record<string, string> = {
+    executor: '/api/actions/run',
+    reviewer: '/api/actions/review',
+    qa: '/api/actions/qa',
+    audit: '/api/actions/audit',
+    slicer: '/api/actions/planner',
+    analytics: '/api/actions/analytics',
+  };
+  const endpoint = endpointMap[jobId];
+  if (!endpoint) {
+    return Promise.reject(new Error(`Unknown job ID: ${jobId}`));
+  }
+  return apiFetch<ActionResult>(apiPath(endpoint), { method: 'POST' });
+}
+
 export function triggerInstallCron(): Promise<ActionResult> {
   return apiFetch<ActionResult>(apiPath('/api/actions/install-cron'), {
     method: 'POST',

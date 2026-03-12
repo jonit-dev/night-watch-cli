@@ -186,6 +186,64 @@ describe('config-normalize', () => {
       // Both should be skipped
       expect(normalized.providerPresets).toBeUndefined();
     });
+  });
+});
 
+describe('normalizeConfig - registry-driven job configs', () => {
+  it('normalizes qa config via registry', () => {
+    const normalized = normalizeConfig({
+      qa: {
+        enabled: false,
+        schedule: '0 12 * * *',
+        maxRuntime: 1800,
+        artifacts: 'screenshot',
+        skipLabel: 'no-qa',
+        autoInstallPlaywright: false,
+        branchPatterns: ['feat/'],
+      },
+    });
+    expect(normalized.qa?.enabled).toBe(false);
+    expect(normalized.qa?.schedule).toBe('0 12 * * *');
+    expect(normalized.qa?.maxRuntime).toBe(1800);
+    expect((normalized.qa as Record<string, unknown>)?.artifacts).toBe('screenshot');
+    expect((normalized.qa as Record<string, unknown>)?.skipLabel).toBe('no-qa');
+    expect((normalized.qa as Record<string, unknown>)?.autoInstallPlaywright).toBe(false);
+    expect((normalized.qa as Record<string, unknown>)?.branchPatterns).toEqual(['feat/']);
+  });
+
+  it('normalizes audit config via registry', () => {
+    const normalized = normalizeConfig({
+      audit: { enabled: false, schedule: '0 4 * * 0', maxRuntime: 900 },
+    });
+    expect(normalized.audit?.enabled).toBe(false);
+    expect(normalized.audit?.schedule).toBe('0 4 * * 0');
+    expect(normalized.audit?.maxRuntime).toBe(900);
+  });
+
+  it('normalizes analytics config via registry', () => {
+    const normalized = normalizeConfig({
+      analytics: {
+        enabled: true,
+        schedule: '0 8 * * 1',
+        maxRuntime: 600,
+        lookbackDays: 14,
+        targetColumn: 'Ready',
+      },
+    });
+    expect(normalized.analytics?.enabled).toBe(true);
+    expect((normalized.analytics as Record<string, unknown>)?.lookbackDays).toBe(14);
+    expect((normalized.analytics as Record<string, unknown>)?.targetColumn).toBe('Ready');
+  });
+
+  it('applies qa defaults for missing fields', () => {
+    const normalized = normalizeConfig({ qa: {} });
+    expect(normalized.qa?.enabled).toBe(true);
+    expect((normalized.qa as Record<string, unknown>)?.artifacts).toBe('both');
+    expect((normalized.qa as Record<string, unknown>)?.autoInstallPlaywright).toBe(true);
+  });
+
+  it('rejects invalid qa artifacts enum value', () => {
+    const normalized = normalizeConfig({ qa: { artifacts: 'invalid' } });
+    expect((normalized.qa as Record<string, unknown>)?.artifacts).toBe('both'); // falls back to default
   });
 });

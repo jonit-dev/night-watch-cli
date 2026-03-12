@@ -11,6 +11,7 @@ import { Request, Response, Router } from 'express';
 import {
   CLAIM_FILE_EXTENSION,
   INightWatchConfig,
+  JOB_REGISTRY,
   checkLockFile,
   executorLockPath,
   fetchStatusSnapshot,
@@ -182,21 +183,15 @@ function createActionRouteHandlers(ctx: IActionRouteContext): Router {
     spawnAction(ctx.getProjectDir(req), ['review'], req, res);
   });
 
-  router.post(`/${p}qa`, (req: Request, res: Response): void => {
-    spawnAction(ctx.getProjectDir(req), ['qa'], req, res);
-  });
-
-  router.post(`/${p}audit`, (req: Request, res: Response): void => {
-    spawnAction(ctx.getProjectDir(req), ['audit'], req, res);
-  });
-
-  router.post(`/${p}analytics`, (req: Request, res: Response): void => {
-    spawnAction(ctx.getProjectDir(req), ['analytics'], req, res);
-  });
-
-  router.post(`/${p}planner`, (req: Request, res: Response): void => {
-    spawnAction(ctx.getProjectDir(req), ['planner'], req, res);
-  });
+  // Registry-driven job routes (all jobs except executor and reviewer which are handled above)
+  for (const jobDef of JOB_REGISTRY) {
+    if (jobDef.id === 'executor') continue; // handled above (has SSE broadcast)
+    if (jobDef.id === 'reviewer') continue; // handled above
+    const cmd = jobDef.cliCommand;
+    router.post(`/${p}${cmd}`, (req: Request, res: Response): void => {
+      spawnAction(ctx.getProjectDir(req), [cmd], req, res);
+    });
+  }
 
   router.post(`/${p}install-cron`, (req: Request, res: Response): void => {
     const projectDir = ctx.getProjectDir(req);

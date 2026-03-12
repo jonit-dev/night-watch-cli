@@ -19,6 +19,7 @@ import {
   QaArtifacts,
   QueueMode,
 } from './types.js';
+import { getDefaultQueuePriority, getLogFileNames, getValidJobTypes } from './jobs/job-registry.js';
 
 // Branch Configuration (default branch)
 export const DEFAULT_DEFAULT_BRANCH = ''; // empty = auto-detect
@@ -170,15 +171,8 @@ export const ANALYTICS_LOG_NAME = 'analytics';
 // Valid providers (backward compat - derived from built-in presets)
 export const VALID_PROVIDERS: Provider[] = ['claude', 'codex'];
 
-// Valid job types for per-job provider configuration
-export const VALID_JOB_TYPES: JobType[] = [
-  'executor',
-  'reviewer',
-  'qa',
-  'audit',
-  'slicer',
-  'analytics',
-];
+// Valid job types for per-job provider configuration (derived from JOB_REGISTRY)
+export const VALID_JOB_TYPES: JobType[] = getValidJobTypes();
 
 // Default per-job provider configuration (empty = use global provider)
 export const DEFAULT_JOB_PROVIDERS: IJobProviders = {};
@@ -270,15 +264,8 @@ export const REVIEWER_LOG_NAME = 'reviewer';
 export const EXECUTOR_LOG_FILE = 'executor.log';
 export const REVIEWER_LOG_FILE = 'reviewer.log';
 
-// Mapping from logical API names to actual file names
-export const LOG_FILE_NAMES: Record<string, string> = {
-  executor: EXECUTOR_LOG_NAME,
-  reviewer: REVIEWER_LOG_NAME,
-  qa: QA_LOG_NAME,
-  audit: AUDIT_LOG_NAME,
-  planner: PLANNER_LOG_NAME,
-  analytics: ANALYTICS_LOG_NAME,
-};
+// Mapping from logical API names to actual file names (derived from JOB_REGISTRY)
+export const LOG_FILE_NAMES: Record<string, string> = getLogFileNames();
 
 // Global Registry
 export const GLOBAL_CONFIG_DIR = '.night-watch';
@@ -295,14 +282,8 @@ export const DEFAULT_QUEUE_ENABLED = true;
 export const DEFAULT_QUEUE_MODE: QueueMode = 'conservative';
 export const DEFAULT_QUEUE_MAX_CONCURRENCY = 1;
 export const DEFAULT_QUEUE_MAX_WAIT_TIME = 7200; // 2 hours in seconds
-export const DEFAULT_QUEUE_PRIORITY: Record<string, number> = {
-  executor: 50,
-  reviewer: 40,
-  slicer: 30,
-  qa: 20,
-  audit: 10,
-  analytics: 10,
-};
+// Default per-job queue priority mapping (derived from JOB_REGISTRY)
+export const DEFAULT_QUEUE_PRIORITY: Record<string, number> = getDefaultQueuePriority();
 
 export const DEFAULT_QUEUE: IQueueConfig = {
   enabled: DEFAULT_QUEUE_ENABLED,

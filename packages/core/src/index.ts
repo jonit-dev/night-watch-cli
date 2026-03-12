@@ -48,3 +48,4 @@ export * from './templates/slicer-prompt.js';
 // Note: shared/types are re-exported selectively through types.ts to avoid duplicates.
 // Import directly from '@night-watch/core/shared/types.js' if you need the full shared API contract.
 export type { IRoadmapContextOptions } from './shared/types.js';
+export * from './jobs/index.js';

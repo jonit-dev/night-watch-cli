@@ -29,12 +29,7 @@ import {
   updateConfig,
   triggerInstallCron,
   triggerUninstallCron,
-  triggerRun,
-  triggerReview,
-  triggerQa,
-  triggerAudit,
-  triggerPlanner,
-  triggerAnalytics,
+  triggerJob,
   useApi,
 } from '../api';
 import {
@@ -46,6 +41,7 @@ import {
   isWithin30Minutes,
 } from '../utils/cron';
 import type { IScheduleTemplate } from '../utils/cron.js';
+import { getWebJobDef } from '../utils/jobs';
 
 interface IScheduleEditState {
   form: IScheduleConfigForm;
@@ -199,27 +195,17 @@ const Scheduling: React.FC = () => {
     }
   };
   const handleJobToggle = async (
-    job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics',
+    jobId: string,
     enabled: boolean,
   ) => {
     if (!config) return;
-    setUpdatingJob(job);
+    // Map legacy 'planner' ID to registry 'slicer' ID
+    const registryId = jobId === 'planner' ? 'slicer' : jobId;
+    const jobDef = getWebJobDef(registryId);
+    if (!jobDef) return;
+    setUpdatingJob(jobId);
     try {
-      if (job === 'executor') {
-        await updateConfig({ executorEnabled: enabled });
-      } else if (job === 'reviewer') {
-        await updateConfig({ reviewerEnabled: enabled });
-      } else if (job === 'qa') {
-        await updateConfig({ qa: { ...config.qa, enabled } });
-      } else if (job === 'audit') {
-        await updateConfig({ audit: { ...config.audit, enabled } });
-      } else if (job === 'analytics') {
-        await updateConfig({ analytics: { ...config.analytics, enabled } });
-      } else {
-        await updateConfig({
-          roadmapScanner: { ...config.roadmapScanner, enabled },
-        });
-      }
+      await updateConfig(jobDef.buildEnabledPatch(enabled, config));
       let cronInstallFailedMessage = '';
       try {
         await triggerInstallCron();
@@ -239,7 +225,7 @@ const Scheduling: React.FC = () => {
             }
           : {
               title: 'Job Updated',
-              message: `${job[0].toUpperCase() + job.slice(1)} ${enabled ? 'enabled' : 'disabled'}.`,
+              message: `${jobId[0].toUpperCase() + jobId.slice(1)} ${enabled ? 'enabled' : 'disabled'}.`,
               type: 'success',
             },
       );
@@ -253,28 +239,22 @@ const Scheduling: React.FC = () => {
       setUpdatingJob(null);
     }
   };
-  const handleTriggerJob = async (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics') => {
-    setTriggeringJob(job);
+  const handleTriggerJob = async (jobId: string) => {
+    // Map legacy 'planner' ID to registry 'slicer' ID
+    const registryId = jobId === 'planner' ? 'slicer' : jobId;
+    setTriggeringJob(jobId);
     try {
-      const triggerMap = {
-        executor: triggerRun,
-        reviewer: triggerReview,
-        qa: triggerQa,
-        audit: triggerAudit,
-        planner: triggerPlanner,
-        analytics: triggerAnalytics,
-      };
-      await triggerMap[job]();
+      await triggerJob(registryId);
       addToast({
         title: 'Job Triggered',
-        message: `${job[0].toUpperCase() + job.slice(1)} job has been queued.`,
+        message: `${jobId[0].toUpperCase() + jobId.slice(1)} job has been queued.`,
         type: 'success',
       });
       refetchSchedule();
     } catch (error) {
       addToast({
         title: 'Trigger Failed',
-        message: formatErrorMessage(error, `Failed to trigger ${job} job`),
+        message: formatErrorMessage(error, `Failed to trigger ${jobId} job`),
         type: 'error',
       });
     } finally {
@@ -632,7 +612,7 @@ const Scheduling: React.FC = () => {
                       checked={agent.enabled}
                       disabled={updatingJob !== null}
                       aria-label={`Toggle ${agent.name.toLowerCase()} automation`}
-                      onChange={(checked) => handleJobToggle(agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics', checked)}
+                      onChange={(checked) => handleJobToggle(agent.id, checked)}
                     />
                   </div>
 
@@ -676,7 +656,7 @@ const Scheduling: React.FC = () => {
                         </div>
                         <button
                           disabled={triggeringJob !== null}
-                          onClick={() => handleTriggerJob(agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics')}
+                          onClick={() => handleTriggerJob(agent.id)}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-green-400 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 hover:border-green-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
                           {triggeringJob === agent.id ? (
