@@ -3,6 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/%40jonit-dev%2Fnight-watch-cli.svg)](https://www.npmjs.com/package/%40jonit-dev%2Fnight-watch-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen.svg)](https://nodejs.org/)
+[![Website](https://img.shields.io/badge/website-nightwatchcli.com-blue.svg)](https://nightwatchcli.com/)
 
 **Overnight PRD execution for AI-native devs and small teams**
 
@@ -155,6 +156,8 @@ yarn install && yarn build && npm link
 ---
 
 ## Documentation
+
+Full documentation is available at **[nightwatchcli.com](https://nightwatchcli.com/)**.
 
 ### Getting Started
 

@@ -105,6 +105,19 @@ export function fetchProjects(): Promise<ProjectInfo[]> {
   return apiFetch<ProjectInfo[]>('/api/projects');
 }
 
+export interface IRemoveProjectResult {
+  cronEntriesRemoved: number;
+  unregistered: boolean;
+  dataPruned: boolean;
+}
+
+export function removeProject(projectId: string): Promise<IRemoveProjectResult> {
+  const encoded = encodeProjectId(projectId);
+  return apiFetch<IRemoveProjectResult>(`/api/projects/${encoded}`, {
+    method: 'DELETE',
+  });
+}
+
 // ==================== Generic Fetch ====================
 
 /**

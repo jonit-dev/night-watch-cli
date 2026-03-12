@@ -1,4 +1,4 @@
-import { AlertCircle, AlertTriangle, RotateCcw, Save } from 'lucide-react';
+import { AlertCircle, AlertTriangle, RotateCcw, Save, Trash2 } from 'lucide-react';
 import React from 'react';
 import {
   ClaudeModel,
@@ -17,6 +17,7 @@ import {
   IRoadmapScannerConfig,
   IWebhookConfig,
   MergeMethod,
+  removeProject,
   triggerInstallCron,
   toggleRoadmapScanner,
   updateConfig,
@@ -193,8 +194,10 @@ const resolveScheduleUiState = (form: ConfigForm): ScheduleUiState => {
 };
 
 const Settings: React.FC = () => {
-  const { addToast, projectName, selectedProjectId, globalModeLoading } = useStore();
+  const { addToast, projectName, selectedProjectId, globalModeLoading, isGlobalMode, removeProjectFromList } = useStore();
   const [saving, setSaving] = React.useState(false);
+  const [removeModalOpen, setRemoveModalOpen] = React.useState(false);
+  const [removing, setRemoving] = React.useState(false);
   const [form, setForm] = React.useState<ConfigForm | null>(null);
   const [allProjectConfigs, setAllProjectConfigs] = React.useState<Array<{ projectId: string; config: INightWatchConfig }>>([]);
   const [globalWebhook, setGlobalWebhook] = React.useState<IWebhookConfig | null | undefined>(undefined);
@@ -589,6 +592,29 @@ const Settings: React.FC = () => {
         message: err instanceof Error ? err.message : 'Failed to toggle roadmap scanner',
         type: 'error',
       });
+    }
+  };
+
+  const handleRemoveProject = async () => {
+    if (!selectedProjectId) return;
+    setRemoving(true);
+    try {
+      await removeProject(selectedProjectId);
+      removeProjectFromList(selectedProjectId);
+      setRemoveModalOpen(false);
+      addToast({
+        title: 'Project Removed',
+        message: 'Cron jobs uninstalled and all project data removed from the database.',
+        type: 'success',
+      });
+    } catch (err) {
+      addToast({
+        title: 'Remove Failed',
+        message: err instanceof Error ? err.message : 'Failed to remove project',
+        type: 'error',
+      });
+    } finally {
+      setRemoving(false);
     }
   };
 
@@ -1093,6 +1119,59 @@ const Settings: React.FC = () => {
           Save Changes
         </Button>
       </div>
+
+      {/* Danger Zone (global mode only) */}
+      {isGlobalMode && selectedProjectId && (
+        <div className="mt-10 rounded-lg border border-red-900/50 bg-red-950/20 p-6">
+          <h3 className="text-lg font-medium text-red-400 mb-2">Danger Zone</h3>
+          <p className="text-sm text-slate-400 mb-4">
+            Remove this project from Night Watch. This will uninstall cron jobs and delete all
+            project data from the database. Files on disk will not be touched.
+          </p>
+          <Button
+            variant="secondary"
+            className="bg-red-600 hover:bg-red-700 text-white"
+            onClick={() => setRemoveModalOpen(true)}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Remove Project
+          </Button>
+        </div>
+      )}
+
+      {/* Remove Project Confirmation Modal */}
+      {removeModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => !removing && setRemoveModalOpen(false)}
+            aria-hidden="true"
+          />
+          <div className="relative w-full max-w-md transform rounded-xl bg-slate-900 border border-slate-800 shadow-2xl p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <AlertTriangle className="h-6 w-6 text-red-400" />
+              <h3 className="text-lg font-semibold text-slate-100">Remove {projectName}?</h3>
+            </div>
+            <p className="text-sm text-slate-300 mb-6">
+              This will uninstall cron jobs and remove all Night Watch data for this project
+              from the database. The project files on disk will not be deleted.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button variant="ghost" onClick={() => setRemoveModalOpen(false)} disabled={removing}>
+                Cancel
+              </Button>
+              <Button
+                variant="secondary"
+                className="bg-red-600 hover:bg-red-700"
+                onClick={handleRemoveProject}
+                loading={removing}
+              >
+                Remove
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Preset Form Modal */}
       <PresetFormModal

@@ -56,26 +56,28 @@
 **Body:**
 
 ```
-Hey everyone. I've been building Night Watch for a few months and figured it's time to share it.
+Hey everyone. I've been building Night Watch for a few weeks and figured it's time to share it.
 
-**What it does:** Night Watch is a CLI that picks up work from your GitHub Projects board, implements it with AI (Claude or Codex), opens PRs, reviews them, runs QA, and can auto-merge if you want. I'd recommend leaving auto-merge off for now and reviewing yourself.
+**Disclaimer:** I'm the creator of this MIT open source project. Free to use, but you still need your own Claude (or any other agentic CLI) subscription.
+
+**TLDR:** Night Watch is a CLI that picks up work from your GitHub Projects board (it creates a dedicated one for this purpose), implements it with AI (Claude or Codex), opens PRs, reviews them, runs QA, and can auto-merge if you want. I'd recommend leaving auto-merge off for now and reviewing yourself. We're not quite there yet in terms of LLM models for full auto usage.
 
 The idea: define work during the day, let Night Watch execute overnight, review PRs in the morning. You can leave it running 24/7 too if you have tokens. Either way, start with one task first until you get a feel for it.
 
 **How it works:**
 
-1. Queue issues on a GitHub Projects board (Draft > Ready > In Progress > Done). Ask Claude to "use night-watch-cli to create a PRD about X", or write the `.md` yourself and push it via the CLI or `gh`.
-2. Night Watch picks up "Ready" items on a cron schedule.
+1. Queue issues on a GitHub Projects board. Ask Claude to "use night-watch-cli to create a PRD about X", or write the `.md` yourself and push it via the CLI or `gh`.
+2. Night Watch picks up "Ready" items on a cron schedule. Careful: if it's not in the Ready column, IT WON'T BE PICKED UP.
 3. Agents implement the spec in isolated git worktrees, so it won't interfere with what you're doing.
 4. PRs get opened, reviewed (you can pick a different model for this), scored, and optionally auto-merged.
 5. Telegram notifications throughout.
 
 **Agents:**
 - **Executor** -- implements PRDs, opens PRs
-- **Reviewer** -- scores PRDs, requests fixes, retries
-- **QA** -- generates and runs Playwright e2e tests
-- **Auditor** -- scans for code quality issues
-- **Slicer** -- breaks roadmap items into granular PRDs
+- **Reviewer** -- scores PRDs, requests fixes, retries. Stops once reviews reach a pre-defined scoring threshold (default is 80)
+- **QA** -- generates and runs Playwright e2e tests, fills testing gaps
+- **Auditor** -- scans for code quality issues, opens an issue and places it under "Draft" so it's not automatically picked up. You decide if it's relevant
+- **Slicer** -- breaks roadmap (ROADMAP.md) items into granular PRDs (beta)
 
 **Requirements:**
 - Node
@@ -83,14 +85,24 @@ The idea: define work during the day, let Night Watch execute overnight, review 
 - An agentic CLI like Claude Code or Codex (technically works with others, but I haven't tested)
 - Playwright (only if you're running the QA agent)
 
+Run `night-watch doctor` for extra info.
+
+**Notifications:** Add your own Telegram bot to stay posted on what's happening.
+
 **Things worth knowing:**
 
 - It's in beta. Core loop works, but some features are still rough.
-- Don't expect miracles. It won't build complex software overnight. You still need to review PRs and make judgment calls before merging.
+- Don't expect miracles. It won't build complex software overnight. You still need to review PRs and make judgment calls before merging. LLMs are not quite there yet.
 - Quality depends on what's running underneath. I use Opus 4.6 for PRDs, Sonnet 4.6 or GLM-5 for grunt work, and Codex for reviews.
-- Let it cook. Once a PR is open, don't touch it immediately. Let the reviewer run until the score hits 80+, then pick it up.
+- Don't bother memorizing CLI commands. Just ask Claude to read the README and it'll figure out how to use it.
+- Tested on Linux/WSL2.
+
+**Tips:**
+- Let it cook. Once a PR is open, don't touch it immediately. Let the reviewer run until the score hits 80+, then pick it up for reviewing yourself.
 - Don't let PRs sit too long either. Merge conflicts pile up fast.
-- Don't bother memorizing CLI commands. Just ask Claude to read the README and it'll figure it out.
+- Don't blindly trust any AI-generated PRs. Do your own QA.
+- When creating the PRD, use the night-watch built-in template for consistency. Use Opus 4.6 for this part. (Broken PRD = broken output)
+- Use the web UI to configure your projects: `night-watch serve -g`
 
 [IMAGE_1: Dashboard showing active jobs and PR status]
 
@@ -98,7 +110,10 @@ The idea: define work during the day, let Night Watch execute overnight, review 
 
 [IMAGE_3: GitHub PR opened by Night Watch with review score]
 
-Open source, MIT: https://github.com/jonit-dev/night-watch-cli
+**Links:**
+- GitHub: https://github.com/jonit-dev/night-watch-cli
+- Website: https://nightwatchcli.com/
+- Discord: https://discord.gg/maCPEJzPXa
 
 Would love feedback, especially from anyone who's experimented with automating parts of their dev workflow.
 ```

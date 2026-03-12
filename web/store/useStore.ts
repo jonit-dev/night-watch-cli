@@ -32,6 +32,7 @@ interface AppState {
   setProjects: (p: ProjectInfo[]) => void;
   selectedProjectId: string | null;
   selectProject: (id: string | null) => void;
+  removeProjectFromList: (id: string) => void;
 }
 
 const savedProjectId = typeof localStorage !== 'undefined'
@@ -90,6 +91,29 @@ export const useStore = create<AppState>((set) => ({
       return {
         selectedProjectId: id,
         ...(project ? { projectName: project.name } : {}),
+      };
+    });
+  },
+
+  removeProjectFromList: (id) => {
+    set((state) => {
+      const remaining = state.projects.filter((p) => p.name !== id);
+      const wasSelected = state.selectedProjectId === id;
+      const nextId = wasSelected ? (remaining[0]?.name ?? null) : state.selectedProjectId;
+
+      if (wasSelected) {
+        setCurrentProject(nextId);
+        if (nextId) {
+          localStorage.setItem('nw-selected-project', nextId);
+        } else {
+          localStorage.removeItem('nw-selected-project');
+        }
+      }
+
+      return {
+        projects: remaining,
+        selectedProjectId: nextId,
+        ...(wasSelected && remaining[0] ? { projectName: remaining[0].name } : {}),
       };
     });
   },

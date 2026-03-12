@@ -5,6 +5,7 @@
 
 import { Command } from 'commander';
 import {
+  BUILT_IN_PRESETS,
   IWebhookConfig,
   NotificationEvent,
   checkConfigFile,
@@ -13,7 +14,6 @@ import {
   checkGitRepo,
   checkLogsDirectory,
   checkNodeVersion,
-  checkPrdDirectory,
   checkProviderCli,
   header,
   info,
@@ -143,7 +143,7 @@ export function doctorCommand(program: Command): void {
     .action(async (options: IDoctorOptions) => {
       const projectDir = process.cwd();
       const config = loadConfig(projectDir);
-      const totalChecks = 8;
+      const totalChecks = 7;
       let checkNum = 1;
       let passedChecks = 0;
       let fixedChecks = 0;
@@ -177,12 +177,14 @@ export function doctorCommand(program: Command): void {
       if (ghResult.passed) passedChecks++;
       if (ghResult.fixed) fixedChecks++;
 
-      // Check 4: Provider CLI
+      // Check 4: Provider CLI — resolve the actual CLI command for preset providers
+      // (e.g. glm-5 and glm-47 use the 'claude' binary with env vars)
+      const resolvedProviderCli = BUILT_IN_PRESETS[config.provider]?.command ?? config.provider;
       const providerResult = runCheck(
         checkNum++,
         totalChecks,
         'provider CLI',
-        () => checkProviderCli(config.provider),
+        () => checkProviderCli(resolvedProviderCli),
         options,
       );
       if (providerResult.passed) passedChecks++;
@@ -199,18 +201,7 @@ export function doctorCommand(program: Command): void {
       if (configResult.passed) passedChecks++;
       if (configResult.fixed) fixedChecks++;
 
-      // Check 6: PRD directory
-      const prdResult = runCheck(
-        checkNum++,
-        totalChecks,
-        'PRD directory',
-        () => checkPrdDirectory(projectDir, config.prdDir),
-        options,
-      );
-      if (prdResult.passed) passedChecks++;
-      if (prdResult.fixed) fixedChecks++;
-
-      // Check 7: Logs directory
+      // Check 6: Logs directory
       const logsResult = runCheck(
         checkNum++,
         totalChecks,
@@ -221,7 +212,7 @@ export function doctorCommand(program: Command): void {
       if (logsResult.passed) passedChecks++;
       if (logsResult.fixed) fixedChecks++;
 
-      // Check 8: Webhook configuration
+      // Check 7: Webhook configuration
       step(checkNum, totalChecks, 'Checking webhook configuration...');
       if (!config.notifications || config.notifications.webhooks.length === 0) {
         info('No webhooks configured (optional)');

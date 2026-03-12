@@ -11,6 +11,7 @@ import { CONFIG_FILE_NAME, GLOBAL_CONFIG_DIR, REGISTRY_FILE_NAME } from '../cons
 import { getRepositories, resetRepositories } from '../storage/repositories/index.js';
 import { getDb } from '../storage/sqlite/client.js';
 import { closeDb } from '../storage/sqlite/client.js';
+import { generateMarker, removeEntriesForProject } from './crontab.js';
 import { getProjectName } from './status-data.js';
 
 export interface IRegistryEntry {
@@ -163,6 +164,50 @@ export function validateRegistry(): { valid: IRegistryEntry[]; invalid: IRegistr
   }
 
   return { valid, invalid };
+}
+
+/**
+ * Remove all project-specific data from the global SQLite database.
+ * Does NOT remove the project from the registry — use removeProject() for full cleanup.
+ */
+export function pruneProjectData(projectDir: string): void {
+  const resolvedPath = path.resolve(projectDir);
+  const db = getDb();
+
+  db.transaction(() => {
+    db.prepare('DELETE FROM execution_history WHERE project_path = ?').run(resolvedPath);
+    db.prepare('DELETE FROM prd_states WHERE project_path = ?').run(resolvedPath);
+    db.prepare('DELETE FROM job_queue WHERE project_path = ?').run(resolvedPath);
+    db.prepare('DELETE FROM job_runs WHERE project_path = ?').run(resolvedPath);
+    // roadmap_states keyed by prd_dir (e.g., /path/to/project/docs/prds)
+    db.prepare('DELETE FROM roadmap_states WHERE prd_dir LIKE ?').run(`${resolvedPath}%`);
+  })();
+}
+
+export interface IRemoveProjectResult {
+  cronEntriesRemoved: number;
+  unregistered: boolean;
+  dataPruned: boolean;
+}
+
+/**
+ * Fully remove a project: uninstall cron jobs, prune DB data, and unregister.
+ */
+export function removeProject(projectDir: string): IRemoveProjectResult {
+  const resolvedPath = path.resolve(projectDir);
+  const projectName = getProjectName(resolvedPath);
+  const marker = generateMarker(projectName);
+
+  // 1. Remove cron entries
+  const cronEntriesRemoved = removeEntriesForProject(resolvedPath, marker);
+
+  // 2. Prune all project-specific data from global DB
+  pruneProjectData(resolvedPath);
+
+  // 3. Remove from projects registry
+  const unregistered = unregisterProject(resolvedPath);
+
+  return { cronEntriesRemoved, unregistered, dataPruned: true };
 }
 
 export { closeDb, resetRepositories };
