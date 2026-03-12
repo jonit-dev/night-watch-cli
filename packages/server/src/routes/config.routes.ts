@@ -6,13 +6,17 @@ import { Request, Response, Router } from 'express';
 import { CronExpressionParser } from 'cron-parser';
 
 import {
+  IGlobalNotificationsConfig,
   INightWatchConfig,
   IProviderPreset,
+  IWebhookConfig,
   JobType,
   VALID_CLAUDE_MODELS,
   VALID_JOB_TYPES,
   loadConfig,
+  loadGlobalNotificationsConfig,
   saveConfig,
+  saveGlobalNotificationsConfig,
   validateWebhook,
 } from '@night-watch/core';
 
@@ -727,6 +731,30 @@ export function createConfigRoutes(deps: IConfigRoutesDeps): Router {
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }
+  });
+
+  return router;
+}
+
+export function createGlobalNotificationsRoutes(): Router {
+  const router = Router();
+
+  router.get('/', (_req: Request, res: Response): void => {
+    res.json(loadGlobalNotificationsConfig());
+  });
+
+  router.put('/', (req: Request, res: Response): void => {
+    const { webhook } = req.body as { webhook: unknown };
+    if (webhook !== null && webhook !== undefined) {
+      const issues = validateWebhook(webhook as IWebhookConfig);
+      if (issues.length > 0) {
+        res.status(400).json({ error: `Invalid webhook: ${issues.join(', ')}` });
+        return;
+      }
+    }
+    const config: IGlobalNotificationsConfig = { webhook: (webhook as IWebhookConfig) ?? null };
+    saveGlobalNotificationsConfig(config);
+    res.json(loadGlobalNotificationsConfig());
   });
 
   return router;

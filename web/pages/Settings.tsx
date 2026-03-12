@@ -5,6 +5,7 @@ import {
   fetchAllConfigs,
   fetchConfig,
   fetchDoctor,
+  fetchGlobalNotifications,
   IAnalyticsConfig,
   IAuditConfig,
   IBoardProviderConfig,
@@ -14,10 +15,12 @@ import {
   IProviderPreset,
   IQaConfig,
   IRoadmapScannerConfig,
+  IWebhookConfig,
   MergeMethod,
   triggerInstallCron,
   toggleRoadmapScanner,
   updateConfig,
+  updateGlobalNotifications,
   useApi,
 } from '../api';
 import WebhookEditor from '../components/settings/WebhookEditor.js';
@@ -194,6 +197,7 @@ const Settings: React.FC = () => {
   const [saving, setSaving] = React.useState(false);
   const [form, setForm] = React.useState<ConfigForm | null>(null);
   const [allProjectConfigs, setAllProjectConfigs] = React.useState<Array<{ projectId: string; config: INightWatchConfig }>>([]);
+  const [globalWebhook, setGlobalWebhook] = React.useState<IWebhookConfig | null | undefined>(undefined);
   // Prevents refetchConfig from overwriting the form after a save (form was already set from PUT response)
   const skipNextFormResetRef = React.useRef(false);
   // Tracks when jobProviders was changed by user (to trigger auto-save)
@@ -227,6 +231,9 @@ const Settings: React.FC = () => {
 
   React.useEffect(() => {
     fetchAllConfigs().then(setAllProjectConfigs).catch(console.error);
+    fetchGlobalNotifications().then((cfg) => setGlobalWebhook(cfg.webhook)).catch(() => {
+      // server unavailable — leave as undefined so globe buttons stay hidden
+    });
   }, [selectedProjectId]);
 
   React.useEffect(() => {
@@ -517,6 +524,35 @@ const Settings: React.FC = () => {
         title: 'Reset Complete',
         message: 'Unsaved changes were discarded.',
         type: 'info',
+      });
+    }
+  };
+
+  const handleSetGlobal = async (webhook: IWebhookConfig) => {
+    if (globalWebhook !== null && globalWebhook !== undefined) {
+      if (!window.confirm('Replace existing global channel?')) return;
+    }
+    try {
+      const cfg = await updateGlobalNotifications({ webhook });
+      setGlobalWebhook(cfg.webhook);
+    } catch (err) {
+      addToast({
+        title: 'Failed to set global channel',
+        message: err instanceof Error ? err.message : 'Unknown error',
+        type: 'error',
+      });
+    }
+  };
+
+  const handleUnsetGlobal = async () => {
+    try {
+      await updateGlobalNotifications({ webhook: null });
+      setGlobalWebhook(null);
+    } catch (err) {
+      addToast({
+        title: 'Failed to unset global channel',
+        message: err instanceof Error ? err.message : 'Unknown error',
+        type: 'error',
       });
     }
   };
@@ -889,6 +925,9 @@ const Settings: React.FC = () => {
           <WebhookEditor
             notifications={form.notifications}
             onChange={(notifications) => updateField('notifications', notifications)}
+            globalWebhook={globalWebhook}
+            onSetGlobal={handleSetGlobal}
+            onUnsetGlobal={handleUnsetGlobal}
           />
         </Card>
       ),

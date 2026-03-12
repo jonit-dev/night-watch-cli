@@ -505,6 +505,25 @@ export function triggerClearQueue(force?: boolean): Promise<{ cleared: number }>
   });
 }
 
+// ==================== Global Notifications ====================
+
+export interface IGlobalNotificationsConfig {
+  webhook: IWebhookConfig | null;
+}
+
+export function fetchGlobalNotifications(): Promise<IGlobalNotificationsConfig> {
+  return apiFetch<IGlobalNotificationsConfig>('/api/global-notifications');
+}
+
+export function updateGlobalNotifications(
+  config: IGlobalNotificationsConfig,
+): Promise<IGlobalNotificationsConfig> {
+  return apiFetch<IGlobalNotificationsConfig>('/api/global-notifications', {
+    method: 'PUT',
+    body: JSON.stringify(config),
+  });
+}
+
 // ==================== Roadmap Scanner ====================
 // RoadmapItem and RoadmapStatus are imported from @night-watch/types above.
 
