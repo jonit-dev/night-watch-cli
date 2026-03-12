@@ -19,6 +19,7 @@ import {
   initContainer,
   loadConfig,
   loadRegistry,
+  removeProject,
   scanRoadmap,
   validateRegistry,
 } from '@night-watch/core';
@@ -209,6 +210,24 @@ export function createGlobalApp(): Express {
       res.json(
         entries.map((e) => ({ name: e.name, path: e.path, valid: !invalidPaths.has(e.path) })),
       );
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
+  app.delete('/api/projects/:projectId', (req: Request, res: Response): void => {
+    try {
+      const rawId = decodeURIComponent(String(req.params.projectId)).replace(/~/g, '/');
+      const entries = loadRegistry();
+      const entry = entries.find((e) => e.name === rawId);
+
+      if (!entry) {
+        res.status(404).json({ error: 'Project not found' });
+        return;
+      }
+
+      const result = removeProject(entry.path);
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
     }

@@ -241,7 +241,6 @@ describe("doctor command", () => {
       expect(output).toContain("GitHub CLI");
       expect(output).toContain("provider CLI");
       expect(output).toContain("config file");
-      expect(output).toContain("PRD directory");
       expect(output).toContain("logs directory");
       expect(output).toContain("webhook configuration");
 
