@@ -27,6 +27,7 @@ import type {
     QaArtifacts,
 } from '@shared/types';
 import { DependencyList, useEffect, useRef, useState } from 'react';
+import { getWebJobDef } from './utils/jobs';
 
 // Re-export shared types so consumers can import from either place
 export type {
@@ -317,20 +318,11 @@ export function triggerPlanner(): Promise<ActionResult> {
  * Prefer this over per-job triggerRun/triggerReview/etc. for new code.
  */
 export function triggerJob(jobId: string): Promise<ActionResult> {
-  // Map job IDs to their API action endpoints
-  const endpointMap: Record<string, string> = {
-    executor: '/api/actions/run',
-    reviewer: '/api/actions/review',
-    qa: '/api/actions/qa',
-    audit: '/api/actions/audit',
-    slicer: '/api/actions/planner',
-    analytics: '/api/actions/analytics',
-  };
-  const endpoint = endpointMap[jobId];
-  if (!endpoint) {
+  const jobDef = getWebJobDef(jobId);
+  if (!jobDef) {
     return Promise.reject(new Error(`Unknown job ID: ${jobId}`));
   }
-  return apiFetch<ActionResult>(apiPath(endpoint), { method: 'POST' });
+  return apiFetch<ActionResult>(apiPath(jobDef.triggerEndpoint), { method: 'POST' });
 }
 
 export function triggerInstallCron(): Promise<ActionResult> {

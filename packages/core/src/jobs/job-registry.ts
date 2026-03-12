@@ -56,11 +56,6 @@ export interface IJobDefinition<TConfig extends IBaseJobConfig = IBaseJobConfig>
   extraFields?: IExtraFieldDef[];
   /** Default configuration values */
   defaultConfig: TConfig;
-  /**
-   * Legacy config migration: reads old flat/nested config shapes and extracts job config.
-   * Returns undefined if no legacy fields are present.
-   */
-  migrateLegacy?: (raw: Record<string, unknown>) => Partial<TConfig> | undefined;
 }
 
 /**
@@ -82,25 +77,6 @@ export const JOB_REGISTRY: IJobDefinition[] = [
       schedule: '5 */2 * * *',
       maxRuntime: 7200,
     },
-    migrateLegacy: (raw): Partial<IBaseJobConfig> | undefined => {
-      const result: Partial<IBaseJobConfig> = {};
-      let hasLegacy = false;
-
-      if (typeof raw.executorEnabled === 'boolean') {
-        result.enabled = raw.executorEnabled;
-        hasLegacy = true;
-      }
-      if (typeof raw.cronSchedule === 'string') {
-        result.schedule = raw.cronSchedule;
-        hasLegacy = true;
-      }
-      if (typeof raw.maxRuntime === 'number') {
-        result.maxRuntime = raw.maxRuntime;
-        hasLegacy = true;
-      }
-
-      return hasLegacy ? result : undefined;
-    },
   },
   {
     id: 'reviewer',
@@ -116,25 +92,6 @@ export const JOB_REGISTRY: IJobDefinition[] = [
       schedule: '25 */3 * * *',
       maxRuntime: 3600,
     },
-    migrateLegacy: (raw): Partial<IBaseJobConfig> | undefined => {
-      const result: Partial<IBaseJobConfig> = {};
-      let hasLegacy = false;
-
-      if (typeof raw.reviewerEnabled === 'boolean') {
-        result.enabled = raw.reviewerEnabled;
-        hasLegacy = true;
-      }
-      if (typeof raw.reviewerSchedule === 'string') {
-        result.schedule = raw.reviewerSchedule;
-        hasLegacy = true;
-      }
-      if (typeof raw.reviewerMaxRuntime === 'number') {
-        result.maxRuntime = raw.reviewerMaxRuntime;
-        hasLegacy = true;
-      }
-
-      return hasLegacy ? result : undefined;
-    },
   },
   {
     id: 'slicer',
@@ -149,28 +106,6 @@ export const JOB_REGISTRY: IJobDefinition[] = [
       enabled: true,
       schedule: '35 */6 * * *',
       maxRuntime: 600,
-    },
-    migrateLegacy: (raw): Partial<IBaseJobConfig> | undefined => {
-      const roadmapScanner = raw.roadmapScanner as Record<string, unknown> | undefined;
-      if (!roadmapScanner) return undefined;
-
-      const result: Partial<IBaseJobConfig> = {};
-      let hasLegacy = false;
-
-      if (typeof roadmapScanner.enabled === 'boolean') {
-        result.enabled = roadmapScanner.enabled;
-        hasLegacy = true;
-      }
-      if (typeof roadmapScanner.slicerSchedule === 'string') {
-        result.schedule = roadmapScanner.slicerSchedule;
-        hasLegacy = true;
-      }
-      if (typeof roadmapScanner.slicerMaxRuntime === 'number') {
-        result.maxRuntime = roadmapScanner.slicerMaxRuntime;
-        hasLegacy = true;
-      }
-
-      return hasLegacy ? result : undefined;
     },
   },
   {
@@ -207,24 +142,6 @@ export const JOB_REGISTRY: IJobDefinition[] = [
       skipLabel: string;
       autoInstallPlaywright: boolean;
     },
-    migrateLegacy: (raw): Partial<IBaseJobConfig> | undefined => {
-      const qa = raw.qa as Record<string, unknown> | undefined;
-      if (!qa) return undefined;
-
-      // If qa object exists with base fields, it's already in new format
-      if (
-        typeof qa.enabled === 'boolean' ||
-        typeof qa.schedule === 'string' ||
-        typeof qa.maxRuntime === 'number'
-      ) {
-        return {
-          enabled: typeof qa.enabled === 'boolean' ? qa.enabled : undefined,
-          schedule: typeof qa.schedule === 'string' ? qa.schedule : undefined,
-          maxRuntime: typeof qa.maxRuntime === 'number' ? qa.maxRuntime : undefined,
-        } as Partial<IBaseJobConfig>;
-      }
-      return undefined;
-    },
   },
   {
     id: 'audit',
@@ -239,23 +156,6 @@ export const JOB_REGISTRY: IJobDefinition[] = [
       enabled: true,
       schedule: '50 3 * * 1',
       maxRuntime: 1800,
-    },
-    migrateLegacy: (raw): Partial<IBaseJobConfig> | undefined => {
-      const audit = raw.audit as Record<string, unknown> | undefined;
-      if (!audit) return undefined;
-
-      if (
-        typeof audit.enabled === 'boolean' ||
-        typeof audit.schedule === 'string' ||
-        typeof audit.maxRuntime === 'number'
-      ) {
-        return {
-          enabled: typeof audit.enabled === 'boolean' ? audit.enabled : undefined,
-          schedule: typeof audit.schedule === 'string' ? audit.schedule : undefined,
-          maxRuntime: typeof audit.maxRuntime === 'number' ? audit.maxRuntime : undefined,
-        } as Partial<IBaseJobConfig>;
-      }
-      return undefined;
     },
   },
   {
@@ -285,23 +185,6 @@ export const JOB_REGISTRY: IJobDefinition[] = [
       targetColumn: 'Draft',
       analysisPrompt: '',
     } as IBaseJobConfig & { lookbackDays: number; targetColumn: string; analysisPrompt: string },
-    migrateLegacy: (raw): Partial<IBaseJobConfig> | undefined => {
-      const analytics = raw.analytics as Record<string, unknown> | undefined;
-      if (!analytics) return undefined;
-
-      if (
-        typeof analytics.enabled === 'boolean' ||
-        typeof analytics.schedule === 'string' ||
-        typeof analytics.maxRuntime === 'number'
-      ) {
-        return {
-          enabled: typeof analytics.enabled === 'boolean' ? analytics.enabled : undefined,
-          schedule: typeof analytics.schedule === 'string' ? analytics.schedule : undefined,
-          maxRuntime: typeof analytics.maxRuntime === 'number' ? analytics.maxRuntime : undefined,
-        } as Partial<IBaseJobConfig>;
-      }
-      return undefined;
-    },
   },
 ];
 
