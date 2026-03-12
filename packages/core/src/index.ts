@@ -24,6 +24,7 @@ export * from './utils/execution-history.js';
 export * from './utils/git-utils.js';
 export * from './utils/github.js';
 export * from './utils/log-utils.js';
+export * from './utils/global-config.js';
 export * from './utils/notify.js';
 export { findEligibleBoardIssue } from './utils/prd-discovery.js';
 export type { IEligibleBoardIssue } from './utils/prd-discovery.js';

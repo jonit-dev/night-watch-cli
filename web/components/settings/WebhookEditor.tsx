@@ -1,4 +1,4 @@
-import { Edit2, Plus, Trash2 } from 'lucide-react';
+import { Edit2, Globe, Plus, Trash2 } from 'lucide-react';
 import React from 'react';
 import { INotificationConfig, IWebhookConfig } from '../../api';
 import Button from '../ui/Button';
@@ -8,6 +8,14 @@ import Select from '../ui/Select';
 interface IWebhookEditorProps {
   notifications: INotificationConfig;
   onChange: (notifications: INotificationConfig) => void;
+  globalWebhook?: IWebhookConfig | null;
+  onSetGlobal?: (webhook: IWebhookConfig) => void;
+  onUnsetGlobal?: () => void;
+}
+
+function webhookIdentity(wh: IWebhookConfig): string {
+  if (wh.type === 'telegram') return `telegram:${wh.botToken}:${wh.chatId}`;
+  return `${wh.type}:${wh.url}`;
 }
 
 interface IWebhookFormProps {
@@ -122,7 +130,13 @@ const WebhookForm: React.FC<IWebhookFormProps> = ({ webhook, onChange, onSave, o
   </div>
 );
 
-const WebhookEditor: React.FC<IWebhookEditorProps> = ({ notifications, onChange }) => {
+const WebhookEditor: React.FC<IWebhookEditorProps> = ({
+  notifications,
+  onChange,
+  globalWebhook,
+  onSetGlobal,
+  onUnsetGlobal,
+}) => {
   const [editingIndex, setEditingIndex] = React.useState<number | null>(null);
   const [showAddForm, setShowAddForm] = React.useState(false);
   const [newWebhook, setNewWebhook] = React.useState<IWebhookConfig>({
@@ -188,6 +202,22 @@ const WebhookEditor: React.FC<IWebhookEditorProps> = ({ notifications, onChange 
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    {onSetGlobal !== undefined && (() => {
+                      const isGlobal =
+                        globalWebhook != null &&
+                        webhookIdentity(webhook) === webhookIdentity(globalWebhook);
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => (isGlobal ? onUnsetGlobal?.() : onSetGlobal(webhook))}
+                          className={`p-2 transition-colors ${isGlobal ? 'text-indigo-400 hover:text-indigo-300' : 'text-slate-500 hover:text-slate-300'}`}
+                          aria-label={isGlobal ? 'Global channel (active)' : 'Set as global channel'}
+                          title={isGlobal ? 'Global channel (active)' : 'Set as global channel'}
+                        >
+                          <Globe className="h-4 w-4" />
+                        </button>
+                      );
+                    })()}
                     <button
                       type="button"
                       onClick={() => setEditingIndex(index)}

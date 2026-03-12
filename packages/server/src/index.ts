@@ -29,7 +29,11 @@ import { SseClientSet, startSseStatusWatcher } from './middleware/sse.middleware
 
 import { createActionRoutes, createProjectActionRoutes } from './routes/action.routes.js';
 import { createBoardRoutes, createProjectBoardRoutes } from './routes/board.routes.js';
-import { createConfigRoutes, createProjectConfigRoutes } from './routes/config.routes.js';
+import {
+  createConfigRoutes,
+  createGlobalNotificationsRoutes,
+  createProjectConfigRoutes,
+} from './routes/config.routes.js';
 import { createDoctorRoutes, createProjectDoctorRoutes } from './routes/doctor.routes.js';
 import { createLogRoutes, createProjectLogRoutes } from './routes/log.routes.js';
 import { createPrdRoutes, createProjectPrdRoutes } from './routes/prd.routes.js';
@@ -125,6 +129,7 @@ export function createApp(projectDir: string): Express {
   app.use('/api/logs', createLogRoutes({ projectDir }));
   app.use('/api/doctor', createDoctorRoutes({ projectDir, getConfig: () => config }));
   app.use('/api/queue', createQueueRoutes({ getConfig: () => config }));
+  app.use('/api/global-notifications', createGlobalNotificationsRoutes());
 
   app.get('/api/prs', async (_req: Request, res: Response): Promise<void> => {
     try {
@@ -211,6 +216,7 @@ export function createGlobalApp(): Express {
 
   // Global queue routes (not project-scoped — reads the shared state DB)
   app.use('/api/queue', createGlobalQueueRoutes());
+  app.use('/api/global-notifications', createGlobalNotificationsRoutes());
 
   app.use('/api/projects/:projectId', resolveProject, createProjectRouter());
 
