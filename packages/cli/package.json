@@ -24,7 +24,8 @@
     "verify": "tsc --build tsconfig.json --dry",
     "test": "vitest run",
     "prepublishOnly": "yarn build && yarn test",
-    "deploy": "bash scripts/publish.sh"
+    "deploy": "bash scripts/publish.sh",
+    "deploy:beta": "bash scripts/publish.sh --beta"
   },
   "keywords": [
     "ai-agent",
