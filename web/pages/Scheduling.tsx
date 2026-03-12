@@ -9,6 +9,7 @@ import {
   TestTube2,
   Search,
   ClipboardList,
+  BarChart2,
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -33,6 +34,7 @@ import {
   triggerQa,
   triggerAudit,
   triggerPlanner,
+  triggerAnalytics,
   useApi,
 } from '../api';
 import {
@@ -70,6 +72,7 @@ const Scheduling: React.FC = () => {
       reviewerSchedule: '25 */6 * * *',
       qa: { schedule: '45 2,14 * * *', enabled: true },
       audit: { schedule: '50 3 * * 1', enabled: true },
+      analytics: { schedule: '0 6 * * 1', enabled: false },
       roadmapScanner: { slicerSchedule: '35 */12 * * *', enabled: true },
       scheduleBundleId: null,
       schedulingPriority: 3,
@@ -141,6 +144,7 @@ const Scheduling: React.FC = () => {
           reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
           qa: config.qa || { schedule: '45 2,14 * * *', enabled: true },
           audit: config.audit || { schedule: '50 3 * * 1', enabled: true },
+          analytics: config.analytics || { schedule: '0 6 * * 1', enabled: false },
           roadmapScanner: {
             enabled: config.roadmapScanner?.enabled ?? true,
             slicerSchedule: config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
@@ -249,7 +253,7 @@ const Scheduling: React.FC = () => {
       setUpdatingJob(null);
     }
   };
-  const handleTriggerJob = async (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner') => {
+  const handleTriggerJob = async (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics') => {
     setTriggeringJob(job);
     try {
       const triggerMap = {
@@ -258,6 +262,7 @@ const Scheduling: React.FC = () => {
         qa: triggerQa,
         audit: triggerAudit,
         planner: triggerPlanner,
+        analytics: triggerAnalytics,
       };
       await triggerMap[job]();
       addToast({
@@ -356,6 +361,10 @@ const Scheduling: React.FC = () => {
         audit: {
           ...config.audit,
           schedule: editState.form.audit.schedule,
+        },
+        analytics: {
+          ...config.analytics,
+          schedule: editState.form.analytics?.schedule || config.analytics?.schedule || '0 6 * * 1',
         },
         roadmapScanner: {
           ...config.roadmapScanner,
@@ -482,7 +491,7 @@ const Scheduling: React.FC = () => {
     configuredCronExpr: string,
     displayedCronExpr: string,
   ): string => {
-    if (!activeTemplate) {
+    if (!activeTemplate || job === 'analytics') {
       return cronToHuman(displayedCronExpr);
     }
     if (!isCronEquivalent(activeTemplate.schedules[job], configuredCronExpr)) {
@@ -556,6 +565,16 @@ const Scheduling: React.FC = () => {
       nextRun: scheduleInfo.planner?.nextRun,
       delayInfo: scheduleInfo.planner,
     },
+    {
+      id: 'analytics',
+      name: 'Analytics',
+      description: 'Fetches Amplitude data, analyzes with AI, and creates board issues',
+      icon: <BarChart2 className="h-4 w-4" />,
+      enabled: config?.analytics?.enabled ?? false,
+      schedule: scheduleInfo.analytics?.schedule || config.analytics?.schedule || '0 6 * * 1',
+      nextRun: scheduleInfo.analytics?.nextRun,
+      delayInfo: scheduleInfo.analytics,
+    },
   ];
   const tabs = [
     {
@@ -613,7 +632,7 @@ const Scheduling: React.FC = () => {
                       checked={agent.enabled}
                       disabled={updatingJob !== null}
                       aria-label={`Toggle ${agent.name.toLowerCase()} automation`}
-                      onChange={(checked) => handleJobToggle(agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner', checked)}
+                      onChange={(checked) => handleJobToggle(agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics', checked)}
                     />
                   </div>
 
@@ -623,13 +642,15 @@ const Scheduling: React.FC = () => {
                         <div className="text-sm text-slate-400">Schedule</div>
                         <div className="text-sm text-slate-200 font-medium">
                           {formatScheduleLabel(
-                            (agent.id === 'planner' ? 'slicer' : agent.id) as 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer',
+                            (agent.id === 'planner' ? 'slicer' : agent.id) as 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics',
                             agent.id === 'qa'
                               ? config?.qa?.schedule || ''
                               : agent.id === 'audit'
                               ? config?.audit?.schedule || ''
                               : agent.id === 'planner'
                               ? config?.roadmapScanner?.slicerSchedule || '35 */12 * * *'
+                              : agent.id === 'analytics'
+                              ? config?.analytics?.schedule || '0 6 * * 1'
                               : agent.schedule,
                             agent.id === 'qa'
                               ? config?.qa?.schedule || ''
@@ -637,6 +658,8 @@ const Scheduling: React.FC = () => {
                               ? config?.audit?.schedule || ''
                               : agent.id === 'planner'
                               ? config?.roadmapScanner?.slicerSchedule || '35 */12 * * *'
+                              : agent.id === 'analytics'
+                              ? config?.analytics?.schedule || '0 6 * * 1'
                               : agent.schedule,
                           )}
                         </div>
@@ -653,7 +676,7 @@ const Scheduling: React.FC = () => {
                         </div>
                         <button
                           disabled={triggeringJob !== null}
-                          onClick={() => handleTriggerJob(agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner')}
+                          onClick={() => handleTriggerJob(agent.id as 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics')}
                           className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-green-400 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 hover:border-green-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
                           {triggeringJob === agent.id ? (
@@ -715,6 +738,7 @@ const Scheduling: React.FC = () => {
                       reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
                       qa: config.qa || { schedule: '45 2,14 * * *', enabled: true },
                       audit: config.audit || { schedule: '50 3 * * 1', enabled: true },
+                      analytics: config.analytics || { schedule: '0 6 * * 1', enabled: false },
                       roadmapScanner: {
                         enabled: config.roadmapScanner?.enabled ?? true,
                         slicerSchedule: config.roadmapScanner?.slicerSchedule || '35 */12 * * *',

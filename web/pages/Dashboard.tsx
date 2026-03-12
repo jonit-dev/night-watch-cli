@@ -118,10 +118,10 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleTriggerJob = async (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner') => {
+  const handleTriggerJob = async (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics') => {
     setTriggeringJob(job);
     try {
-      const triggerMap = { executor: triggerRun, reviewer: triggerReview, qa: triggerQa, audit: triggerAudit, planner: triggerPlanner };
+      const triggerMap = { executor: triggerRun, reviewer: triggerReview, qa: triggerQa, audit: triggerAudit, planner: triggerPlanner, analytics: triggerAnalytics };
       await triggerMap[job]();
       addToast({ title: 'Job Triggered', message: `${job[0].toUpperCase() + job.slice(1)} job has been queued.`, type: 'success' });
     } catch (err) {

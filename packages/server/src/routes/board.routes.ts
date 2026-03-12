@@ -194,6 +194,7 @@ function createBoardRouteHandlers(ctx: IBoardRouteContext): Router {
         return;
       }
       await provider.closeIssue(issueNumber);
+      await provider.moveIssue(issueNumber, 'Done');
       invalidateBoardCache(projectDir);
       res.json({ closed: true });
     } catch (error) {

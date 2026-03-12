@@ -1665,12 +1665,14 @@ describe('server API', () => {
         expect(response.body.error).toContain('body is required');
       });
 
-      it('DELETE /api/board/issues/:number closes issue', async () => {
+      it('DELETE /api/board/issues/:number closes issue and moves it to Done', async () => {
         vi.mocked(mockBoardProvider.closeIssue).mockResolvedValue(undefined);
+        vi.mocked(mockBoardProvider.moveIssue).mockResolvedValue(undefined);
         const response = await request(app).delete('/api/board/issues/10');
         expect(response.status).toBe(200);
         expect(response.body.closed).toBe(true);
         expect(mockBoardProvider.closeIssue).toHaveBeenCalledWith(10);
+        expect(mockBoardProvider.moveIssue).toHaveBeenCalledWith(10, 'Done');
       });
     });
   });
