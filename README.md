@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/%40jonit-dev%2Fnight-watch-cli.svg)](https://www.npmjs.com/package/%40jonit-dev%2Fnight-watch-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen.svg)](https://nodejs.org/)
 
 **Overnight PRD execution for AI-native devs and small teams**
 
