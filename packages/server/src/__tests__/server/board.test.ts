@@ -169,6 +169,7 @@ function createTestApp(config: Record<string, unknown>, provider: IBoardProvider
         return;
       }
       await prov.closeIssue(issueNumber);
+      await prov.moveIssue(issueNumber, "Done");
       res.json({ closed: true });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
@@ -537,10 +538,11 @@ describe("Board API Endpoints", () => {
       expect(response.body).toEqual({ error: "Invalid issue number" });
     });
 
-    it("closes an issue", async () => {
+    it("closes an issue and moves it to Done", async () => {
       const config = { boardProvider: { enabled: true, projectNumber: "123" } };
       const mockProvider = createMockProvider();
       mockProvider.closeIssue = vi.fn().mockResolvedValue(undefined);
+      mockProvider.moveIssue = vi.fn().mockResolvedValue(undefined);
 
       const app = createTestApp(config, mockProvider);
       const response = await request(app).delete("/api/board/issues/42");
@@ -548,6 +550,7 @@ describe("Board API Endpoints", () => {
       expect(response.status).toBe(200);
       expect(response.body).toEqual({ closed: true });
       expect(mockProvider.closeIssue).toHaveBeenCalledWith(42);
+      expect(mockProvider.moveIssue).toHaveBeenCalledWith(42, "Done");
     });
   });
 });

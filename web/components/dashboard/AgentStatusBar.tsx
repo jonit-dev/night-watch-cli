@@ -10,7 +10,7 @@ interface IAgentStatusBarProps {
   onViewLog: () => void;
   cancellingProcess: 'run' | 'review' | null;
   clearingLock: boolean;
-  onTriggerJob: (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner') => void;
+  onTriggerJob: (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics') => void;
   triggeringJob: string | null;
 }
 
@@ -18,7 +18,7 @@ interface IAgentConfig {
   name: string;
   displayName: string;
   processName: string;
-  triggerId: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner';
+  triggerId: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics';
   cancelType?: 'run' | 'review';
   runningLabel: string;
   idleLabel: string;
@@ -30,6 +30,7 @@ const AGENTS: IAgentConfig[] = [
   { name: 'qa', displayName: 'QA', processName: 'qa', triggerId: 'qa', runningLabel: 'Running', idleLabel: 'Idle' },
   { name: 'auditor', displayName: 'Auditor', processName: 'audit', triggerId: 'audit', runningLabel: 'Running', idleLabel: 'Idle' },
   { name: 'planner', displayName: 'Planner', processName: 'planner', triggerId: 'planner', runningLabel: 'Writing PRDs', idleLabel: 'Idle' },
+  { name: 'analytics', displayName: 'Analytics', processName: 'analytics', triggerId: 'analytics', runningLabel: 'Running', idleLabel: 'Idle' },
 ];
 
 const AgentStatusBar: React.FC<IAgentStatusBarProps> = ({
@@ -51,7 +52,7 @@ const AgentStatusBar: React.FC<IAgentStatusBarProps> = ({
   };
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
       {AGENTS.map(agent => {
         const process = getProcess(agent.processName);
         const isRunning = process?.running ?? false;
