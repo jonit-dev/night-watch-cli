@@ -55,9 +55,10 @@ function loadRegistryEntriesWithLegacyFallback(): IRegistryEntry[] {
 
   const db = getDb();
   const alreadyHydrated = db
-    .prepare<[], { value: string }>(
-      "SELECT value FROM schema_meta WHERE key = 'legacy_projects_json_hydrated'",
-    )
+    .prepare<
+      [],
+      { value: string }
+    >("SELECT value FROM schema_meta WHERE key = 'legacy_projects_json_hydrated'")
     .get();
   if (alreadyHydrated) {
     return [];

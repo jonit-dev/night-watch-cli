@@ -12,9 +12,11 @@ independently-executable pieces.
 1. **Ask for the epic description** if not provided.
 
 2. **Run the slicer** to auto-generate PRDs from a roadmap file:
+
    ```
    night-watch slice
    ```
+
    This reads `docs/roadmap.md` (or configured roadmap path) and generates PRD files.
 
 3. **To slice a specific feature**, first add it to `docs/roadmap.md`, then run slice.

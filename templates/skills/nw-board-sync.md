@@ -9,16 +9,19 @@ When the board is out of sync with PRD/PR status, or after manual changes to iss
 ## Steps
 
 1. **View current board state**:
+
    ```
    night-watch board status
    ```
 
 2. **Sync board with PRD filesystem**:
+
    ```
    night-watch board sync
    ```
 
 3. **List open issues that may need board assignment**:
+
    ```
    gh issue list --state open --label "night-watch"
    ```
@@ -30,13 +33,13 @@ When the board is out of sync with PRD/PR status, or after manual changes to iss
 
 ## Board Columns
 
-| Column | Meaning |
-|--------|---------|
-| Draft | Not ready for execution |
-| Ready | Queued for Night Watch — picked up automatically |
-| In Progress | Currently being implemented |
-| Review | PR opened, awaiting review |
-| Done | Merged and complete |
+| Column      | Meaning                                          |
+| ----------- | ------------------------------------------------ |
+| Draft       | Not ready for execution                          |
+| Ready       | Queued for Night Watch — picked up automatically |
+| In Progress | Currently being implemented                      |
+| Review      | PR opened, awaiting review                       |
+| Done        | Merged and complete                              |
 
 ## Notes
 

@@ -1,4 +1,4 @@
-import { MoonStar, Github } from 'lucide-react';
+import { Github, MoonStar } from 'lucide-react';
 
 export function Footer() {
   return (
@@ -11,20 +11,47 @@ export function Footer() {
             <div className="absolute -bottom-2 -right-2 w-5 h-5 bg-purple-500/30 blur-md rounded-full"></div>
             <div className="absolute -top-2 -left-2 w-5 h-5 bg-indigo-500/30 blur-md rounded-full"></div>
           </div>
-          <span className="font-bold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-gray-200 to-gray-500 group-hover:to-gray-300 transition-colors">Night Watch</span>
+          <span className="font-bold text-lg tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-gray-200 to-gray-500 group-hover:to-gray-300 transition-colors">
+            Night Watch
+          </span>
         </a>
-        
+
         <div className="flex items-center gap-6 text-sm text-gray-400">
-          <a href="https://github.com/jonit-dev/night-watch-cli" className="hover:text-white transition-colors flex items-center gap-1">
+          <a
+            href="https://github.com/jonit-dev/night-watch-cli"
+            className="hover:text-white transition-colors flex items-center gap-1"
+          >
             <Github className="w-4 h-4" /> GitHub
           </a>
-          <a href="https://npmjs.com/package/@jonit-dev/night-watch-cli" className="hover:text-white transition-colors">npm</a>
-          <a href="https://github.com/jonit-dev/night-watch-cli/blob/master/README.md" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">Docs</a>
-          <a href="#license" className="hover:text-white transition-colors">License (MIT)</a>
+          <a
+            href="https://npmjs.com/package/@jonit-dev/night-watch-cli"
+            className="hover:text-white transition-colors"
+          >
+            npm
+          </a>
+          <a
+            href="https://github.com/jonit-dev/night-watch-cli/blob/master/README.md"
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-white transition-colors"
+          >
+            Docs
+          </a>
+          <a href="#license" className="hover:text-white transition-colors">
+            License (MIT)
+          </a>
         </div>
-        
+
         <div className="text-sm text-gray-500 text-center md:text-right">
-          <p>Built by <a href="https://github.com/jonit-dev" className="text-gray-400 hover:text-white transition-colors">jonit-dev</a></p>
+          <p>
+            Built by{' '}
+            <a
+              href="https://github.com/jonit-dev"
+              className="text-gray-400 hover:text-white transition-colors"
+            >
+              jonit-dev
+            </a>
+          </p>
           <p className="text-xs mt-1">Night Watch is open source. MIT licensed.</p>
         </div>
       </div>

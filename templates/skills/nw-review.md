@@ -9,16 +9,19 @@ When the user wants to trigger automated code review on Night Watch PRs, or when
 ## Steps
 
 1. **List open Night Watch PRs**:
+
    ```
    gh pr list --state open --json number,title,headRefName --jq '.[] | select(.headRefName | startswith("night-watch/"))'
    ```
 
 2. **Run the reviewer** (processes all eligible PRs):
+
    ```
    night-watch review
    ```
 
 3. **Review a specific PR**:
+
    ```
    night-watch review --pr <number>
    ```

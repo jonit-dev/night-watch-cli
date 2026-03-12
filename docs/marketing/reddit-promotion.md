@@ -12,33 +12,33 @@
 
 ### Tier 1 — High relevance, post first
 
-| Subreddit | Members | Why | Post type |
-|---|---|---|---|
-| r/SideProject | ~200k | Built for show-and-tell of indie tools | Show-off / Launch |
-| r/ChatGPTCoding | ~300k | AI-assisted coding is the core topic | Tutorial / Demo |
-| r/ClaudeAI | ~150k | Night Watch uses Claude as primary provider | Tool showcase |
-| r/selfhosted | ~400k | CLI tool you run on your own infra | Project announcement |
-| r/opensource | ~50k | It's open source on GitHub | Launch post |
+| Subreddit       | Members | Why                                         | Post type            |
+| --------------- | ------- | ------------------------------------------- | -------------------- |
+| r/SideProject   | ~200k   | Built for show-and-tell of indie tools      | Show-off / Launch    |
+| r/ChatGPTCoding | ~300k   | AI-assisted coding is the core topic        | Tutorial / Demo      |
+| r/ClaudeAI      | ~150k   | Night Watch uses Claude as primary provider | Tool showcase        |
+| r/selfhosted    | ~400k   | CLI tool you run on your own infra          | Project announcement |
+| r/opensource    | ~50k    | It's open source on GitHub                  | Launch post          |
 
 ### Tier 2 — Good fit, post after Tier 1
 
-| Subreddit | Members | Why | Post type |
-|---|---|---|---|
-| r/programming | ~6M | General dev audience, use sparingly | Link post to blog/landing |
-| r/webdev | ~2M | Many solo devs / small teams here | Show-off |
-| r/devops | ~300k | Cron-driven automation, CI integration | Tool announcement |
-| r/github | ~30k | GitHub Projects integration is a key feature | Demo |
-| r/solopreneur | ~100k | "Your overnight engineering team" resonates | Story post |
-| r/indiehackers | ~100k | Solo founder building with AI | Behind-the-scenes |
+| Subreddit      | Members | Why                                          | Post type                 |
+| -------------- | ------- | -------------------------------------------- | ------------------------- |
+| r/programming  | ~6M     | General dev audience, use sparingly          | Link post to blog/landing |
+| r/webdev       | ~2M     | Many solo devs / small teams here            | Show-off                  |
+| r/devops       | ~300k   | Cron-driven automation, CI integration       | Tool announcement         |
+| r/github       | ~30k    | GitHub Projects integration is a key feature | Demo                      |
+| r/solopreneur  | ~100k   | "Your overnight engineering team" resonates  | Story post                |
+| r/indiehackers | ~100k   | Solo founder building with AI                | Behind-the-scenes         |
 
 ### Tier 3 — Niche, optional
 
-| Subreddit | Members | Why | Post type |
-|---|---|---|---|
-| r/node | ~200k | Built with Node/TypeScript | Project post |
-| r/typescript | ~100k | TypeScript monorepo, tsyringe DI | Project post |
-| r/MachineLearning | ~3M | AI agents in production | Discussion |
-| r/artificial | ~200k | Practical AI agent use case | Discussion |
+| Subreddit         | Members | Why                              | Post type    |
+| ----------------- | ------- | -------------------------------- | ------------ |
+| r/node            | ~200k   | Built with Node/TypeScript       | Project post |
+| r/typescript      | ~100k   | TypeScript monorepo, tsyringe DI | Project post |
+| r/MachineLearning | ~3M     | AI agents in production          | Discussion   |
+| r/artificial      | ~200k   | Practical AI agent use case      | Discussion   |
 
 ---
 
@@ -47,6 +47,7 @@
 ### Template A — Show-off / Launch (r/SideProject, r/opensource, r/webdev)
 
 **Title options (pick one):**
+
 - "I built a CLI that runs Claude/Codex on a schedule and opens PRs while I sleep"
 - "Night Watch: queue up tasks during the day, wake up to PRs in the morning"
 - "I got tired of context-switching, so I built a cron-based orchestrator for Claude/Codex"
@@ -123,6 +124,7 @@ Would love feedback, especially from anyone who's experimented with automating p
 ### Template B — Tutorial / How-I-Use-It (r/ChatGPTCoding, r/ClaudeAI)
 
 **Title options:**
+
 - "How I use Claude to implement my entire backlog overnight (Night Watch CLI)"
 - "I set up an AI agent pipeline that writes code, reviews PRs, and runs tests on autopilot"
 - "My setup: Claude Code + cron + GitHub Projects = overnight AI engineering team"
@@ -157,8 +159,10 @@ I wake up to Telegram notifications with PR links.
 
 **Setup takes ~2 minutes:**
 ```
+
 npx @jonit-dev/night-watch-cli init
-night-watch install  # sets up cron
+night-watch install # sets up cron
+
 ```
 
 It supports Claude and Codex as providers, with automatic rate-limit fallback. You can configure per-job providers (e.g., Codex for execution, Claude for reviews).
@@ -175,6 +179,7 @@ Happy to answer questions about the architecture or share more about how I use i
 ### Template C — Technical / DevOps angle (r/devops, r/selfhosted)
 
 **Title options:**
+
 - "Night Watch — cron-driven AI agent pipeline for automated PRs, reviews, and QA"
 - "Open-source CLI that turns GitHub Projects into an overnight AI execution pipeline"
 
@@ -194,7 +199,9 @@ Built an open-source CLI tool for automating software engineering tasks on a sch
 
 **Agent pipeline:**
 ```
+
 Slicer (roadmap → PRDs) → Executor (PRD → PR) → Reviewer (PR → score/fix) → QA (PR → e2e tests) → Auto-merge
+
 ```
 
 **Key design decisions:**
@@ -209,7 +216,9 @@ Slicer (roadmap → PRDs) → Executor (PRD → PR) → Reviewer (PR → score/f
 [IMAGE_8: Cron entries installed by `night-watch install`]
 
 ```
+
 npx @jonit-dev/night-watch-cli init
+
 ```
 
 GitHub: (repo link)
@@ -222,6 +231,7 @@ Looking for feedback on the scheduling model and the review scoring approach.
 ### Template D — Story / Founder angle (r/solopreneur, r/indiehackers)
 
 **Title options:**
+
 - "I built an AI 'night shift' for my codebase — it does my backlog while I sleep"
 - "As a solo dev, I needed more hands. So I built an AI team that works overnight"
 
@@ -268,29 +278,31 @@ Anyone else automating parts of their dev workflow? Curious what's working for o
 
 Replace these with actual screenshots before posting:
 
-| Placeholder | What to capture |
-|---|---|
-| `[IMAGE_1]` | Web dashboard — jobs list or overview page |
-| `[IMAGE_2]` | Terminal: successful `night-watch run` output showing PR URL |
-| `[IMAGE_3]` | GitHub PR opened by Night Watch — show title, description, review score comment |
-| `[IMAGE_4]` | GitHub Projects board with columns (Draft / Ready / In Progress / Review / Done) |
-| `[IMAGE_5]` | Telegram notification — successful run with PR summary |
-| `[IMAGE_6]` | Web dashboard — run history or analytics view |
-| `[IMAGE_7]` | Architecture diagram or agent pipeline flow chart |
-| `[IMAGE_8]` | Terminal: `night-watch install` output showing cron entries |
-| `[IMAGE_9]` | GitHub Projects board before/after (items moved to Done) |
-| `[IMAGE_10]` | Morning Telegram batch — multiple completed PR notifications |
+| Placeholder  | What to capture                                                                  |
+| ------------ | -------------------------------------------------------------------------------- |
+| `[IMAGE_1]`  | Web dashboard — jobs list or overview page                                       |
+| `[IMAGE_2]`  | Terminal: successful `night-watch run` output showing PR URL                     |
+| `[IMAGE_3]`  | GitHub PR opened by Night Watch — show title, description, review score comment  |
+| `[IMAGE_4]`  | GitHub Projects board with columns (Draft / Ready / In Progress / Review / Done) |
+| `[IMAGE_5]`  | Telegram notification — successful run with PR summary                           |
+| `[IMAGE_6]`  | Web dashboard — run history or analytics view                                    |
+| `[IMAGE_7]`  | Architecture diagram or agent pipeline flow chart                                |
+| `[IMAGE_8]`  | Terminal: `night-watch install` output showing cron entries                      |
+| `[IMAGE_9]`  | GitHub Projects board before/after (items moved to Done)                         |
+| `[IMAGE_10]` | Morning Telegram batch — multiple completed PR notifications                     |
 
 ---
 
 ## Posting Strategy
 
 ### Timing
+
 - Post between **9–11 AM EST** on **Tuesday, Wednesday, or Thursday** (peak Reddit engagement)
 - Space posts across subreddits: 1–2 per day over a week
 - Don't cross-post — write slightly different titles/angles for each sub
 
 ### Order
+
 1. **Day 1:** r/SideProject (Template A) + r/ClaudeAI (Template B)
 2. **Day 2:** r/ChatGPTCoding (Template B) + r/opensource (Template A)
 3. **Day 3:** r/selfhosted (Template C) + r/webdev (Template A)
@@ -298,6 +310,7 @@ Replace these with actual screenshots before posting:
 5. **Day 5:** r/programming (link post) + r/indiehackers (Template D)
 
 ### Engagement rules
+
 - Reply to every comment within the first 2 hours
 - Be honest about limitations — "it works great for scoped tasks, not for vague requests"
 - Don't be defensive about AI criticism — acknowledge valid concerns
@@ -305,6 +318,7 @@ Replace these with actual screenshots before posting:
 - If someone asks "how is this different from X" — answer directly, don't dodge
 
 ### What to avoid
+
 - Don't say "game-changer" or "revolutionary"
 - Don't post to subreddits that ban self-promotion (check rules first)
 - Don't use multiple accounts or ask friends to upvote
