@@ -1,16 +1,19 @@
 import React from 'react';
+import { INightWatchConfig } from '../../api.js';
 import Card from '../ui/Card';
 import CronScheduleInput from '../ui/CronScheduleInput';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import Switch from '../ui/Switch';
 import { IScheduleTemplate, SCHEDULE_TEMPLATES } from '../../utils/cron.js';
+import ScheduleTimeline from './ScheduleTimeline.js';
 
 export interface IScheduleConfigForm {
   cronSchedule: string;
   reviewerSchedule: string;
   qa: { schedule: string; enabled: boolean };
   audit: { schedule: string; enabled: boolean };
+  analytics?: { schedule: string; enabled: boolean };
   roadmapScanner: { slicerSchedule: string; enabled: boolean };
   scheduleBundleId: string | null;
   schedulingPriority: number;
@@ -26,6 +29,9 @@ interface IScheduleConfigProps {
   onSwitchToTemplate: () => void;
   onSwitchToCustom: () => void;
   onApplyTemplate: (tpl: IScheduleTemplate) => void;
+  allProjectConfigs?: Array<{ projectId: string; config: INightWatchConfig }>;
+  currentProjectId?: string;
+  onEditJob?: (projectId: string, jobType: string) => void;
 }
 
 const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
@@ -36,9 +42,20 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
   onSwitchToTemplate,
   onSwitchToCustom,
   onApplyTemplate,
+  allProjectConfigs,
+  currentProjectId,
+  onEditJob,
 }) => {
   return (
     <Card className="p-6 space-y-6">
+      {allProjectConfigs && allProjectConfigs.length > 0 && (
+        <ScheduleTimeline
+          configs={allProjectConfigs}
+          currentProjectId={currentProjectId}
+          onEditJob={onEditJob}
+        />
+      )}
+
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-lg font-medium text-slate-200 mb-1">Job Schedules</h3>
@@ -141,6 +158,18 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
               })
             }
           />
+          {form.analytics?.enabled && (
+            <CronScheduleInput
+              label="Analytics Schedule"
+              value={form.analytics.schedule}
+              onChange={(val) =>
+                onFieldChange('analytics', {
+                  ...form.analytics,
+                  schedule: val,
+                })
+              }
+            />
+          )}
           {form.roadmapScanner.enabled && (
             <CronScheduleInput
               label="Planner Schedule"

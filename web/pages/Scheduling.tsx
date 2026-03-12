@@ -16,10 +16,15 @@ import Switch from '../components/ui/Switch';
 import Tabs from '../components/ui/Tabs';
 import ScheduleConfig from '../components/scheduling/ScheduleConfig.js';
 import type { IScheduleConfigForm } from '../components/scheduling/ScheduleConfig.js';
+import ScheduleTimeline from '../components/scheduling/ScheduleTimeline.js';
 import { useStore } from '../store/useStore';
+import type { INightWatchConfig, IQueueAnalytics, IQueueStatus } from '../api';
 import {
   fetchScheduleInfo,
   fetchConfig,
+  fetchAllConfigs,
+  fetchQueueStatus,
+  fetchQueueAnalytics,
   updateConfig,
   triggerInstallCron,
   triggerUninstallCron,
@@ -54,6 +59,10 @@ const Scheduling: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [updatingJob, setUpdatingJob] = useState<string | null>(null);
   const [triggeringJob, setTriggeringJob] = useState<string | null>(null);
+
+  const [allProjectConfigs, setAllProjectConfigs] = useState<Array<{ projectId: string; config: INightWatchConfig }>>([]);
+  const [queueStatus, setQueueStatus] = useState<IQueueStatus | null>(null);
+  const [queueAnalytics, setQueueAnalytics] = useState<IQueueAnalytics | null>(null);
 
   const [editState, setEditState] = useState<IScheduleEditState>({
     form: {
@@ -92,6 +101,28 @@ const Scheduling: React.FC = () => {
     }, 30000);
     return () => clearInterval(interval);
   }, [refetchSchedule]);
+
+  // Fetch all project configs for the timeline
+  useEffect(() => {
+    if (globalModeLoading) return;
+    fetchAllConfigs().then(setAllProjectConfigs).catch(console.error);
+  }, [selectedProjectId, globalModeLoading]);
+
+  // Fetch queue status and analytics, refresh every 30 seconds
+  useEffect(() => {
+    if (globalModeLoading) return;
+    const fetchDashboard = () => {
+      fetchQueueStatus()
+        .then(setQueueStatus)
+        .catch(() => { /* silently ignore */ });
+      fetchQueueAnalytics(24)
+        .then(setQueueAnalytics)
+        .catch(() => { /* silently ignore */ });
+    };
+    fetchDashboard();
+    const interval = setInterval(fetchDashboard, 30000);
+    return () => clearInterval(interval);
+  }, [globalModeLoading, selectedProjectId]);
   // Initialize edit state when config loads
   useEffect(() => {
     if (config && !editState.isDirty) {
@@ -649,6 +680,13 @@ const Scheduling: React.FC = () => {
       label: 'Schedules',
       content: (
         <div className="space-y-6">
+          <ScheduleTimeline
+            configs={allProjectConfigs}
+            currentProjectId={selectedProjectId ?? undefined}
+            onEditJob={(_projectId, _jobType) => { /* timeline click in schedules tab */ }}
+            queueStatus={queueStatus}
+            queueAnalytics={queueAnalytics}
+          />
           <ScheduleConfig
             form={editState.form}
             scheduleMode={editState.scheduleMode}

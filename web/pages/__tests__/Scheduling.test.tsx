@@ -573,17 +573,25 @@ describe('Scheduling page', () => {
   it('keeps cron controls available after dashboard refresh', async () => {
     renderScheduling();
 
-    // Cron controls exist immediately
+    // Navigate to the Schedules tab first
+    fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
+
+    // Job Schedules heading is visible in template mode
+    expect(screen.getByText('Job Schedules')).toBeInTheDocument();
+
+    // Switch to custom mode to reveal cron inputs
+    fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
+
+    // Cron controls are now visible
     expect(screen.getByText('PRD Execution Schedule')).toBeInTheDocument();
     expect(screen.getByText('PR Review Schedule')).toBeInTheDocument();
-    expect(screen.getByText('Job Schedules')).toBeInTheDocument();
 
     // Wait a bit for any async operations
     await waitFor(() => {
       expect(screen.getByText('PRD Execution Schedule')).toBeInTheDocument();
     });
 
-    // Cron controls still present
+    // Cron controls still present after async ops
     expect(screen.getByText('PRD Execution Schedule')).toBeInTheDocument();
     expect(screen.getByText('Job Schedules')).toBeInTheDocument();
   });
