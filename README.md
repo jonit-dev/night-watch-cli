@@ -7,6 +7,8 @@
 
 **Overnight PRD execution for AI-native devs and small teams**
 
+![Night Watch — Your repo's night shift](docs/marketing/screenshots/landing-header.webp)
+
 Night Watch is an async execution layer for well-scoped engineering work. It takes PRDs or queued board items, runs Claude CLI or Codex in isolated git worktrees, and opens pull requests while you're offline.
 
 Think of it as a repo night shift: you define the work during the day, Night Watch executes the queue overnight, and you wake up to PRs, review fixes, QA output, and audit results.
@@ -55,6 +57,18 @@ night-watch install       # Setup automated cron
 ## 5-Minute Walkthrough
 
 New to Night Watch? Follow our [**5-Minute Walkthrough**](docs/walkthrough.md) to go from zero to your first AI-generated PR.
+
+### Board View
+
+Queue work as GitHub issues and track them through Draft → Ready → In Progress → Review → Done.
+
+![Board — kanban view of queued work](docs/marketing/screenshots/board.png)
+
+### Execution Timeline
+
+See all scheduled agent runs across your projects at a glance.
+
+![Execution Timeline — upcoming runs across projects](docs/marketing/screenshots/execution-timeline.webp)
 
 ```bash
 # Quick start
