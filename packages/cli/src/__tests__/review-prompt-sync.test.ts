@@ -25,7 +25,13 @@ describe('review prompt sync', () => {
     const prompt = fs.readFileSync(promptPath, 'utf-8');
 
     expect(prompt).toContain('### **AI PR Review Instructions**');
-    expect(prompt).toContain('- **Score:** Provide a score from 0-100.');
+    expect(prompt).toContain('### **AI Review Summary**');
+    expect(prompt).toContain('**🏆 Overall Score:** XX/100');
+    expect(prompt).toContain('### **✅ Key Strengths**');
+    expect(prompt).toContain('### **⚠️ Areas for Improvement**');
+    expect(prompt).toContain('### **🐛 Bugs Found**');
+    expect(prompt).toContain('### **📋 Issues Found**');
+    expect(prompt).toContain('### **🔚 Conclusion**');
     expect(prompt).toContain('**🏆 Overall Score:** 85/100');
   });
 });
