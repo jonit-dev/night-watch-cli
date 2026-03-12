@@ -43,6 +43,7 @@ interface AppState {
   setProjects: (p: ProjectInfo[]) => void;
   selectedProjectId: string | null;
   selectProject: (id: string | null) => void;
+  removeProjectFromList: (id: string) => void;
 
   // Jobs computed state (derived from status.config via WEB_JOB_REGISTRY)
   getJobStates: () => IWebJobState[];
@@ -104,6 +105,29 @@ export const useStore = create<AppState>((set, get) => ({
       return {
         selectedProjectId: id,
         ...(project ? { projectName: project.name } : {}),
+      };
+    });
+  },
+
+  removeProjectFromList: (id) => {
+    set((state) => {
+      const remaining = state.projects.filter((p) => p.name !== id);
+      const wasSelected = state.selectedProjectId === id;
+      const nextId = wasSelected ? (remaining[0]?.name ?? null) : state.selectedProjectId;
+
+      if (wasSelected) {
+        setCurrentProject(nextId);
+        if (nextId) {
+          localStorage.setItem('nw-selected-project', nextId);
+        } else {
+          localStorage.removeItem('nw-selected-project');
+        }
+      }
+
+      return {
+        projects: remaining,
+        selectedProjectId: nextId,
+        ...(wasSelected && remaining[0] ? { projectName: remaining[0].name } : {}),
       };
     });
   },

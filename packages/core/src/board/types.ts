@@ -45,6 +45,9 @@ export interface IBoardProvider {
   /** Create a GitHub issue and add it to the board in the specified column. */
   createIssue(input: ICreateIssueInput): Promise<IBoardIssue>;
 
+  /** Add an existing issue (by number) to the board in the specified column. */
+  addIssue(issueNumber: number, column?: BoardColumnName): Promise<IBoardIssue>;
+
   /** Get a single issue by number. */
   getIssue(issueNumber: number): Promise<IBoardIssue | null>;
 

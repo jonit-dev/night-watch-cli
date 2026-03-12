@@ -2,9 +2,12 @@
 
 [![npm version](https://img.shields.io/npm/v/%40jonit-dev%2Fnight-watch-cli.svg)](https://www.npmjs.com/package/%40jonit-dev%2Fnight-watch-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen.svg)](https://nodejs.org/)
+[![Website](https://img.shields.io/badge/website-nightwatchcli.com-blue.svg)](https://nightwatchcli.com/)
 
 **Overnight PRD execution for AI-native devs and small teams**
+
+![Night Watch — Your repo's night shift](docs/marketing/screenshots/landing-header.webp)
 
 Night Watch is an async execution layer for well-scoped engineering work. It takes PRDs or queued board items, runs Claude CLI or Codex in isolated git worktrees, and opens pull requests while you're offline.
 
@@ -54,6 +57,18 @@ night-watch install       # Setup automated cron
 ## 5-Minute Walkthrough
 
 New to Night Watch? Follow our [**5-Minute Walkthrough**](docs/walkthrough.md) to go from zero to your first AI-generated PR.
+
+### Board View
+
+Queue work as GitHub issues and track them through Draft → Ready → In Progress → Review → Done.
+
+![Board — kanban view of queued work](docs/marketing/screenshots/board.png)
+
+### Execution Timeline
+
+See all scheduled agent runs across your projects at a glance.
+
+![Execution Timeline — upcoming runs across projects](docs/marketing/screenshots/execution-timeline.webp)
 
 ```bash
 # Quick start
@@ -155,6 +170,8 @@ yarn install && yarn build && npm link
 ---
 
 ## Documentation
+
+Full documentation is available at **[nightwatchcli.com](https://nightwatchcli.com/)**.
 
 ### Getting Started
 
