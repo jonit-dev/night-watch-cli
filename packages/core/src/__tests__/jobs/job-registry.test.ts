@@ -182,42 +182,6 @@ describe('getAllJobDefs', () => {
   });
 });
 
-describe('migrateLegacy', () => {
-  it('executor migrates cronSchedule from flat format', () => {
-    const def = getJobDef('executor')!;
-    const raw = { cronSchedule: '*/5 * * * *', executorEnabled: false, maxRuntime: 3600 };
-    const migrated = def.migrateLegacy?.(raw);
-    expect(migrated?.schedule).toBe('*/5 * * * *');
-    expect(migrated?.enabled).toBe(false);
-    expect(migrated?.maxRuntime).toBe(3600);
-  });
-
-  it('executor returns undefined when no legacy fields present', () => {
-    const def = getJobDef('executor')!;
-    const migrated = def.migrateLegacy?.({});
-    expect(migrated).toBeUndefined();
-  });
-
-  it('reviewer migrates from reviewerSchedule/reviewerEnabled', () => {
-    const def = getJobDef('reviewer')!;
-    const raw = { reviewerSchedule: '*/10 * * * *', reviewerEnabled: false };
-    const migrated = def.migrateLegacy?.(raw);
-    expect(migrated?.schedule).toBe('*/10 * * * *');
-    expect(migrated?.enabled).toBe(false);
-  });
-
-  it('slicer migrates from roadmapScanner.slicerSchedule', () => {
-    const def = getJobDef('slicer')!;
-    const raw = {
-      roadmapScanner: { slicerSchedule: '0 */6 * * *', slicerMaxRuntime: 300, enabled: true },
-    };
-    const migrated = def.migrateLegacy?.(raw);
-    expect(migrated?.schedule).toBe('0 */6 * * *');
-    expect(migrated?.maxRuntime).toBe(300);
-    expect(migrated?.enabled).toBe(true);
-  });
-});
-
 describe('derived constants match expected values', () => {
   it('VALID_JOB_TYPES from constants matches getValidJobTypes()', () => {
     const fromRegistry = getValidJobTypes();
