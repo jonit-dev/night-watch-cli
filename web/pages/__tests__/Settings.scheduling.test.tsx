@@ -46,6 +46,7 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     maxRetries: 3,
     reviewerMaxRetries: 2,
     reviewerRetryDelay: 30,
+    reviewerMaxPrsPerRun: 0,
     providerEnv: {},
     notifications: { webhooks: [] },
     prdPriority: [],

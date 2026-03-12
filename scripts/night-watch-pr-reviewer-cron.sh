@@ -38,6 +38,7 @@ fi
 # Retry configuration
 REVIEWER_MAX_RETRIES="${NW_REVIEWER_MAX_RETRIES:-2}"
 REVIEWER_RETRY_DELAY="${NW_REVIEWER_RETRY_DELAY:-30}"
+REVIEWER_MAX_PRS_PER_RUN="${NW_REVIEWER_MAX_PRS_PER_RUN:-0}"
 SCRIPT_START_TIME=$(date +%s)
 
 # Normalize retry settings to safe numeric ranges
@@ -47,11 +48,17 @@ fi
 if ! [[ "${REVIEWER_RETRY_DELAY}" =~ ^[0-9]+$ ]]; then
   REVIEWER_RETRY_DELAY="30"
 fi
+if ! [[ "${REVIEWER_MAX_PRS_PER_RUN}" =~ ^[0-9]+$ ]]; then
+  REVIEWER_MAX_PRS_PER_RUN="0"
+fi
 if [ "${REVIEWER_MAX_RETRIES}" -gt 10 ]; then
   REVIEWER_MAX_RETRIES="10"
 fi
 if [ "${REVIEWER_RETRY_DELAY}" -gt 300 ]; then
   REVIEWER_RETRY_DELAY="300"
+fi
+if [ "${REVIEWER_MAX_PRS_PER_RUN}" -gt 100 ]; then
+  REVIEWER_MAX_PRS_PER_RUN="100"
 fi
 
 mkdir -p "${LOG_DIR}"
@@ -607,7 +614,7 @@ NEEDS_WORK=0
 REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || echo "")
 PRS_NEEDING_WORK=""
 
-while IFS=$'\t' read -r pr_number pr_branch; do
+while IFS=$'\t' read -r pr_number pr_branch pr_labels; do
   if [ -z "${pr_number}" ] || [ -z "${pr_branch}" ]; then
     continue
   fi
@@ -617,6 +624,11 @@ while IFS=$'\t' read -r pr_number pr_branch; do
   fi
 
   if [ -z "${TARGET_PR}" ] && ! printf '%s\n' "${pr_branch}" | grep -Eq "${BRANCH_REGEX}"; then
+    continue
+  fi
+
+  if printf '%s\n' "${pr_labels:-}" | tr ',' '\n' | grep -Fxq 'needs-human-review'; then
+    log "INFO: PR #${pr_number} (${pr_branch}) is labeled needs-human-review; skipping automated review"
     continue
   fi
 
@@ -656,7 +668,10 @@ while IFS=$'\t' read -r pr_number pr_branch; do
     NEEDS_WORK=1
     PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
   fi
-done < <(gh pr list --state open --json number,headRefName --jq '.[] | [.number, .headRefName] | @tsv' 2>/dev/null || true)
+done < <(
+  gh pr list --state open --json number,headRefName,labels \
+    --jq '.[] | [.number, .headRefName, ((.labels // []) | map(.name) | join(","))] | @tsv' 2>/dev/null || true
+)
 
 if [ "${NEEDS_WORK}" -eq 0 ]; then
   log "SKIP: All ${OPEN_PRS} open PR(s) have passing CI and review score >= ${MIN_REVIEW_SCORE} (or no score yet)"
@@ -747,6 +762,16 @@ for pr_token in ${PRS_NEEDING_WORK}; do
   PR_NUMBER_ARRAY+=("${pr_token#\#}")
 done
 
+if [ "${REVIEWER_MAX_PRS_PER_RUN}" -gt 0 ] && [ "${#PR_NUMBER_ARRAY[@]}" -gt "${REVIEWER_MAX_PRS_PER_RUN}" ]; then
+  log "LIMIT: Restricting reviewer run to first ${REVIEWER_MAX_PRS_PER_RUN} PR(s) out of ${#PR_NUMBER_ARRAY[@]} needing work"
+  PR_NUMBER_ARRAY=("${PR_NUMBER_ARRAY[@]:0:${REVIEWER_MAX_PRS_PER_RUN}}")
+  PRS_NEEDING_WORK=""
+  for pr_number in "${PR_NUMBER_ARRAY[@]}"; do
+    PRS_NEEDING_WORK="${PRS_NEEDING_WORK}${PRS_NEEDING_WORK:+ }#${pr_number}"
+  done
+  PRS_NEEDING_WORK_CSV="${PRS_NEEDING_WORK// /,}"
+fi
+
 if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED}" = "1" ] && [ "${#PR_NUMBER_ARRAY[@]}" -gt 1 ]; then
   # Dry-run mode: print diagnostics and exit
   if [ "${NW_DRY_RUN:-0}" = "1" ]; then
@@ -758,6 +783,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
     if [ "${AUTO_MERGE}" = "1" ]; then
       echo "Auto-merge Method: ${AUTO_MERGE_METHOD}"
     fi
+    echo "Max PRs Per Run: ${REVIEWER_MAX_PRS_PER_RUN}"
     echo "Open PRs needing work:${PRS_NEEDING_WORK}"
     echo "Default Branch: ${DEFAULT_BRANCH}"
     echo "Parallel Workers: ${#PR_NUMBER_ARRAY[@]}"
@@ -892,6 +918,7 @@ if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   fi
   echo "Max Retries: ${REVIEWER_MAX_RETRIES}"
   echo "Retry Delay: ${REVIEWER_RETRY_DELAY}s"
+  echo "Max PRs Per Run: ${REVIEWER_MAX_PRS_PER_RUN}"
   echo "Open PRs needing work:${PRS_NEEDING_WORK}"
   echo "Default Branch: ${DEFAULT_BRANCH}"
   echo "Review Worktree: ${REVIEW_WORKTREE_DIR}"

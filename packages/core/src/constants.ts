@@ -42,6 +42,7 @@ export const DEFAULT_MAX_RETRIES = 3;
 // Reviewer Retry Configuration
 export const DEFAULT_REVIEWER_MAX_RETRIES = 2;
 export const DEFAULT_REVIEWER_RETRY_DELAY = 30; // seconds
+export const DEFAULT_REVIEWER_MAX_PRS_PER_RUN = 0; // 0 = unlimited
 
 // Branch Configuration
 export const DEFAULT_BRANCH_PREFIX = 'night-watch';

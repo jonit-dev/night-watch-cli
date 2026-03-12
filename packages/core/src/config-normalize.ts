@@ -93,6 +93,7 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
   normalized.maxRetries = readNumber(rawConfig.maxRetries);
   normalized.reviewerMaxRetries = readNumber(rawConfig.reviewerMaxRetries);
   normalized.reviewerRetryDelay = readNumber(rawConfig.reviewerRetryDelay);
+  normalized.reviewerMaxPrsPerRun = readNumber(rawConfig.reviewerMaxPrsPerRun);
   normalized.provider = validateProvider(String(rawConfig.provider ?? '')) ?? undefined;
   normalized.executorEnabled = readBoolean(rawConfig.executorEnabled);
   normalized.reviewerEnabled = readBoolean(rawConfig.reviewerEnabled);
@@ -309,9 +310,7 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
   if (rawQueue) {
     const rawMode = readString(rawQueue.mode);
     const mode: QueueMode =
-      rawMode === 'conservative' || rawMode === 'provider-aware'
-        ? rawMode
-        : DEFAULT_QUEUE.mode;
+      rawMode === 'conservative' || rawMode === 'provider-aware' ? rawMode : DEFAULT_QUEUE.mode;
 
     const queue: IQueueConfig = {
       enabled: readBoolean(rawQueue.enabled) ?? DEFAULT_QUEUE.enabled,

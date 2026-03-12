@@ -38,9 +38,7 @@ function validateMergeMethod(value: string) {
   return VALID_MERGE_METHODS.includes(value as never) ? value : null;
 }
 
-function applyRoadmapEnv(
-  base: IRoadmapScannerConfig,
-): IRoadmapScannerConfig {
+function applyRoadmapEnv(base: IRoadmapScannerConfig): IRoadmapScannerConfig {
   return { ...base };
 }
 
@@ -105,6 +103,10 @@ export function buildEnvOverrideConfig(
     const v = parseInt(process.env.NW_REVIEWER_RETRY_DELAY, 10);
     if (!isNaN(v) && v >= 0) env.reviewerRetryDelay = v;
   }
+  if (process.env.NW_REVIEWER_MAX_PRS_PER_RUN !== undefined) {
+    const v = parseInt(process.env.NW_REVIEWER_MAX_PRS_PER_RUN, 10);
+    if (!isNaN(v) && v >= 0) env.reviewerMaxPrsPerRun = v;
+  }
 
   if (process.env.NW_PROVIDER) {
     const p = validateProvider(process.env.NW_PROVIDER);
@@ -124,7 +126,9 @@ export function buildEnvOverrideConfig(
       if (parsed && typeof parsed === 'object') {
         env.notifications = parsed as INotificationConfig;
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   // Roadmap scanner env vars (mutated incrementally)
@@ -219,7 +223,9 @@ export function buildEnvOverrideConfig(
     if (v !== null) env.qa = { ...qaBase(), autoInstallPlaywright: v };
   }
   if (process.env.NW_QA_BRANCH_PATTERNS) {
-    const patterns = process.env.NW_QA_BRANCH_PATTERNS.split(',').map((s) => s.trim()).filter(Boolean);
+    const patterns = process.env.NW_QA_BRANCH_PATTERNS.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (patterns.length > 0) env.qa = { ...qaBase(), branchPatterns: patterns };
   }
 
@@ -278,7 +284,9 @@ export function buildEnvOverrideConfig(
         }
         env.queue = { ...base, priority };
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   return env;

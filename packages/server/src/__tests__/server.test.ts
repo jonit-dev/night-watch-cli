@@ -566,15 +566,26 @@ describe('server API', () => {
       expect(response.body.error).toContain('reviewerRetryDelay');
     });
 
+    it('should validate reviewerMaxPrsPerRun range', async () => {
+      const response = await request(app).put('/api/config').send({ reviewerMaxPrsPerRun: 101 });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('reviewerMaxPrsPerRun');
+    });
+
     it('should accept valid retry configuration fields', async () => {
-      const response = await request(app)
-        .put('/api/config')
-        .send({ maxRetries: 4, reviewerMaxRetries: 3, reviewerRetryDelay: 45 });
+      const response = await request(app).put('/api/config').send({
+        maxRetries: 4,
+        reviewerMaxRetries: 3,
+        reviewerRetryDelay: 45,
+        reviewerMaxPrsPerRun: 2,
+      });
 
       expect(response.status).toBe(200);
       expect(response.body.maxRetries).toBe(4);
       expect(response.body.reviewerMaxRetries).toBe(3);
       expect(response.body.reviewerRetryDelay).toBe(45);
+      expect(response.body.reviewerMaxPrsPerRun).toBe(2);
     });
 
     it('should validate branchPatterns is array of strings', async () => {

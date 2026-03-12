@@ -14,10 +14,10 @@ import {
   INightWatchConfig,
   LOG_DIR,
   Provider,
-  checkNodeVersion,
-  checkProviderCli,
   checkGhCli,
   checkGitRepo,
+  checkNodeVersion,
+  checkProviderCli,
   createBoardProvider,
   createTable,
   detectProviders,
@@ -335,6 +335,7 @@ export function buildInitConfig(params: {
     schedulingPriority: defaults.schedulingPriority,
     maxRetries: defaults.maxRetries,
     reviewerMaxRetries: defaults.reviewerMaxRetries,
+    reviewerMaxPrsPerRun: defaults.reviewerMaxPrsPerRun,
     reviewerRetryDelay: defaults.reviewerRetryDelay,
     provider: params.provider,
     providerLabel: '',
@@ -751,7 +752,9 @@ export function initCommand(program: Command): void {
           );
         } else if (!ghAuthenticated) {
           boardSetupStatus = 'Skipped (gh auth required)';
-          info('GitHub CLI is not authenticated — run `gh auth login`, then `night-watch board setup`.');
+          info(
+            'GitHub CLI is not authenticated — run `gh auth login`, then `night-watch board setup`.',
+          );
         } else {
           try {
             const provider = createBoardProvider({ enabled: true, provider: 'github' }, cwd);

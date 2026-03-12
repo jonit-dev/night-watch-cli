@@ -130,6 +130,9 @@ export interface INightWatchConfig {
   /** Delay in seconds between reviewer retry attempts (default: 30) */
   reviewerRetryDelay: number;
 
+  /** Maximum number of PRs the reviewer should process in a single run (0 = unlimited) */
+  reviewerMaxPrsPerRun: number;
+
   // Provider configuration
 
   /** AI provider to use for execution */
@@ -423,10 +426,13 @@ export interface IJobRunAnalytics {
     durationSeconds: number | null;
     throttledCount: number;
   }>;
-  byProviderBucket: Record<string, {
-    running: number;
-    pending: number;
-  }>;
+  byProviderBucket: Record<
+    string,
+    {
+      running: number;
+      pending: number;
+    }
+  >;
   averageWaitSeconds: number | null;
   oldestPendingAge: number | null;
 }
