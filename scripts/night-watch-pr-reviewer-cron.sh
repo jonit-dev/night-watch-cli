@@ -105,46 +105,35 @@ extract_review_score_from_text() {
     | grep -oP '\d+(?=/100)' || echo ""
 }
 
- # Extract the full body of the most recent review comment containing a score
- # Returns the review comment text (up to 8000 chars, truncated for prompt injection)
+# Extract the full body of the most recent review comment containing a score.
+# Uses jq to process complete JSON strings, correctly handling multi-line bodies.
+# Returns the review comment text (up to 8000 chars, truncated for prompt injection).
 get_pr_latest_review_body() {
   local pr_number="${1:-}"
   local repo="${2:-}"
-  local all_comments=""
   local review_body=""
+  # jq regex to match score patterns like "Score: 72/100" or "**Overall Score:** 85/100"
+  local score_regex='(?:Overall\s+)?Score:\*?\*?\s*[0-9]+/100'
 
   if [ -z "${pr_number}" ]; then
     echo ""
     return
   fi
 
-  # Fetch comments from both gh pr view and gh api
-  all_comments=$(
-    {
-      gh pr view "${pr_number}" --json comments --jq '.comments[].body' 2>/dev/null || true
-      if [ -n "${repo}" ]; then
-        gh api "repos/${repo}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
-      fi
-    } | awk '!seen[$0]++'
+  # Use jq to select the last comment body containing a score pattern.
+  # jq processes the full JSON string (including embedded newlines), so multi-line
+  # review bodies are matched correctly. "m" flag enables multi-line mode in jq regex.
+  review_body=$(
+    gh pr view "${pr_number}" --json comments \
+      --jq "[.comments[].body | select(test(\"${score_regex}\"; \"m\"))] | last // empty" 2>/dev/null || true
   )
 
-  if [ -z "${all_comments}" ]; then
-    echo ""
-    return
-  fi
-
-  # Find the most recent comment that contains a review score pattern
-  # We iterate through comments and keep the last one that matches the score pattern
-  while IFS= read -r line; do
-    if printf '%s\n' "${line}" | grep -qP '(?:Overall\s+)?Score:\*?\*?\s*\d+/100'; then
-      review_body="${line}"
-    fi
-  done <<< "${all_comments}"
-
-  # If no single-line match, try to find a multi-line review comment
-  if [ -z "${review_body}" ]; then
-    # Fall back to getting all comments and looking for score pattern across multiple lines
-    review_body=$(printf '%s' "${all_comments}" | grep -Pzo '(?s)(?:Overall\s+)?Score:\*?\*?\s*\d+/100.*?(?s)' | tail -1)
+  # Fallback to gh api if pr view returned nothing (e.g. auth scope differences)
+  if [ -z "${review_body}" ] && [ -n "${repo}" ]; then
+    review_body=$(
+      gh api "repos/${repo}/issues/${pr_number}/comments" \
+        --jq "[.[].body | select(test(\"${score_regex}\"; \"m\"))] | last // empty" 2>/dev/null || true
+    )
   fi
 
   # Truncate to 8000 chars to avoid prompt bloat
@@ -1050,7 +1039,7 @@ if [ -n "${TARGET_PR}" ]; then
     if [ "${TARGET_SCORE}" -lt "${MIN_REVIEW_SCORE}" ]; then
       TARGET_REVIEW_BODY=$(get_pr_latest_review_body "${TARGET_PR}" "${REPO}")
       if [ -n "${TARGET_REVIEW_BODY}" ]; then
-        TARGET_SCOPE_PROMPT+=$'\n\n## Latest Review Feedback\nThe following review was posted for this PR. Address ALL issues mentioned:\ \n'"${TARGET_REVIEW_BODY}"$'\n'
+        TARGET_SCOPE_PROMPT+=$'\n\n## Latest Review Feedback\nThe following review was posted for this PR. Address ALL issues mentioned:\n'"${TARGET_REVIEW_BODY}"$'\n'
       else
         TARGET_SCOPE_PROMPT+=$'\n\n## Latest Review Feedback\n- action: fix (review score below threshold)\n'
       fi
