@@ -60,7 +60,7 @@ export function Hero() {
             npm install -g @jonit-dev/night-watch-cli
             {copied ? <Check className="w-4 h-4 text-green-500 ml-2" /> : <Copy className="w-4 h-4 text-gray-500 group-hover:text-gray-300 ml-2 transition-colors" />}
           </button>
-          <a href="#docs" className="px-6 py-3 rounded-xl font-medium text-white border border-white/10 bg-white/5 hover:bg-white/10 backdrop-blur-md transition-all w-full sm:w-auto">
+          <a href="https://github.com/jonit-dev/night-watch-cli/blob/master/README.md" target="_blank" rel="noreferrer" className="px-6 py-3 rounded-xl font-medium text-white border border-white/10 bg-white/5 hover:bg-white/10 backdrop-blur-md transition-all w-full sm:w-auto">
             Read the docs
           </a>
         </motion.div>
