@@ -32,6 +32,7 @@ import Switch from '../components/ui/Switch';
 import Tabs from '../components/ui/Tabs';
 import { useStore } from '../store/useStore';
 import { IScheduleTemplate, resolveActiveTemplate, SCHEDULE_TEMPLATES } from '../utils/cron.js';
+import { JOB_DEFINITIONS } from '../utils/jobs.js';
 
 type ConfigForm = {
   provider: INightWatchConfig['provider'];
@@ -694,7 +695,17 @@ const Settings: React.FC = () => {
     const mode = params.get('mode');
 
     if (tab) {
-      setActiveSettingsTab(tab);
+      const tabMigration: Record<string, string> = {
+        providers: 'ai-runtime',
+        runtime: 'ai-runtime',
+        roadmap: 'jobs',
+        qa: 'jobs',
+        audit: 'jobs',
+        analytics: 'jobs',
+        board: 'integrations',
+        notifications: 'integrations',
+      };
+      setActiveSettingsTab(tabMigration[tab] ?? tab);
     }
     if (mode === 'custom') {
       setScheduleMode('custom');
@@ -703,7 +714,7 @@ const Settings: React.FC = () => {
     }
 
     const jobTypeParam = params.get('jobType');
-    if (jobTypeParam && tab === 'schedules') {
+    if (jobTypeParam) {
       // Small delay to ensure the tab and mode have settled
       setTimeout(() => {
         handleEditJob('current', jobTypeParam);
@@ -736,20 +747,30 @@ const Settings: React.FC = () => {
   }, [config]);
 
   const handleEditJob = (projectId: string, jobType: string) => {
-    // If it's the current project, scroll to the custom mode tab and focus the input
     if (projectId === projectName || projectId === 'current') {
+      const jobsTabTypes = ['qa', 'audit', 'slicer', 'analytics'];
+      if (jobsTabTypes.includes(jobType)) {
+        setActiveSettingsTab('jobs');
+        setTimeout(() => {
+          const el = document.getElementById(`job-section-${jobType}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('ring-2', 'ring-indigo-500', 'ring-offset-2', 'ring-offset-slate-900', 'rounded-lg');
+            setTimeout(() => el.classList.remove('ring-2', 'ring-indigo-500', 'ring-offset-2', 'ring-offset-slate-900'), 2000);
+          }
+        }, 50);
+        return;
+      }
+
+      // executor / reviewer → schedules tab
       if (scheduleMode !== 'custom') {
         switchToCustomMode();
       }
-
-      // Give it a tick to render custom mode if needed
+      setActiveSettingsTab('schedules');
       setTimeout(() => {
         const idMap: Record<string, string> = {
           executor: 'job-schedule-executor',
           reviewer: 'job-schedule-reviewer',
-          qa: 'job-schedule-qa',
-          audit: 'job-schedule-audit',
-          slicer: 'job-schedule-slicer',
         };
         const el = document.getElementById(idMap[jobType] || '');
         if (el) {
@@ -759,7 +780,6 @@ const Settings: React.FC = () => {
         }
       }, 50);
     } else {
-      // In global mode, maybe we'd want to navigate to that project's settings?
       addToast({
         title: 'Project Switch Required',
         message: `To edit ${projectId}, please switch to that project in the sidebar.`,
@@ -1004,75 +1024,95 @@ const Settings: React.FC = () => {
       id: 'general',
       label: 'General',
       content: (
-        <Card className="p-6 space-y-6">
-          <div>
-            <h3 className="text-lg font-medium text-slate-200">Project Configuration</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-              <Input label="Project Name" value={projectName} disabled />
-              <Input label="Default Branch" value={form.defaultBranch} onChange={(e) => updateField('defaultBranch', e.target.value)} />
-              <Input
-                label="PRD Directory"
-                value={form.prdDir}
-                onChange={(e) => updateField('prdDir', e.target.value)}
-                helperText="Directory containing PRD files (relative to project root)"
-              />
-              <Input label="Branch Prefix" value={form.branchPrefix} onChange={(e) => updateField('branchPrefix', e.target.value)} />
-              <div className="md:col-span-2">
-                <Switch
-                  label="Enable PRD Executor"
-                  checked={form.executorEnabled}
-                  onChange={(checked) => updateField('executorEnabled', checked)}
+        <div className="space-y-6">
+          <Card className="p-6 space-y-6">
+            <div>
+              <h3 className="text-lg font-medium text-slate-200">Project Configuration</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                <Input label="Project Name" value={projectName} disabled />
+                <Input label="Default Branch" value={form.defaultBranch} onChange={(e) => updateField('defaultBranch', e.target.value)} />
+                <Input
+                  label="PRD Directory"
+                  value={form.prdDir}
+                  onChange={(e) => updateField('prdDir', e.target.value)}
+                  helperText="Directory containing PRD files (relative to project root)"
+                />
+                <Input label="Branch Prefix" value={form.branchPrefix} onChange={(e) => updateField('branchPrefix', e.target.value)} />
+                <div className="md:col-span-2">
+                  <Switch label="Enable PRD Executor" checked={form.executorEnabled} onChange={(checked) => updateField('executorEnabled', checked)} />
+                </div>
+                <div className="md:col-span-2">
+                  <Switch label="Enable Automated Reviews" checked={form.reviewerEnabled} onChange={(checked) => updateField('reviewerEnabled', checked)} />
+                </div>
+                <div className="md:col-span-2">
+                  <Switch label="Auto-merge approved PRs" checked={form.autoMerge} onChange={(checked) => updateField('autoMerge', checked)} />
+                </div>
+                {form.autoMerge && (
+                  <Select
+                    label="Merge Method"
+                    value={form.autoMergeMethod}
+                    onChange={(val) => updateField('autoMergeMethod', val as MergeMethod)}
+                    options={[
+                      { label: 'Squash', value: 'squash' },
+                      { label: 'Merge', value: 'merge' },
+                      { label: 'Rebase', value: 'rebase' },
+                    ]}
+                  />
+                )}
+              </div>
+              <div className="pt-4 mt-4 border-t border-slate-800">
+                <TagInput
+                  label="Branch Patterns"
+                  value={form.branchPatterns}
+                  onChange={(patterns) => updateField('branchPatterns', patterns)}
+                  placeholder="e.g., feat/"
+                  helpText="Branch patterns matched by reviewer and related automation jobs"
                 />
               </div>
-              <div className="md:col-span-2">
-                <Switch
-                  label="Enable Automated Reviews"
-                  checked={form.reviewerEnabled}
-                  onChange={(checked) => updateField('reviewerEnabled', checked)}
-                />
-              </div>
-              <div className="md:col-span-2">
-                <Switch
-                  label="Auto-merge approved PRs"
-                  checked={form.autoMerge}
-                  onChange={(checked) => updateField('autoMerge', checked)}
-                />
-              </div>
-              {form.autoMerge && (
-                <Select
-                  label="Merge Method"
-                  value={form.autoMergeMethod}
-                  onChange={(val) => updateField('autoMergeMethod', val as MergeMethod)}
-                  options={[
-                    { label: 'Squash', value: 'squash' },
-                    { label: 'Merge', value: 'merge' },
-                    { label: 'Rebase', value: 'rebase' },
-                  ]}
-                />
-              )}
             </div>
+          </Card>
 
-            <div className="pt-4 mt-4 border-t border-slate-800">
-              <TagInput
-                label="Branch Patterns"
-                value={form.branchPatterns}
-                onChange={(patterns) => updateField('branchPatterns', patterns)}
-                placeholder="e.g., feat/"
-                helpText="Branch patterns matched by reviewer and related automation jobs"
-              />
+          <Card className="divide-y divide-slate-800">
+            <div className="p-4 flex items-center gap-2">
+              <Activity className="h-4 w-4 text-indigo-500" />
+              <h3 className="text-base font-medium text-slate-200">System Health</h3>
             </div>
-          </div>
-        </Card>
+            {doctorLoading ? (
+              <div className="p-4 text-sm text-slate-500">Loading health checks...</div>
+            ) : (
+              doctorChecks.map((check, idx) => {
+                const isPass = check.status === 'pass';
+                const isWarn = check.status === 'warn';
+                const statusClass = isPass
+                  ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                  : isWarn
+                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                    : 'bg-red-500/10 text-red-400 border-red-500/20';
+                return (
+                  <div key={`${check.name}-${idx}`} className="p-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-slate-200">{check.name}</p>
+                      <p className="text-xs text-slate-500">{check.detail}</p>
+                    </div>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${statusClass}`}>
+                      {check.status.toUpperCase()}
+                    </span>
+                  </div>
+                );
+              })
+            )}
+          </Card>
+        </div>
       ),
     },
     {
-      id: 'providers',
-      label: 'Providers',
+      id: 'ai-runtime',
+      label: 'AI & Runtime',
       content: (
         <div className="space-y-6">
           <Card className="p-6 space-y-6">
             <div>
-              <h3 className="text-lg font-medium text-slate-200">Global Provider</h3>
+              <h3 className="text-lg font-medium text-slate-200">AI Provider</h3>
               <p className="text-sm text-slate-400 mt-1">Default AI provider used for all jobs unless overridden below</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1137,27 +1177,18 @@ const Settings: React.FC = () => {
               </p>
             </div>
             <div className="space-y-4">
-              {([
-                { key: 'executor', label: 'Executor' },
-                { key: 'reviewer', label: 'Reviewer' },
-                { key: 'qa', label: 'QA' },
-                { key: 'audit', label: 'Audit' },
-                { key: 'slicer', label: 'Planner' },
-              ] as const).map(({ key, label }) => (
-                <div
-                  key={key}
-                  className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40 gap-4"
-                >
+              {JOB_DEFINITIONS.map(({ id, label }) => (
+                <div key={id} className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40 gap-4">
                   <span className="text-sm font-medium text-slate-200 whitespace-nowrap">{label}</span>
                   <div className="w-64">
                     <Select
-                      value={form.jobProviders[key] ?? ''}
+                      value={form.jobProviders[id as keyof IJobProviders] ?? ''}
                       onChange={(val) => {
                         const newJobProviders = { ...form.jobProviders };
                         if (val === '') {
-                          delete newJobProviders[key];
+                          delete newJobProviders[id as keyof IJobProviders];
                         } else {
-                          newJobProviders[key] = val as 'claude' | 'codex';
+                          (newJobProviders as Record<string, string>)[id] = val;
                         }
                         updateField('jobProviders', newJobProviders);
                       }}
@@ -1175,20 +1206,11 @@ const Settings: React.FC = () => {
 
           <Card className="p-6">
             <h3 className="text-lg font-medium text-slate-200 mb-2">Provider Environment Variables</h3>
-            <ProviderEnvEditor
-              envVars={form.providerEnv}
-              onChange={(envVars) => updateField('providerEnv', envVars)}
-            />
+            <ProviderEnvEditor envVars={form.providerEnv} onChange={(envVars) => updateField('providerEnv', envVars)} />
           </Card>
-        </div>
-      ),
-    },
-    {
-      id: 'runtime',
-      label: 'Runtime',
-      content: (
-        <div className="space-y-6">
+
           <Card className="p-6 space-y-6">
+            <h3 className="text-lg font-medium text-slate-200">Performance</h3>
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-2">Min Review Score (0-100)</label>
               <div className="flex items-center space-x-4">
@@ -1267,6 +1289,248 @@ const Settings: React.FC = () => {
       ),
     },
     {
+      id: 'jobs',
+      label: 'Jobs',
+      content: (
+        <div className="space-y-6">
+          {/* QA */}
+          <div id="job-section-qa">
+            <Card className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium text-slate-200">Quality Assurance</h3>
+                <p className="text-sm text-slate-400">Automated UI testing using Playwright</p>
+              </div>
+              <Switch checked={form.qa.enabled} onChange={(checked) => updateField('qa', { ...form.qa, enabled: checked })} />
+            </div>
+            {form.qa.enabled && (
+              <div className="space-y-6 pt-4 border-t border-slate-800">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <CronScheduleInput
+                    label="QA Schedule"
+                    value={form.qa.schedule}
+                    onChange={(val) => updateField('qa', { ...form.qa, schedule: val })}
+                  />
+                  <Input
+                    label="Max Runtime"
+                    type="number"
+                    value={String(form.qa.maxRuntime)}
+                    onChange={(e) => updateField('qa', { ...form.qa, maxRuntime: Number(e.target.value || 0) })}
+                    rightIcon={<span className="text-xs">sec</span>}
+                    helperText="Maximum runtime for QA tasks (default: 3600 seconds)"
+                  />
+                  <Select
+                    label="Artifacts"
+                    value={form.qa.artifacts}
+                    onChange={(val) => updateField('qa', { ...form.qa, artifacts: val as QaArtifacts })}
+                    options={[
+                      { label: 'Screenshots', value: 'screenshot' },
+                      { label: 'Videos', value: 'video' },
+                      { label: 'Both', value: 'both' },
+                    ]}
+                    helperText="What artifacts to capture for UI tests"
+                  />
+                  <Input
+                    label="Skip Label"
+                    value={form.qa.skipLabel}
+                    onChange={(e) => updateField('qa', { ...form.qa, skipLabel: e.target.value })}
+                    helperText="GitHub label to skip QA (PRs with this label are excluded)"
+                  />
+                </div>
+                <TagInput
+                  label="QA Branch Patterns"
+                  value={form.qa.branchPatterns}
+                  onChange={(patterns) => updateField('qa', { ...form.qa, branchPatterns: patterns })}
+                  placeholder="e.g., qa/, test/"
+                  helpText="Branch patterns to match for QA (defaults to top-level branchPatterns if empty)"
+                />
+                <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
+                  <div>
+                    <span className="text-sm font-medium text-slate-200">Auto-install Playwright</span>
+                    <p className="text-xs text-slate-500 mt-1">Automatically install Playwright browsers if missing during QA run</p>
+                  </div>
+                  <Switch
+                    checked={form.qa.autoInstallPlaywright}
+                    onChange={(checked) => updateField('qa', { ...form.qa, autoInstallPlaywright: checked })}
+                  />
+                </div>
+              </div>
+            )}
+            </Card>
+          </div>
+
+          {/* Audit */}
+          <div id="job-section-audit">
+            <Card className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium text-slate-200">Code Audit</h3>
+                <p className="text-sm text-slate-400">Automated code quality and security audits</p>
+              </div>
+              <Switch checked={form.audit.enabled} onChange={(checked) => updateField('audit', { ...form.audit, enabled: checked })} />
+            </div>
+            {form.audit.enabled && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
+                <CronScheduleInput
+                  label="Audit Schedule"
+                  value={form.audit.schedule}
+                  onChange={(val) => updateField('audit', { ...form.audit, schedule: val })}
+                />
+                <Input
+                  label="Max Runtime"
+                  type="number"
+                  value={String(form.audit.maxRuntime)}
+                  onChange={(e) => updateField('audit', { ...form.audit, maxRuntime: Number(e.target.value || 0) })}
+                  rightIcon={<span className="text-xs">sec</span>}
+                  helperText="Maximum runtime for audit tasks (default: 1800 seconds)"
+                />
+              </div>
+            )}
+            </Card>
+          </div>
+
+          {/* Analytics */}
+          <div id="job-section-analytics">
+            <Card className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium text-slate-200">Analytics (Amplitude)</h3>
+                <p className="text-sm text-slate-400">Fetch Amplitude data, analyze with AI, and create board issues</p>
+              </div>
+              <Switch
+                checked={form.analytics.enabled}
+                onChange={(checked) => updateField('analytics', { ...form.analytics, enabled: checked })}
+              />
+            </div>
+            {form.analytics.enabled && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
+                <Input
+                  label="Amplitude API Key"
+                  value={form.providerEnv?.AMPLITUDE_API_KEY ?? ''}
+                  onChange={(e) => updateField('providerEnv', { ...form.providerEnv, AMPLITUDE_API_KEY: e.target.value })}
+                  placeholder="Required"
+                  helperText="Your Amplitude project API key"
+                />
+                <Input
+                  label="Amplitude Secret Key"
+                  type="password"
+                  value={form.providerEnv?.AMPLITUDE_SECRET_KEY ?? ''}
+                  onChange={(e) => updateField('providerEnv', { ...form.providerEnv, AMPLITUDE_SECRET_KEY: e.target.value })}
+                  placeholder="Required"
+                  helperText="Your Amplitude secret key"
+                />
+                <CronScheduleInput
+                  label="Analytics Schedule"
+                  value={form.analytics.schedule}
+                  onChange={(val) => updateField('analytics', { ...form.analytics, schedule: val })}
+                />
+                <Input
+                  label="Max Runtime"
+                  type="number"
+                  value={String(form.analytics.maxRuntime)}
+                  onChange={(e) => updateField('analytics', { ...form.analytics, maxRuntime: Number(e.target.value || 0) })}
+                  rightIcon={<span className="text-xs">sec</span>}
+                  helperText="Maximum runtime for analytics job (default: 900 seconds)"
+                />
+                <Input
+                  label="Lookback Days"
+                  type="number"
+                  min="1"
+                  max="90"
+                  value={String(form.analytics.lookbackDays)}
+                  onChange={(e) => updateField('analytics', { ...form.analytics, lookbackDays: Math.max(1, Math.min(90, Number(e.target.value || 7))) })}
+                  helperText="Number of days to look back in Amplitude (1-90)"
+                />
+                <Select
+                  label="Target Column"
+                  value={form.analytics.targetColumn}
+                  onChange={(value) => updateField('analytics', { ...form.analytics, targetColumn: value as IAnalyticsConfig['targetColumn'] })}
+                  options={[
+                    { value: 'Draft', label: 'Draft' },
+                    { value: 'Ready', label: 'Ready' },
+                    { value: 'In Progress', label: 'In Progress' },
+                    { value: 'Review', label: 'Review' },
+                    { value: 'Done', label: 'Done' },
+                  ]}
+                  helperText="Board column for created issues"
+                />
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5">Analysis Prompt (optional)</label>
+                  <textarea
+                    rows={4}
+                    value={form.analytics.analysisPrompt ?? ''}
+                    onChange={(e) => updateField('analytics', { ...form.analytics, analysisPrompt: e.target.value })}
+                    placeholder="Custom prompt for AI analysis. Leave empty to use default."
+                    className="w-full bg-slate-950/50 border border-white/10 text-slate-200 rounded-lg px-3 py-2.5 text-sm placeholder-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 resize-y"
+                  />
+                  <p className="mt-1.5 text-xs text-slate-500">Custom prompt for AI analysis. Leave empty to use default.</p>
+                </div>
+              </div>
+            )}
+            </Card>
+          </div>
+
+          {/* Planner */}
+          <div id="job-section-slicer">
+            <Card className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium text-slate-200">Planner</h3>
+                <p className="text-sm text-slate-400">
+                  Generate one PRD per run using ROADMAP.md first, then audit findings when roadmap work is exhausted
+                </p>
+              </div>
+              <Switch checked={form.roadmapScanner.enabled} aria-label="Enable planner" onChange={handleRoadmapToggle} />
+            </div>
+            {form.roadmapScanner.enabled && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
+                <Input
+                  label="Roadmap File Path"
+                  value={form.roadmapScanner.roadmapPath}
+                  onChange={(e) => updateField('roadmapScanner', { ...form.roadmapScanner, roadmapPath: e.target.value })}
+                  helperText="Primary planning source (relative to project root)."
+                />
+                <CronScheduleInput
+                  label="Planner Schedule"
+                  value={form.roadmapScanner.slicerSchedule || '35 */12 * * *'}
+                  onChange={(val) => updateField('roadmapScanner', { ...form.roadmapScanner, slicerSchedule: val })}
+                />
+                <Input
+                  label="Planner Max Runtime"
+                  type="number"
+                  value={String(form.roadmapScanner.slicerMaxRuntime || '')}
+                  onChange={(e) => updateField('roadmapScanner', { ...form.roadmapScanner, slicerMaxRuntime: Number(e.target.value || 0) })}
+                  rightIcon={<span className="text-xs">sec</span>}
+                  helperText="Maximum runtime for planner tasks"
+                />
+                <Select
+                  label="Planner Priority Mode"
+                  value={form.roadmapScanner.priorityMode || 'roadmap-first'}
+                  onChange={(val) => updateField('roadmapScanner', { ...form.roadmapScanner, priorityMode: val === 'audit-first' ? 'audit-first' : 'roadmap-first' })}
+                  options={[
+                    { label: 'Roadmap first (recommended)', value: 'roadmap-first' },
+                    { label: 'Audit first', value: 'audit-first' },
+                  ]}
+                  helperText="Choose whether planner consumes roadmap items or audit findings first."
+                />
+                <Select
+                  label="Planner Issue Column"
+                  value={form.roadmapScanner.issueColumn || 'Draft'}
+                  onChange={(val) => updateField('roadmapScanner', { ...form.roadmapScanner, issueColumn: val === 'Ready' ? 'Ready' : 'Draft' })}
+                  options={[
+                    { label: 'Draft (default)', value: 'Draft' },
+                    { label: 'Ready', value: 'Ready' },
+                  ]}
+                  helperText="Column where planner-created issues are added after PRD generation."
+                />
+              </div>
+            )}
+            </Card>
+          </div>
+        </div>
+      ),
+    },
+    {
       id: 'schedules',
       label: 'Schedules',
       content: (
@@ -1302,12 +1566,15 @@ const Settings: React.FC = () => {
             </div>
           </div>
 
-          <ScheduleTimeline
-            configs={allProjectConfigs}
-            currentProjectId={selectedProjectId}
-            onEditJob={handleEditJob}
-          />
+          <div className="pt-2 border-t border-slate-800">
+            <ScheduleTimeline
+              configs={allProjectConfigs}
+              currentProjectId={selectedProjectId}
+              onEditJob={handleEditJob}
+            />
+          </div>
 
+          <div className="pt-2 border-t border-slate-800">
           {scheduleMode === 'template' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {SCHEDULE_TEMPLATES.map((tpl) => {
@@ -1360,58 +1627,6 @@ const Settings: React.FC = () => {
                   onChange={(val) => updateField('reviewerSchedule', val)}
                 />
               </div>
-              <div id="job-schedule-qa">
-                <CronScheduleInput
-                  label="QA Schedule"
-                  value={form.qa.schedule}
-                  onChange={(val) =>
-                    updateField('qa', {
-                      ...form.qa,
-                      schedule: val,
-                    })
-                  }
-                />
-              </div>
-              <div id="job-schedule-audit">
-                <CronScheduleInput
-                  label="Audit Schedule"
-                  value={form.audit.schedule}
-                  onChange={(val) =>
-                    updateField('audit', {
-                      ...form.audit,
-                      schedule: val,
-                    })
-                  }
-                />
-              </div>
-              {form.roadmapScanner.enabled && (
-                <div id="job-schedule-slicer">
-                  <CronScheduleInput
-                    label="Planner Schedule"
-                    value={form.roadmapScanner.slicerSchedule || '35 */12 * * *'}
-                    onChange={(val) =>
-                      updateField('roadmapScanner', {
-                        ...form.roadmapScanner,
-                        slicerSchedule: val,
-                      })
-                    }
-                  />
-                </div>
-              )}
-              {form.analytics.enabled && (
-                <div id="job-schedule-analytics">
-                  <CronScheduleInput
-                    label="Analytics Schedule"
-                    value={form.analytics.schedule}
-                    onChange={(val) =>
-                      updateField('analytics', {
-                        ...form.analytics,
-                        schedule: val,
-                      })
-                    }
-                  />
-                </div>
-              )}
             </div>
           )}
 
@@ -1440,12 +1655,7 @@ const Settings: React.FC = () => {
                 </div>
                 <Switch
                   checked={form.queue.enabled}
-                  onChange={(enabled) =>
-                    updateField('queue', {
-                      ...form.queue,
-                      enabled,
-                    })
-                  }
+                  onChange={(enabled) => updateField('queue', { ...form.queue, enabled })}
                 />
               </div>
             </div>
@@ -1463,444 +1673,68 @@ const Settings: React.FC = () => {
               helperText="Manual delay in minutes added before cron jobs start. This stacks on top of automatic balancing."
             />
           </div>
-        </Card>
-      ),
-    },
-    {
-      id: 'notifications',
-      label: 'Notifications',
-      content: (
-        <Card className="p-6">
-          <h3 className="text-lg font-medium text-slate-200 mb-2">Notification Webhooks</h3>
-          <WebhookEditor
-            notifications={form.notifications}
-            onChange={(notifications) => updateField('notifications', notifications)}
-          />
-        </Card>
-      ),
-    },
-    {
-      id: 'roadmap',
-      label: 'Planner',
-      content: (
-        <Card className="p-6 space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-medium text-slate-200">Planner</h3>
-              <p className="text-sm text-slate-400">
-                Generate one PRD per run using ROADMAP.md first, then audit findings when roadmap work is exhausted
-              </p>
-            </div>
-            <Switch
-              checked={form.roadmapScanner.enabled}
-              aria-label="Enable planner"
-              onChange={handleRoadmapToggle}
-            />
           </div>
-
-          {form.roadmapScanner.enabled && (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
-                <Input
-                  label="Roadmap File Path"
-                  value={form.roadmapScanner.roadmapPath}
-                  onChange={(e) =>
-                    updateField('roadmapScanner', {
-                      ...form.roadmapScanner,
-                      roadmapPath: e.target.value,
-                    })
-                  }
-                  helperText="Primary planning source (relative to project root)."
-                />
-                <CronScheduleInput
-                  label="Planner Schedule"
-                  value={form.roadmapScanner.slicerSchedule || '35 */12 * * *'}
-                  onChange={(val) =>
-                    updateField('roadmapScanner', {
-                      ...form.roadmapScanner,
-                      slicerSchedule: val,
-                    })
-                  }
-                />
-              </div>
-
-              <div className="pt-4 border-t border-slate-800">
-                <h4 className="text-md font-medium text-slate-200 mb-4">Planner Execution</h4>
-                <p className="text-sm text-slate-400 mb-4">
-                  Planner creates one PRD at a time and can auto-create a board issue for handoff.
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <Input
-                    label="Planner Max Runtime"
-                    type="number"
-                    value={String(form.roadmapScanner.slicerMaxRuntime || '')}
-                    onChange={(e) =>
-                      updateField('roadmapScanner', {
-                        ...form.roadmapScanner,
-                        slicerMaxRuntime: Number(e.target.value || 0),
-                      })
-                    }
-                    rightIcon={<span className="text-xs">sec</span>}
-                    helperText="Maximum runtime for planner tasks"
-                  />
-                  <Select
-                    label="Planner Priority Mode"
-                    value={form.roadmapScanner.priorityMode || 'roadmap-first'}
-                    onChange={(val) =>
-                      updateField('roadmapScanner', {
-                        ...form.roadmapScanner,
-                        priorityMode: val === 'audit-first' ? 'audit-first' : 'roadmap-first',
-                      })
-                    }
-                    options={[
-                      { label: 'Roadmap first (recommended)', value: 'roadmap-first' },
-                      { label: 'Audit first', value: 'audit-first' },
-                    ]}
-                    helperText="Choose whether planner consumes roadmap items or audit findings first."
-                  />
-                  <Select
-                    label="Planner Issue Column"
-                    value={form.roadmapScanner.issueColumn || 'Draft'}
-                    onChange={(val) =>
-                      updateField('roadmapScanner', {
-                        ...form.roadmapScanner,
-                        issueColumn: val === 'Ready' ? 'Ready' : 'Draft',
-                      })
-                    }
-                    options={[
-                      { label: 'Draft (default)', value: 'Draft' },
-                      { label: 'Ready', value: 'Ready' },
-                    ]}
-                    helperText="Column where planner-created issues are added after PRD generation."
-                  />
-                </div>
-              </div>
-            </>
-          )}
         </Card>
       ),
     },
     {
-      id: 'board',
-      label: 'Board',
+      id: 'integrations',
+      label: 'Integrations',
       content: (
-        <Card className="p-6 space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-medium text-slate-200">Board Provider</h3>
-              <p className="text-sm text-slate-400">
-                Track PRDs and their status using GitHub Projects or local SQLite
-              </p>
-            </div>
-            <Switch
-              checked={form.boardProvider.enabled}
-              onChange={(checked) =>
-                updateField('boardProvider', {
-                  ...form.boardProvider,
-                  enabled: checked,
-                })
-              }
-            />
-          </div>
-
-          {form.boardProvider.enabled && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
-              <Select
-                label="Board Provider"
-                value={form.boardProvider.provider}
-                onChange={(val) =>
-                  updateField('boardProvider', {
-                    ...form.boardProvider,
-                    provider: val as 'github' | 'local',
-                  })
-                }
-                options={[
-                  { label: 'GitHub Projects', value: 'github' },
-                  { label: 'Local (SQLite)', value: 'local' },
-                ]}
+        <div className="space-y-6">
+          <Card className="p-6 space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-medium text-slate-200">Board Provider</h3>
+                <p className="text-sm text-slate-400">Track PRDs and their status using GitHub Projects or local SQLite</p>
+              </div>
+              <Switch
+                checked={form.boardProvider.enabled}
+                onChange={(checked) => updateField('boardProvider', { ...form.boardProvider, enabled: checked })}
               />
-              {form.boardProvider.provider === 'github' && (
-                <>
-                  <Input
-                    label="Project Number"
-                    type="number"
-                    value={String(form.boardProvider.projectNumber || '')}
-                    onChange={(e) =>
-                      updateField('boardProvider', {
-                        ...form.boardProvider,
-                        projectNumber: e.target.value ? Number(e.target.value) : undefined,
-                      })
-                    }
-                    helperText="GitHub Projects V2 project number"
-                  />
-                  <Input
-                    label="Repository"
-                    value={form.boardProvider.repo || ''}
-                    onChange={(e) =>
-                      updateField('boardProvider', {
-                        ...form.boardProvider,
-                        repo: e.target.value || undefined,
-                      })
-                    }
-                    helperText="owner/repo (auto-detected if empty)"
-                  />
-                </>
-              )}
-              {form.boardProvider.provider === 'local' && (
-                <div className="md:col-span-2">
-                  <p className="text-sm text-slate-400">
-                    Local board uses SQLite for storage — no additional configuration needed.
-                  </p>
-                </div>
-              )}
             </div>
-          )}
-        </Card>
-      ),
-    },
-    {
-      id: 'qa',
-      label: 'QA',
-      content: (
-        <Card className="p-6 space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-medium text-slate-200">Quality Assurance</h3>
-              <p className="text-sm text-slate-400">
-                Automated UI testing using Playwright
-              </p>
-            </div>
-            <Switch
-              checked={form.qa.enabled}
-              onChange={(checked) =>
-                updateField('qa', {
-                  ...form.qa,
-                  enabled: checked,
-                })
-              }
-            />
-          </div>
-
-          {form.qa.enabled && (
-            <>
+            {form.boardProvider.enabled && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
-                <Input
-                  label="Max Runtime"
-                  type="number"
-                  value={String(form.qa.maxRuntime)}
-                  onChange={(e) =>
-                    updateField('qa', {
-                      ...form.qa,
-                      maxRuntime: Number(e.target.value || 0),
-                    })
-                  }
-                  rightIcon={<span className="text-xs">sec</span>}
-                  helperText="Maximum runtime for QA tasks (default: 3600 seconds)"
-                />
                 <Select
-                  label="Artifacts"
-                  value={form.qa.artifacts}
-                  onChange={(val) =>
-                    updateField('qa', {
-                      ...form.qa,
-                      artifacts: val as QaArtifacts,
-                    })
-                  }
+                  label="Board Provider"
+                  value={form.boardProvider.provider}
+                  onChange={(val) => updateField('boardProvider', { ...form.boardProvider, provider: val as 'github' | 'local' })}
                   options={[
-                    { label: 'Screenshots', value: 'screenshot' },
-                    { label: 'Videos', value: 'video' },
-                    { label: 'Both', value: 'both' },
+                    { label: 'GitHub Projects', value: 'github' },
+                    { label: 'Local (SQLite)', value: 'local' },
                   ]}
-                  helperText="What artifacts to capture for UI tests"
                 />
-                <Input
-                  label="Skip Label"
-                  value={form.qa.skipLabel}
-                  onChange={(e) =>
-                    updateField('qa', {
-                      ...form.qa,
-                      skipLabel: e.target.value,
-                    })
-                  }
-                  helperText="GitHub label to skip QA (PRs with this label are excluded)"
-                />
-              </div>
-
-              <div className="pt-4 border-t border-slate-800 space-y-4">
-                <TagInput
-                  label="QA Branch Patterns"
-                  value={form.qa.branchPatterns}
-                  onChange={(patterns) =>
-                    updateField('qa', {
-                      ...form.qa,
-                      branchPatterns: patterns,
-                    })
-                  }
-                  placeholder="e.g., qa/, test/"
-                  helpText="Branch patterns to match for QA (defaults to top-level branchPatterns if empty)"
-                />
-
-                <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
-                  <div>
-                    <span className="text-sm font-medium text-slate-200">Auto-install Playwright</span>
-                    <p className="text-xs text-slate-500 mt-1">
-                      Automatically install Playwright browsers if missing during QA run
-                    </p>
+                {form.boardProvider.provider === 'github' && (
+                  <>
+                    <Input
+                      label="Project Number"
+                      type="number"
+                      value={String(form.boardProvider.projectNumber || '')}
+                      onChange={(e) => updateField('boardProvider', { ...form.boardProvider, projectNumber: e.target.value ? Number(e.target.value) : undefined })}
+                      helperText="GitHub Projects V2 project number"
+                    />
+                    <Input
+                      label="Repository"
+                      value={form.boardProvider.repo || ''}
+                      onChange={(e) => updateField('boardProvider', { ...form.boardProvider, repo: e.target.value || undefined })}
+                      helperText="owner/repo (auto-detected if empty)"
+                    />
+                  </>
+                )}
+                {form.boardProvider.provider === 'local' && (
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-slate-400">Local board uses SQLite for storage — no additional configuration needed.</p>
                   </div>
-                  <Switch
-                    checked={form.qa.autoInstallPlaywright}
-                    onChange={(checked) =>
-                      updateField('qa', {
-                        ...form.qa,
-                        autoInstallPlaywright: checked,
-                      })
-                    }
-                  />
-                </div>
+                )}
               </div>
-            </>
-          )}
-        </Card>
-      ),
-    },
-    {
-      id: 'audit',
-      label: 'Audit',
-      content: (
-        <Card className="p-6 space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-medium text-slate-200">Code Audit</h3>
-              <p className="text-sm text-slate-400">
-                Automated code quality and security audits
-              </p>
-            </div>
-            <Switch
-              checked={form.audit.enabled}
-              onChange={(checked) =>
-                updateField('audit', {
-                  ...form.audit,
-                  enabled: checked,
-                })
-              }
-            />
-          </div>
+            )}
+          </Card>
 
-          {form.audit.enabled && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
-              <Input
-                label="Max Runtime"
-                type="number"
-                value={String(form.audit.maxRuntime)}
-                onChange={(e) =>
-                  updateField('audit', {
-                    ...form.audit,
-                    maxRuntime: Number(e.target.value || 0),
-                  })
-                }
-                rightIcon={<span className="text-xs">sec</span>}
-                helperText="Maximum runtime for audit tasks (default: 1800 seconds)"
-              />
-            </div>
-          )}
-        </Card>
-      ),
-    },
-    {
-      id: 'analytics',
-      label: 'Analytics',
-      content: (
-        <Card className="p-6 space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-medium text-slate-200">Analytics (Amplitude)</h3>
-              <p className="text-sm text-slate-400">
-                Fetch Amplitude data, analyze with AI, and create board issues
-              </p>
-            </div>
-            <Switch
-              checked={form.analytics.enabled}
-              onChange={(checked) => {
-                updateField('analytics', {
-                  ...form.analytics,
-                  enabled: checked,
-                });
-              }}
-            />
-          </div>
-
-          {form.analytics.enabled && (!form.providerEnv?.AMPLITUDE_API_KEY || !form.providerEnv?.AMPLITUDE_SECRET_KEY) && (
-            <p className="text-sm text-amber-400">
-              Amplitude API Key and Secret Key are required. Set them in Provider Environment below.
-            </p>
-          )}
-
-          {form.analytics.enabled && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
-              <Input
-                label="Max Runtime"
-                type="number"
-                value={String(form.analytics.maxRuntime)}
-                onChange={(e) =>
-                  updateField('analytics', {
-                    ...form.analytics,
-                    maxRuntime: Number(e.target.value || 0),
-                  })
-                }
-                rightIcon={<span className="text-xs">sec</span>}
-                helperText="Maximum runtime for analytics job (default: 900 seconds)"
-              />
-              <Input
-                label="Lookback Days"
-                type="number"
-                min="1"
-                max="90"
-                value={String(form.analytics.lookbackDays)}
-                onChange={(e) =>
-                  updateField('analytics', {
-                    ...form.analytics,
-                    lookbackDays: Math.max(1, Math.min(90, Number(e.target.value || 7))),
-                  })
-                }
-                helperText="Number of days to look back in Amplitude (1-90)"
-              />
-              <Select
-                label="Target Column"
-                value={form.analytics.targetColumn}
-                onChange={(value) =>
-                  updateField('analytics', {
-                    ...form.analytics,
-                    targetColumn: value as IAnalyticsConfig['targetColumn'],
-                  })
-                }
-                options={[
-                  { value: 'Draft', label: 'Draft' },
-                  { value: 'Ready', label: 'Ready' },
-                  { value: 'In Progress', label: 'In Progress' },
-                  { value: 'Review', label: 'Review' },
-                  { value: 'Done', label: 'Done' },
-                ]}
-                helperText="Board column for created issues"
-              />
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-400 mb-1.5">Analysis Prompt (optional)</label>
-                <textarea
-                  rows={4}
-                  value={form.analytics.analysisPrompt ?? ''}
-                  onChange={(e) =>
-                    updateField('analytics', {
-                      ...form.analytics,
-                      analysisPrompt: e.target.value,
-                    })
-                  }
-                  placeholder="Custom prompt for AI analysis. Leave empty to use default."
-                  className="w-full bg-slate-950/50 border border-white/10 text-slate-200 rounded-lg px-3 py-2.5 text-sm placeholder-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 resize-y"
-                />
-                <p className="mt-1.5 text-xs text-slate-500">Custom prompt for AI analysis. Leave empty to use default.</p>
-              </div>
-            </div>
-          )}
-        </Card>
+          <Card className="p-6">
+            <h3 className="text-lg font-medium text-slate-200 mb-2">Notification Webhooks</h3>
+            <WebhookEditor notifications={form.notifications} onChange={(notifications) => updateField('notifications', notifications)} />
+          </Card>
+        </div>
       ),
     },
     {
@@ -1962,39 +1796,6 @@ const Settings: React.FC = () => {
         </Button>
       </div>
 
-      <div className="mt-12">
-        <h3 className="text-lg font-bold text-slate-200 mb-4 flex items-center">
-          <Activity className="h-5 w-5 mr-2 text-indigo-500" />
-          System Health
-        </h3>
-        <Card className="divide-y divide-slate-800">
-          {doctorLoading ? (
-            <div className="p-4 text-sm text-slate-500">Loading health checks...</div>
-          ) : (
-            doctorChecks.map((check, idx) => {
-              const isPass = check.status === 'pass';
-              const isWarn = check.status === 'warn';
-              const statusClass = isPass
-                ? 'bg-green-500/10 text-green-400 border-green-500/20'
-                : isWarn
-                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                  : 'bg-red-500/10 text-red-400 border-red-500/20';
-
-              return (
-                <div key={`${check.name}-${idx}`} className="p-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-slate-200">{check.name}</p>
-                    <p className="text-xs text-slate-500">{check.detail}</p>
-                  </div>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${statusClass}`}>
-                    {check.status.toUpperCase()}
-                  </span>
-                </div>
-              );
-            })
-          )}
-        </Card>
-      </div>
     </div>
   );
 };

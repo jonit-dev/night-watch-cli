@@ -272,7 +272,7 @@ const Scheduling: React.FC = () => {
   };
 
   const handleJobToggle = async (
-    job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner',
+    job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics',
     enabled: boolean,
   ) => {
     if (!config) return;
@@ -287,6 +287,8 @@ const Scheduling: React.FC = () => {
         await updateConfig({ qa: { ...config.qa, enabled } });
       } else if (job === 'audit') {
         await updateConfig({ audit: { ...config.audit, enabled } });
+      } else if (job === 'analytics') {
+        await updateConfig({ analytics: { ...config.analytics, enabled } });
       } else {
         await updateConfig({
           roadmapScanner: { ...config.roadmapScanner, enabled },
@@ -454,7 +456,7 @@ const Scheduling: React.FC = () => {
   );
 
   const formatScheduleLabel = (
-    job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer',
+    job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics',
     configuredCronExpr: string,
     displayedCronExpr: string,
   ): string => {
@@ -799,6 +801,38 @@ const Scheduling: React.FC = () => {
             <div className="text-slate-500 text-sm">Planner uses roadmap scanner scheduling.</div>
           )}
         </Card>
+
+        <Card className={`p-6 ${!config.analytics.enabled ? 'opacity-50' : ''}`}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              Analytics
+            </h3>
+            {!config.analytics.enabled && (
+              <span className="text-xs text-slate-500 bg-slate-800 px-2 py-1 rounded">Disabled</span>
+            )}
+          </div>
+          {config.analytics.enabled ? (
+            <div className="space-y-4">
+              <div>
+                <div className="text-sm text-slate-400 mb-1">Schedule</div>
+                <div className="text-lg text-slate-200 font-medium">
+                  {formatScheduleLabel('analytics', config.analytics.schedule, scheduleInfo.analytics?.schedule ?? config.analytics.schedule)}
+                </div>
+                <div className="text-xs text-slate-500 font-mono mt-1">
+                  {scheduleInfo.analytics?.schedule ?? config.analytics.schedule}
+                </div>
+                {renderDelayNote(scheduleInfo.analytics)}
+              </div>
+              <div>
+                <div className="text-sm text-slate-400 mb-1">Next Run</div>
+                {renderNextRun(scheduleInfo.analytics?.nextRun)}
+              </div>
+            </div>
+          ) : (
+            <div className="text-slate-500 text-sm">Analytics is disabled in settings.</div>
+          )}
+        </Card>
       </div>
 
       {/* Active Crontab Entries */}
@@ -884,7 +918,7 @@ const Scheduling: React.FC = () => {
             onChange={(checked) => handleJobToggle('audit', checked)}
           />
         </div>
-        <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40 md:col-span-2">
+        <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
           <div>
             <div className="text-sm font-medium text-slate-200">Planner</div>
             <div className="text-xs text-slate-500">Creates PRDs from audit findings and pending roadmap items</div>
@@ -894,6 +928,18 @@ const Scheduling: React.FC = () => {
             disabled={updatingJob !== null}
             aria-label="Toggle planner automation"
             onChange={(checked) => handleJobToggle('planner', checked)}
+          />
+        </div>
+        <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
+          <div>
+            <div className="text-sm font-medium text-slate-200">Analytics</div>
+            <div className="text-xs text-slate-500">Fetches Amplitude data and generates board issues</div>
+          </div>
+          <Switch
+            checked={config.analytics.enabled}
+            disabled={updatingJob !== null}
+            aria-label="Toggle analytics automation"
+            onChange={(checked) => handleJobToggle('analytics', checked)}
           />
         </div>
       </div>
