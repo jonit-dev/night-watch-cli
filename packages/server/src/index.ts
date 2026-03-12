@@ -19,6 +19,7 @@ import {
   initContainer,
   loadConfig,
   loadRegistry,
+  removeProject,
   scanRoadmap,
   validateRegistry,
 } from '@night-watch/core';
@@ -29,7 +30,11 @@ import { SseClientSet, startSseStatusWatcher } from './middleware/sse.middleware
 
 import { createActionRoutes, createProjectActionRoutes } from './routes/action.routes.js';
 import { createBoardRoutes, createProjectBoardRoutes } from './routes/board.routes.js';
-import { createConfigRoutes, createProjectConfigRoutes } from './routes/config.routes.js';
+import {
+  createConfigRoutes,
+  createGlobalNotificationsRoutes,
+  createProjectConfigRoutes,
+} from './routes/config.routes.js';
 import { createDoctorRoutes, createProjectDoctorRoutes } from './routes/doctor.routes.js';
 import { createLogRoutes, createProjectLogRoutes } from './routes/log.routes.js';
 import { createPrdRoutes, createProjectPrdRoutes } from './routes/prd.routes.js';
@@ -125,6 +130,7 @@ export function createApp(projectDir: string): Express {
   app.use('/api/logs', createLogRoutes({ projectDir }));
   app.use('/api/doctor', createDoctorRoutes({ projectDir, getConfig: () => config }));
   app.use('/api/queue', createQueueRoutes({ getConfig: () => config }));
+  app.use('/api/global-notifications', createGlobalNotificationsRoutes());
 
   app.get('/api/prs', async (_req: Request, res: Response): Promise<void> => {
     try {
@@ -209,8 +215,27 @@ export function createGlobalApp(): Express {
     }
   });
 
+  app.delete('/api/projects/:projectId', (req: Request, res: Response): void => {
+    try {
+      const rawId = decodeURIComponent(String(req.params.projectId)).replace(/~/g, '/');
+      const entries = loadRegistry();
+      const entry = entries.find((e) => e.name === rawId);
+
+      if (!entry) {
+        res.status(404).json({ error: 'Project not found' });
+        return;
+      }
+
+      const result = removeProject(entry.path);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
+    }
+  });
+
   // Global queue routes (not project-scoped — reads the shared state DB)
   app.use('/api/queue', createGlobalQueueRoutes());
+  app.use('/api/global-notifications', createGlobalNotificationsRoutes());
 
   app.use('/api/projects/:projectId', resolveProject, createProjectRouter());
 

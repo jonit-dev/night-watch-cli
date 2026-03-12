@@ -1,102 +1,140 @@
 ### **AI PR Review Instructions**
 
-**Objective:**  
-Provide a clear, concise, and actionable review of the Pull Request (PR). Focus on overall codebase quality, including readability, maintainability, functionality, adherence to best practices, performance optimizations, and testing coverage. Avoid minor nitty-picky comments and repetitive feedback.
+Review the pull request and produce one standardized markdown review comment.
+The output must be concise, specific, and action-oriented. Avoid generic praise, nitpicks, or repeated points.
 
-**Focus Areas:**
-1. **Code Quality:** Assess the readability, organization, and maintainability of the code.
-2. **Functionality:** Ensure the PR meets its intended purpose and functions as expected.
-3. **Best Practices:** Evaluate adherence to coding standards, design patterns, and project guidelines.
-4. **Performance:** Identify any potential performance improvements or optimizations.
-5. **Testing:** Review the comprehensiveness and effectiveness of the test coverage.
-6. **Security:** Identify any potential security vulnerabilities or concerns.
-7. **Bugs Found:** List any bugs identified in the PR.
-8. **Issues Found:** Consolidate performance and testing issues into a unified section.
+**Focus areas**
 
-**Critical Instructions:**
- - If you have nothing to say about a particular section, you can omit it from the review.
- - If you think there are no issues and the PR is good to go, mention it in the conclusion. No need to add unnecessary feedback. Don't be redundant.
+1. Code quality and maintainability
+2. Functional correctness
+3. Architecture and best practices
+4. Performance
+5. Testing coverage and gaps
+6. Security and reliability
+7. Concrete bugs
+8. Non-blocking issues worth tracking
 
-**Scoring Criteria:**
-- 90-100: Exceptional quality
-  • Clean, efficient, and well-documented code
-  • Comprehensive test coverage (>90%)
-  • Follows all best practices and design patterns
-  • No security vulnerabilities
-  • Optimal performance considerations
-  • Clear documentation and comments
+**Critical rules**
 
-- 75-89: High quality
-  • Well-structured and maintainable code
-  • Good test coverage (70-90%)
-  • Minor optimization opportunities
-  • No critical security issues
-  • Few non-critical issues
-  • Adequate documentation
+- Use the exact section order and heading names defined below.
+- Always include the score line exactly as `**🏆 Overall Score:** XX/100`.
+- Keep the summary and conclusion short.
+- Prefer specific file/function references when possible.
+- Only include `Bugs Found` and `Issues Found` when there is at least one real entry.
+- If there are no meaningful problems, say so clearly in the conclusion instead of inventing filler feedback.
+- Do not output review boilerplate outside the required structure.
 
-- 60-74: Average quality
-  • Functional but needs improvement
-  • Basic test coverage (40-70%)
-  • Some code duplication
-  • Multiple minor issues
-  • Basic security considerations
-  • Limited documentation
+**Scoring guidance**
 
-- 40-59: Below average
-  • Significant structural issues
-  • Poor test coverage (<40%)
-  • Multiple security concerns
-  • Performance bottlenecks
-  • Inadequate error handling
-  • Missing or unclear documentation
+- 90-100: Exceptional quality, merge-ready with no meaningful concerns
+- 75-89: Strong implementation with minor issues or follow-ups
+- 60-74: Functional but has notable quality, correctness, or testing gaps
+- 40-59: Significant issues reduce confidence in merge readiness
+- 0-39: Major correctness, architecture, security, or testing failures
 
-- 0-39: Poor quality
-  • Major architectural problems
-  • Missing or broken tests
-  • Critical security vulnerabilities
-  • Severe performance issues
-  • No error handling
-  • No documentation
-  • Breaking changes without justification
+**Required review structure**
 
-**Review Structure:**
+Use this exact structure:
 
-1. **Overall Summary**
-   - **Score:** Provide a score from 0-100.
-   - **Summary:** Brief overview of the PR, highlighting its purpose and main changes.
+### **AI Review Summary**
 
-2. **Key Strengths**
-   - Highlight 2-3 major strengths related to code quality and overall implementation.
+**🏆 Overall Score:** XX/100
 
-3. **Areas for Improvement**
-   - Identify 2-3 significant areas that need enhancement, if any.
-   - Provide actionable suggestions for each identified issue.
+_1-2 sentence high-level summary of what the PR does and the overall quality assessment._
 
-4. **Bugs Found** (if any)
-   - Present any bugs identified in the PR in a table format.
-   - **Table Columns:** Bug Name, Affected Files, Description, Confidence (High 🟢, Medium 🟡, Low 🔴)
+---
 
-5. **Issues Found** (if any)
-   - Consolidate performance and testing issues into a single table.
-   - **Table Columns:** Issue Type, Issue Name, Affected Components, Description, Impact/Severity
+### **✅ Key Strengths**
 
-6. **Conclusion**
-    - A short closing statement summarizing the overall quality of the PR and its readiness for merging.
+- **<strength title>:** <specific positive observation>
+- **<strength title>:** <specific positive observation>
+- **<strength title>:** <specific positive observation>
 
-**Example Output:**
+---
+
+### **⚠️ Areas for Improvement**
+
+- **<issue title>:** <specific improvement suggestion>
+- **<issue title>:** <specific improvement suggestion>
+- **<issue title>:** <specific improvement suggestion>
+
+If there are fewer than 3 real improvements, include only the meaningful ones.
+
+---
+
+### **🐛 Bugs Found**
+
+Include this section only when you found at least one likely bug. Use this exact table shape:
+
+| Bug Name   | Affected Files | Description                           | Confidence                   |
+| ---------- | -------------- | ------------------------------------- | ---------------------------- |
+| <bug name> | `<path>`       | <why this is a bug and likely impact> | High 🟢 / Medium 🟡 / Low 🔴 |
+
+---
+
+### **📋 Issues Found**
+
+Include this section only when you found non-bug issues worth flagging, such as performance, testing, maintainability, or design concerns. Use this exact table shape:
+
+| Issue Type                                         | Issue Name   | Affected Components   | Description        | Impact/Severity     |
+| -------------------------------------------------- | ------------ | --------------------- | ------------------ | ------------------- |
+| Performance / Testing / Maintainability / Security | <issue name> | `<component or file>` | <specific concern> | High / Medium / Low |
+
+---
+
+### **🔚 Conclusion**
+
+_1-2 sentence conclusion on merge readiness, seriousness of findings, and whether fixes are required before merge._
+
+**Review quality bar**
+
+- Prefer 2-3 substantial strengths and 0-3 meaningful improvements.
+- Distinguish clearly between bugs and non-bug issues.
+- Do not call something a bug unless there is a concrete failure mode.
+- Performance or test-design feedback belongs in `Issues Found`, not `Bugs Found`, unless it causes incorrect behavior.
+
+**Example output**
 
 ### **AI Review Summary**
 
 **🏆 Overall Score:** 85/100
 
-*The PR successfully implements XYZ with clean and well-structured code.*
+_The PR implements a comprehensive feature with solid structure, good coverage, and only a few medium-priority follow-ups._
 
-**✅ Key Strengths**
-- **Feature Implementation:** Effectively adds the new feature
-- **Code Structure:** Well-organized with logical separation of concerns
+---
 
-**⚠️ Areas for Improvement**
-- **Error Handling:** Implement more robust error handling
+### **✅ Key Strengths**
 
-**🔚 Conclusion**  
-*The PR is well-executed. Addressing the highlighted issues will further strengthen the codebase.*
+- **Comprehensive Implementation:** Covers the full feature surface cleanly.
+- **Service Design:** Separates responsibilities well across modules.
+- **Test Coverage:** Includes targeted unit and integration coverage for the main flows.
+
+---
+
+### **⚠️ Areas for Improvement**
+
+- **Database Query Optimization:** Replace row-by-row updates with batched statements where possible.
+- **Validation Reuse:** Reuse shared validation helpers instead of duplicating normalization logic.
+
+---
+
+### **🐛 Bugs Found**
+
+| Bug Name                     | Affected Files      | Description                                                                                                        | Confidence |
+| ---------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------ | ---------- |
+| Example Integration Mismatch | `server/example.ts` | The endpoint path appears inconsistent with the client call, which could cause the integration to fail at runtime. | Medium 🟡  |
+
+---
+
+### **📋 Issues Found**
+
+| Issue Type  | Issue Name        | Affected Components   | Description                                                                         | Impact/Severity |
+| ----------- | ----------------- | --------------------- | ----------------------------------------------------------------------------------- | --------------- |
+| Performance | Sequential Checks | `matching.service.ts` | Multiple serial queries are executed per item, which may increase latency at scale. | Medium          |
+| Testing     | Fragile Mocks     | `service.spec.ts`     | Nested mocks make test setup hard to maintain and reason about.                     | Low             |
+
+---
+
+### **🔚 Conclusion**
+
+_This is a strong PR with a clear structure and solid test coverage. The main follow-ups are manageable, but any real bugs identified should be addressed before merge._

@@ -106,6 +106,19 @@ export function fetchProjects(): Promise<ProjectInfo[]> {
   return apiFetch<ProjectInfo[]>('/api/projects');
 }
 
+export interface IRemoveProjectResult {
+  cronEntriesRemoved: number;
+  unregistered: boolean;
+  dataPruned: boolean;
+}
+
+export function removeProject(projectId: string): Promise<IRemoveProjectResult> {
+  const encoded = encodeProjectId(projectId);
+  return apiFetch<IRemoveProjectResult>(`/api/projects/${encoded}`, {
+    method: 'DELETE',
+  });
+}
+
 // ==================== Generic Fetch ====================
 
 /**
@@ -515,6 +528,25 @@ export function triggerClearQueue(force?: boolean): Promise<{ cleared: number }>
   return apiFetch<{ cleared: number }>('/api/queue/clear', {
     method: 'POST',
     body: JSON.stringify({ force: force ?? false }),
+  });
+}
+
+// ==================== Global Notifications ====================
+
+export interface IGlobalNotificationsConfig {
+  webhook: IWebhookConfig | null;
+}
+
+export function fetchGlobalNotifications(): Promise<IGlobalNotificationsConfig> {
+  return apiFetch<IGlobalNotificationsConfig>('/api/global-notifications');
+}
+
+export function updateGlobalNotifications(
+  config: IGlobalNotificationsConfig,
+): Promise<IGlobalNotificationsConfig> {
+  return apiFetch<IGlobalNotificationsConfig>('/api/global-notifications', {
+    method: 'PUT',
+    body: JSON.stringify(config),
   });
 }
 

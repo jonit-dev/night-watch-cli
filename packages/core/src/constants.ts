@@ -273,6 +273,7 @@ export const REGISTRY_FILE_NAME = 'projects.json';
 export const HISTORY_FILE_NAME = 'history.json';
 export const PRD_STATES_FILE_NAME = 'prd-states.json';
 export const STATE_DB_FILE_NAME = 'state.db';
+export const GLOBAL_NOTIFICATIONS_FILE_NAME = 'global-notifications.json';
 
 // Execution History
 export const MAX_HISTORY_RECORDS_PER_PRD = 10;

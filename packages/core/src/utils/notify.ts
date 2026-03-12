@@ -4,6 +4,7 @@
  */
 
 import { INightWatchConfig, IWebhookConfig, NotificationEvent } from '../types.js';
+import { loadGlobalNotificationsConfig } from './global-config.js';
 import { info, warn } from './ui.js';
 import { extractSummary } from './github.js';
 
@@ -387,25 +388,34 @@ export async function sendWebhook(
   }
 }
 
+function webhookIdentity(wh: IWebhookConfig): string {
+  if (wh.type === 'telegram') return `telegram:${wh.botToken}:${wh.chatId}`;
+  return `${wh.type}:${wh.url}`;
+}
+
 /**
- * Send notifications to all configured webhooks.
+ * Send notifications to all configured webhooks, merging in the global webhook if set.
  */
 export async function sendNotifications(
   config: INightWatchConfig,
   ctx: INotificationContext,
 ): Promise<void> {
-  const webhooks = config.notifications?.webhooks ?? [];
-  const tasks: Promise<void>[] = [];
-  for (const wh of webhooks) {
-    tasks.push(sendWebhook(wh, ctx));
+  const projectWebhooks = config.notifications?.webhooks ?? [];
+  const globalConfig = loadGlobalNotificationsConfig();
+
+  const allWebhooks = [...projectWebhooks];
+  if (globalConfig.webhook) {
+    const projectIds = new Set(projectWebhooks.map(webhookIdentity));
+    if (!projectIds.has(webhookIdentity(globalConfig.webhook))) {
+      allWebhooks.push(globalConfig.webhook);
+    }
   }
 
-  if (tasks.length === 0) {
+  if (allWebhooks.length === 0) {
     return;
   }
 
-  const results = await Promise.allSettled(tasks);
+  const results = await Promise.allSettled(allWebhooks.map((wh) => sendWebhook(wh, ctx)));
   const sent = results.filter((r) => r.status === 'fulfilled').length;
-  const total = results.length;
-  info(`Sent ${sent}/${total} notifications`);
+  info(`Sent ${sent}/${allWebhooks.length} notifications`);
 }

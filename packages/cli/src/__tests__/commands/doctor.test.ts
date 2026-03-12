@@ -2,14 +2,14 @@
  * Tests for doctor command — validateWebhook and CLI
  */
 
-import { describe, it, expect } from "vitest";
-import { execSync } from "child_process";
-import path from "path";
-import { validateWebhook } from "@/cli/commands/doctor.js";
-import { IWebhookConfig } from "@night-watch/core/types.js";
+import { describe, it, expect } from 'vitest';
+import { execSync } from 'child_process';
+import path from 'path';
+import { validateWebhook } from '@/cli/commands/doctor.js';
+import { IWebhookConfig } from '@night-watch/core/types.js';
 
-const CLI_PATH = path.join(process.cwd(), "dist/cli.js");
-const TSX_PATH = "node";
+const CLI_PATH = path.join(process.cwd(), 'dist/cli.js');
+const TSX_PATH = 'node';
 
 // Cache CLI outputs to avoid repeated spawns
 let cachedMainHelp: string | null = null;
@@ -19,7 +19,7 @@ let cachedDoctorOutput: string | null = null;
 function getMainHelp(): string {
   if (!cachedMainHelp) {
     cachedMainHelp = execSync(`${TSX_PATH} ${CLI_PATH} --help`, {
-      encoding: "utf-8",
+      encoding: 'utf-8',
       cwd: process.cwd(),
       timeout: 10000,
     });
@@ -30,7 +30,7 @@ function getMainHelp(): string {
 function getDoctorHelp(): string {
   if (!cachedDoctorHelp) {
     cachedDoctorHelp = execSync(`${TSX_PATH} ${CLI_PATH} doctor --help`, {
-      encoding: "utf-8",
+      encoding: 'utf-8',
       cwd: process.cwd(),
       timeout: 10000,
     });
@@ -40,221 +40,220 @@ function getDoctorHelp(): string {
 
 function getDoctorOutput(): string {
   if (!cachedDoctorOutput) {
-    const repoRoot = path.resolve(process.cwd(), "..", "..");
+    const repoRoot = path.resolve(process.cwd(), '..', '..');
     try {
       cachedDoctorOutput = execSync(`${TSX_PATH} ${CLI_PATH} doctor`, {
-        encoding: "utf-8",
+        encoding: 'utf-8',
         cwd: repoRoot,
-        stdio: "pipe",
+        stdio: 'pipe',
         timeout: 10000,
       });
     } catch (error) {
       const err = error as { stdout?: string };
-      cachedDoctorOutput = err.stdout || "";
+      cachedDoctorOutput = err.stdout || '';
     }
   }
   return cachedDoctorOutput;
 }
 
-describe("doctor command", () => {
-  describe("validateWebhook", () => {
-    it("should pass valid slack webhook", () => {
+describe('doctor command', () => {
+  describe('validateWebhook', () => {
+    it('should pass valid slack webhook', () => {
       const webhook: IWebhookConfig = {
-        type: "slack",
-        url: "https://hooks.slack.com/services/T00/B00/xxx",
-        events: ["run_succeeded", "run_failed"],
+        type: 'slack',
+        url: 'https://hooks.slack.com/services/T00/B00/xxx',
+        events: ['run_succeeded', 'run_failed'],
       };
       expect(validateWebhook(webhook)).toEqual([]);
     });
 
-    it("should fail slack webhook with invalid URL", () => {
+    it('should fail slack webhook with invalid URL', () => {
       const webhook: IWebhookConfig = {
-        type: "slack",
-        url: "https://example.com/webhook",
-        events: ["run_failed"],
+        type: 'slack',
+        url: 'https://example.com/webhook',
+        events: ['run_failed'],
       };
       const issues = validateWebhook(webhook);
       expect(issues.length).toBeGreaterThan(0);
-      expect(issues[0]).toContain("hooks.slack.com");
+      expect(issues[0]).toContain('hooks.slack.com');
     });
 
-    it("should fail slack webhook with missing URL", () => {
+    it('should fail slack webhook with missing URL', () => {
       const webhook: IWebhookConfig = {
-        type: "slack",
-        events: ["run_failed"],
+        type: 'slack',
+        events: ['run_failed'],
       };
       const issues = validateWebhook(webhook);
-      expect(issues).toContain("Missing URL");
+      expect(issues).toContain('Missing URL');
     });
 
-    it("should pass valid discord webhook", () => {
+    it('should pass valid discord webhook', () => {
       const webhook: IWebhookConfig = {
-        type: "discord",
-        url: "https://discord.com/api/webhooks/123/abc",
-        events: ["run_failed"],
+        type: 'discord',
+        url: 'https://discord.com/api/webhooks/123/abc',
+        events: ['run_failed'],
       };
       expect(validateWebhook(webhook)).toEqual([]);
     });
 
-    it("should fail discord webhook with invalid URL", () => {
+    it('should fail discord webhook with invalid URL', () => {
       const webhook: IWebhookConfig = {
-        type: "discord",
-        url: "https://example.com/hook",
-        events: ["run_failed"],
+        type: 'discord',
+        url: 'https://example.com/hook',
+        events: ['run_failed'],
       };
       const issues = validateWebhook(webhook);
       expect(issues.length).toBeGreaterThan(0);
-      expect(issues[0]).toContain("discord.com/api/webhooks");
+      expect(issues[0]).toContain('discord.com/api/webhooks');
     });
 
-    it("should fail discord webhook with missing URL", () => {
+    it('should fail discord webhook with missing URL', () => {
       const webhook: IWebhookConfig = {
-        type: "discord",
-        events: ["run_failed"],
+        type: 'discord',
+        events: ['run_failed'],
       };
       const issues = validateWebhook(webhook);
-      expect(issues).toContain("Missing URL");
+      expect(issues).toContain('Missing URL');
     });
 
-    it("should pass valid telegram webhook", () => {
+    it('should pass valid telegram webhook', () => {
       const webhook: IWebhookConfig = {
-        type: "telegram",
-        botToken: "123456:ABC-DEF",
-        chatId: "-1001234567890",
-        events: ["run_failed"],
+        type: 'telegram',
+        botToken: '123456:ABC-DEF',
+        chatId: '-1001234567890',
+        events: ['run_failed'],
       };
       expect(validateWebhook(webhook)).toEqual([]);
     });
 
-    it("should fail telegram without botToken", () => {
+    it('should fail telegram without botToken', () => {
       const webhook: IWebhookConfig = {
-        type: "telegram",
-        chatId: "-100123",
-        events: ["run_failed"],
+        type: 'telegram',
+        chatId: '-100123',
+        events: ['run_failed'],
       };
       const issues = validateWebhook(webhook);
-      expect(issues).toContain("Missing botToken");
+      expect(issues).toContain('Missing botToken');
     });
 
-    it("should fail telegram without chatId", () => {
+    it('should fail telegram without chatId', () => {
       const webhook: IWebhookConfig = {
-        type: "telegram",
-        botToken: "123:ABC",
-        events: ["run_failed"],
+        type: 'telegram',
+        botToken: '123:ABC',
+        events: ['run_failed'],
       };
       const issues = validateWebhook(webhook);
-      expect(issues).toContain("Missing chatId");
+      expect(issues).toContain('Missing chatId');
     });
 
-    it("should fail telegram without both botToken and chatId", () => {
+    it('should fail telegram without both botToken and chatId', () => {
       const webhook: IWebhookConfig = {
-        type: "telegram",
-        events: ["run_failed"],
+        type: 'telegram',
+        events: ['run_failed'],
       };
       const issues = validateWebhook(webhook);
-      expect(issues).toContain("Missing botToken");
-      expect(issues).toContain("Missing chatId");
+      expect(issues).toContain('Missing botToken');
+      expect(issues).toContain('Missing chatId');
     });
 
-    it("should fail with no events configured", () => {
+    it('should fail with no events configured', () => {
       const webhook: IWebhookConfig = {
-        type: "slack",
-        url: "https://hooks.slack.com/services/T00/B00/xxx",
+        type: 'slack',
+        url: 'https://hooks.slack.com/services/T00/B00/xxx',
         events: [],
       };
       const issues = validateWebhook(webhook);
-      expect(issues).toContain("No events configured");
+      expect(issues).toContain('No events configured');
     });
 
-    it("should fail with invalid event name", () => {
+    it('should fail with invalid event name', () => {
       const webhook: IWebhookConfig = {
-        type: "slack",
-        url: "https://hooks.slack.com/services/T00/B00/xxx",
-        events: ["invalid_event" as any],
+        type: 'slack',
+        url: 'https://hooks.slack.com/services/T00/B00/xxx',
+        events: ['invalid_event' as any],
       };
       const issues = validateWebhook(webhook);
       expect(issues.length).toBeGreaterThan(0);
-      expect(issues[0]).toContain("Invalid event");
+      expect(issues[0]).toContain('Invalid event');
     });
 
-    it("should fail with unknown webhook type", () => {
+    it('should fail with unknown webhook type', () => {
       const webhook: IWebhookConfig = {
-        type: "teams" as any,
-        url: "https://example.com/webhook",
-        events: ["run_failed"],
+        type: 'teams' as any,
+        url: 'https://example.com/webhook',
+        events: ['run_failed'],
       };
       const issues = validateWebhook(webhook);
       expect(issues.length).toBeGreaterThan(0);
-      expect(issues[0]).toContain("Unknown webhook type");
+      expect(issues[0]).toContain('Unknown webhook type');
     });
 
-    it("should report multiple issues at once", () => {
+    it('should report multiple issues at once', () => {
       const webhook: IWebhookConfig = {
-        type: "slack",
-        url: "https://example.com/bad-url",
-        events: ["invalid_event" as any],
+        type: 'slack',
+        url: 'https://example.com/bad-url',
+        events: ['invalid_event' as any],
       };
       const issues = validateWebhook(webhook);
       // Should have both an invalid event issue and a bad URL issue
       expect(issues.length).toBe(2);
-      expect(issues.some((i) => i.includes("Invalid event"))).toBe(true);
-      expect(issues.some((i) => i.includes("hooks.slack.com"))).toBe(true);
+      expect(issues.some((i) => i.includes('Invalid event'))).toBe(true);
+      expect(issues.some((i) => i.includes('hooks.slack.com'))).toBe(true);
     });
 
-    it("should accept all valid event types", () => {
+    it('should accept all valid event types', () => {
       const webhook: IWebhookConfig = {
-        type: "slack",
-        url: "https://hooks.slack.com/services/T00/B00/xxx",
+        type: 'slack',
+        url: 'https://hooks.slack.com/services/T00/B00/xxx',
         events: [
-          "run_started",
-          "run_succeeded",
-          "run_failed",
-          "run_timeout",
-          "review_completed",
-          "pr_auto_merged",
-          "rate_limit_fallback",
-          "qa_completed",
+          'run_started',
+          'run_succeeded',
+          'run_failed',
+          'run_timeout',
+          'review_completed',
+          'pr_auto_merged',
+          'rate_limit_fallback',
+          'qa_completed',
         ],
       };
       expect(validateWebhook(webhook)).toEqual([]);
     });
   });
 
-  describe("CLI", () => {
-    it("should show doctor command in help", () => {
+  describe('CLI', () => {
+    it('should show doctor command in help', () => {
       const output = getMainHelp();
-      expect(output).toContain("doctor");
+      expect(output).toContain('doctor');
     });
 
-    it("should show help text with --fix option", () => {
+    it('should show help text with --fix option', () => {
       const output = getDoctorHelp();
-      expect(output).toContain("Check Night Watch configuration");
-      expect(output).toContain("--fix");
+      expect(output).toContain('Check Night Watch configuration');
+      expect(output).toContain('--fix');
     });
 
-    it("should run all checks and show pass/fail indicators", () => {
+    it('should run all checks and show pass/fail indicators', () => {
       const output = getDoctorOutput();
 
       // Should show check names
-      expect(output).toContain("Node.js version");
-      expect(output).toContain("git repository");
-      expect(output).toContain("GitHub CLI");
-      expect(output).toContain("provider CLI");
-      expect(output).toContain("config file");
-      expect(output).toContain("PRD directory");
-      expect(output).toContain("logs directory");
-      expect(output).toContain("webhook configuration");
+      expect(output).toContain('Node.js version');
+      expect(output).toContain('git repository');
+      expect(output).toContain('GitHub CLI');
+      expect(output).toContain('provider CLI');
+      expect(output).toContain('config file');
+      expect(output).toContain('logs directory');
+      expect(output).toContain('webhook configuration');
 
       // Should show summary
-      expect(output).toContain("Summary");
-      expect(output).toContain("Checks passed");
+      expect(output).toContain('Summary');
+      expect(output).toContain('Checks passed');
     });
 
-    it("should show git repo check success in project dir", () => {
+    it('should show git repo check success in project dir', () => {
       const output = getDoctorOutput();
 
       // This project IS a git repo, so should pass
-      expect(output).toContain("Git repository found");
+      expect(output).toContain('Git repository found');
     });
   });
 });

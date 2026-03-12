@@ -1,7 +1,7 @@
 {
   "name": "@jonit-dev/night-watch-cli",
-  "version": "1.8.2",
-  "description": "Autonomous PRD execution using AI Provider CLIs + cron",
+  "version": "1.8.3",
+  "description": "AI agent that implements your specs, opens PRs, and reviews code overnight. Queue GitHub issues or PRDs, wake up to pull requests.",
   "type": "module",
   "bin": {
     "night-watch": "./bin/night-watch.mjs"
@@ -24,16 +24,25 @@
     "verify": "tsc --build tsconfig.json --dry",
     "test": "vitest run",
     "prepublishOnly": "yarn build && yarn test",
-    "deploy": "bash scripts/publish.sh"
+    "deploy": "bash scripts/publish.sh",
+    "deploy:beta": "bash scripts/publish.sh --beta"
   },
   "keywords": [
+    "ai-agent",
+    "ai-automation",
+    "autonomous-agent",
     "claude",
+    "claude-ai",
     "codex",
     "ai",
     "prd",
+    "spec-driven-development",
+    "pull-request-automation",
+    "code-review-automation",
     "automation",
     "cron",
     "cli",
+    "developer-tools",
     "night-watch"
   ],
   "author": "Joao Pio",
