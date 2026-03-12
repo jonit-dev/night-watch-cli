@@ -6,22 +6,29 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { runAnalytics } from '../analytics-runner.js';
-import { INightWatchConfig } from '../../types.js';
-import { createBoardProvider } from '../../board/factory.js';
+import { runAnalytics } from '../analytics/analytics-runner.js';
+import { INightWatchConfig } from '../types.js';
+import { createBoardProvider } from '../board/factory.js';
 
 // Mock dependencies
-vi.mock('../../board/factory.js');
-vi.mock('../amplitude-client.js');
-vi.mock('../../utils/shell.js');
-vi.mock('../../utils/logger.js');
+vi.mock('../board/factory.js');
+vi.mock('../analytics/amplitude-client.js');
+vi.mock('../utils/shell.js');
+vi.mock('../utils/logger.js', () => ({
+  createLogger: () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }),
+}));
 
 describe('analytics-runner', () => {
   let tempDir: string;
   let mockConfig: INightWatchConfig;
   let mockBoardProvider: any;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'analytics-test-'));
 
     mockBoardProvider = {
@@ -123,7 +130,7 @@ describe('analytics-runner', () => {
     };
 
     // Mock executeScriptWithOutput
-    const { executeScriptWithOutput } = await import('../../utils/shell.js');
+    const { executeScriptWithOutput } = await import('../utils/shell.js');
     vi.mocked(executeScriptWithOutput).mockResolvedValue({
       exitCode: 0,
       stdout: '[{"title": "Test Issue", "body": "Test Body", "labels": ["analytics"]}]',
@@ -131,7 +138,7 @@ describe('analytics-runner', () => {
     });
 
     // Mock fetchAmplitudeData
-    const { fetchAmplitudeData } = await import('../amplitude-client.js');
+    const { fetchAmplitudeData } = await import('../analytics/amplitude-client.js');
     vi.mocked(fetchAmplitudeData).mockResolvedValue({
       activeUsers: { data: 100 },
       eventSegmentation: { events: [] },
@@ -167,10 +174,11 @@ describe('analytics-runner', () => {
   });
 
   it('should parse AI response with issue recommendations and create issues', async () => {
-    const { executeScriptWithOutput } = await import('../../utils/shell.js');
+    const { executeScriptWithOutput } = await import('../utils/shell.js');
     vi.mocked(executeScriptWithOutput).mockResolvedValue({
       exitCode: 0,
-      stdout: 'Response text [{"title": "Issue 1", "body": "Body 1", "labels": ["analytics", "bug"]}] more text',
+      stdout:
+        'Response text [{"title": "Issue 1", "body": "Body 1", "labels": ["analytics", "bug"]}] more text',
       stderr: '',
     });
 
@@ -192,7 +200,7 @@ describe('analytics-runner', () => {
       analytics: { ...mockConfig.analytics, targetColumn: 'Ready' as const },
     };
 
-    const { executeScriptWithOutput } = await import('../../utils/shell.js');
+    const { executeScriptWithOutput } = await import('../utils/shell.js');
     vi.mocked(executeScriptWithOutput).mockResolvedValue({
       exitCode: 0,
       stdout: '[{"title": "Test", "body": "Body", "labels": []}]',
@@ -210,7 +218,7 @@ describe('analytics-runner', () => {
   });
 
   it('should handle empty AI response gracefully', async () => {
-    const { executeScriptWithOutput } = await import('../../utils/shell.js');
+    const { executeScriptWithOutput } = await import('../utils/shell.js');
     vi.mocked(executeScriptWithOutput).mockResolvedValue({
       exitCode: 0,
       stdout: 'No issues found []',
@@ -225,7 +233,7 @@ describe('analytics-runner', () => {
   });
 
   it('should handle AI response with no JSON array', async () => {
-    const { executeScriptWithOutput } = await import('../../utils/shell.js');
+    const { executeScriptWithOutput } = await import('../utils/shell.js');
     vi.mocked(executeScriptWithOutput).mockResolvedValue({
       exitCode: 0,
       stdout: 'No actionable insights today',
@@ -239,7 +247,7 @@ describe('analytics-runner', () => {
   });
 
   it('should handle AI provider failure', async () => {
-    const { executeScriptWithOutput } = await import('../../utils/shell.js');
+    const { executeScriptWithOutput } = await import('../utils/shell.js');
     vi.mocked(executeScriptWithOutput).mockResolvedValue({
       exitCode: 1,
       stdout: '',
@@ -250,7 +258,7 @@ describe('analytics-runner', () => {
   });
 
   it('should use default labels when none provided', async () => {
-    const { executeScriptWithOutput } = await import('../../utils/shell.js');
+    const { executeScriptWithOutput } = await import('../utils/shell.js');
     vi.mocked(executeScriptWithOutput).mockResolvedValue({
       exitCode: 0,
       stdout: '[{"title": "Test", "body": "Body"}]',
@@ -268,7 +276,7 @@ describe('analytics-runner', () => {
   });
 
   it('should handle multiple issues from AI response', async () => {
-    const { executeScriptWithOutput } = await import('../../utils/shell.js');
+    const { executeScriptWithOutput } = await import('../utils/shell.js');
     vi.mocked(executeScriptWithOutput).mockResolvedValue({
       exitCode: 0,
       stdout: '[{"title": "Issue 1", "body": "Body 1"}, {"title": "Issue 2", "body": "Body 2"}]',
@@ -282,16 +290,14 @@ describe('analytics-runner', () => {
   });
 
   it('should continue creating issues even if one fails', async () => {
-    mockBoardProvider.createIssue
-      .mockRejectedValueOnce(new Error('Failed'))
-      .mockResolvedValueOnce({
-        id: 'issue-2',
-        number: 2,
-        title: 'Issue 2',
-        body: 'Body 2',
-      });
+    mockBoardProvider.createIssue.mockRejectedValueOnce(new Error('Failed')).mockResolvedValueOnce({
+      id: 'issue-2',
+      number: 2,
+      title: 'Issue 2',
+      body: 'Body 2',
+    });
 
-    const { executeScriptWithOutput } = await import('../../utils/shell.js');
+    const { executeScriptWithOutput } = await import('../utils/shell.js');
     vi.mocked(executeScriptWithOutput).mockResolvedValue({
       exitCode: 0,
       stdout: '[{"title": "Issue 1", "body": "Body 1"}, {"title": "Issue 2", "body": "Body 2"}]',

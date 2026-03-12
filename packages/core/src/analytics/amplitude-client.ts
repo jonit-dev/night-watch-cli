@@ -60,15 +60,17 @@ export async function fetchAmplitudeData(
 
   const baseUrl = 'https://amplitude.com/api/2';
 
+  const allEventsParam = encodeURIComponent('{"event_type":"_all"}');
+
   const [activeUsers, eventSegmentation, retention, userSessions] = await Promise.allSettled([
     amplitudeFetch(`${baseUrl}/users/active?start=${start}&end=${end}`, authHeader, 'active users'),
     amplitudeFetch(
-      `${baseUrl}/events/segmentation?start=${start}&end=${end}&e={"event_type":"_all"}`,
+      `${baseUrl}/events/segmentation?start=${start}&end=${end}&e=${allEventsParam}`,
       authHeader,
       'event segmentation',
     ),
     amplitudeFetch(
-      `${baseUrl}/retention?se={"event_type":"_all"}&re={"event_type":"_all"}&start=${start}&end=${end}`,
+      `${baseUrl}/retention?se=${allEventsParam}&re=${allEventsParam}&start=${start}&end=${end}`,
       authHeader,
       'retention',
     ),
@@ -79,6 +81,14 @@ export async function fetchAmplitudeData(
     ),
   ]);
 
+  const settled = [activeUsers, eventSegmentation, retention, userSessions];
+  const labels = ['active users', 'event segmentation', 'retention', 'user sessions'];
+
+  // If all endpoints failed, re-throw the first error rather than silently returning null data
+  if (settled.every((r) => r.status === 'rejected')) {
+    throw (settled[0] as PromiseRejectedResult).reason;
+  }
+
   const extract = (result: PromiseSettledResult<unknown>, label: string): unknown => {
     if (result.status === 'fulfilled') return result.value;
     logger.warn(`Failed to fetch ${label}`, { error: String(result.reason) });
@@ -86,10 +96,10 @@ export async function fetchAmplitudeData(
   };
 
   return {
-    activeUsers: extract(activeUsers, 'active users'),
-    eventSegmentation: extract(eventSegmentation, 'event segmentation'),
-    retention: extract(retention, 'retention'),
-    userSessions: extract(userSessions, 'user sessions'),
+    activeUsers: extract(activeUsers, labels[0]),
+    eventSegmentation: extract(eventSegmentation, labels[1]),
+    retention: extract(retention, labels[2]),
+    userSessions: extract(userSessions, labels[3]),
     fetchedAt: new Date().toISOString(),
     lookbackDays,
   };

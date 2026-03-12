@@ -1697,9 +1697,6 @@ const Settings: React.FC = () => {
             <Switch
               checked={form.analytics.enabled}
               onChange={(checked) => {
-                if (checked && !form.providerEnv?.AMPLITUDE_API_KEY && !form.providerEnv?.AMPLITUDE_SECRET_KEY) {
-                  return;
-                }
                 updateField('analytics', {
                   ...form.analytics,
                   enabled: checked,
@@ -1708,7 +1705,7 @@ const Settings: React.FC = () => {
             />
           </div>
 
-          {form.analytics.enabled && !form.providerEnv?.AMPLITUDE_API_KEY && (
+          {form.analytics.enabled && (!form.providerEnv?.AMPLITUDE_API_KEY || !form.providerEnv?.AMPLITUDE_SECRET_KEY) && (
             <p className="text-sm text-amber-400">
               Amplitude API Key and Secret Key are required. Set them in Provider Environment below.
             </p>
