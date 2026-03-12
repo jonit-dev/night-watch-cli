@@ -248,7 +248,11 @@ export async function fetchAllConfigs(): Promise<Array<{ projectId: string; conf
   }
 }
 
-export function updateConfig(changes: Partial<INightWatchConfig>): Promise<INightWatchConfig> {
+export type ConfigUpdatePayload = Partial<Omit<INightWatchConfig, 'jobProviders'>> & {
+  jobProviders?: Partial<Record<keyof IJobProviders, string | null>>;
+};
+
+export function updateConfig(changes: ConfigUpdatePayload): Promise<INightWatchConfig> {
   return apiFetch<INightWatchConfig>(apiPath('/api/config'), {
     method: 'PUT',
     body: JSON.stringify(changes),

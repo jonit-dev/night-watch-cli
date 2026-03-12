@@ -208,5 +208,35 @@ describe('config-writer', () => {
         issueColumn: 'Draft',
       });
     });
+
+    it('should drop null job provider overrides when clearing assignments', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify(
+          {
+            jobProviders: {
+              executor: 'claude',
+              reviewer: 'codex',
+            },
+          },
+          null,
+          2,
+        ),
+      );
+
+      const result = saveConfig(tempDir, {
+        jobProviders: {
+          executor: 'claude',
+          reviewer: null,
+        } as any,
+      });
+
+      expect(result.success).toBe(true);
+      const updated = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      expect(updated.jobProviders).toEqual({
+        executor: 'claude',
+      });
+    });
   });
 });
