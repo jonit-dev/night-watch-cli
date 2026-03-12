@@ -287,7 +287,7 @@ describe('Settings schedules mode sync', () => {
 
     renderSettings();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Planner' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Jobs' }));
     fireEvent.click(screen.getByLabelText('Enable planner'));
 
     await waitFor(() => {
@@ -318,7 +318,7 @@ describe('Settings schedules mode sync', () => {
 
     renderSettings();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Planner' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Jobs' }));
     fireEvent.click(screen.getByLabelText('Enable planner'));
 
     await waitFor(() => {

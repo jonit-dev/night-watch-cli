@@ -20,7 +20,7 @@ export function createLogRoutes(deps: ILogRoutesDeps): Router {
     try {
       const { name } = req.params;
 
-      const validNames = ['executor', 'reviewer', 'qa', 'audit', 'planner'];
+      const validNames = ['executor', 'reviewer', 'qa', 'audit', 'planner', 'analytics'];
       if (!validNames.includes(name as string)) {
         res.status(400).json({
           error: `Invalid log name. Must be one of: ${validNames.join(', ')}`,
@@ -57,7 +57,7 @@ export function createProjectLogRoutes(): Router {
       const projectDir = req.projectDir!;
       const { name } = req.params;
 
-      const validNames = ['executor', 'reviewer', 'qa', 'audit', 'planner'];
+      const validNames = ['executor', 'reviewer', 'qa', 'audit', 'planner', 'analytics'];
       if (!validNames.includes(name as string)) {
         res.status(400).json({
           error: `Invalid log name. Must be one of: ${validNames.join(', ')}`,

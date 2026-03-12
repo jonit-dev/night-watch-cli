@@ -3,8 +3,9 @@ import { Pause, Play, Search, ArrowDownCircle, AlertCircle } from 'lucide-react'
 import Button from '../components/ui/Button';
 import { useApi, fetchLogs } from '../api';
 import { useStore } from '../store/useStore';
+import { JOB_DEFINITIONS } from '../utils/jobs.js';
 
-type LogName = 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner';
+type LogName = string;
 
 const Logs: React.FC = () => {
   const [autoScroll, setAutoScroll] = useState(true);
@@ -81,71 +82,22 @@ const Logs: React.FC = () => {
             </div>
             <div className="h-6 w-px bg-slate-700 mx-2"></div>
             <div className="flex space-x-1">
-               <button
-                 onClick={() => handleLogChange('executor')}
-                 className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                   activeLog === 'executor'
-                     ? 'bg-slate-800 text-slate-200 shadow-sm border border-slate-700'
-                     : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                 }`}
-               >
-                 <div className="flex items-center space-x-2">
-                   <span>Executor</span>
-                   {getProcessStatus('executor') && <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>}
-                 </div>
-               </button>
-               <button
-                 onClick={() => handleLogChange('reviewer')}
-                 className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                   activeLog === 'reviewer'
-                     ? 'bg-slate-800 text-slate-200 shadow-sm border border-slate-700'
-                     : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                 }`}
-               >
-                 <div className="flex items-center space-x-2">
-                   <span>Reviewer</span>
-                   {getProcessStatus('reviewer') && <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>}
-                 </div>
-               </button>
-               <button
-                 onClick={() => handleLogChange('qa')}
-                 className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                   activeLog === 'qa'
-                     ? 'bg-slate-800 text-slate-200 shadow-sm border border-slate-700'
-                     : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                 }`}
-               >
-                 <div className="flex items-center space-x-2">
-                   <span>QA</span>
-                   {getProcessStatus('qa') && <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>}
-                </div>
-              </button>
-              <button
-                onClick={() => handleLogChange('audit')}
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                  activeLog === 'audit'
-                    ? 'bg-slate-800 text-slate-200 shadow-sm border border-slate-700'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <span>Auditor</span>
-                  {getProcessStatus('audit') && <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>}
-                </div>
-              </button>
-              <button
-                onClick={() => handleLogChange('planner')}
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                  activeLog === 'planner'
-                    ? 'bg-slate-800 text-slate-200 shadow-sm border border-slate-700'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                }`}
-              >
-                <div className="flex items-center space-x-2">
-                  <span>Planner</span>
-                  {getProcessStatus('planner') && <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>}
-                </div>
-              </button>
+              {JOB_DEFINITIONS.map(({ processName, label }) => (
+                <button
+                  key={processName}
+                  onClick={() => handleLogChange(processName)}
+                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    activeLog === processName
+                      ? 'bg-slate-800 text-slate-200 shadow-sm border border-slate-700'
+                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2">
+                    <span>{label}</span>
+                    {getProcessStatus(processName) && <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>}
+                  </div>
+                </button>
+              ))}
             </div>
          </div>
          <div className="flex items-center space-x-2">
