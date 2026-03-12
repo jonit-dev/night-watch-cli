@@ -60,6 +60,22 @@ interface IInitOptions {
   reviewer?: boolean;
 }
 
+interface ISkillsInstallResult {
+  location: string;
+  installed: number;
+  skipped: number;
+  type: 'claude' | 'codex' | 'none';
+}
+
+const NW_SKILLS = [
+  'nw-create-prd',
+  'nw-add-issue',
+  'nw-run',
+  'nw-slice',
+  'nw-board-sync',
+  'nw-review',
+] as const;
+
 interface IGeneratedInitConfig extends Omit<INightWatchConfig, '_cliProviderOverride'> {
   $schema: string;
   projectName: string;
@@ -467,6 +483,81 @@ function addToGitignore(cwd: string): void {
   console.log(`  Updated: ${gitignorePath} (added ${missing.map((e) => e.label).join(', ')})`);
 }
 
+function installSkills(
+  cwd: string,
+  provider: Provider,
+  force: boolean,
+  templatesDir: string,
+): ISkillsInstallResult {
+  const skillsTemplatesDir = path.join(templatesDir, 'skills');
+  if (!fs.existsSync(skillsTemplatesDir)) {
+    return { location: '', installed: 0, skipped: 0, type: 'none' };
+  }
+
+  const isClaudeProvider = provider === 'claude' || provider.startsWith('claude');
+  const isCodexProvider = provider === 'codex';
+  const claudeDir = path.join(cwd, '.claude');
+
+  if (isClaudeProvider || fs.existsSync(claudeDir)) {
+    ensureDir(claudeDir);
+    const skillsDir = path.join(claudeDir, 'skills');
+    ensureDir(skillsDir);
+
+    let installed = 0;
+    let skipped = 0;
+
+    for (const skillName of NW_SKILLS) {
+      const templateFile = path.join(skillsTemplatesDir, `${skillName}.md`);
+      if (!fs.existsSync(templateFile)) continue;
+
+      const skillDir = path.join(skillsDir, skillName);
+      ensureDir(skillDir);
+      const target = path.join(skillDir, 'SKILL.md');
+
+      if (fs.existsSync(target) && !force) {
+        skipped++;
+        continue;
+      }
+
+      fs.copyFileSync(templateFile, target);
+      installed++;
+    }
+
+    return { location: '.claude/skills/', installed, skipped, type: 'claude' };
+  }
+
+  if (isCodexProvider) {
+    const agentsFile = path.join(cwd, 'AGENTS.md');
+    const blockFile = path.join(skillsTemplatesDir, '_codex-block.md');
+    if (!fs.existsSync(blockFile)) {
+      return { location: '', installed: 0, skipped: 0, type: 'none' };
+    }
+
+    const block = fs.readFileSync(blockFile, 'utf-8');
+    const marker = '## Night Watch Skills';
+
+    if (!fs.existsSync(agentsFile)) {
+      fs.writeFileSync(agentsFile, block);
+      return { location: 'AGENTS.md', installed: NW_SKILLS.length, skipped: 0, type: 'codex' };
+    }
+
+    const existing = fs.readFileSync(agentsFile, 'utf-8');
+    if (existing.includes(marker)) {
+      if (!force) {
+        return { location: 'AGENTS.md', installed: 0, skipped: NW_SKILLS.length, type: 'codex' };
+      }
+      const withoutSection = existing.replace(/\n\n## Night Watch Skills[\s\S]*$/, '');
+      fs.writeFileSync(agentsFile, withoutSection + '\n\n' + block);
+    } else {
+      fs.appendFileSync(agentsFile, '\n\n' + block);
+    }
+
+    return { location: 'AGENTS.md', installed: NW_SKILLS.length, skipped: 0, type: 'codex' };
+  }
+
+  return { location: '', installed: 0, skipped: 0, type: 'none' };
+}
+
 /**
  * Main init command implementation
  */
@@ -482,7 +573,7 @@ export function initCommand(program: Command): void {
       const cwd = process.cwd();
       const force = options.force || false;
       const prdDir = options.prdDir || DEFAULT_PRD_DIR;
-      const totalSteps = 12;
+      const totalSteps = 13;
       const interactive = isInteractiveInitSession();
 
       console.log();
@@ -796,8 +887,22 @@ export function initCommand(program: Command): void {
         );
       }
 
+      // Step 12: Install AI skills
+      step(12, totalSteps, 'Installing Night Watch skills...');
+      const skillsResult = installSkills(cwd, selectedProvider, force, TEMPLATES_DIR);
+      if (skillsResult.installed > 0) {
+        success(`Installed ${skillsResult.installed} skills to ${skillsResult.location}`);
+        for (const skillName of NW_SKILLS) {
+          console.log(`  /${skillName}`);
+        }
+      } else if (skillsResult.skipped > 0) {
+        info(`Skills already installed (use --force to overwrite)`);
+      } else if (skillsResult.type === 'none') {
+        info('No compatible AI skills directory detected — skipping.');
+      }
+
       // Print summary
-      step(12, totalSteps, 'Initialization complete!');
+      step(13, totalSteps, 'Initialization complete!');
 
       // Summary with table
       header('Initialization Complete');
@@ -812,6 +917,13 @@ export function initCommand(program: Command): void {
       filesTable.push(['Config File', CONFIG_FILE_NAME]);
       filesTable.push(['Board Setup', boardSetupStatus]);
       filesTable.push(['Global Registry', '~/.night-watch/projects.json']);
+      const skillsSummary =
+        skillsResult.installed > 0
+          ? `${skillsResult.installed} skills → ${skillsResult.location}`
+          : skillsResult.skipped > 0
+            ? `Already installed (${skillsResult.location})`
+            : 'Skipped';
+      filesTable.push(['Skills', skillsSummary]);
       console.log(filesTable.toString());
 
       // Configuration summary
@@ -827,6 +939,9 @@ export function initCommand(program: Command): void {
       info('2. Run `night-watch install` to set up cron jobs');
       info('3. Run `night-watch doctor` to verify the full setup');
       info('4. Or run `night-watch run` to execute PRDs manually');
+      if (skillsResult.installed > 0) {
+        info(`5. Use /nw-create-prd, /nw-run, /nw-add-issue and more in your AI assistant`);
+      }
       console.log();
     });
 }
