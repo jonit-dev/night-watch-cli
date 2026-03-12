@@ -11,6 +11,7 @@ import {
 } from 'date-fns';
 import React, { useMemo } from 'react';
 import type { INightWatchConfig, IQueueAnalytics, IQueueStatus } from '../../api';
+import { JOB_DEFINITIONS } from '../../utils/jobs.js';
 
 
 interface ProjectConfig {
@@ -26,13 +27,7 @@ interface ScheduleTimelineProps {
   queueAnalytics?: IQueueAnalytics | null;
 }
 
-const JOB_TYPES = [
-  { id: 'executor', label: 'Executor', color: { bg: 'bg-blue-500', border: 'border-blue-500/60' } },
-  { id: 'reviewer', label: 'Reviewer', color: { bg: 'bg-green-500', border: 'border-green-500/60' } },
-  { id: 'qa', label: 'QA', color: { bg: 'bg-purple-500', border: 'border-purple-500/60' } },
-  { id: 'audit', label: 'Audit', color: { bg: 'bg-orange-500', border: 'border-orange-500/60' } },
-  { id: 'slicer', label: 'Planner', color: { bg: 'bg-yellow-500', border: 'border-yellow-500/60' } },
-] as const;
+const JOB_TYPES = JOB_DEFINITIONS;
 
 // Colors for non-current projects
 const PROJECT_ACCENT_COLORS = [
@@ -72,7 +67,7 @@ const ScheduleTimeline: React.FC<ScheduleTimelineProps> = ({
   const scheduledTasks = useMemo(() => {
     const tasks: Array<{
       projectId: string;
-      jobType: typeof JOB_TYPES[number]['id'];
+      jobType: string;
       time: Date;
     }> = [];
 
@@ -83,6 +78,7 @@ const ScheduleTimeline: React.FC<ScheduleTimelineProps> = ({
         qa: config.qa.enabled ? config.qa.schedule : null,
         audit: config.audit.enabled ? config.audit.schedule : null,
         slicer: config.roadmapScanner.enabled ? config.roadmapScanner.slicerSchedule : null,
+        analytics: config.analytics?.enabled ? config.analytics?.schedule : null,
       };
 
       const offset = config.cronScheduleOffset || 0;
@@ -104,7 +100,7 @@ const ScheduleTimeline: React.FC<ScheduleTimelineProps> = ({
             if (isAfter(taskTime, startTime) && isBefore(taskTime, endTime)) {
               tasks.push({
                 projectId,
-                jobType: jobType as typeof JOB_TYPES[number]['id'],
+                jobType,
                 time: taskTime,
               });
             }
@@ -126,6 +122,7 @@ const ScheduleTimeline: React.FC<ScheduleTimelineProps> = ({
     if (configs.every(c => !c.config.qa.enabled)) disabled.add('qa');
     if (configs.every(c => !c.config.audit.enabled)) disabled.add('audit');
     if (configs.every(c => !c.config.roadmapScanner.enabled)) disabled.add('slicer');
+    if (configs.every(c => !c.config.analytics?.enabled)) disabled.add('analytics');
     return disabled;
   }, [configs]);
 
