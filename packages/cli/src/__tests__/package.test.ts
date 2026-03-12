@@ -27,7 +27,7 @@ describe('Package Configuration', () => {
     expect(packageJson).toHaveProperty('repository');
 
     expect(packageJson.name).toBe('@jonit-dev/night-watch-cli');
-    expect(packageJson.description).toContain('Autonomous PRD execution');
+    expect(packageJson.description).toContain('AI agent');
     expect(packageJson.license).toBe('MIT');
   });
 
