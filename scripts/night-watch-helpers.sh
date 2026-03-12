@@ -76,19 +76,83 @@ ensure_provider_on_path() {
 
 # ── Provider validation ───────────────────────────────────────────────────────
 
-# Validates that the provider command is supported.
-# Returns 0 if valid, 1 if unknown.
-# Supported providers: claude, codex
+# Validates that the provider command is non-empty.
+# With provider presets, any command is valid - we no longer restrict to a hardcoded list.
+# Returns 0 if valid (non-empty), 1 if empty.
 validate_provider() {
-  local provider="${1:?provider required}"
-  case "${provider}" in
-    claude|codex)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
+  local provider="${1:-}"
+  if [ -n "${provider}" ]; then
+    return 0
+  fi
+  return 1
+}
+
+# ── Generic Provider Command Builder ──────────────────────────────────────────
+
+# Build a provider command from NW_PROVIDER_* environment variables.
+# Outputs one NUL-delimited argument so callers can capture it as an array via
+# `mapfile -d ''`. This preserves multiline prompt arguments verbatim instead of
+# splitting them into multiple argv entries.
+#
+# Required env vars:
+#   NW_PROVIDER_CMD - CLI binary (e.g., "claude", "codex")
+#
+# Optional env vars:
+#   NW_PROVIDER_SUBCOMMAND    - Subcommand (e.g., "exec" for codex)
+#   NW_PROVIDER_PROMPT_FLAG   - Flag for prompt (e.g., "-p"). If empty, prompt is positional.
+#   NW_PROVIDER_APPROVE_FLAG  - Auto-approve flag (e.g., "--dangerously-skip-permissions")
+#   NW_PROVIDER_WORKDIR_FLAG  - Working directory flag (e.g., "-C"). If empty, cd before execution.
+#   NW_PROVIDER_MODEL_FLAG    - Model flag (e.g., "--model")
+#   NW_PROVIDER_MODEL         - Model value (e.g., "claude-opus-4-6")
+#
+# Usage:
+#   mapfile -d '' -t CMD_PARTS < <(build_provider_cmd "/path/to/worktree" "Your prompt here")
+#   "${CMD_PARTS[@]}"
+#
+# Returns: One NUL-delimited argument per entry (safe for mapfile -d '' array capture)
+build_provider_cmd() {
+  local workdir="${1:?workdir required}"
+  local prompt="${2:?prompt required}"
+
+  # Binary
+  printf '%s\0' "${NW_PROVIDER_CMD}"
+
+  # Optional subcommand (e.g., "exec" for codex)
+  if [ -n "${NW_PROVIDER_SUBCOMMAND:-}" ]; then
+    printf '%s\0' "${NW_PROVIDER_SUBCOMMAND}"
+  fi
+
+  # Working directory flag (if provider supports it)
+  if [ -n "${NW_PROVIDER_WORKDIR_FLAG:-}" ]; then
+    printf '%s\0' "${NW_PROVIDER_WORKDIR_FLAG}"
+    printf '%s\0' "${workdir}"
+  fi
+
+  # Auto-approve flag
+  if [ -n "${NW_PROVIDER_APPROVE_FLAG:-}" ]; then
+    printf '%s\0' "${NW_PROVIDER_APPROVE_FLAG}"
+  fi
+
+  # Model selection (only if both flag and value are set)
+  if [ -n "${NW_PROVIDER_MODEL_FLAG:-}" ] && [ -n "${NW_PROVIDER_MODEL:-}" ]; then
+    printf '%s\0' "${NW_PROVIDER_MODEL_FLAG}"
+    printf '%s\0' "${NW_PROVIDER_MODEL}"
+  fi
+
+  # Prompt - either with flag or positional
+  if [ -n "${NW_PROVIDER_PROMPT_FLAG:-}" ]; then
+    printf '%s\0' "${NW_PROVIDER_PROMPT_FLAG}"
+  fi
+  printf '%s\0' "${prompt}"
+}
+
+# Check if the provider uses a working directory flag (vs requiring cd).
+# Returns 0 if workdir flag is set, 1 otherwise.
+provider_uses_workdir_flag() {
+  if [ -n "${NW_PROVIDER_WORKDIR_FLAG:-}" ]; then
+    return 0
+  fi
+  return 1
 }
 
 # Resolve a usable night-watch CLI binary for nested script calls.

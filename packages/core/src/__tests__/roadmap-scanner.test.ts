@@ -51,6 +51,7 @@ describe('roadmap-scanner', () => {
     maxRetries: 3,
     reviewerMaxRetries: 2,
     reviewerRetryDelay: 30,
+    reviewerMaxPrsPerRun: 0,
     provider: 'claude',
     executorEnabled: true,
     reviewerEnabled: true,

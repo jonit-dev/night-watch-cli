@@ -49,6 +49,7 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
     maxRetries: 3,
     reviewerMaxRetries: 2,
     reviewerRetryDelay: 30,
+    reviewerMaxPrsPerRun: 0,
     providerEnv: {},
     fallbackOnRateLimit: false,
     claudeModel: 'sonnet',

@@ -51,6 +51,8 @@ export function getEventEmoji(event: NotificationEvent): string {
       return '\u274C';
     case 'run_timeout':
       return '\u23F0';
+    case 'run_no_work':
+      return '\uD83D\uDCD6';
     case 'review_completed':
       return '\uD83D\uDD0D';
     case 'rate_limit_fallback':
@@ -75,6 +77,8 @@ export function getEventTitle(event: NotificationEvent): string {
       return 'PRD Execution Failed';
     case 'run_timeout':
       return 'PRD Execution Timed Out';
+    case 'run_no_work':
+      return 'No Eligible Work';
     case 'review_completed':
       return 'PR Review Completed';
     case 'rate_limit_fallback':
@@ -99,6 +103,8 @@ export function getEventColor(event: NotificationEvent): number {
       return 0xff0000;
     case 'run_timeout':
       return 0xff0000;
+    case 'run_no_work':
+      return 0x95a5a6;
     case 'review_completed':
       return 0x0099ff;
     case 'rate_limit_fallback':

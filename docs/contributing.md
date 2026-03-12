@@ -45,8 +45,8 @@ See [Local Testing](local-testing.md) for details.
 ## Code Conventions
 
 - **Package manager**: yarn (not npm)
-- **File names**: kebab-case (`agent-persona.repository.ts`)
-- **Interfaces**: Prefix with `I` (`IAgentPersona`)
+- **File names**: kebab-case (`kanban-issue.repository.ts`)
+- **Interfaces**: Prefix with `I` (`IKanbanIssue`)
 - **Imports**: Use `.js` extensions, `@night-watch/*` for cross-package
 - **Tests**: Vitest, in `src/__tests__/`, files named `*.test.ts`
 - Always run `yarn verify` before committing

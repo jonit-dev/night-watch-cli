@@ -378,6 +378,24 @@
   resolved "https://registry.npmjs.org/@isaacs/cliui/-/cliui-9.0.0.tgz"
   integrity sha512-AokJm4tuBHillT+FpMtxQ60n8ObyXBatq7jD2/JA9dxbDDokKQm8KMht5ibGzLVU9IJDIKK4TPKgMHEYMn3lMg==
 
+"@jonit-dev/night-watch-cli@file:/home/joao/projects/night-watch-cli/packages/cli":
+  version "1.7.93"
+  resolved "file:packages/cli"
+  dependencies:
+    better-sqlite3 "^12.6.2"
+    blessed "^0.1.81"
+    chalk "^5.6.2"
+    cli-table3 "^0.6.5"
+    commander "^12.0.0"
+    concurrently "^9.2.1"
+    cors "^2.8.6"
+    cron-parser "^5.5.0"
+    cronstrue "^3.12.0"
+    express "^5.2.1"
+    ora "^9.3.0"
+    reflect-metadata "^0.2.2"
+    tsyringe "^4.10.0"
+
 "@jridgewell/resolve-uri@^3.1.0":
   version "3.1.2"
   resolved "https://registry.npmjs.org/@jridgewell/resolve-uri/-/resolve-uri-3.1.2.tgz"

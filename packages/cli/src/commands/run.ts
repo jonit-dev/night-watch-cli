@@ -23,6 +23,7 @@ import {
   loadConfig,
   parseScriptResult,
   resolveJobProvider,
+  resolvePreset,
   sendNotifications,
   error as uiError,
   validateRegistry,
@@ -59,6 +60,9 @@ export function resolveRunNotificationEvent(
   }
   if (!scriptStatus || scriptStatus === 'success_open_pr') {
     return 'run_succeeded';
+  }
+  if (scriptStatus?.startsWith('skip_')) {
+    return 'run_no_work';
   }
   return null;
 }
@@ -321,6 +325,44 @@ export function buildEnvVars(
   env.NW_CLAUDE_SECONDARY_MODEL_ID = CLAUDE_MODEL_IDS[secondaryFallbackModel];
   // Backward compatibility for scripts/helpers still reading the legacy env var.
   env.NW_CLAUDE_MODEL_ID = env.NW_CLAUDE_PRIMARY_MODEL_ID;
+
+  // Preset-based fallback (takes precedence over model-based fallback when configured)
+  if (config.primaryFallbackPreset) {
+    try {
+      const fallbackPreset = resolvePreset(config, config.primaryFallbackPreset);
+      env.NW_FALLBACK_PRIMARY_PRESET_CMD = fallbackPreset.command;
+      if (fallbackPreset.promptFlag)
+        env.NW_FALLBACK_PRIMARY_PRESET_PROMPT_FLAG = fallbackPreset.promptFlag;
+      if (fallbackPreset.autoApproveFlag)
+        env.NW_FALLBACK_PRIMARY_PRESET_AUTO_APPROVE_FLAG = fallbackPreset.autoApproveFlag;
+      if (fallbackPreset.modelFlag)
+        env.NW_FALLBACK_PRIMARY_PRESET_MODEL_FLAG = fallbackPreset.modelFlag;
+      if (fallbackPreset.model) env.NW_FALLBACK_PRIMARY_PRESET_MODEL = fallbackPreset.model;
+      if (fallbackPreset.envVars && Object.keys(fallbackPreset.envVars).length > 0) {
+        env.NW_FALLBACK_PRIMARY_PRESET_ENV = JSON.stringify(fallbackPreset.envVars);
+      }
+    } catch {
+      // preset not found — fall back to model-based fallback
+    }
+  }
+  if (config.secondaryFallbackPreset) {
+    try {
+      const fallbackPreset = resolvePreset(config, config.secondaryFallbackPreset);
+      env.NW_FALLBACK_SECONDARY_PRESET_CMD = fallbackPreset.command;
+      if (fallbackPreset.promptFlag)
+        env.NW_FALLBACK_SECONDARY_PRESET_PROMPT_FLAG = fallbackPreset.promptFlag;
+      if (fallbackPreset.autoApproveFlag)
+        env.NW_FALLBACK_SECONDARY_PRESET_AUTO_APPROVE_FLAG = fallbackPreset.autoApproveFlag;
+      if (fallbackPreset.modelFlag)
+        env.NW_FALLBACK_SECONDARY_PRESET_MODEL_FLAG = fallbackPreset.modelFlag;
+      if (fallbackPreset.model) env.NW_FALLBACK_SECONDARY_PRESET_MODEL = fallbackPreset.model;
+      if (fallbackPreset.envVars && Object.keys(fallbackPreset.envVars).length > 0) {
+        env.NW_FALLBACK_SECONDARY_PRESET_ENV = JSON.stringify(fallbackPreset.envVars);
+      }
+    } catch {
+      // preset not found — fall back to model-based fallback
+    }
+  }
 
   // Telegram credentials for in-script fallback warnings.
   // Export only webhooks that explicitly subscribed to rate_limit_fallback.
@@ -594,7 +636,7 @@ export function runCommand(program: Command): void {
           spinner.fail(`PRD executor exited with code ${exitCode}`);
         }
 
-        // Send notifications (fire-and-forget, failures do not affect exit code)
+        // Send completion notifications (fire-and-forget, failures do not affect exit code)
         if (!options.dryRun) {
           await sendRunCompletionNotifications(config, projectDir, options, exitCode, scriptResult);
         }

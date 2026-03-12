@@ -68,6 +68,7 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
     claudeModel: 'sonnet',
     reviewerMaxRetries: 2,
     reviewerRetryDelay: 30,
+    reviewerMaxPrsPerRun: 0,
     autoMerge: false,
     autoMergeMethod: 'squash',
     qa: {

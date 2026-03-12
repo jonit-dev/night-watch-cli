@@ -14,6 +14,7 @@ import {
   generateMarker,
   getEntries,
   getProjectEntries,
+  resolvePreset,
 } from '@night-watch/core';
 
 interface IHealthCheck {
@@ -36,17 +37,21 @@ function runDoctorChecks(projectDir: string, config: INightWatchConfig): IHealth
   }
 
   try {
-    execSync(`which ${config.provider}`, { stdio: 'pipe' });
+    const preset = resolvePreset(config, config.provider);
+    const command = preset?.command ?? config.provider;
+    execSync(`which ${command}`, { stdio: 'pipe' });
     checks.push({
       name: 'provider',
       status: 'pass',
-      detail: `Provider CLI found: ${config.provider}`,
+      detail: `Provider CLI found: ${command} (preset: ${config.provider})`,
     });
   } catch {
+    const preset = resolvePreset(config, config.provider);
+    const command = preset?.command ?? config.provider;
     checks.push({
       name: 'provider',
       status: 'fail',
-      detail: `Provider CLI not found: ${config.provider}`,
+      detail: `Provider CLI not found: ${command} (preset: ${config.provider})`,
     });
   }
 

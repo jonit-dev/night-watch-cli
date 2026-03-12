@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Bell, Settings, Wifi, WifiOff } from 'lucide-react';
+import { Search, Bell, Wifi, WifiOff } from 'lucide-react';
 import { useStore } from '../store/useStore';
 
 const TopBar: React.FC = () => {
@@ -38,9 +38,6 @@ const TopBar: React.FC = () => {
           <button className="p-2.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-full relative transition-all">
             <Bell className="h-5 w-5" />
             <span className="absolute top-2.5 right-2.5 h-2 w-2 bg-red-500 rounded-full ring-2 ring-[#030712]"></span>
-          </button>
-          <button className="p-2.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-full transition-all">
-            <Settings className="h-5 w-5" />
           </button>
         </div>
         

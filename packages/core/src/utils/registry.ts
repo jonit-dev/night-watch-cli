@@ -9,12 +9,76 @@ import * as path from 'path';
 
 import { CONFIG_FILE_NAME, GLOBAL_CONFIG_DIR, REGISTRY_FILE_NAME } from '../constants.js';
 import { getRepositories, resetRepositories } from '../storage/repositories/index.js';
+import { getDb } from '../storage/sqlite/client.js';
 import { closeDb } from '../storage/sqlite/client.js';
 import { getProjectName } from './status-data.js';
 
 export interface IRegistryEntry {
   name: string;
   path: string;
+}
+
+function readLegacyRegistryEntries(): IRegistryEntry[] {
+  const registryPath = getRegistryPath();
+  if (!fs.existsSync(registryPath)) {
+    return [];
+  }
+
+  try {
+    const raw = fs.readFileSync(registryPath, 'utf-8');
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.filter(
+      (entry): entry is IRegistryEntry =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        typeof entry.name === 'string' &&
+        entry.name.length > 0 &&
+        typeof entry.path === 'string' &&
+        entry.path.length > 0,
+    );
+  } catch {
+    return [];
+  }
+}
+
+function loadRegistryEntriesWithLegacyFallback(): IRegistryEntry[] {
+  const { projectRegistry } = getRepositories();
+  const entries = projectRegistry.getAll();
+  if (entries.length > 0) {
+    return entries;
+  }
+
+  const db = getDb();
+  const alreadyHydrated = db
+    .prepare<[], { value: string }>(
+      "SELECT value FROM schema_meta WHERE key = 'legacy_projects_json_hydrated'",
+    )
+    .get();
+  if (alreadyHydrated) {
+    return [];
+  }
+
+  const legacyEntries = readLegacyRegistryEntries();
+  if (legacyEntries.length === 0) {
+    return [];
+  }
+
+  db.transaction(() => {
+    for (const entry of legacyEntries) {
+      projectRegistry.upsert(entry);
+    }
+
+    db.prepare(
+      `INSERT INTO schema_meta (key, value) VALUES ('legacy_projects_json_hydrated', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    ).run(new Date().toISOString());
+  })();
+
+  return projectRegistry.getAll();
 }
 
 /**
@@ -30,8 +94,7 @@ export function getRegistryPath(): string {
  * Load all registry entries from the SQLite repository.
  */
 export function loadRegistry(): IRegistryEntry[] {
-  const { projectRegistry } = getRepositories();
-  return projectRegistry.getAll();
+  return loadRegistryEntriesWithLegacyFallback();
 }
 
 /**
@@ -53,7 +116,7 @@ export function saveRegistry(entries: IRegistryEntry[]): void {
 export function registerProject(projectDir: string): IRegistryEntry {
   const resolvedPath = path.resolve(projectDir);
   const { projectRegistry } = getRepositories();
-  const entries = projectRegistry.getAll();
+  const entries = loadRegistryEntriesWithLegacyFallback();
 
   const existing = entries.find((e) => e.path === resolvedPath);
   if (existing) {
@@ -77,6 +140,7 @@ export function registerProject(projectDir: string): IRegistryEntry {
  */
 export function unregisterProject(projectDir: string): boolean {
   const resolvedPath = path.resolve(projectDir);
+  loadRegistryEntriesWithLegacyFallback();
   const { projectRegistry } = getRepositories();
   return projectRegistry.remove(resolvedPath);
 }

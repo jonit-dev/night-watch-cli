@@ -49,6 +49,7 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
     maxLogSize: 524288,
     cronSchedule: '0 0-21 * * *',
     reviewerSchedule: '0 0,3,6,9,12,15,18,21 * * *',
+    reviewerMaxPrsPerRun: 0,
     provider: 'claude',
     reviewerEnabled: true,
     autoMerge: false,
@@ -106,6 +107,7 @@ describe('review command', () => {
 
       // Should use NW_REVIEWER_* env vars
       expect(env.NW_REVIEWER_MAX_RUNTIME).toBe('3600');
+      expect(env.NW_REVIEWER_MAX_PRS_PER_RUN).toBe('0');
       expect(env.NW_MIN_REVIEW_SCORE).toBe('80');
       expect(env.NW_BRANCH_PATTERNS).toBe('feat/,night-watch/');
       expect(env.NW_PRD_DIR).toBe('docs/PRDs/night-watch');

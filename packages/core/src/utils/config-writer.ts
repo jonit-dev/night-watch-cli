@@ -13,10 +13,32 @@ export interface ISaveConfigResult {
   error?: string;
 }
 
-const PARTIAL_MERGE_KEYS = new Set(['notifications', 'qa', 'audit', 'roadmapScanner', 'queue']);
+const PARTIAL_MERGE_KEYS = new Set([
+  'notifications',
+  'qa',
+  'audit',
+  'roadmapScanner',
+  'queue',
+  'providerPresets',
+]);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function cleanJobProviders(value: unknown): Record<string, string> {
+  if (!isPlainObject(value)) {
+    return {};
+  }
+
+  const entries: Array<[string, string]> = [];
+  for (const [key, provider] of Object.entries(value)) {
+    if (typeof provider === 'string' && provider.trim().length > 0) {
+      entries.push([key, provider]);
+    }
+  }
+
+  return Object.fromEntries(entries);
 }
 
 /**
@@ -42,7 +64,13 @@ export function saveConfig(
     const merged = { ...existing };
     for (const [key, value] of Object.entries(changes)) {
       if (value !== undefined) {
-        if (PARTIAL_MERGE_KEYS.has(key) && isPlainObject(existing[key]) && isPlainObject(value)) {
+        if (key === 'jobProviders') {
+          merged[key] = cleanJobProviders(value);
+        } else if (
+          PARTIAL_MERGE_KEYS.has(key) &&
+          isPlainObject(existing[key]) &&
+          isPlainObject(value)
+        ) {
           merged[key] = { ...(existing[key] as Record<string, unknown>), ...value };
         } else {
           merged[key] = value;

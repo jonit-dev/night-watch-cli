@@ -38,6 +38,7 @@ fi
 # Retry configuration
 REVIEWER_MAX_RETRIES="${NW_REVIEWER_MAX_RETRIES:-2}"
 REVIEWER_RETRY_DELAY="${NW_REVIEWER_RETRY_DELAY:-30}"
+REVIEWER_MAX_PRS_PER_RUN="${NW_REVIEWER_MAX_PRS_PER_RUN:-0}"
 SCRIPT_START_TIME=$(date +%s)
 
 # Normalize retry settings to safe numeric ranges
@@ -47,11 +48,17 @@ fi
 if ! [[ "${REVIEWER_RETRY_DELAY}" =~ ^[0-9]+$ ]]; then
   REVIEWER_RETRY_DELAY="30"
 fi
+if ! [[ "${REVIEWER_MAX_PRS_PER_RUN}" =~ ^[0-9]+$ ]]; then
+  REVIEWER_MAX_PRS_PER_RUN="0"
+fi
 if [ "${REVIEWER_MAX_RETRIES}" -gt 10 ]; then
   REVIEWER_MAX_RETRIES="10"
 fi
 if [ "${REVIEWER_RETRY_DELAY}" -gt 300 ]; then
   REVIEWER_RETRY_DELAY="300"
+fi
+if [ "${REVIEWER_MAX_PRS_PER_RUN}" -gt 100 ]; then
+  REVIEWER_MAX_PRS_PER_RUN="100"
 fi
 
 mkdir -p "${LOG_DIR}"
@@ -88,6 +95,14 @@ emit_result() {
   else
     echo "NIGHT_WATCH_RESULT:${status}"
   fi
+}
+
+extract_review_score_from_text() {
+  local review_text="${1:-}"
+  printf '%s' "${review_text}" \
+    | grep -oP '(?:Overall\s+)?Score:\*?\*?\s*\d+/100' \
+    | tail -1 \
+    | grep -oP '\d+(?=/100)' || echo ""
 }
 
 # ── Global Job Queue Gate ────────────────────────────────────────────────────
@@ -391,12 +406,9 @@ get_pr_score() {
       if [ -n "${REPO:-}" ]; then
         gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
       fi
-    } | sort -u
+    } | awk '!seen[$0]++'
   )
-  echo "${all_comments}" \
-    | grep -oP 'Overall Score:\*?\*?\s*(\d+)/100' \
-    | tail -1 \
-    | grep -oP '\d+(?=/100)' || echo ""
+  extract_review_score_from_text "${all_comments}"
 }
 
 # Count failed CI checks for a PR.
@@ -602,7 +614,7 @@ NEEDS_WORK=0
 REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || echo "")
 PRS_NEEDING_WORK=""
 
-while IFS=$'\t' read -r pr_number pr_branch; do
+while IFS=$'\t' read -r pr_number pr_branch pr_labels; do
   if [ -z "${pr_number}" ] || [ -z "${pr_branch}" ]; then
     continue
   fi
@@ -612,6 +624,11 @@ while IFS=$'\t' read -r pr_number pr_branch; do
   fi
 
   if [ -z "${TARGET_PR}" ] && ! printf '%s\n' "${pr_branch}" | grep -Eq "${BRANCH_REGEX}"; then
+    continue
+  fi
+
+  if printf '%s\n' "${pr_labels:-}" | tr ',' '\n' | grep -Fxq 'needs-human-review'; then
+    log "INFO: PR #${pr_number} (${pr_branch}) is labeled needs-human-review; skipping automated review"
     continue
   fi
 
@@ -643,18 +660,18 @@ while IFS=$'\t' read -r pr_number pr_branch; do
       if [ -n "${REPO}" ]; then
         gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
       fi
-    } | sort -u
+    } | awk '!seen[$0]++'
   )
-  LATEST_SCORE=$(echo "${ALL_COMMENTS}" \
-    | grep -oP 'Overall Score:\*?\*?\s*(\d+)/100' \
-    | tail -1 \
-    | grep -oP '\d+(?=/100)' || echo "")
+  LATEST_SCORE=$(extract_review_score_from_text "${ALL_COMMENTS}")
   if [ -n "${LATEST_SCORE}" ] && [ "${LATEST_SCORE}" -lt "${MIN_REVIEW_SCORE}" ]; then
     log "INFO: PR #${pr_number} (${pr_branch}) has review score ${LATEST_SCORE}/100 (threshold: ${MIN_REVIEW_SCORE})"
     NEEDS_WORK=1
     PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
   fi
-done < <(gh pr list --state open --json number,headRefName --jq '.[] | [.number, .headRefName] | @tsv' 2>/dev/null || true)
+done < <(
+  gh pr list --state open --json number,headRefName,labels \
+    --jq '.[] | [.number, .headRefName, ((.labels // []) | map(.name) | join(","))] | @tsv' 2>/dev/null || true
+)
 
 if [ "${NEEDS_WORK}" -eq 0 ]; then
   log "SKIP: All ${OPEN_PRS} open PR(s) have passing CI and review score >= ${MIN_REVIEW_SCORE} (or no score yet)"
@@ -684,12 +701,9 @@ if [ "${NEEDS_WORK}" -eq 0 ]; then
           if [ -n "${REPO}" ]; then
             gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
           fi
-        } | sort -u
+        } | awk '!seen[$0]++'
       )
-      PR_SCORE=$(echo "${PR_COMMENTS}" \
-        | grep -oP 'Overall Score:\*?\*?\s*(\d+)/100' \
-        | tail -1 \
-        | grep -oP '\d+(?=/100)' || echo "")
+      PR_SCORE=$(extract_review_score_from_text "${PR_COMMENTS}")
 
       # Skip PRs without a score or with score below threshold
       [ -z "${PR_SCORE}" ] && continue
@@ -748,6 +762,16 @@ for pr_token in ${PRS_NEEDING_WORK}; do
   PR_NUMBER_ARRAY+=("${pr_token#\#}")
 done
 
+if [ "${REVIEWER_MAX_PRS_PER_RUN}" -gt 0 ] && [ "${#PR_NUMBER_ARRAY[@]}" -gt "${REVIEWER_MAX_PRS_PER_RUN}" ]; then
+  log "LIMIT: Restricting reviewer run to first ${REVIEWER_MAX_PRS_PER_RUN} PR(s) out of ${#PR_NUMBER_ARRAY[@]} needing work"
+  PR_NUMBER_ARRAY=("${PR_NUMBER_ARRAY[@]:0:${REVIEWER_MAX_PRS_PER_RUN}}")
+  PRS_NEEDING_WORK=""
+  for pr_number in "${PR_NUMBER_ARRAY[@]}"; do
+    PRS_NEEDING_WORK="${PRS_NEEDING_WORK}${PRS_NEEDING_WORK:+ }#${pr_number}"
+  done
+  PRS_NEEDING_WORK_CSV="${PRS_NEEDING_WORK// /,}"
+fi
+
 if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED}" = "1" ] && [ "${#PR_NUMBER_ARRAY[@]}" -gt 1 ]; then
   # Dry-run mode: print diagnostics and exit
   if [ "${NW_DRY_RUN:-0}" = "1" ]; then
@@ -759,6 +783,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
     if [ "${AUTO_MERGE}" = "1" ]; then
       echo "Auto-merge Method: ${AUTO_MERGE_METHOD}"
     fi
+    echo "Max PRs Per Run: ${REVIEWER_MAX_PRS_PER_RUN}"
     echo "Open PRs needing work:${PRS_NEEDING_WORK}"
     echo "Default Branch: ${DEFAULT_BRANCH}"
     echo "Parallel Workers: ${#PR_NUMBER_ARRAY[@]}"
@@ -893,6 +918,7 @@ if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   fi
   echo "Max Retries: ${REVIEWER_MAX_RETRIES}"
   echo "Retry Delay: ${REVIEWER_RETRY_DELAY}s"
+  echo "Max PRs Per Run: ${REVIEWER_MAX_PRS_PER_RUN}"
   echo "Open PRs needing work:${PRS_NEEDING_WORK}"
   echo "Default Branch: ${DEFAULT_BRANCH}"
   echo "Review Worktree: ${REVIEW_WORKTREE_DIR}"
@@ -915,9 +941,14 @@ if ! assert_isolated_worktree "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}" "reviewe
   exit 1
 fi
 
-REVIEWER_PROMPT_PATH=$(resolve_instruction_path_with_fallback "${REVIEW_WORKTREE_DIR}" "pr-reviewer.md" "night-watch-pr-reviewer.md" || true)
+SHARED_REVIEW_PROMPT_PATH="${REVIEW_WORKTREE_DIR}/.github/prompts/pr-review.md"
+if [ -f "${SHARED_REVIEW_PROMPT_PATH}" ]; then
+  REVIEWER_PROMPT_PATH="${SHARED_REVIEW_PROMPT_PATH}"
+else
+  REVIEWER_PROMPT_PATH=$(resolve_instruction_path_with_fallback "${REVIEW_WORKTREE_DIR}" "pr-reviewer.md" "night-watch-pr-reviewer.md" || true)
+fi
 if [ -z "${REVIEWER_PROMPT_PATH}" ]; then
-  log "FAIL: Missing reviewer prompt file. Checked pr-reviewer.md/night-watch-pr-reviewer.md in instructions/, .claude/commands/, and bundled templates/"
+  log "FAIL: Missing reviewer prompt file. Checked .github/prompts/pr-review.md plus pr-reviewer.md/night-watch-pr-reviewer.md in instructions/, .claude/commands/, and bundled templates/"
   emit_result "failure" "reason=missing_reviewer_prompt"
   exit 1
 fi
@@ -1071,38 +1102,15 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
   REVIEWER_ATTEMPT_START=$(date +%s)
   REVIEWER_PROMPT="${REVIEWER_PROMPT_BASE}${TARGET_SCOPE_PROMPT}${PRD_CONTEXT_PROMPT}"
 
-  case "${PROVIDER_CMD}" in
-    claude)
-      if (
-        cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" \
-          claude -p "${REVIEWER_PROMPT}" \
-            --dangerously-skip-permissions \
-            2>&1 | tee -a "${LOG_FILE}"
-      ); then
-        EXIT_CODE=0
-      else
-        EXIT_CODE=$?
-      fi
-      ;;
-    codex)
-      if (
-        cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" \
-          codex exec \
-            -C "${REVIEW_WORKTREE_DIR}" \
-            --yolo \
-            "${REVIEWER_PROMPT}" \
-            2>&1 | tee -a "${LOG_FILE}"
-      ); then
-        EXIT_CODE=0
-      else
-        EXIT_CODE=$?
-      fi
-      ;;
-    *)
-      log "ERROR: Unknown provider: ${PROVIDER_CMD}"
-      exit 1
-      ;;
-  esac
+  # Build provider command array using generic helper
+  mapfile -d '' -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${REVIEW_WORKTREE_DIR}" "${REVIEWER_PROMPT}")
+
+  # Execute — always cd into worktree so provider tools resolve project files correctly
+  if (cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
+    EXIT_CODE=0
+  else
+    EXIT_CODE=$?
+  fi
 
   REVIEWER_ATTEMPT_ELAPSED=$(( $(date +%s) - REVIEWER_ATTEMPT_START ))
   log "RETRY: Attempt ${ATTEMPT}/${TOTAL_ATTEMPTS} finished exit_code=${EXIT_CODE} elapsed=${REVIEWER_ATTEMPT_ELAPSED}s pr=${TARGET_PR:-all}"
@@ -1223,12 +1231,9 @@ if [ "${AUTO_MERGE}" = "1" ] && [ ${EXIT_CODE} -eq 0 ]; then
         if [ -n "${REPO}" ]; then
           gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
         fi
-      } | sort -u
+      } | awk '!seen[$0]++'
     )
-    LATEST_SCORE=$(echo "${ALL_COMMENTS}" \
-      | grep -oP 'Overall Score:\*?\*?\s*(\d+)/100' \
-      | tail -1 \
-      | grep -oP '\d+(?=/100)' || echo "")
+    LATEST_SCORE=$(extract_review_score_from_text "${ALL_COMMENTS}")
 
     # Skip PRs without a score
     if [ -z "${LATEST_SCORE}" ]; then

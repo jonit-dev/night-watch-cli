@@ -6,8 +6,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { loadConfig, getDefaultConfig, resolveJobProvider } from '../config.js';
-import { INightWatchConfig, JobType } from '../types.js';
+import { loadConfig, getDefaultConfig, resolveJobProvider, resolvePreset } from '../config.js';
+import { INightWatchConfig, JobType, IProviderPreset } from '../types.js';
 import type { IQaConfig, IAuditConfig, IAnalyticsConfig } from '../types.js';
 
 describe('config', () => {
@@ -60,6 +60,7 @@ describe('config', () => {
       expect(config.maxLogSize).toBe(524288);
       expect(config.cronSchedule).toBe('5 */2 * * *');
       expect(config.reviewerSchedule).toBe('25 */3 * * *');
+      expect(config.reviewerMaxPrsPerRun).toBe(0);
       expect(config.scheduleBundleId).toBeNull();
     });
 
@@ -242,12 +243,13 @@ describe('config', () => {
       expect(config.reviewerEnabled).toBe(false);
     });
 
-    it('should fallback to default for invalid NW_PROVIDER', () => {
-      process.env.NW_PROVIDER = 'invalid';
+    it('should accept any non-empty string as preset ID for NW_PROVIDER', () => {
+      process.env.NW_PROVIDER = 'custom-preset';
 
       const config = loadConfig(tempDir);
 
-      expect(config.provider).toBe('claude');
+      // Now accepts any string as preset ID (validation happens at resolve time)
+      expect(config.provider).toBe('custom-preset');
     });
 
     it("should handle NW_REVIEWER_ENABLED with '1' value", () => {
@@ -323,6 +325,7 @@ describe('config', () => {
 
       expect(config.reviewerMaxRetries).toBe(2);
       expect(config.reviewerRetryDelay).toBe(30);
+      expect(config.reviewerMaxPrsPerRun).toBe(0);
     });
 
     it('should clamp reviewerMaxRetries to valid range (0-10)', () => {
@@ -397,6 +400,14 @@ describe('config', () => {
       expect(config.reviewerRetryDelay).toBe(60);
     });
 
+    it('should handle NW_REVIEWER_MAX_PRS_PER_RUN env var', () => {
+      process.env.NW_REVIEWER_MAX_PRS_PER_RUN = '4';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.reviewerMaxPrsPerRun).toBe(4);
+    });
+
     it('should handle NW_REVIEWER_MAX_RETRIES=0 env var', () => {
       process.env.NW_REVIEWER_MAX_RETRIES = '0';
 
@@ -420,16 +431,19 @@ describe('config', () => {
         JSON.stringify({
           reviewerMaxRetries: 3,
           reviewerRetryDelay: 45,
+          reviewerMaxPrsPerRun: 2,
         }),
       );
 
       process.env.NW_REVIEWER_MAX_RETRIES = '7';
       process.env.NW_REVIEWER_RETRY_DELAY = '90';
+      process.env.NW_REVIEWER_MAX_PRS_PER_RUN = '5';
 
       const config = loadConfig(tempDir);
 
       expect(config.reviewerMaxRetries).toBe(7);
       expect(config.reviewerRetryDelay).toBe(90);
+      expect(config.reviewerMaxPrsPerRun).toBe(5);
     });
 
     it('should handle NW_BRANCH_PREFIX env var', () => {
@@ -1458,7 +1472,8 @@ describe('config', () => {
 
       const config = loadConfig(tempDir);
 
-      expect(config.jobProviders.executor).toBeUndefined();
+      // Now accepts any string as preset ID (validation happens at resolve time)
+      expect(config.jobProviders.executor).toBe('invalid-provider');
       expect(config.jobProviders.reviewer).toBe('claude');
     });
 
@@ -1472,12 +1487,13 @@ describe('config', () => {
       expect(config.jobProviders.reviewer).toBe('claude');
     });
 
-    it('should ignore invalid provider from env vars', () => {
-      process.env.NW_JOB_PROVIDER_EXECUTOR = 'invalid';
+    it('should accept any non-empty string as preset ID from env vars', () => {
+      process.env.NW_JOB_PROVIDER_EXECUTOR = 'custom-preset';
 
       const config = loadConfig(tempDir);
 
-      expect(config.jobProviders.executor).toBeUndefined();
+      // Now accepts any string as preset ID (validation happens at resolve time)
+      expect(config.jobProviders.executor).toBe('custom-preset');
     });
 
     it('should let env vars override jobProviders from config file', () => {
@@ -1757,6 +1773,7 @@ describe('config', () => {
         'maxRetries',
         'reviewerMaxRetries',
         'reviewerRetryDelay',
+        'reviewerMaxPrsPerRun',
         'provider',
         'executorEnabled',
         'reviewerEnabled',
@@ -1798,6 +1815,7 @@ describe('config', () => {
         'maxRetries',
         'reviewerMaxRetries',
         'reviewerRetryDelay',
+        'reviewerMaxPrsPerRun',
         'provider',
         'executorEnabled',
         'reviewerEnabled',
@@ -1890,6 +1908,7 @@ describe('config', () => {
         'maxRetries',
         'reviewerMaxRetries',
         'reviewerRetryDelay',
+        'reviewerMaxPrsPerRun',
         'provider',
         'executorEnabled',
         'reviewerEnabled',
@@ -2007,6 +2026,198 @@ describe('config', () => {
       // Default priorities survive the merge
       expect(config.queue.priority.executor).toBe(50);
       expect(config.queue.priority.reviewer).toBe(40);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // resolvePreset tests
+  // ---------------------------------------------------------------------------
+
+  describe('resolvePreset', () => {
+    it('should resolve built-in claude preset', () => {
+      const config = getDefaultConfig();
+      const preset = resolvePreset(config, 'claude');
+
+      expect(preset.command).toBe('claude');
+      expect(preset.name).toBe('Claude');
+      expect(preset.promptFlag).toBe('-p');
+      expect(preset.autoApproveFlag).toBe('--dangerously-skip-permissions');
+    });
+
+    it('should resolve built-in codex preset', () => {
+      const config = getDefaultConfig();
+      const preset = resolvePreset(config, 'codex');
+
+      expect(preset.command).toBe('codex');
+      expect(preset.name).toBe('Codex');
+      expect(preset.subcommand).toBe('exec');
+      expect(preset.autoApproveFlag).toBe('--yolo');
+      expect(preset.workdirFlag).toBe('-C');
+    });
+
+    it('should resolve custom preset from config', () => {
+      const customPreset: IProviderPreset = {
+        name: 'Architect',
+        command: 'claude',
+        model: 'claude-opus-4-6',
+        modelFlag: '--model',
+      };
+      const config: INightWatchConfig = {
+        ...getDefaultConfig(),
+        providerPresets: {
+          architect: customPreset,
+        },
+      };
+
+      const preset = resolvePreset(config, 'architect');
+
+      expect(preset.name).toBe('Architect');
+      expect(preset.command).toBe('claude');
+      expect(preset.model).toBe('claude-opus-4-6');
+      expect(preset.modelFlag).toBe('--model');
+    });
+
+    it('should throw for unknown preset', () => {
+      const config = getDefaultConfig();
+
+      expect(() => resolvePreset(config, 'invalid')).toThrow('Unknown provider preset: "invalid"');
+    });
+
+    it('should allow overriding built-in preset', () => {
+      const customClaude: IProviderPreset = {
+        name: 'Custom Claude',
+        command: 'claude',
+        promptFlag: '--prompt',
+        envVars: { ANTHROPIC_BASE_URL: 'https://custom.api.com' },
+      };
+      const config: INightWatchConfig = {
+        ...getDefaultConfig(),
+        providerPresets: {
+          claude: customClaude,
+        },
+      };
+
+      const preset = resolvePreset(config, 'claude');
+
+      // Custom preset overrides built-in
+      expect(preset.name).toBe('Custom Claude');
+      expect(preset.promptFlag).toBe('--prompt');
+      expect(preset.envVars?.ANTHROPIC_BASE_URL).toBe('https://custom.api.com');
+    });
+
+    it('should resolve job provider as preset ID', () => {
+      const config: INightWatchConfig = {
+        ...getDefaultConfig(),
+        provider: 'claude',
+        jobProviders: {
+          executor: 'architect',
+        },
+        providerPresets: {
+          architect: {
+            name: 'Architect',
+            command: 'claude',
+            model: 'claude-opus-4-6',
+          },
+        },
+      };
+
+      // resolveJobProvider returns the preset ID
+      expect(resolveJobProvider(config, 'executor' as JobType)).toBe('architect');
+
+      // And we can resolve it to get the full preset
+      const preset = resolvePreset(config, 'architect');
+      expect(preset.name).toBe('Architect');
+      expect(preset.model).toBe('claude-opus-4-6');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // providerPresets config tests
+  // ---------------------------------------------------------------------------
+
+  describe('providerPresets config', () => {
+    it('should load providerPresets from config file', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          providerPresets: {
+            'custom-provider': {
+              name: 'Custom Provider',
+              command: 'custom-cli',
+              promptFlag: '--input',
+              autoApproveFlag: '--yes',
+            },
+          },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.providerPresets).toBeDefined();
+      expect(config.providerPresets!['custom-provider']).toBeDefined();
+      expect(config.providerPresets!['custom-provider'].name).toBe('Custom Provider');
+      expect(config.providerPresets!['custom-provider'].command).toBe('custom-cli');
+      expect(config.providerPresets!['custom-provider'].promptFlag).toBe('--input');
+    });
+
+    it('should load providerPresets with envVars', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          providerPresets: {
+            'proxy-claude': {
+              name: 'Proxy Claude',
+              command: 'claude',
+              envVars: {
+                ANTHROPIC_BASE_URL: 'https://proxy.example.com',
+                ANTHROPIC_API_KEY: 'sk-test',
+              },
+            },
+          },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.providerPresets!['proxy-claude'].envVars).toEqual({
+        ANTHROPIC_BASE_URL: 'https://proxy.example.com',
+        ANTHROPIC_API_KEY: 'sk-test',
+      });
+    });
+
+    it('should ignore providerPresets without required fields', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          providerPresets: {
+            'missing-command': {
+              name: 'Missing Command',
+              // command is missing
+            },
+            'missing-name': {
+              // name is missing
+              command: 'some-cli',
+            },
+            'valid-preset': {
+              name: 'Valid',
+              command: 'valid-cli',
+            },
+          },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      // Only the valid preset should be loaded
+      expect(config.providerPresets).toEqual({
+        'valid-preset': {
+          name: 'Valid',
+          command: 'valid-cli',
+        },
+      });
     });
   });
 });
