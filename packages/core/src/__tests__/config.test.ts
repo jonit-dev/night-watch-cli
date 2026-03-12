@@ -60,6 +60,7 @@ describe('config', () => {
       expect(config.maxLogSize).toBe(524288);
       expect(config.cronSchedule).toBe('5 */2 * * *');
       expect(config.reviewerSchedule).toBe('25 */3 * * *');
+      expect(config.reviewerMaxPrsPerRun).toBe(0);
       expect(config.scheduleBundleId).toBeNull();
     });
 
@@ -324,6 +325,7 @@ describe('config', () => {
 
       expect(config.reviewerMaxRetries).toBe(2);
       expect(config.reviewerRetryDelay).toBe(30);
+      expect(config.reviewerMaxPrsPerRun).toBe(0);
     });
 
     it('should clamp reviewerMaxRetries to valid range (0-10)', () => {
@@ -398,6 +400,14 @@ describe('config', () => {
       expect(config.reviewerRetryDelay).toBe(60);
     });
 
+    it('should handle NW_REVIEWER_MAX_PRS_PER_RUN env var', () => {
+      process.env.NW_REVIEWER_MAX_PRS_PER_RUN = '4';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.reviewerMaxPrsPerRun).toBe(4);
+    });
+
     it('should handle NW_REVIEWER_MAX_RETRIES=0 env var', () => {
       process.env.NW_REVIEWER_MAX_RETRIES = '0';
 
@@ -421,16 +431,19 @@ describe('config', () => {
         JSON.stringify({
           reviewerMaxRetries: 3,
           reviewerRetryDelay: 45,
+          reviewerMaxPrsPerRun: 2,
         }),
       );
 
       process.env.NW_REVIEWER_MAX_RETRIES = '7';
       process.env.NW_REVIEWER_RETRY_DELAY = '90';
+      process.env.NW_REVIEWER_MAX_PRS_PER_RUN = '5';
 
       const config = loadConfig(tempDir);
 
       expect(config.reviewerMaxRetries).toBe(7);
       expect(config.reviewerRetryDelay).toBe(90);
+      expect(config.reviewerMaxPrsPerRun).toBe(5);
     });
 
     it('should handle NW_BRANCH_PREFIX env var', () => {
@@ -1645,6 +1658,7 @@ describe('config', () => {
         'maxRetries',
         'reviewerMaxRetries',
         'reviewerRetryDelay',
+        'reviewerMaxPrsPerRun',
         'provider',
         'executorEnabled',
         'reviewerEnabled',
@@ -1686,6 +1700,7 @@ describe('config', () => {
         'maxRetries',
         'reviewerMaxRetries',
         'reviewerRetryDelay',
+        'reviewerMaxPrsPerRun',
         'provider',
         'executorEnabled',
         'reviewerEnabled',
@@ -1778,6 +1793,7 @@ describe('config', () => {
         'maxRetries',
         'reviewerMaxRetries',
         'reviewerRetryDelay',
+        'reviewerMaxPrsPerRun',
         'provider',
         'executorEnabled',
         'reviewerEnabled',
@@ -1949,9 +1965,7 @@ describe('config', () => {
     it('should throw for unknown preset', () => {
       const config = getDefaultConfig();
 
-      expect(() => resolvePreset(config, 'invalid')).toThrow(
-        'Unknown provider preset: "invalid"',
-      );
+      expect(() => resolvePreset(config, 'invalid')).toThrow('Unknown provider preset: "invalid"');
     });
 
     it('should allow overriding built-in preset', () => {

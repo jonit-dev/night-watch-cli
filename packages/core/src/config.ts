@@ -36,6 +36,7 @@ import {
   DEFAULT_QA,
   DEFAULT_QUEUE,
   DEFAULT_REVIEWER_ENABLED,
+  DEFAULT_REVIEWER_MAX_PRS_PER_RUN,
   DEFAULT_REVIEWER_MAX_RETRIES,
   DEFAULT_REVIEWER_MAX_RUNTIME,
   DEFAULT_REVIEWER_RETRY_DELAY,
@@ -71,6 +72,7 @@ export function getDefaultConfig(): INightWatchConfig {
     maxRetries: DEFAULT_MAX_RETRIES,
     reviewerMaxRetries: DEFAULT_REVIEWER_MAX_RETRIES,
     reviewerRetryDelay: DEFAULT_REVIEWER_RETRY_DELAY,
+    reviewerMaxPrsPerRun: DEFAULT_REVIEWER_MAX_PRS_PER_RUN,
     provider: DEFAULT_PROVIDER,
     executorEnabled: DEFAULT_EXECUTOR_ENABLED,
     reviewerEnabled: DEFAULT_REVIEWER_ENABLED,
@@ -136,6 +138,14 @@ function sanitizeReviewerRetryDelay(value: number, fallback: number): number {
   return n;
 }
 
+function sanitizeReviewerMaxPrsPerRun(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  const n = Math.floor(value);
+  if (n < 0) return 0;
+  if (n > 100) return 100;
+  return n;
+}
+
 /**
  * Apply a partial config layer onto a base, skipping undefined values.
  */
@@ -189,6 +199,10 @@ function mergeConfigs(
   merged.reviewerRetryDelay = sanitizeReviewerRetryDelay(
     merged.reviewerRetryDelay,
     DEFAULT_REVIEWER_RETRY_DELAY,
+  );
+  merged.reviewerMaxPrsPerRun = sanitizeReviewerMaxPrsPerRun(
+    merged.reviewerMaxPrsPerRun,
+    DEFAULT_REVIEWER_MAX_PRS_PER_RUN,
   );
   merged.primaryFallbackModel =
     merged.primaryFallbackModel ?? merged.claudeModel ?? DEFAULT_PRIMARY_FALLBACK_MODEL;

@@ -142,6 +142,16 @@ function validateConfigChanges(
   }
 
   if (
+    changes.reviewerMaxPrsPerRun !== undefined &&
+    (typeof changes.reviewerMaxPrsPerRun !== 'number' ||
+      !Number.isInteger(changes.reviewerMaxPrsPerRun) ||
+      changes.reviewerMaxPrsPerRun < 0 ||
+      changes.reviewerMaxPrsPerRun > 100)
+  ) {
+    return 'reviewerMaxPrsPerRun must be an integer between 0 and 100';
+  }
+
+  if (
     changes.branchPatterns !== undefined &&
     (!Array.isArray(changes.branchPatterns) ||
       !changes.branchPatterns.every((p) => typeof p === 'string'))
@@ -378,13 +388,19 @@ function validateConfigChanges(
   }
 
   if (changes.primaryFallbackPreset !== undefined && changes.primaryFallbackPreset !== null) {
-    if (typeof changes.primaryFallbackPreset !== 'string' || changes.primaryFallbackPreset.trim().length === 0) {
+    if (
+      typeof changes.primaryFallbackPreset !== 'string' ||
+      changes.primaryFallbackPreset.trim().length === 0
+    ) {
       return 'primaryFallbackPreset must be a non-empty string (preset ID)';
     }
   }
 
   if (changes.secondaryFallbackPreset !== undefined && changes.secondaryFallbackPreset !== null) {
-    if (typeof changes.secondaryFallbackPreset !== 'string' || changes.secondaryFallbackPreset.trim().length === 0) {
+    if (
+      typeof changes.secondaryFallbackPreset !== 'string' ||
+      changes.secondaryFallbackPreset.trim().length === 0
+    ) {
       return 'secondaryFallbackPreset must be a non-empty string (preset ID)';
     }
   }
@@ -490,7 +506,9 @@ function validateConfigChanges(
 
     if (
       queue.maxWaitTime !== undefined &&
-      (typeof queue.maxWaitTime !== 'number' || queue.maxWaitTime < 300 || queue.maxWaitTime > 14400)
+      (typeof queue.maxWaitTime !== 'number' ||
+        queue.maxWaitTime < 300 ||
+        queue.maxWaitTime > 14400)
     ) {
       return 'queue.maxWaitTime must be a number between 300 and 14400';
     }

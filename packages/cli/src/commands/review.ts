@@ -128,6 +128,7 @@ export function buildEnvVars(
   env.NW_REVIEWER_MAX_RUNTIME = String(config.reviewerMaxRuntime);
   env.NW_REVIEWER_MAX_RETRIES = String(config.reviewerMaxRetries);
   env.NW_REVIEWER_RETRY_DELAY = String(config.reviewerRetryDelay);
+  env.NW_REVIEWER_MAX_PRS_PER_RUN = String(config.reviewerMaxPrsPerRun);
   env.NW_MIN_REVIEW_SCORE = String(config.minReviewScore);
   env.NW_BRANCH_PATTERNS = config.branchPatterns.join(',');
   env.NW_PRD_DIR = config.prdDir;
@@ -335,6 +336,10 @@ export function reviewCommand(program: Command): void {
         ]);
         configTable.push(['Max Retry Attempts', String(config.reviewerMaxRetries)]);
         configTable.push(['Retry Delay', `${config.reviewerRetryDelay}s`]);
+        configTable.push([
+          'Max PRs Per Run',
+          config.reviewerMaxPrsPerRun === 0 ? 'Unlimited' : String(config.reviewerMaxPrsPerRun),
+        ]);
         console.log(configTable.toString());
 
         // Check for open PRs needing work

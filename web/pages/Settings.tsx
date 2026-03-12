@@ -60,6 +60,7 @@ type ConfigForm = {
   maxRetries: number;
   reviewerMaxRetries: number;
   reviewerRetryDelay: number;
+  reviewerMaxPrsPerRun: number;
   providerEnv: Record<string, string>;
   notifications: INotificationConfig;
   prdPriority: string[];
@@ -102,6 +103,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   maxRetries: config.maxRetries ?? 3,
   reviewerMaxRetries: config.reviewerMaxRetries ?? 2,
   reviewerRetryDelay: config.reviewerRetryDelay ?? 30,
+  reviewerMaxPrsPerRun: config.reviewerMaxPrsPerRun ?? 0,
   providerEnv: config.providerEnv || {},
   notifications: config.notifications || { webhooks: [] },
   prdPriority: config.prdPriority || [],
@@ -629,6 +631,7 @@ const Settings: React.FC = () => {
         maxRetries: form.maxRetries,
         reviewerMaxRetries: form.reviewerMaxRetries,
         reviewerRetryDelay: form.reviewerRetryDelay,
+        reviewerMaxPrsPerRun: form.reviewerMaxPrsPerRun,
         providerEnv: form.providerEnv,
         notifications: form.notifications,
         prdPriority: form.prdPriority,
@@ -1273,6 +1276,18 @@ const Settings: React.FC = () => {
                   updateField('reviewerRetryDelay', val);
                 }}
                 helperText="Wait time between retry attempts to let CI settle."
+              />
+              <Input
+                label="Max PRs Per Run"
+                type="number"
+                min="0"
+                max="100"
+                value={String(form.reviewerMaxPrsPerRun)}
+                onChange={(e) => {
+                  const val = Math.min(100, Math.max(0, Number(e.target.value || 0)));
+                  updateField('reviewerMaxPrsPerRun', val);
+                }}
+                helperText="Hard cap on how many PRs the reviewer processes per run. 0 = unlimited."
               />
             </div>
           </Card>
