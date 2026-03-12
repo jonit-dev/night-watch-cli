@@ -2,6 +2,7 @@ import { AlertCircle, AlertTriangle, RotateCcw, Save } from 'lucide-react';
 import React from 'react';
 import {
   ClaudeModel,
+  fetchAllConfigs,
   fetchConfig,
   fetchDoctor,
   IAnalyticsConfig,
@@ -37,7 +38,7 @@ import JobsTab from './settings/JobsTab.js';
 
 /** Built-in preset IDs that cannot be deleted */
 const BUILT_IN_PRESET_IDS = ['claude', 'claude-sonnet-4-6', 'claude-opus-4-6', 'codex', 'glm-47', 'glm-5'];
-const JOB_PROVIDER_KEYS: Array<keyof IJobProviders> = ['executor', 'reviewer', 'qa', 'audit', 'slicer'];
+const JOB_PROVIDER_KEYS: Array<keyof IJobProviders> = ['executor', 'reviewer', 'qa', 'audit', 'slicer', 'analytics'];
 
 type ConfigForm = {
   provider: INightWatchConfig['provider'];
@@ -192,6 +193,7 @@ const Settings: React.FC = () => {
   const { addToast, projectName, selectedProjectId, globalModeLoading } = useStore();
   const [saving, setSaving] = React.useState(false);
   const [form, setForm] = React.useState<ConfigForm | null>(null);
+  const [allProjectConfigs, setAllProjectConfigs] = React.useState<Array<{ projectId: string; config: INightWatchConfig }>>([]);
   // Prevents refetchConfig from overwriting the form after a save (form was already set from PUT response)
   const skipNextFormResetRef = React.useRef(false);
   // Tracks when jobProviders was changed by user (to trigger auto-save)
@@ -222,6 +224,10 @@ const Settings: React.FC = () => {
     refetch: refetchDoctor,
   } = useApi(fetchDoctor, [selectedProjectId], { enabled: !globalModeLoading });
   const doctorChecks = doctorChecksData ?? [];
+
+  React.useEffect(() => {
+    fetchAllConfigs().then(setAllProjectConfigs).catch(console.error);
+  }, [selectedProjectId]);
 
   React.useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -633,6 +639,7 @@ const Settings: React.FC = () => {
       qa: 'QA',
       audit: 'Audit',
       slicer: 'Planner',
+      analytics: 'Analytics',
     };
 
     for (const [jobType, provider] of Object.entries(formData.jobProviders)) {
@@ -845,6 +852,7 @@ const Settings: React.FC = () => {
             reviewerSchedule: form.reviewerSchedule,
             qa: form.qa,
             audit: form.audit,
+            analytics: form.analytics,
             roadmapScanner: {
               enabled: form.roadmapScanner.enabled,
               slicerSchedule: form.roadmapScanner.slicerSchedule || '35 */12 * * *',
@@ -866,6 +874,9 @@ const Settings: React.FC = () => {
           onSwitchToTemplate={switchToTemplateMode}
           onSwitchToCustom={switchToCustomMode}
           onApplyTemplate={applyTemplate}
+          allProjectConfigs={allProjectConfigs}
+          currentProjectId={selectedProjectId}
+          onEditJob={handleEditJob}
         />
       ),
     },
