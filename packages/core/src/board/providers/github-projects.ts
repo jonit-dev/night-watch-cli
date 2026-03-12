@@ -11,7 +11,12 @@ import {
 } from '@/board/types.js';
 import { graphql } from './github-graphql.js';
 import { GitHubProjectsBase } from './github-projects-base.js';
-import type { IAddItemData, ICreateFieldData, ICreateProjectData, IRawIssue } from './github-projects-types.js';
+import type {
+  IAddItemData,
+  ICreateFieldData,
+  ICreateProjectData,
+  IRawIssue,
+} from './github-projects-types.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -28,11 +33,18 @@ export class GitHubProjectsProvider extends GitHubProjectsBase implements IBoard
     }
 
     const createData = await graphql<ICreateProjectData>(
-      `mutation CreateProject($ownerId: ID!, $title: String!) {
-        createProjectV2(input: { ownerId: $ownerId, title: $title }) {
-          projectV2 { id number url title }
+      `
+        mutation CreateProject($ownerId: ID!, $title: String!) {
+          createProjectV2(input: { ownerId: $ownerId, title: $title }) {
+            projectV2 {
+              id
+              number
+              url
+              title
+            }
+          }
         }
-      }`,
+      `,
       { ownerId: owner.id, title },
       this.cwd,
     );
@@ -55,24 +67,34 @@ export class GitHubProjectsProvider extends GitHubProjectsBase implements IBoard
       if (!message.includes('Status field not found')) throw err;
 
       const createFieldData = await graphql<ICreateFieldData>(
-        `mutation CreateStatusField($projectId: ID!) {
-          createProjectV2Field(input: {
-            projectId: $projectId
-            dataType: SINGLE_SELECT
-            name: "Status"
-            singleSelectOptions: [
-              { name: "Draft",       color: GRAY,   description: "" }
-              { name: "Ready",       color: BLUE,   description: "" }
-              { name: "In Progress", color: YELLOW, description: "" }
-              { name: "Review",      color: ORANGE, description: "" }
-              { name: "Done",        color: GREEN,  description: "" }
-            ]
-          }) {
-            projectV2Field {
-              ... on ProjectV2SingleSelectField { id options { id name } }
+        `
+          mutation CreateStatusField($projectId: ID!) {
+            createProjectV2Field(
+              input: {
+                projectId: $projectId
+                dataType: SINGLE_SELECT
+                name: "Status"
+                singleSelectOptions: [
+                  { name: "Draft", color: GRAY, description: "" }
+                  { name: "Ready", color: BLUE, description: "" }
+                  { name: "In Progress", color: YELLOW, description: "" }
+                  { name: "Review", color: ORANGE, description: "" }
+                  { name: "Done", color: GREEN, description: "" }
+                ]
+              }
+            ) {
+              projectV2Field {
+                ... on ProjectV2SingleSelectField {
+                  id
+                  options {
+                    id
+                    name
+                  }
+                }
+              }
             }
           }
-        }`,
+        `,
         { projectId: project.id },
         this.cwd,
       );
@@ -106,12 +128,24 @@ export class GitHubProjectsProvider extends GitHubProjectsBase implements IBoard
     const repo = await this.getRepo();
     const { projectId, fieldId, optionIds } = await this.ensureProjectCache();
 
-    const issueArgs = ['issue', 'create', '--title', input.title, '--body', input.body, '--repo', repo];
+    const issueArgs = [
+      'issue',
+      'create',
+      '--title',
+      input.title,
+      '--body',
+      input.body,
+      '--repo',
+      repo,
+    ];
     if (input.labels && input.labels.length > 0) {
       issueArgs.push('--label', input.labels.join(','));
     }
 
-    const { stdout: issueUrlRaw } = await execFileAsync('gh', issueArgs, { cwd: this.cwd, encoding: 'utf-8' });
+    const { stdout: issueUrlRaw } = await execFileAsync('gh', issueArgs, {
+      cwd: this.cwd,
+      encoding: 'utf-8',
+    });
     const issueUrl = issueUrlRaw.trim();
     const issueNumber = parseInt(issueUrl.split('/').pop() ?? '', 10);
     if (!issueNumber) throw new Error(`Failed to parse issue number from URL: ${issueUrl}`);
@@ -125,11 +159,15 @@ export class GitHubProjectsProvider extends GitHubProjectsBase implements IBoard
     const issueJson = { number: issueNumber, id: nodeIdRaw.trim(), url: issueUrl };
 
     const addData = await graphql<IAddItemData>(
-      `mutation AddProjectItem($projectId: ID!, $contentId: ID!) {
-        addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
-          item { id }
+      `
+        mutation AddProjectItem($projectId: ID!, $contentId: ID!) {
+          addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+            item {
+              id
+            }
+          }
         }
-      }`,
+      `,
       { projectId, contentId: issueJson.id },
       this.cwd,
     );
@@ -154,6 +192,43 @@ export class GitHubProjectsProvider extends GitHubProjectsBase implements IBoard
     };
   }
 
+  async addIssue(issueNumber: number, column: BoardColumnName = 'Ready'): Promise<IBoardIssue> {
+    const repo = await this.getRepo();
+    const { projectId, fieldId, optionIds } = await this.ensureProjectCache();
+
+    const [owner, repoName] = repo.split('/');
+    const { stdout: nodeIdRaw } = await execFileAsync(
+      'gh',
+      ['api', `repos/${owner}/${repoName}/issues/${issueNumber}`, '--jq', '.node_id'],
+      { cwd: this.cwd, encoding: 'utf-8' },
+    );
+    const nodeId = nodeIdRaw.trim();
+    if (!nodeId) throw new Error(`Issue #${issueNumber} not found in ${repo}.`);
+
+    const addData = await graphql<IAddItemData>(
+      `
+        mutation AddProjectItem($projectId: ID!, $contentId: ID!) {
+          addProjectV2ItemById(input: { projectId: $projectId, contentId: $contentId }) {
+            item {
+              id
+            }
+          }
+        }
+      `,
+      { projectId, contentId: nodeId },
+      this.cwd,
+    );
+
+    const itemId = addData.addProjectV2ItemById.item.id;
+    const optionId = optionIds.get(column);
+    if (optionId) await this.setItemStatus(projectId, itemId, fieldId, optionId);
+
+    const full = await this.getIssue(issueNumber);
+    if (full) return { ...full, column };
+
+    throw new Error(`Added issue #${issueNumber} to project but failed to fetch it back.`);
+  }
+
   async getIssue(issueNumber: number): Promise<IBoardIssue | null> {
     const repo = await this.getRepo();
 
@@ -161,7 +236,15 @@ export class GitHubProjectsProvider extends GitHubProjectsBase implements IBoard
     try {
       const { stdout: output } = await execFileAsync(
         'gh',
-        ['issue', 'view', String(issueNumber), '--repo', repo, '--json', 'number,title,body,url,id,labels,assignees'],
+        [
+          'issue',
+          'view',
+          String(issueNumber),
+          '--repo',
+          repo,
+          '--json',
+          'number,title,body,url,id,labels,assignees',
+        ],
         { cwd: this.cwd, encoding: 'utf-8' },
       );
       rawIssue = JSON.parse(output) as IRawIssue;

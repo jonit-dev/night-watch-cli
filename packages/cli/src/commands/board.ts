@@ -415,6 +415,36 @@ export function boardCommand(program: Command): void {
     );
 
   // ---------------------------------------------------------------------------
+  // board add-issue <number>
+  // ---------------------------------------------------------------------------
+  board
+    .command('add-issue')
+    .description('Add an existing GitHub issue to the board')
+    .argument('<number>', 'Issue number')
+    .option('--column <name>', 'Target column (default: Ready)', 'Ready')
+    .action(async (number: string, options: { column: string }) =>
+      run(async () => {
+        const cwd = process.cwd();
+        const config = loadConfig(cwd);
+        const provider = getProvider(config, cwd);
+        await ensureBoardConfigured(config, cwd, provider);
+
+        if (!BOARD_COLUMNS.includes(options.column as BoardColumnName)) {
+          console.error(
+            `Invalid column "${options.column}". Valid columns: ${BOARD_COLUMNS.join(', ')}`,
+          );
+          process.exit(1);
+        }
+
+        const issue = await provider.addIssue(
+          parseInt(number, 10),
+          options.column as BoardColumnName,
+        );
+        success(`Added issue #${issue.number} "${issue.title}" to ${options.column}`);
+      }),
+    );
+
+  // ---------------------------------------------------------------------------
   // board status
   // ---------------------------------------------------------------------------
   board

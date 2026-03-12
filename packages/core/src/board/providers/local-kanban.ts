@@ -40,6 +40,10 @@ export class LocalKanbanProvider implements IBoardProvider {
     return toIBoardIssue(row);
   }
 
+  async addIssue(_issueNumber: number, _column?: BoardColumnName): Promise<IBoardIssue> {
+    throw new Error('addIssue is not supported by the local Kanban provider.');
+  }
+
   async getIssue(issueNumber: number): Promise<IBoardIssue | null> {
     const row = this.repo.getByNumber(issueNumber);
     return row ? toIBoardIssue(row) : null;
