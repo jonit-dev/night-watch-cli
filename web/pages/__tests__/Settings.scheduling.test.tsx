@@ -46,6 +46,7 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     maxRetries: 3,
     reviewerMaxRetries: 2,
     reviewerRetryDelay: 30,
+    reviewerMaxPrsPerRun: 0,
     providerEnv: {},
     notifications: { webhooks: [] },
     prdPriority: [],
@@ -328,6 +329,49 @@ describe('Settings schedules mode sync', () => {
         message: 'cron install failed',
         type: 'warning',
       });
+    });
+  });
+
+  it('shows rate limit fallback preset selectors in AI & Runtime tab', async () => {
+    currentConfig = makeConfig({ provider: 'codex' });
+
+    renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: 'AI & Runtime' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Rate Limit Fallback/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/Primary Fallback Preset/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Secondary Fallback Preset/i).length).toBeGreaterThan(0);
+    });
+  });
+
+  it('clears a reviewer provider override when switching back to global', async () => {
+    currentConfig = makeConfig({
+      jobProviders: { reviewer: 'codex' },
+    });
+    apiMocks.updateConfig.mockImplementation(async (changes) => {
+      currentConfig = makeConfig({
+        jobProviders: changes.jobProviders ?? {},
+      });
+      return currentConfig;
+    });
+
+    renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: 'AI & Runtime' }));
+
+    const selects = screen.getAllByRole('combobox');
+    fireEvent.change(selects[2], { target: { value: '' } });
+
+    await waitFor(() => {
+      expect(apiMocks.updateConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobProviders: { reviewer: null },
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect((screen.getAllByRole('combobox')[2] as HTMLSelectElement).value).toBe('');
     });
   });
 });

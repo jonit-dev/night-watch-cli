@@ -76,6 +76,12 @@ function getNightWatchBinPath(): string {
  * so we need to explicitly add the node bin directory to each cron entry.
  */
 function getNodeBinDir(): string {
+  // process.execPath is the node binary that ran this install command — stable even
+  // when invoked via yarn (which sets a temp /tmp/yarn-* dir in PATH that gets wiped
+  // on WSL restart). Falls back to `which node` for edge cases.
+  if (process.execPath && process.execPath !== 'node') {
+    return path.dirname(process.execPath);
+  }
   try {
     const nodePath = execSync('which node', { encoding: 'utf-8' }).trim();
     return path.dirname(nodePath);

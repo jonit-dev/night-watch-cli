@@ -122,6 +122,7 @@ function makeItemsResponse(
     number: number;
     statusName?: string;
     title?: string;
+    repo?: string;
   }>,
 ): string {
   return gqlResponse({
@@ -134,8 +135,9 @@ function makeItemsResponse(
             number: item.number,
             title: item.title ?? `Issue ${item.number}`,
             body: 'body',
-            url: `https://github.com/owner/repo/issues/${item.number}`,
+            url: `https://github.com/${item.repo ?? 'owner/repo'}/issues/${item.number}`,
             id: `issue-node-${item.id}`,
+            repository: { nameWithOwner: item.repo ?? 'owner/repo' },
             labels: { nodes: [] },
             assignees: { nodes: [] },
           },
@@ -572,6 +574,36 @@ describe('GitHubProjectsProvider', () => {
       );
     });
 
+    it('ignores matching issue numbers from other repositories on the same project', async () => {
+      queueCachePrimingMocks();
+
+      mockExecFileSync
+        .mockReturnValueOnce(
+          makeItemsResponse([
+            { id: 'foreign-5', number: 5, statusName: 'Draft', repo: 'other/repo' },
+            { id: 'local-5', number: 5, statusName: 'Draft', repo: 'owner/repo' },
+          ]) as unknown as Buffer,
+        )
+        .mockReturnValueOnce(
+          gqlResponse({
+            updateProjectV2ItemFieldValue: {
+              projectV2Item: { id: 'item-local-5' },
+            },
+          }) as unknown as Buffer,
+        );
+
+      const provider = new GitHubProjectsProvider(mockConfig, CWD);
+      await provider.moveIssue(5, 'In Progress');
+
+      const updateCall = mockExecFileSync.mock.calls.find(
+        (c) =>
+          Array.isArray(c[1]) &&
+          (c[1] as string[]).some((a) => a.includes('updateProjectV2ItemFieldValue')),
+      );
+      expect(updateCall).toBeDefined();
+      expect(updateCall![1]).toContain('itemId=item-local-5');
+    });
+
     it('throws when target column is not in the option IDs', async () => {
       // Set up cache with incomplete options (missing "Done")
       mockExecFileSync
@@ -688,6 +720,24 @@ describe('GitHubProjectsProvider', () => {
       expect(issues[0].column).toBe('Draft');
       expect(issues[1].number).toBe(2);
       expect(issues[1].column).toBe('Done');
+    });
+
+    it('filters out issues from other repositories on a shared project board', async () => {
+      queueCachePrimingMocks();
+
+      mockExecFileSync.mockReturnValueOnce(
+        makeItemsResponse([
+          { id: '1', number: 1, statusName: 'Draft', repo: 'owner/repo' },
+          { id: '2', number: 2, statusName: 'Ready', repo: 'other/repo' },
+          { id: '3', number: 3, statusName: 'Review', repo: 'owner/repo' },
+        ]) as unknown as Buffer,
+      );
+
+      const provider = new GitHubProjectsProvider(mockConfig, CWD);
+      const issues = await provider.getAllIssues();
+
+      expect(issues.map((issue) => issue.number)).toEqual([1, 3]);
+      expect(issues.every((issue) => issue.url.includes('owner/repo'))).toBe(true);
     });
 
     it('skips non-issue items (null content)', async () => {

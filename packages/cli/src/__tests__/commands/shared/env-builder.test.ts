@@ -23,6 +23,7 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
     maxRetries: 3,
     reviewerMaxRetries: 2,
     reviewerRetryDelay: 30,
+    reviewerMaxPrsPerRun: 0,
     provider: 'claude',
     reviewerEnabled: true,
     providerEnv: {},
@@ -187,6 +188,68 @@ describe('buildBaseEnvVars', () => {
     expect(buildBaseEnvVars(config, 'reviewer', false).NW_PROVIDER_CMD).toBe('codex');
     expect(buildBaseEnvVars(config, 'qa', false).NW_PROVIDER_CMD).toBe('claude');
     expect(buildBaseEnvVars(config, 'slicer', false).NW_PROVIDER_CMD).toBe('codex');
+  });
+
+  it('should emit NW_PROVIDER_PROMPT_FLAG for claude preset', () => {
+    const config = createTestConfig({ provider: 'claude' });
+    const env = buildBaseEnvVars(config, 'executor', false);
+
+    expect(env.NW_PROVIDER_PROMPT_FLAG).toBe('-p');
+  });
+
+  it('should emit NW_PROVIDER_MODEL for preset with model', () => {
+    const config = createTestConfig({
+      provider: 'architect',
+      providerPresets: {
+        architect: {
+          name: 'Architect',
+          command: 'claude',
+          promptFlag: '-p',
+          autoApproveFlag: '--dangerously-skip-permissions',
+          modelFlag: '--model',
+          model: 'claude-opus-4-6',
+        },
+      },
+    });
+    const env = buildBaseEnvVars(config, 'executor', false);
+
+    expect(env.NW_PROVIDER_MODEL).toBe('claude-opus-4-6');
+  });
+
+  it('should merge preset envVars into output', () => {
+    const config = createTestConfig({
+      provider: 'architect',
+      providerPresets: {
+        architect: {
+          name: 'Architect',
+          command: 'claude',
+          promptFlag: '-p',
+          autoApproveFlag: '--dangerously-skip-permissions',
+          envVars: { ANTHROPIC_BASE_URL: 'https://api.example.com', CUSTOM_KEY: 'custom-value' },
+        },
+      },
+    });
+    const env = buildBaseEnvVars(config, 'executor', false);
+
+    expect(env.ANTHROPIC_BASE_URL).toBe('https://api.example.com');
+    expect(env.CUSTOM_KEY).toBe('custom-value');
+  });
+
+  it('should use preset name as provider label', () => {
+    const config = createTestConfig({
+      provider: 'architect',
+      providerPresets: {
+        architect: {
+          name: 'Architect',
+          command: 'claude',
+          promptFlag: '-p',
+          autoApproveFlag: '--dangerously-skip-permissions',
+        },
+      },
+    });
+    const env = buildBaseEnvVars(config, 'executor', false);
+
+    expect(env.NW_PROVIDER_LABEL).toBe('Architect');
   });
 });
 

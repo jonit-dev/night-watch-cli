@@ -6,8 +6,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { INightWatchConfig, IQueueConfig, JobType, Provider } from './types.js';
+import { INightWatchConfig, IProviderPreset, IQueueConfig, JobType, Provider } from './types.js';
 import {
+  BUILT_IN_PRESETS,
   CONFIG_FILE_NAME,
   DEFAULT_ANALYTICS,
   DEFAULT_AUDIT,
@@ -36,6 +37,7 @@ import {
   DEFAULT_QA,
   DEFAULT_QUEUE,
   DEFAULT_REVIEWER_ENABLED,
+  DEFAULT_REVIEWER_MAX_PRS_PER_RUN,
   DEFAULT_REVIEWER_MAX_RETRIES,
   DEFAULT_REVIEWER_MAX_RUNTIME,
   DEFAULT_REVIEWER_RETRY_DELAY,
@@ -71,6 +73,7 @@ export function getDefaultConfig(): INightWatchConfig {
     maxRetries: DEFAULT_MAX_RETRIES,
     reviewerMaxRetries: DEFAULT_REVIEWER_MAX_RETRIES,
     reviewerRetryDelay: DEFAULT_REVIEWER_RETRY_DELAY,
+    reviewerMaxPrsPerRun: DEFAULT_REVIEWER_MAX_PRS_PER_RUN,
     provider: DEFAULT_PROVIDER,
     executorEnabled: DEFAULT_EXECUTOR_ENABLED,
     reviewerEnabled: DEFAULT_REVIEWER_ENABLED,
@@ -137,6 +140,14 @@ function sanitizeReviewerRetryDelay(value: number, fallback: number): number {
   return n;
 }
 
+function sanitizeReviewerMaxPrsPerRun(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  const n = Math.floor(value);
+  if (n < 0) return 0;
+  if (n > 100) return 100;
+  return n;
+}
+
 /**
  * Apply a partial config layer onto a base, skipping undefined values.
  */
@@ -192,6 +203,10 @@ function mergeConfigs(
     merged.reviewerRetryDelay,
     DEFAULT_REVIEWER_RETRY_DELAY,
   );
+  merged.reviewerMaxPrsPerRun = sanitizeReviewerMaxPrsPerRun(
+    merged.reviewerMaxPrsPerRun,
+    DEFAULT_REVIEWER_MAX_PRS_PER_RUN,
+  );
   merged.primaryFallbackModel =
     merged.primaryFallbackModel ?? merged.claudeModel ?? DEFAULT_PRIMARY_FALLBACK_MODEL;
   merged.secondaryFallbackModel =
@@ -218,11 +233,31 @@ export function loadConfig(projectDir: string): INightWatchConfig {
 /**
  * Resolve the provider for a specific job type.
  * Precedence: CLI override > job-specific provider > global provider.
+ * Returns the preset ID (string) that should be used.
  */
-export function resolveJobProvider(config: INightWatchConfig, jobType: JobType): Provider {
+export function resolveJobProvider(config: INightWatchConfig, jobType: JobType): string {
   if (config._cliProviderOverride) return config._cliProviderOverride;
   if (config.jobProviders[jobType]) return config.jobProviders[jobType]!;
   return config.provider;
+}
+
+/**
+ * Resolve a provider preset by ID.
+ * Looks up custom presets from config first, then falls back to built-in presets.
+ * Throws if the preset ID is not found.
+ */
+export function resolvePreset(config: INightWatchConfig, presetId: string): IProviderPreset {
+  // Check custom presets first (allows overriding built-ins)
+  if (config.providerPresets?.[presetId]) {
+    return config.providerPresets[presetId];
+  }
+
+  // Fall back to built-in presets
+  if (BUILT_IN_PRESETS[presetId]) {
+    return BUILT_IN_PRESETS[presetId];
+  }
+
+  throw new Error(`Unknown provider preset: "${presetId}"`);
 }
 
 /**

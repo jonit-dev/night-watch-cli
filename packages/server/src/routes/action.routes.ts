@@ -14,11 +14,9 @@ import {
   checkLockFile,
   executorLockPath,
   fetchStatusSnapshot,
-  loadConfig,
   performCancel,
   plannerLockPath,
   reviewerLockPath,
-  sendNotifications,
 } from '@night-watch/core';
 import { SseClientSet, broadcastSSE } from '../middleware/sse.middleware.js';
 import { validatePrdName } from '../helpers.js';
@@ -105,18 +103,6 @@ function spawnAction(
     child.unref();
 
     if (child.pid !== undefined) {
-      if (command[0] === 'run') {
-        const config = loadConfig(projectDir);
-        sendNotifications(config, {
-          event: 'run_started',
-          projectName: path.basename(projectDir),
-          exitCode: 0,
-          provider: config.provider,
-        }).catch(() => {
-          /* silently ignore notification errors */
-        });
-      }
-
       if (onSpawned) {
         onSpawned(child.pid);
       }

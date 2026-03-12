@@ -105,6 +105,10 @@ export function buildEnvOverrideConfig(
     const v = parseInt(process.env.NW_REVIEWER_RETRY_DELAY, 10);
     if (!isNaN(v) && v >= 0) env.reviewerRetryDelay = v;
   }
+  if (process.env.NW_REVIEWER_MAX_PRS_PER_RUN !== undefined) {
+    const v = parseInt(process.env.NW_REVIEWER_MAX_PRS_PER_RUN, 10);
+    if (!isNaN(v) && v >= 0) env.reviewerMaxPrsPerRun = v;
+  }
 
   if (process.env.NW_PROVIDER) {
     const p = validateProvider(process.env.NW_PROVIDER);

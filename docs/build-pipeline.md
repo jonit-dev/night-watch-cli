@@ -78,7 +78,6 @@ graph LR
         Express["express"]
         Commander["commander"]
         Blessed["blessed"]
-        SlackSDK["@slack/*"]
     end
 
     Entry["dist/cli.js<br/>(tsc output)"] --> ESBuild

@@ -16,6 +16,7 @@ import {
   IJobProviders,
   INightWatchConfig,
   IProviderBucketConfig,
+  IProviderPreset,
   IQaConfig,
   IQueueConfig,
   IRoadmapScannerConfig,
@@ -38,12 +39,13 @@ import {
   VALID_CLAUDE_MODELS,
   VALID_JOB_TYPES,
   VALID_MERGE_METHODS,
-  VALID_PROVIDERS,
 } from './constants.js';
 
 export function validateProvider(value: string): Provider | null {
-  if (VALID_PROVIDERS.includes(value as Provider)) {
-    return value as Provider;
+  // Accept any non-empty string as a preset ID (backward compat with 'claude'/'codex')
+  const trimmed = value.trim();
+  if (trimmed.length > 0) {
+    return trimmed;
   }
   return null;
 }
@@ -98,6 +100,7 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
   normalized.maxRetries = readNumber(rawConfig.maxRetries);
   normalized.reviewerMaxRetries = readNumber(rawConfig.reviewerMaxRetries);
   normalized.reviewerRetryDelay = readNumber(rawConfig.reviewerRetryDelay);
+  normalized.reviewerMaxPrsPerRun = readNumber(rawConfig.reviewerMaxPrsPerRun);
   normalized.provider = validateProvider(String(rawConfig.provider ?? '')) ?? undefined;
   normalized.executorEnabled = readBoolean(rawConfig.executorEnabled);
   normalized.reviewerEnabled = readBoolean(rawConfig.reviewerEnabled);
@@ -117,6 +120,49 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
     }
     if (Object.keys(env).length > 0) {
       normalized.providerEnv = env;
+    }
+  }
+
+  // Parse provider presets
+  const rawProviderPresets = readObject(rawConfig.providerPresets);
+  if (rawProviderPresets) {
+    const presets: Record<string, IProviderPreset> = {};
+    for (const [presetId, presetVal] of Object.entries(rawProviderPresets)) {
+      const rawPreset = readObject(presetVal);
+      if (rawPreset) {
+        const name = readString(rawPreset.name);
+        const command = readString(rawPreset.command);
+        // name and command are required
+        if (name && command) {
+          const preset: IProviderPreset = {
+            name,
+            command,
+            subcommand: readString(rawPreset.subcommand),
+            promptFlag: readString(rawPreset.promptFlag),
+            autoApproveFlag: readString(rawPreset.autoApproveFlag),
+            workdirFlag: readString(rawPreset.workdirFlag),
+            modelFlag: readString(rawPreset.modelFlag),
+            model: readString(rawPreset.model),
+          };
+          // Parse envVars if present
+          const rawEnvVars = readObject(rawPreset.envVars);
+          if (rawEnvVars) {
+            const envVars: Record<string, string> = {};
+            for (const [envKey, envVal] of Object.entries(rawEnvVars)) {
+              if (typeof envVal === 'string') {
+                envVars[envKey] = envVal;
+              }
+            }
+            if (Object.keys(envVars).length > 0) {
+              preset.envVars = envVars;
+            }
+          }
+          presets[presetId] = preset;
+        }
+      }
+    }
+    if (Object.keys(presets).length > 0) {
+      normalized.providerPresets = presets;
     }
   }
 
@@ -211,6 +257,8 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
   ) {
     normalized.secondaryFallbackModel = secondaryFallbackModelRaw as ClaudeModel;
   }
+  normalized.primaryFallbackPreset = readString(rawConfig.primaryFallbackPreset);
+  normalized.secondaryFallbackPreset = readString(rawConfig.secondaryFallbackPreset);
 
   normalized.autoMerge = readBoolean(rawConfig.autoMerge);
   const mergeMethod = readString(rawConfig.autoMergeMethod);
@@ -273,9 +321,10 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
     const jobProviders: IJobProviders = {};
     for (const jobType of VALID_JOB_TYPES) {
       const providerValue = readString(rawJobProviders[jobType]);
-      if (providerValue && VALID_PROVIDERS.includes(providerValue as Provider)) {
-        (jobProviders as Record<JobType, Provider | undefined>)[jobType as JobType] =
-          providerValue as Provider;
+      // Accept any non-empty string as a preset ID
+      if (providerValue && providerValue.trim().length > 0) {
+        (jobProviders as Record<JobType, string | undefined>)[jobType as JobType] =
+          providerValue.trim();
       }
     }
     if (Object.keys(jobProviders).length > 0) {

@@ -25,6 +25,9 @@ jobs:
       - name: Build CLI
         run: yarn build
 
+      - name: Install web dependencies
+        run: cd web && yarn install --frozen-lockfile
+
       - name: Run tests
         run: yarn test
 
@@ -44,6 +47,9 @@ jobs:
 
       - name: Build CLI
         run: yarn build
+
+      - name: Install web dependencies
+        run: cd web && yarn install --frozen-lockfile
 
       - name: Run core flow smoke tests
         run: yarn vitest run packages/cli/src/__tests__/scripts/core-flow-smoke.test.ts

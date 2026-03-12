@@ -5,7 +5,12 @@ import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
 import { getDefaultConfig } from '@night-watch/core';
-import { buildInitConfig, resolveTemplatePath } from '../../commands/init.js';
+import {
+  buildInitConfig,
+  chooseProviderForNonInteractive,
+  getGitHubRemoteStatus,
+  resolveTemplatePath,
+} from '../../commands/init.js';
 
 // Get project root directory (4 levels up from this test file)
 const __filename = fileURLToPath(import.meta.url);
@@ -223,6 +228,43 @@ describe('init command', () => {
       const content = fs.readFileSync(gitignorePath, 'utf-8');
       const logsCount = (content.match(/\/logs\//g) || []).length;
       expect(logsCount).toBe(1);
+    });
+
+    it('should add night-watch.config.json to .gitignore', () => {
+      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
+
+      execSync(`${TSX_CMD} init --provider claude`, {
+        encoding: 'utf-8',
+        cwd: tempDir,
+        stdio: 'pipe',
+        timeout: 15000,
+      });
+
+      const gitignorePath = path.join(tempDir, '.gitignore');
+      const content = fs.readFileSync(gitignorePath, 'utf-8');
+      expect(content).toContain('night-watch.config.json');
+    });
+
+    it('should not duplicate night-watch.config.json in .gitignore if already present', () => {
+      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
+
+      const gitignorePath = path.join(tempDir, '.gitignore');
+      fs.writeFileSync(gitignorePath, 'node_modules\nnight-watch.config.json\n');
+
+      execSync(`${TSX_CMD} init --provider claude`, {
+        encoding: 'utf-8',
+        cwd: tempDir,
+        stdio: 'pipe',
+        timeout: 15000,
+      });
+
+      const content = fs.readFileSync(gitignorePath, 'utf-8');
+      const count = (content.match(/night-watch\.config\.json/g) || []).length;
+      expect(count).toBe(1);
     });
   });
 
@@ -459,6 +501,40 @@ describe('init command', () => {
 
       expect(result.source).toBe('bundled');
       expect(result.path).toBe('/bundled/templates/night-watch.md');
+    });
+  });
+
+  describe('chooseProviderForNonInteractive', () => {
+    it('should prefer claude when multiple providers are available', () => {
+      expect(chooseProviderForNonInteractive(['codex', 'claude'])).toBe('claude');
+    });
+
+    it('should fall back to the first detected provider when claude is unavailable', () => {
+      expect(chooseProviderForNonInteractive(['codex'])).toBe('codex');
+    });
+  });
+
+  describe('getGitHubRemoteStatus', () => {
+    it('should report no GitHub remote when origin is missing', () => {
+      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
+
+      expect(getGitHubRemoteStatus(tempDir)).toEqual({
+        hasGitHubRemote: false,
+        remoteUrl: null,
+      });
+    });
+
+    it('should detect a GitHub origin remote', () => {
+      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git remote add origin git@github.com:jonit-dev/night-watch-cli.git', {
+        cwd: tempDir,
+        stdio: 'pipe',
+      });
+
+      expect(getGitHubRemoteStatus(tempDir)).toEqual({
+        hasGitHubRemote: true,
+        remoteUrl: 'git@github.com:jonit-dev/night-watch-cli.git',
+      });
     });
   });
 

@@ -5,9 +5,36 @@
 import { BoardColumnName, IBoardProviderConfig } from './board/types.js';
 
 /**
- * Supported AI providers
+ * Supported AI providers (string to allow custom presets)
+ * Backward compatible: 'claude' | 'codex' are still valid string values
  */
-export type Provider = 'claude' | 'codex';
+// eslint-disable-next-line sonarjs/redundant-type-aliases
+export type Provider = string;
+
+/**
+ * A fully-configured provider preset that defines how to invoke an AI provider CLI.
+ * Presets can be built-in (claude, codex) or user-defined in night-watch.config.json.
+ */
+export interface IProviderPreset {
+  /** Human-friendly display name (e.g., "Claude", "GLM-5", "Codex") */
+  name: string;
+  /** Base command to execute (e.g., "claude", "codex", "npx") */
+  command: string;
+  /** Optional subcommand after the base command (e.g., "exec" for "codex exec") */
+  subcommand?: string;
+  /** Flag to pass the prompt (e.g., "-p" for claude) */
+  promptFlag?: string;
+  /** Flag to enable auto-approve/yolo mode (e.g., "--dangerously-skip-permissions") */
+  autoApproveFlag?: string;
+  /** Flag to set working directory (e.g., "-C" for codex) */
+  workdirFlag?: string;
+  /** Flag to specify the model (e.g., "--model") */
+  modelFlag?: string;
+  /** Default model to use if modelFlag is set (e.g., "claude-sonnet-4-6") */
+  model?: string;
+  /** Additional environment variables to set when invoking the provider */
+  envVars?: Record<string, string>;
+}
 
 /**
  * Job types that can have per-job provider configuration
@@ -104,6 +131,9 @@ export interface INightWatchConfig {
   /** Delay in seconds between reviewer retry attempts (default: 30) */
   reviewerRetryDelay: number;
 
+  /** Maximum number of PRs the reviewer should process in a single run (0 = unlimited) */
+  reviewerMaxPrsPerRun: number;
+
   // Provider configuration
 
   /** AI provider to use for execution */
@@ -119,9 +149,17 @@ export interface INightWatchConfig {
   providerEnv: Record<string, string>;
 
   /**
+   * Named provider presets that define how to invoke AI provider CLIs.
+   * Built-in presets (claude, codex) can be overridden here.
+   * Custom presets allow defining new providers with full CLI configuration.
+   */
+  providerPresets?: Record<string, IProviderPreset>;
+
+  /**
    * Optional human-friendly label for the AI provider shown in PR bodies, review comments,
    * board comments, and commit co-authors. Auto-derived if not set.
    * e.g. "GLM-5", "Codex", "Claude" — useful when using a proxy (ANTHROPIC_BASE_URL).
+   * @deprecated Use providerPresets[id].name instead for custom presets.
    */
   providerLabel?: string;
 
@@ -147,6 +185,18 @@ export interface INightWatchConfig {
    * until explicitly configured otherwise.
    */
   secondaryFallbackModel?: ClaudeModel;
+
+  /**
+   * Preset ID to use as the primary fallback when rate-limited.
+   * Takes precedence over primaryFallbackModel when set.
+   * Example: 'glm-47' to fall back from glm-5 to glm-47 on rate limit.
+   */
+  primaryFallbackPreset?: string;
+
+  /**
+   * Preset ID to use as the secondary fallback if the primary fallback preset is also rate-limited.
+   */
+  secondaryFallbackPreset?: string;
 
   /**
    * Legacy alias for primaryFallbackModel kept for backward compatibility with
@@ -248,6 +298,7 @@ export type NotificationEvent =
   | 'run_succeeded'
   | 'run_failed'
   | 'run_timeout'
+  | 'run_no_work'
   | 'review_completed'
   | 'pr_auto_merged'
   | 'rate_limit_fallback'

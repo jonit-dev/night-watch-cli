@@ -8,7 +8,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
       // - provider, providerLabel, defaultBranch, prdDir, branchPrefix, branchPatterns
       // - executorEnabled, reviewerEnabled, minReviewScore, maxRuntime, reviewerMaxRuntime, maxLogSize
       // - cronSchedule, reviewerSchedule, cronScheduleOffset, maxRetries
-      // - reviewerMaxRetries, reviewerRetryDelay
+      // - reviewerMaxRetries, reviewerRetryDelay, reviewerMaxPrsPerRun
       // - providerEnv, notifications, prdPriority
       // - roadmapScanner, templatesDir, boardProvider, jobProviders
       // - autoMerge, autoMergeMethod, fallbackOnRateLimit, primaryFallbackModel, secondaryFallbackModel, claudeModel
@@ -34,6 +34,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
         'maxRetries',
         'reviewerMaxRetries',
         'reviewerRetryDelay',
+        'reviewerMaxPrsPerRun',
         'providerEnv',
         'notifications',
         'prdPriority',
@@ -67,9 +68,10 @@ describe('Settings Page - PRD Coverage Verification', () => {
       // Verify reviewer retry fields are included
       expect(requiredFields).toContain('reviewerMaxRetries');
       expect(requiredFields).toContain('reviewerRetryDelay');
+      expect(requiredFields).toContain('reviewerMaxPrsPerRun');
 
-      // If we got here, all 34 fields are defined in ConfigForm
-      expect(requiredFields.length).toBe(34);
+      // If we got here, all 35 fields are defined in ConfigForm
+      expect(requiredFields.length).toBe(35);
     });
   });
 
@@ -144,19 +146,23 @@ describe('Settings Page - PRD Coverage Verification', () => {
     it('should render retry config fields', () => {
       // Verify the retry config fields are part of the form
       const retryFields = ['reviewerMaxRetries', 'reviewerRetryDelay'];
+      const reviewerRunCapField = 'reviewerMaxPrsPerRun';
 
       // These fields should be present in ConfigForm
       expect(retryFields).toContain('reviewerMaxRetries');
       expect(retryFields).toContain('reviewerRetryDelay');
+      expect(reviewerRunCapField).toBe('reviewerMaxPrsPerRun');
 
       // Verify default values match PRD spec
       const retryDefaults = {
         reviewerMaxRetries: 2,
         reviewerRetryDelay: 30,
+        reviewerMaxPrsPerRun: 0,
       };
 
       expect(retryDefaults.reviewerMaxRetries).toBe(2);
       expect(retryDefaults.reviewerRetryDelay).toBe(30);
+      expect(retryDefaults.reviewerMaxPrsPerRun).toBe(0);
     });
 
     it('should clamp reviewerMaxRetries to valid range (0-10)', () => {

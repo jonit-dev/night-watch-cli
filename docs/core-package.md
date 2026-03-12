@@ -2,7 +2,7 @@
 
 The core package contains all domain logic, storage, configuration, and shared types. Both `cli` and `server` depend on it.
 
-> Related: [Architecture Overview](architecture-overview.md) | [Persona System](persona-memory-system.md) | [DEV-ONBOARDING](DEV-ONBOARDING.md)
+> Related: [Architecture Overview](architecture-overview.md) | [DEV-ONBOARDING](DEV-ONBOARDING.md)
 
 ---
 
@@ -10,14 +10,12 @@ The core package contains all domain logic, storage, configuration, and shared t
 
 ```
 packages/core/src/
-├── agents/
-│   └── soul-compiler.ts        # Persona → system prompt compiler
 ├── board/
 │   └── board-provider.ts       # GitHub Projects integration
 ├── di/
 │   └── container.ts            # tsyringe composition root
 ├── shared/
-│   └── types.ts                # Agent persona interfaces (IAgentPersona, etc.)
+│   └── types.ts                # Shared API contract types (IProviderPreset, etc.)
 ├── storage/
 │   ├── repositories/
 │   │   ├── interfaces.ts       # Repository contracts
@@ -63,7 +61,6 @@ sequenceDiagram
     DI->>Mig: runMigrations(db)
     DI->>DI: Register DATABASE_TOKEN (singleton)
     DI->>Repos: Register all repositories (singleton)
-    DI->>DI: Register MemoryService
 ```
 
 **File:** `packages/core/src/di/container.ts`
@@ -73,8 +70,8 @@ sequenceDiagram
 | Token / Class                      | Type      | Purpose                  |
 | ---------------------------------- | --------- | ------------------------ |
 | `DATABASE_TOKEN`                   | Database  | SQLite database instance |
-| `SqliteAgentPersonaRepository`     | Singleton | Agent persona CRUD       |
 | `SqliteExecutionHistoryRepository` | Singleton | PRD execution records    |
+| `SqliteKanbanIssueRepository`      | Singleton | Board issue tracking     |
 | `SqlitePrdStateRepository`         | Singleton | Per-PRD workflow state   |
 | `SqliteProjectRegistryRepository`  | Singleton | Registered project paths |
 | `SqliteRoadmapStateRepository`     | Singleton | Roadmap scan metadata    |
@@ -83,11 +80,11 @@ sequenceDiagram
 
 ```typescript
 import { container } from 'tsyringe';
-import { SqliteAgentPersonaRepository } from '@night-watch/core';
+import { SqliteKanbanIssueRepository } from '@night-watch/core';
 
 // Resolve from container
-const repo = container.resolve(SqliteAgentPersonaRepository);
-const personas = repo.getActive();
+const repo = container.resolve(SqliteKanbanIssueRepository);
+const issues = repo.getAllIssues();
 ```
 
 ### Backward Compatibility
@@ -98,7 +95,7 @@ The `getRepositories()` factory works without explicit DI initialization. It fal
 import { getRepositories } from '@night-watch/core';
 
 const repos = getRepositories();
-repos.agentPersona.getAll();
+repos.kanbanIssue.getAll();
 repos.executionHistory.getRecords(projectPath);
 ```
 
@@ -120,13 +117,13 @@ flowchart LR
 
 **File:** `packages/core/src/storage/repositories/interfaces.ts`
 
-| Interface                     | Methods                                                                                  | Purpose                                  |
-| ----------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------- |
-| `IProjectRegistryRepository`  | `getAll`, `upsert`, `remove`, `clear`                                                    | Registered project paths                 |
-| `IExecutionHistoryRepository` | `getRecords`, `addRecord`, `trimRecords`, `getAllHistory`                                | PRD execution records, cooldown tracking |
-| `IPrdStateRepository`         | `get`, `getAll`, `readAll`, `set`, `delete`                                              | Per-PRD workflow state                   |
-| `IRoadmapStateRepository`     | `load`, `save`                                                                           | Roadmap scan metadata                    |
-| `IAgentPersonaRepository`     | `getAll`, `getById`, `getActive`, `create`, `update`, `delete`, `seedDefaultsOnFirstRun` | Agent persona CRUD                       |
+| Interface                     | Methods                                                              | Purpose                                  |
+| ----------------------------- | -------------------------------------------------------------------- | ---------------------------------------- |
+| `IProjectRegistryRepository`  | `getAll`, `upsert`, `remove`, `clear`                                | Registered project paths                 |
+| `IExecutionHistoryRepository` | `getRecords`, `addRecord`, `trimRecords`, `getAllHistory`            | PRD execution records, cooldown tracking |
+| `IPrdStateRepository`         | `get`, `getAll`, `readAll`, `set`, `delete`                          | Per-PRD workflow state                   |
+| `IRoadmapStateRepository`     | `load`, `save`                                                       | Roadmap scan metadata                    |
+| `IKanbanIssueRepository`      | `getAllIssues`, `getIssue`, `createIssue`, `moveIssue`, `closeIssue` | Board issue tracking                     |
 
 ### Boundary Enforcement
 
@@ -142,8 +139,8 @@ An ESLint rule restricts `better-sqlite3` imports to `packages/core/src/storage/
 | `execution_history` | composite   | PRD execution records            |
 | `prd_states`        | `prd_name`  | Per-PRD workflow state           |
 | `roadmap_states`    | `prd_dir`   | Roadmap scan metadata            |
+| `kanban_issues`     | `id`        | Board issue tracking             |
 | `schema_meta`       | `key`       | Schema version + encryption keys |
-| `agent_personas`    | `id` (UUID) | AI persona definitions           |
 
 Database file location: `~/.night-watch/state.db` (global) or `<projectDir>/state.db` (per-project via DI).
 
@@ -179,18 +176,18 @@ graph TD
 
 Key fields:
 
-| Field            | Type                  | Default                   | Purpose                      |
-| ---------------- | --------------------- | ------------------------- | ---------------------------- |
-| `provider`       | `'claude' \| 'codex'` | `'claude'`                | AI provider                  |
-| `prdDir`         | string                | `'docs/prds'` | PRD file directory           |
-| `maxRuntime`     | number                | `7200`                    | Max execution time (seconds) |
-| `branchPrefix`   | string                | `'night-watch'`           | Git branch prefix            |
-| `minReviewScore` | number                | `80`                      | Minimum PR review score      |
-| `cronSchedule`   | string                | `'0 0-21 * * *'`          | Executor cron                |
-| `notifications`  | object                | `{}`                      | Webhook config               |
-| `slack`          | object?               | undefined                 | Slack bot config             |
-| `boardProvider`  | string?               | undefined                 | Board integration            |
-| `autoMerge`      | boolean               | false                     | Auto-merge approved PRs      |
+| Field            | Type                  | Default          | Purpose                      |
+| ---------------- | --------------------- | ---------------- | ---------------------------- |
+| `provider`       | `'claude' \| 'codex'` | `'claude'`       | AI provider                  |
+| `prdDir`         | string                | `'docs/prds'`    | PRD file directory           |
+| `maxRuntime`     | number                | `7200`           | Max execution time (seconds) |
+| `branchPrefix`   | string                | `'night-watch'`  | Git branch prefix            |
+| `minReviewScore` | number                | `80`             | Minimum PR review score      |
+| `cronSchedule`   | string                | `'0 0-21 * * *'` | Executor cron                |
+| `notifications`  | object                | `{}`             | Webhook config               |
+| `slack`          | object?               | undefined        | Slack bot config             |
+| `boardProvider`  | string?               | undefined        | Board integration            |
+| `autoMerge`      | boolean               | false            | Auto-merge approved PRs      |
 
 See [configuration.md](configuration.md) for the full reference.
 
@@ -243,19 +240,17 @@ Levels: `debug` (magenta), `info` (green), `warn` (yellow), `error` (red).
 The core package uses selective barrel exports from `index.ts`. Key exports include:
 
 - **Config**: `loadConfig`, `getDefaultConfig`, `normalizeConfig`, `saveConfig`
-- **Types**: `INightWatchConfig`, `IAgentPersona`, all shared types
+- **Types**: `INightWatchConfig`, `IKanbanIssue`, all shared types
 - **Constants**: All `DEFAULT_*` and `VALID_*` constants
 - **DI**: `initContainer`, `container`, `isContainerInitialized`
 - **Storage**: All repository interfaces and implementations, `getRepositories`
-- **Agents**: `compileSoul`
-- **Memory**: `MemoryService`
+- **Board**: `IBoardProvider`, `IBoardIssue`, board factory
 - **Utils**: `createLogger`, `sendNotifications`, `executeScriptWithOutput`, etc.
 
 ---
 
 ## Related Docs
 
-- [Persona & Memory System](persona-memory-system.md) — Deep dive into soul compiler and memory
 - [Server API](server-api.md) — How the server uses core services
 - [CLI Package](cli-package.md) — How the CLI uses core
 - [Build Pipeline](build-pipeline.md) — How core is bundled into the CLI

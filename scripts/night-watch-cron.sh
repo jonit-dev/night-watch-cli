@@ -541,39 +541,15 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
   # previous runs that would cause false-positive rate-limit retries).
   LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
 
-  case "${PROVIDER_CMD}" in
-    claude)
-      if (
-        cd "${WORKTREE_DIR}" && timeout "${SESSION_MAX_RUNTIME}" \
-          claude -p "${PROMPT}" \
-            --dangerously-skip-permissions \
-            2>&1 | tee -a "${LOG_FILE}"
-      ); then
-        EXIT_CODE=0
-      else
-        EXIT_CODE=$?
-      fi
-      ;;
-    codex)
-      if (
-        cd "${WORKTREE_DIR}" && timeout "${SESSION_MAX_RUNTIME}" \
-          codex exec \
-            -C "${WORKTREE_DIR}" \
-            --yolo \
-            "${PROMPT}" \
-            2>&1 | tee -a "${LOG_FILE}"
-      ); then
-        EXIT_CODE=0
-      else
-        EXIT_CODE=$?
-      fi
-      ;;
-    *)
-      log "ERROR: Unknown provider: ${PROVIDER_CMD}"
-      emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=unknown_provider|detail=$(sanitize_result_value "Unknown provider: ${PROVIDER_CMD}")"
-      exit 1
-      ;;
-  esac
+  # Build provider command array using generic helper
+  mapfile -d '' -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${WORKTREE_DIR}" "${PROMPT}")
+
+  # Execute — always cd into worktree so provider tools resolve project files correctly
+  if (cd "${WORKTREE_DIR}" && timeout "${SESSION_MAX_RUNTIME}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
+    EXIT_CODE=0
+  else
+    EXIT_CODE=$?
+  fi
 
   ATTEMPT_ELAPSED=$(( $(date +%s) - ATTEMPT_START_TIME ))
   log "ATTEMPT: ${ATTEMPT_NUM}/${MAX_RETRIES} finished exit_code=${EXIT_CODE} elapsed=${ATTEMPT_ELAPSED}s prd=${ELIGIBLE_PRD}"
@@ -679,26 +655,39 @@ done
 # When the proxy returns 429 and fallbackOnRateLimit is enabled, re-run the
 # same prompt with native Claude (OAuth), bypassing the proxy entirely.
 if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
-  PRIMARY_FALLBACK_MODEL="${NW_CLAUDE_PRIMARY_MODEL_ID:-${NW_CLAUDE_MODEL_ID:-claude-sonnet-4-6}}"
-  SECONDARY_FALLBACK_MODEL="${NW_CLAUDE_SECONDARY_MODEL_ID:-}"
+  # Run a preset-based rate-limit fallback (instead of native Claude)
+  run_preset_fallback() {
+    local preset_cmd="${1:?}"
+    local preset_prompt_flag="${2:-}"
+    local preset_auto_approve_flag="${3:-}"
+    local preset_model_flag="${4:-}"
+    local preset_model="${5:-}"
+    local preset_env_json="${6:-}"
+    local log_line_before="${7:-}"
 
-  run_native_fallback() {
-    local model="$1"
-    local log_line_before="$2"
-
-    log "RATE-LIMIT-FALLBACK: Running native Claude (${model}) prd=${ELIGIBLE_PRD}"
-    send_rate_limit_fallback_warning "${model}" "$(basename "${PROJECT_DIR}")"
+    local display_model="${preset_model:-${preset_cmd}}"
+    log "RATE-LIMIT-FALLBACK: Running preset fallback cmd=${preset_cmd} model=${display_model} prd=${ELIGIBLE_PRD}"
+    send_rate_limit_fallback_warning "${display_model}" "$(basename "${PROJECT_DIR}")"
 
     FALLBACK_START_TIME=$(date +%s)
     if (
-      cd "${WORKTREE_DIR}" && \
-        unset ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN \
-              ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL && \
-        timeout "${SESSION_MAX_RUNTIME}" \
-          claude -p "${PROMPT}" \
-            --dangerously-skip-permissions \
-            --model "${model}" \
-            2>&1 | tee -a "${LOG_FILE}"
+      cd "${WORKTREE_DIR}" || exit 1
+      unset ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN \
+            ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL
+      if [ -n "${preset_env_json}" ] && command -v python3 >/dev/null 2>&1; then
+        eval "$(python3 -c "import json,sys,shlex; d=json.loads(sys.argv[1]); [print(f'export {k}={shlex.quote(v)}') for k,v in d.items()]" "${preset_env_json}" 2>/dev/null || true)"
+      fi
+      local model_arg=""
+      if [ -n "${preset_model_flag}" ] && [ -n "${preset_model}" ]; then
+        model_arg="${preset_model_flag} ${preset_model}"
+      fi
+      # shellcheck disable=SC2086
+      timeout "${SESSION_MAX_RUNTIME}" \
+        "${preset_cmd}" \
+          "${preset_prompt_flag:--p}" "${PROMPT}" \
+          ${preset_auto_approve_flag:+${preset_auto_approve_flag}} \
+          ${model_arg} \
+          2>&1 | tee -a "${LOG_FILE}"
     ); then
       EXIT_CODE=0
     else
@@ -706,21 +695,82 @@ if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
     fi
 
     FALLBACK_ELAPSED=$(( $(date +%s) - FALLBACK_START_TIME ))
-    log "RATE-LIMIT-FALLBACK: Native Claude (${model}) exited with code ${EXIT_CODE} elapsed=${FALLBACK_ELAPSED}s"
-    EFFECTIVE_PROVIDER_LABEL="Claude ${model} (fallback)"
+    log "RATE-LIMIT-FALLBACK: Preset fallback (${display_model}) exited with code ${EXIT_CODE} elapsed=${FALLBACK_ELAPSED}s"
+    EFFECTIVE_PROVIDER_LABEL="${preset_cmd} ${display_model} (fallback)"
     LAST_FALLBACK_LOG_LINE_BEFORE="${log_line_before}"
   }
 
-  LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
-  run_native_fallback "${PRIMARY_FALLBACK_MODEL}" "${LOG_LINE_BEFORE}"
+  if [ -n "${NW_FALLBACK_PRIMARY_PRESET_CMD:-}" ]; then
+    # Preset-based fallback
+    LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
+    run_preset_fallback \
+      "${NW_FALLBACK_PRIMARY_PRESET_CMD}" \
+      "${NW_FALLBACK_PRIMARY_PRESET_PROMPT_FLAG:-}" \
+      "${NW_FALLBACK_PRIMARY_PRESET_AUTO_APPROVE_FLAG:-}" \
+      "${NW_FALLBACK_PRIMARY_PRESET_MODEL_FLAG:-}" \
+      "${NW_FALLBACK_PRIMARY_PRESET_MODEL:-}" \
+      "${NW_FALLBACK_PRIMARY_PRESET_ENV:-}" \
+      "${LOG_LINE_BEFORE}"
 
-  if [ ${EXIT_CODE} -ne 0 ] && [ -n "${SECONDARY_FALLBACK_MODEL}" ] && [ "${SECONDARY_FALLBACK_MODEL}" != "${PRIMARY_FALLBACK_MODEL}" ]; then
-    if check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
-      log "RATE-LIMIT-FALLBACK: Primary native Claude fallback was rate-limited; trying secondary model (${SECONDARY_FALLBACK_MODEL})"
-      LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
-      run_native_fallback "${SECONDARY_FALLBACK_MODEL}" "${LOG_LINE_BEFORE}"
+    if [ ${EXIT_CODE} -ne 0 ] && [ -n "${NW_FALLBACK_SECONDARY_PRESET_CMD:-}" ]; then
+      if check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
+        log "RATE-LIMIT-FALLBACK: Primary preset fallback was rate-limited; trying secondary preset"
+        LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
+        run_preset_fallback \
+          "${NW_FALLBACK_SECONDARY_PRESET_CMD}" \
+          "${NW_FALLBACK_SECONDARY_PRESET_PROMPT_FLAG:-}" \
+          "${NW_FALLBACK_SECONDARY_PRESET_AUTO_APPROVE_FLAG:-}" \
+          "${NW_FALLBACK_SECONDARY_PRESET_MODEL_FLAG:-}" \
+          "${NW_FALLBACK_SECONDARY_PRESET_MODEL:-}" \
+          "${NW_FALLBACK_SECONDARY_PRESET_ENV:-}" \
+          "${LOG_LINE_BEFORE}"
+      fi
     fi
-  fi
+  else
+    # Native Claude fallback (existing behavior)
+    PRIMARY_FALLBACK_MODEL="${NW_CLAUDE_PRIMARY_MODEL_ID:-${NW_CLAUDE_MODEL_ID:-claude-sonnet-4-6}}"
+    SECONDARY_FALLBACK_MODEL="${NW_CLAUDE_SECONDARY_MODEL_ID:-}"
+
+    run_native_fallback() {
+      local model="$1"
+      local log_line_before="$2"
+
+      log "RATE-LIMIT-FALLBACK: Running native Claude (${model}) prd=${ELIGIBLE_PRD}"
+      send_rate_limit_fallback_warning "${model}" "$(basename "${PROJECT_DIR}")"
+
+      FALLBACK_START_TIME=$(date +%s)
+      if (
+        cd "${WORKTREE_DIR}" && \
+          unset ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN \
+                ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL && \
+          timeout "${SESSION_MAX_RUNTIME}" \
+            claude -p "${PROMPT}" \
+              --dangerously-skip-permissions \
+              --model "${model}" \
+              2>&1 | tee -a "${LOG_FILE}"
+      ); then
+        EXIT_CODE=0
+      else
+        EXIT_CODE=$?
+      fi
+
+      FALLBACK_ELAPSED=$(( $(date +%s) - FALLBACK_START_TIME ))
+      log "RATE-LIMIT-FALLBACK: Native Claude (${model}) exited with code ${EXIT_CODE} elapsed=${FALLBACK_ELAPSED}s"
+      EFFECTIVE_PROVIDER_LABEL="Claude ${model} (fallback)"
+      LAST_FALLBACK_LOG_LINE_BEFORE="${log_line_before}"
+    }
+
+    LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
+    run_native_fallback "${PRIMARY_FALLBACK_MODEL}" "${LOG_LINE_BEFORE}"
+
+    if [ ${EXIT_CODE} -ne 0 ] && [ -n "${SECONDARY_FALLBACK_MODEL}" ] && [ "${SECONDARY_FALLBACK_MODEL}" != "${PRIMARY_FALLBACK_MODEL}" ]; then
+      if check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
+        log "RATE-LIMIT-FALLBACK: Primary native Claude fallback was rate-limited; trying secondary model (${SECONDARY_FALLBACK_MODEL})"
+        LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
+        run_native_fallback "${SECONDARY_FALLBACK_MODEL}" "${LOG_LINE_BEFORE}"
+      fi
+    fi
+  fi  # end preset vs native choice
 fi
 
 # Detect double rate-limit: both proxy AND native Claude exhausted
