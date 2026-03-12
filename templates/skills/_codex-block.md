@@ -9,15 +9,18 @@ Create a new PRD at `docs/prds/<name>.md`. Ask for feature title, assess complex
 ### Add Issue to Board (`/nw-add-issue`)
 
 Add a GitHub issue to the Night Watch board:
+
 ```
 night-watch board add-issue <issue-number>
 night-watch board add-issue <issue-number> --column "In Progress"
 ```
+
 Available columns: Draft, Ready, In Progress, Review, Done.
 
 ### Run Next PRD (`/nw-run`)
 
 Manually trigger Night Watch to execute the next PRD:
+
 ```
 night-watch prd list         # see what's queued
 night-watch run              # execute next PRD
@@ -28,14 +31,17 @@ night-watch logs --follow    # monitor progress
 ### Slice Roadmap (`/nw-slice`)
 
 Break a high-level feature into multiple PRD files:
+
 ```
 night-watch slice
 ```
+
 Reads `docs/roadmap.md` and generates PRDs. Review and adjust output in `docs/prds/`.
 
 ### Sync Board (`/nw-board-sync`)
 
 Sync the GitHub board with PRD/PR state:
+
 ```
 night-watch board status
 night-watch board sync
@@ -44,6 +50,7 @@ night-watch board sync
 ### Review PRs (`/nw-review`)
 
 Run automated PR review:
+
 ```
 night-watch review
 night-watch review --pr <number>

@@ -9,17 +9,21 @@ When the user wants to add a GitHub issue to the Night Watch Kanban board.
 ## Steps
 
 1. **Check for issue number** — if not provided, list open issues:
+
    ```
    gh issue list --state open --limit 20
    ```
+
    Ask the user which issue(s) to add.
 
 2. **Add the issue to the board**:
+
    ```
    night-watch board add-issue <issue-number>
    ```
 
 3. **Optionally specify a column** (default: "Ready"):
+
    ```
    night-watch board add-issue <issue-number> --column "In Progress"
    ```

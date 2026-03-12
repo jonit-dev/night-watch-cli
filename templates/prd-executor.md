@@ -233,3 +233,4 @@ If two parallel agents modify the same file:
 - **Full context** - each agent gets the complete phase spec + project rules
 - **Verify always** - never skip verification between waves
 - **Task tracking** - every phase is a tracked task with status updates
+- **Clean up worktrees** - after opening a PR for a worktree branch, immediately remove the worktree to avoid blocking future `git checkout` operations

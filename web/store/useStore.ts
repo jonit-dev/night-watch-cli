@@ -1,6 +1,17 @@
 import { create } from 'zustand';
 import type { IStatusSnapshot } from '@shared/types';
 import { ProjectInfo, setCurrentProject, setGlobalMode as setApiGlobalMode } from '../api';
+import { WEB_JOB_REGISTRY } from '../utils/jobs';
+
+export interface IWebJobState {
+  id: string;
+  label: string;
+  processName: string;
+  color: { bg: string; border: string };
+  enabled: boolean;
+  schedule: string;
+  triggerEndpoint: string;
+}
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -33,13 +44,16 @@ interface AppState {
   selectedProjectId: string | null;
   selectProject: (id: string | null) => void;
   removeProjectFromList: (id: string) => void;
+
+  // Jobs computed state (derived from status.config via WEB_JOB_REGISTRY)
+  getJobStates: () => IWebJobState[];
 }
 
 const savedProjectId = typeof localStorage !== 'undefined'
   ? localStorage.getItem('nw-selected-project')
   : null;
 
-export const useStore = create<AppState>((set) => ({
+export const useStore = create<AppState>((set, get) => ({
   projectName: 'Night Watch',
   setProjectName: (name) => set({ projectName: name }),
 
@@ -116,5 +130,19 @@ export const useStore = create<AppState>((set) => ({
         ...(wasSelected && remaining[0] ? { projectName: remaining[0].name } : {}),
       };
     });
+  },
+
+  getJobStates: () => {
+    const { status } = get();
+    const config = status?.config;
+    return WEB_JOB_REGISTRY.map((job) => ({
+      id: job.id,
+      label: job.label,
+      processName: job.processName,
+      color: job.color,
+      enabled: config ? job.getEnabled(config) : true,
+      schedule: config ? job.getSchedule(config) : '',
+      triggerEndpoint: job.triggerEndpoint,
+    }));
   },
 }));

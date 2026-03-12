@@ -5,22 +5,15 @@
 
 import {
   ClaudeModel,
-  IAnalyticsConfig,
-  IAuditConfig,
   IJobProviders,
   INightWatchConfig,
   INotificationConfig,
-  IQaConfig,
   IQueueConfig,
   IRoadmapScannerConfig,
   JobType,
   Provider,
-  QaArtifacts,
 } from './types.js';
 import {
-  DEFAULT_ANALYTICS,
-  DEFAULT_AUDIT,
-  DEFAULT_QA,
   DEFAULT_QUEUE,
   DEFAULT_ROADMAP_SCANNER,
   VALID_CLAUDE_MODELS,
@@ -28,6 +21,7 @@ import {
   VALID_MERGE_METHODS,
 } from './constants.js';
 import { validateProvider } from './config-normalize.js';
+import { buildJobEnvOverrides, getJobDef } from './jobs/job-registry.js';
 
 function parseBoolean(value: string): boolean | null {
   const v = value.toLowerCase().trim();
@@ -197,73 +191,22 @@ export function buildEnvOverrideConfig(
     }
   }
 
-  // QA env vars
-  const qaBase = (): IQaConfig => env.qa ?? fileConfig?.qa ?? DEFAULT_QA;
-
-  if (process.env.NW_QA_ENABLED) {
-    const v = parseBoolean(process.env.NW_QA_ENABLED);
-    if (v !== null) env.qa = { ...qaBase(), enabled: v };
-  }
-  if (process.env.NW_QA_SCHEDULE) {
-    env.qa = { ...qaBase(), schedule: process.env.NW_QA_SCHEDULE };
-  }
-  if (process.env.NW_QA_MAX_RUNTIME) {
-    const v = parseInt(process.env.NW_QA_MAX_RUNTIME, 10);
-    if (!isNaN(v) && v > 0) env.qa = { ...qaBase(), maxRuntime: v };
-  }
-  if (process.env.NW_QA_ARTIFACTS) {
-    const a = process.env.NW_QA_ARTIFACTS;
-    if (['screenshot', 'video', 'both'].includes(a)) {
-      env.qa = { ...qaBase(), artifacts: a as QaArtifacts };
+  // Registry-driven env overrides for nested job configs (qa, audit, analytics)
+  // Executor/reviewer use flat top-level fields; slicer/roadmapScanner handled above
+  for (const jobId of ['qa', 'audit', 'analytics'] as const) {
+    const jobDef = getJobDef(jobId);
+    if (!jobDef) continue;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const currentBase = (env as any)[jobId] ?? (fileConfig as any)?.[jobId] ?? jobDef.defaultConfig;
+    const overrides = buildJobEnvOverrides(
+      jobDef.envPrefix,
+      currentBase as Record<string, unknown>,
+      jobDef.extraFields,
+    );
+    if (overrides) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (env as any)[jobId] = overrides;
     }
-  }
-  if (process.env.NW_QA_SKIP_LABEL) {
-    env.qa = { ...qaBase(), skipLabel: process.env.NW_QA_SKIP_LABEL };
-  }
-  if (process.env.NW_QA_AUTO_INSTALL_PLAYWRIGHT) {
-    const v = parseBoolean(process.env.NW_QA_AUTO_INSTALL_PLAYWRIGHT);
-    if (v !== null) env.qa = { ...qaBase(), autoInstallPlaywright: v };
-  }
-  if (process.env.NW_QA_BRANCH_PATTERNS) {
-    const patterns = process.env.NW_QA_BRANCH_PATTERNS.split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (patterns.length > 0) env.qa = { ...qaBase(), branchPatterns: patterns };
-  }
-
-  // Audit env vars
-  const auditBase = (): IAuditConfig => env.audit ?? fileConfig?.audit ?? DEFAULT_AUDIT;
-
-  if (process.env.NW_AUDIT_ENABLED) {
-    const v = parseBoolean(process.env.NW_AUDIT_ENABLED);
-    if (v !== null) env.audit = { ...auditBase(), enabled: v };
-  }
-  if (process.env.NW_AUDIT_SCHEDULE) {
-    env.audit = { ...auditBase(), schedule: process.env.NW_AUDIT_SCHEDULE };
-  }
-  if (process.env.NW_AUDIT_MAX_RUNTIME) {
-    const v = parseInt(process.env.NW_AUDIT_MAX_RUNTIME, 10);
-    if (!isNaN(v) && v > 0) env.audit = { ...auditBase(), maxRuntime: v };
-  }
-
-  // Analytics env vars
-  const analyticsBase = (): IAnalyticsConfig =>
-    env.analytics ?? fileConfig?.analytics ?? DEFAULT_ANALYTICS;
-
-  if (process.env.NW_ANALYTICS_ENABLED) {
-    const v = parseBoolean(process.env.NW_ANALYTICS_ENABLED);
-    if (v !== null) env.analytics = { ...analyticsBase(), enabled: v };
-  }
-  if (process.env.NW_ANALYTICS_SCHEDULE) {
-    env.analytics = { ...analyticsBase(), schedule: process.env.NW_ANALYTICS_SCHEDULE };
-  }
-  if (process.env.NW_ANALYTICS_MAX_RUNTIME) {
-    const v = parseInt(process.env.NW_ANALYTICS_MAX_RUNTIME, 10);
-    if (!isNaN(v) && v > 0) env.analytics = { ...analyticsBase(), maxRuntime: v };
-  }
-  if (process.env.NW_ANALYTICS_LOOKBACK_DAYS) {
-    const v = parseInt(process.env.NW_ANALYTICS_LOOKBACK_DAYS, 10);
-    if (!isNaN(v) && v > 0) env.analytics = { ...analyticsBase(), lookbackDays: v };
   }
 
   // Per-job provider overrides (NW_JOB_PROVIDER_<JOBTYPE>)

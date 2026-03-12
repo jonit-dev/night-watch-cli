@@ -6,7 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import { INightWatchConfig, IProviderPreset, IQueueConfig, JobType, Provider } from './types.js';
+import { INightWatchConfig, IProviderPreset, IQueueConfig, JobType } from './types.js';
 import {
   BUILT_IN_PRESETS,
   CONFIG_FILE_NAME,

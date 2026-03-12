@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 
-function StarLayer({ count, size, className }: { count: number, size: number, className: string }) {
-  const [stars, setStars] = useState<{x: number, y: number, opacity: number}[]>([]);
-  
+function StarLayer({ count, size, className }: { count: number; size: number; className: string }) {
+  const [stars, setStars] = useState<{ x: number; y: number; opacity: number }[]>([]);
+
   useEffect(() => {
     const newStars = Array.from({ length: count }).map(() => ({
       x: Math.random() * 100,
       y: Math.random() * 100,
-      opacity: Math.random() * 0.8 + 0.2
+      opacity: Math.random() * 0.8 + 0.2,
     }));
     setStars(newStars);
   }, [count]);
@@ -15,7 +15,7 @@ function StarLayer({ count, size, className }: { count: number, size: number, cl
   return (
     <div className={`absolute inset-0 ${className}`}>
       {stars.map((star, i) => (
-        <div 
+        <div
           key={i}
           className="absolute rounded-full bg-white"
           style={{
@@ -50,22 +50,23 @@ export function BackgroundEffects() {
       </div>
 
       {/* Grid - faded at top to show sky */}
-      <div 
-        className="absolute inset-0 bg-grid-pattern opacity-40" 
-        style={{ 
-          maskImage: 'linear-gradient(to bottom, transparent 10%, black 50%, transparent 100%)', 
-          WebkitMaskImage: 'linear-gradient(to bottom, transparent 10%, black 50%, transparent 100%)' 
+      <div
+        className="absolute inset-0 bg-grid-pattern opacity-40"
+        style={{
+          maskImage: 'linear-gradient(to bottom, transparent 10%, black 50%, transparent 100%)',
+          WebkitMaskImage:
+            'linear-gradient(to bottom, transparent 10%, black 50%, transparent 100%)',
         }}
       ></div>
-      
+
       {/* Glowing Orbs / Aurora */}
       <div className="absolute top-[10%] left-[-10%] w-[50%] h-[40%] bg-indigo-600/20 rounded-full mix-blend-screen filter blur-[120px] animate-blob"></div>
       <div className="absolute top-[30%] right-[-10%] w-[40%] h-[50%] bg-purple-600/15 rounded-full mix-blend-screen filter blur-[120px] animate-blob animation-delay-2000"></div>
       <div className="absolute bottom-[-10%] left-[20%] w-[50%] h-[40%] bg-blue-600/15 rounded-full mix-blend-screen filter blur-[120px] animate-blob animation-delay-4000"></div>
-      
+
       {/* Low Fog */}
       <div className="absolute bottom-0 left-0 w-full h-[40%] bg-gradient-to-t from-[#02040a] via-[#02040a]/80 to-transparent z-10 pointer-events-none"></div>
-      
+
       {/* Vignette */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,#02040a_120%)] opacity-80 z-20 pointer-events-none"></div>
     </div>

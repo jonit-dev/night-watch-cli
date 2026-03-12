@@ -3,21 +3,13 @@
  * Handles legacy nested keys and validates field values.
  */
 
-import {
-  BOARD_COLUMNS,
-  BoardColumnName,
-  BoardProviderType,
-  IBoardProviderConfig,
-} from './board/types.js';
+import { BoardProviderType, IBoardProviderConfig } from './board/types.js';
 import {
   ClaudeModel,
-  IAnalyticsConfig,
-  IAuditConfig,
   IJobProviders,
   INightWatchConfig,
   IProviderBucketConfig,
   IProviderPreset,
-  IQaConfig,
   IQueueConfig,
   IRoadmapScannerConfig,
   IWebhookConfig,
@@ -25,21 +17,18 @@ import {
   MergeMethod,
   NotificationEvent,
   Provider,
-  QaArtifacts,
   QueueMode,
   WebhookType,
 } from './types.js';
 import {
-  DEFAULT_ANALYTICS,
-  DEFAULT_AUDIT,
   DEFAULT_BOARD_PROVIDER,
-  DEFAULT_QA,
   DEFAULT_QUEUE,
   DEFAULT_ROADMAP_SCANNER,
   VALID_CLAUDE_MODELS,
   VALID_JOB_TYPES,
   VALID_MERGE_METHODS,
 } from './constants.js';
+import { getJobDef, normalizeJobConfig } from './jobs/job-registry.js';
 
 export function validateProvider(value: string): Provider | null {
   // Accept any non-empty string as a preset ID (backward compat with 'claude'/'codex')
@@ -266,54 +255,16 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
     normalized.autoMergeMethod = mergeMethod as MergeMethod;
   }
 
-  const rawQa = readObject(rawConfig.qa);
-  if (rawQa) {
-    const artifactsValue = readString(rawQa.artifacts);
-    const artifacts =
-      artifactsValue && ['screenshot', 'video', 'both'].includes(artifactsValue)
-        ? (artifactsValue as QaArtifacts)
-        : DEFAULT_QA.artifacts;
-
-    const qa: IQaConfig = {
-      enabled: readBoolean(rawQa.enabled) ?? DEFAULT_QA.enabled,
-      schedule: readString(rawQa.schedule) ?? DEFAULT_QA.schedule,
-      maxRuntime: readNumber(rawQa.maxRuntime) ?? DEFAULT_QA.maxRuntime,
-      branchPatterns: readStringArray(rawQa.branchPatterns) ?? DEFAULT_QA.branchPatterns,
-      artifacts,
-      skipLabel: readString(rawQa.skipLabel) ?? DEFAULT_QA.skipLabel,
-      autoInstallPlaywright:
-        readBoolean(rawQa.autoInstallPlaywright) ?? DEFAULT_QA.autoInstallPlaywright,
-    };
-    normalized.qa = qa;
-  }
-
-  const rawAudit = readObject(rawConfig.audit);
-  if (rawAudit) {
-    const audit: IAuditConfig = {
-      enabled: readBoolean(rawAudit.enabled) ?? DEFAULT_AUDIT.enabled,
-      schedule: readString(rawAudit.schedule) ?? DEFAULT_AUDIT.schedule,
-      maxRuntime: readNumber(rawAudit.maxRuntime) ?? DEFAULT_AUDIT.maxRuntime,
-    };
-    normalized.audit = audit;
-  }
-
-  const rawAnalytics = readObject(rawConfig.analytics);
-  if (rawAnalytics) {
-    const targetColumnRaw = readString(rawAnalytics.targetColumn);
-    const targetColumn: BoardColumnName =
-      targetColumnRaw && BOARD_COLUMNS.includes(targetColumnRaw as BoardColumnName)
-        ? (targetColumnRaw as BoardColumnName)
-        : DEFAULT_ANALYTICS.targetColumn;
-
-    const analytics: IAnalyticsConfig = {
-      enabled: readBoolean(rawAnalytics.enabled) ?? DEFAULT_ANALYTICS.enabled,
-      schedule: readString(rawAnalytics.schedule) ?? DEFAULT_ANALYTICS.schedule,
-      maxRuntime: readNumber(rawAnalytics.maxRuntime) ?? DEFAULT_ANALYTICS.maxRuntime,
-      lookbackDays: readNumber(rawAnalytics.lookbackDays) ?? DEFAULT_ANALYTICS.lookbackDays,
-      targetColumn,
-      analysisPrompt: readString(rawAnalytics.analysisPrompt) ?? DEFAULT_ANALYTICS.analysisPrompt,
-    };
-    normalized.analytics = analytics;
+  // Registry-driven normalization for nested job configs (qa, audit, analytics)
+  // Executor/reviewer use flat top-level fields; slicer lives in roadmapScanner block above
+  for (const jobId of ['qa', 'audit', 'analytics'] as const) {
+    const jobDef = getJobDef(jobId);
+    if (!jobDef) continue;
+    const rawJob = readObject(rawConfig[jobId]);
+    if (rawJob) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (normalized as any)[jobId] = normalizeJobConfig(rawJob, jobDef);
+    }
   }
 
   const rawJobProviders = readObject(rawConfig.jobProviders);

@@ -27,6 +27,7 @@ import type {
     QaArtifacts,
 } from '@shared/types';
 import { DependencyList, useEffect, useRef, useState } from 'react';
+import { getWebJobDef } from './utils/jobs';
 
 // Re-export shared types so consumers can import from either place
 export type {
@@ -323,6 +324,18 @@ export function triggerPlanner(): Promise<ActionResult> {
   return apiFetch<ActionResult>(apiPath('/api/actions/planner'), {
     method: 'POST',
   });
+}
+
+/**
+ * Generic job trigger using the web job registry.
+ * Prefer this over per-job triggerRun/triggerReview/etc. for new code.
+ */
+export function triggerJob(jobId: string): Promise<ActionResult> {
+  const jobDef = getWebJobDef(jobId);
+  if (!jobDef) {
+    return Promise.reject(new Error(`Unknown job ID: ${jobId}`));
+  }
+  return apiFetch<ActionResult>(apiPath(jobDef.triggerEndpoint), { method: 'POST' });
 }
 
 export function triggerInstallCron(): Promise<ActionResult> {

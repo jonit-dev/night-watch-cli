@@ -1,52 +1,52 @@
-import { Terminal, CheckSquare, Activity, Search, Scissors } from 'lucide-react';
+import { Activity, CheckSquare, Scissors, Search, Terminal } from 'lucide-react';
 import { motion } from 'motion/react';
 
 const agents = [
   {
-    name: "Executor",
-    role: "Implements specs as code, opens PRs",
-    schedule: "Hourly",
+    name: 'Executor',
+    role: 'Implements specs as code, opens PRs',
+    schedule: 'Hourly',
     icon: Terminal,
-    color: "bg-indigo-500",
-    glow: "group-hover:shadow-[0_0_30px_-5px_rgba(99,102,241,0.3)]",
-    hoverText: "Branch created: feat/auth-flow"
+    color: 'bg-indigo-500',
+    glow: 'group-hover:shadow-[0_0_30px_-5px_rgba(99,102,241,0.3)]',
+    hoverText: 'Branch created: feat/auth-flow',
   },
   {
-    name: "Reviewer",
-    role: "Scores PRs, requests fixes, auto-merges",
-    schedule: "Every 3 hours",
+    name: 'Reviewer',
+    role: 'Scores PRs, requests fixes, auto-merges',
+    schedule: 'Every 3 hours',
     icon: CheckSquare,
-    color: "bg-emerald-500",
-    glow: "group-hover:shadow-[0_0_30px_-5px_rgba(16,185,129,0.3)]",
-    hoverText: "Score: 87/100 — ready to merge"
+    color: 'bg-emerald-500',
+    glow: 'group-hover:shadow-[0_0_30px_-5px_rgba(16,185,129,0.3)]',
+    hoverText: 'Score: 87/100 — ready to merge',
   },
   {
-    name: "QA",
-    role: "Generates and runs Playwright e2e tests",
-    schedule: "4x daily",
+    name: 'QA',
+    role: 'Generates and runs Playwright e2e tests',
+    schedule: '4x daily',
     icon: Activity,
-    color: "bg-amber-500",
-    glow: "group-hover:shadow-[0_0_30px_-5px_rgba(245,158,11,0.3)]",
-    hoverText: "3 tests passed, 0 failed"
+    color: 'bg-amber-500',
+    glow: 'group-hover:shadow-[0_0_30px_-5px_rgba(245,158,11,0.3)]',
+    hoverText: '3 tests passed, 0 failed',
   },
   {
-    name: "Auditor",
-    role: "Scans codebase for quality issues",
-    schedule: "Weekly",
+    name: 'Auditor',
+    role: 'Scans codebase for quality issues',
+    schedule: 'Weekly',
     icon: Search,
-    color: "bg-purple-500",
-    glow: "group-hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.3)]",
-    hoverText: "Found 2 unused dependencies"
+    color: 'bg-purple-500',
+    glow: 'group-hover:shadow-[0_0_30px_-5px_rgba(168,85,247,0.3)]',
+    hoverText: 'Found 2 unused dependencies',
   },
   {
-    name: "Slicer",
-    role: "Breaks roadmap items into granular specs",
-    schedule: "Every 6 hours",
+    name: 'Slicer',
+    role: 'Breaks roadmap items into granular specs',
+    schedule: 'Every 6 hours',
     icon: Scissors,
-    color: "bg-pink-500",
-    glow: "group-hover:shadow-[0_0_30px_-5px_rgba(236,72,153,0.3)]",
-    hoverText: "Split epic into 4 sub-tasks"
-  }
+    color: 'bg-pink-500',
+    glow: 'group-hover:shadow-[0_0_30px_-5px_rgba(236,72,153,0.3)]',
+    hoverText: 'Split epic into 4 sub-tasks',
+  },
 ];
 
 export function Agents() {
@@ -56,12 +56,14 @@ export function Agents() {
       <div className="container mx-auto max-w-6xl relative z-10">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Five agents. One closed loop.</h2>
-          <p className="text-gray-400 max-w-2xl mx-auto">Specialized agents working together to move tickets from backlog to production.</p>
+          <p className="text-gray-400 max-w-2xl mx-auto">
+            Specialized agents working together to move tickets from backlog to production.
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {agents.map((agent, index) => (
-            <motion.div 
+            <motion.div
               key={index}
               initial={{ opacity: 0, scale: 0.95 }}
               whileInView={{ opacity: 1, scale: 1 }}
@@ -69,7 +71,9 @@ export function Agents() {
               transition={{ duration: 0.4, delay: index * 0.05 }}
               className={`group relative bg-gray-900/40 backdrop-blur-sm rounded-xl border border-white/5 overflow-hidden transition-all duration-300 hover:-translate-y-1 ${agent.glow}`}
             >
-              <div className={`h-1 w-full ${agent.color} opacity-80 group-hover:opacity-100 transition-opacity`}></div>
+              <div
+                className={`h-1 w-full ${agent.color} opacity-80 group-hover:opacity-100 transition-opacity`}
+              ></div>
               <div className="absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
               <div className="p-6">
                 <div className="flex justify-between items-start mb-4">
@@ -82,10 +86,12 @@ export function Agents() {
                 </div>
                 <h3 className="text-xl font-semibold mb-2 text-gray-100">{agent.name}</h3>
                 <p className="text-sm text-gray-400 mb-4">{agent.role}</p>
-                
+
                 <div className="h-0 opacity-0 group-hover:h-auto group-hover:opacity-100 transition-all duration-300 overflow-hidden">
                   <div className="pt-4 border-t border-gray-800/50 mt-4">
-                    <p className="text-xs font-mono text-indigo-400">{'>'} {agent.hoverText}</p>
+                    <p className="text-xs font-mono text-indigo-400">
+                      {'>'} {agent.hoverText}
+                    </p>
                   </div>
                 </div>
               </div>

@@ -4,19 +4,19 @@ import { motion } from 'motion/react';
 const props = [
   {
     icon: Clock,
-    title: "Async-first",
-    description: "Not pair-programming. Queued execution while you sleep."
+    title: 'Async-first',
+    description: 'Not pair-programming. Queued execution while you sleep.',
   },
   {
     icon: GitBranch,
-    title: "Safe isolation",
-    description: "Every task runs in its own git worktree. Your main branch stays clean."
+    title: 'Safe isolation',
+    description: 'Every task runs in its own git worktree. Your main branch stays clean.',
   },
   {
     icon: ShieldCheck,
-    title: "Human-in-the-loop",
-    description: "You review every PR. Configurable trust dials control auto-merge."
-  }
+    title: 'Human-in-the-loop',
+    description: 'You review every PR. Configurable trust dials control auto-merge.',
+  },
 ];
 
 export function ValueProps() {
@@ -26,7 +26,7 @@ export function ValueProps() {
       <div className="container mx-auto max-w-6xl relative z-10">
         <div className="grid md:grid-cols-3 gap-8">
           {props.map((prop, index) => (
-            <motion.div 
+            <motion.div
               key={index}
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}

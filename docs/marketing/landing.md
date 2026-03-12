@@ -38,16 +38,20 @@ Marketing landing page for Night Watch CLI to convert visitors (developers, solo
 ### 2. Hero Section
 
 **Headline (large, bold):**
+
 > Your repo's night shift.
 
 **Subheadline (slate-400, 1-2 lines max):**
+
 > Define work during the day. Night Watch executes overnight. Wake up to pull requests, reviewed code, and tested features.
 
 **CTA buttons:**
+
 - Primary: `npm install -g @jonit-dev/night-watch-cli` (copyable code block styled as a button, click-to-copy)
 - Secondary: "Read the docs" (ghost/outline button, links to docs)
 
 **Below the fold teaser:**
+
 - A single animated terminal recording (asciinema or typed.js simulation) showing:
   ```
   $ night-watch init
@@ -63,11 +67,11 @@ Marketing landing page for Night Watch CLI to convert visitors (developers, solo
 
 Three cards in a row, each with an icon, title, and 1-line description:
 
-| Icon | Title | Description |
-|------|-------|-------------|
-| Moon/Clock | Async-first | Not pair-programming. Queued execution while you sleep. |
-| GitBranch | Safe isolation | Every task runs in its own git worktree. Your main branch stays clean. |
-| Eye/Shield | Human-in-the-loop | You review every PR. Configurable trust dials control auto-merge. |
+| Icon       | Title             | Description                                                            |
+| ---------- | ----------------- | ---------------------------------------------------------------------- |
+| Moon/Clock | Async-first       | Not pair-programming. Queued execution while you sleep.                |
+| GitBranch  | Safe isolation    | Every task runs in its own git worktree. Your main branch stays clean. |
+| Eye/Shield | Human-in-the-loop | You review every PR. Configurable trust dials control auto-merge.      |
 
 ### 4. How It Works (horizontal stepper or vertical timeline)
 
@@ -86,13 +90,13 @@ Four steps, each with a number, title, short description, and a small illustrati
 
 Grid of 5 agent cards (2x3 or horizontal scroll on mobile). Each card:
 
-| Agent | Role | Schedule hint |
-|-------|------|---------------|
-| Executor | Implements specs as code, opens PRs | Hourly |
-| Reviewer | Scores PRs, requests fixes, auto-merges | Every 3 hours |
-| QA | Generates and runs Playwright e2e tests | 4x daily |
-| Auditor | Scans codebase for quality issues | Weekly |
-| Slicer | Breaks roadmap items into granular specs | Every 6 hours |
+| Agent    | Role                                     | Schedule hint |
+| -------- | ---------------------------------------- | ------------- |
+| Executor | Implements specs as code, opens PRs      | Hourly        |
+| Reviewer | Scores PRs, requests fixes, auto-merges  | Every 3 hours |
+| QA       | Generates and runs Playwright e2e tests  | 4x daily      |
+| Auditor  | Scans codebase for quality issues        | Weekly        |
+| Slicer   | Breaks roadmap items into granular specs | Every 6 hours |
 
 Each card should have a subtle colored accent bar on top (different color per agent) and a small icon. On hover, show a brief example of what the agent outputs (e.g., Reviewer: "Score: 87/100 — ready to merge").
 
@@ -113,12 +117,14 @@ Each card should have a subtle colored accent bar on top (different color per ag
 Two-column layout:
 
 **Night Watch is strongest when:** (green checkmarks)
+
 - You already use structured specs, PRDs, or queued board items
 - You want async execution, not another pair-programming UI
 - Your work can be broken into small, reviewable pull requests
 - You care about overnight throughput on bounded tasks
 
 **Night Watch is a weaker fit when:** (gray x-marks)
+
 - Work starts vague and gets clarified only during implementation
 - Your team is not comfortable reviewing AI-generated pull requests
 - You want a general-purpose AI coding assistant
@@ -147,6 +153,7 @@ night-watch install       # setup automated cron
 ```
 
 Below the code block:
+
 - Link: "5-minute walkthrough" (→ docs/walkthrough.md)
 - Link: "Full docs" (→ docs/)
 - Link: "Commands reference" (→ docs/commands.md)
@@ -155,11 +162,11 @@ Below the code block:
 
 Small horizontal strip showing supported providers:
 
-| Provider | Mode |
-|----------|------|
-| Claude CLI | Default, with rate-limit fallback |
-| Codex CLI | Full support |
-| GLM-5 / Custom endpoints | Via `providerEnv` config |
+| Provider                 | Mode                              |
+| ------------------------ | --------------------------------- |
+| Claude CLI               | Default, with rate-limit fallback |
+| Codex CLI                | Full support                      |
+| GLM-5 / Custom endpoints | Via `providerEnv` config          |
 
 Caption: "Bring your own AI provider. Night Watch wraps the CLI — you stay in control of credentials and costs."
 
@@ -209,14 +216,17 @@ Caption: "Bring your own AI provider. Night Watch wraps the CLI — you stay in 
 ## Copy Alternatives for Hero
 
 Option A (current recommendation):
+
 > **Your repo's night shift.**
 > Define work during the day. Night Watch executes overnight. Wake up to pull requests.
 
 Option B:
+
 > **Ship while you sleep.**
 > Night Watch turns your specs into reviewed pull requests — overnight, automatically, safely.
 
 Option C:
+
 > **Async PRD execution for AI-native teams.**
 > Queue specs. Night Watch implements, reviews, tests, and opens PRs while you're offline.
 

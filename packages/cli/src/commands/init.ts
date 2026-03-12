@@ -917,12 +917,14 @@ export function initCommand(program: Command): void {
       filesTable.push(['Config File', CONFIG_FILE_NAME]);
       filesTable.push(['Board Setup', boardSetupStatus]);
       filesTable.push(['Global Registry', '~/.night-watch/projects.json']);
-      const skillsSummary =
-        skillsResult.installed > 0
-          ? `${skillsResult.installed} skills → ${skillsResult.location}`
-          : skillsResult.skipped > 0
-            ? `Already installed (${skillsResult.location})`
-            : 'Skipped';
+      let skillsSummary: string;
+      if (skillsResult.installed > 0) {
+        skillsSummary = `${skillsResult.installed} skills → ${skillsResult.location}`;
+      } else if (skillsResult.skipped > 0) {
+        skillsSummary = `Already installed (${skillsResult.location})`;
+      } else {
+        skillsSummary = 'Skipped';
+      }
       filesTable.push(['Skills', skillsSummary]);
       console.log(filesTable.toString());
 
