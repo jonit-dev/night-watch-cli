@@ -36,6 +36,7 @@ import ScheduleConfig from '../components/scheduling/ScheduleConfig.js';
 
 /** Built-in preset IDs that cannot be deleted */
 const BUILT_IN_PRESET_IDS = ['claude', 'claude-sonnet-4-6', 'claude-opus-4-6', 'codex', 'glm-47', 'glm-5'];
+const JOB_PROVIDER_KEYS: Array<keyof IJobProviders> = ['executor', 'reviewer', 'qa', 'audit', 'slicer'];
 
 type ConfigForm = {
   provider: INightWatchConfig['provider'];
@@ -592,11 +593,15 @@ const Settings: React.FC = () => {
       (form.roadmapScanner.slicerSchedule || '35 */12 * * *') !==
         (config?.roadmapScanner?.slicerSchedule || '35 */12 * * *');
 
-    // Filter out empty/undefined job provider values
-    const cleanedJobProviders: IJobProviders = {};
-    for (const [jobType, provider] of Object.entries(form.jobProviders)) {
-      if (provider !== undefined && provider !== null && provider !== '') {
-        cleanedJobProviders[jobType as keyof IJobProviders] = provider;
+    // Send explicit nulls for cleared overrides so the backend can reliably remove
+    // stale assignments even if it applies partial-merge semantics.
+    const cleanedJobProviders: Partial<Record<keyof IJobProviders, string | null>> = {};
+    for (const jobType of JOB_PROVIDER_KEYS) {
+      const provider = form.jobProviders[jobType];
+      if (typeof provider === 'string' && provider.trim().length > 0) {
+        cleanedJobProviders[jobType] = provider;
+      } else if (config?.jobProviders[jobType]) {
+        cleanedJobProviders[jobType] = null;
       }
     }
 

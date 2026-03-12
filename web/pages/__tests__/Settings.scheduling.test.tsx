@@ -336,4 +336,34 @@ describe('Settings schedules mode sync', () => {
       expect(screen.getByText(/To use Codex, set the global provider above/i)).toBeInTheDocument();
     });
   });
+
+  it('clears a reviewer provider override when switching back to global', async () => {
+    currentConfig = makeConfig({
+      jobProviders: { reviewer: 'codex' },
+    });
+    apiMocks.updateConfig.mockImplementation(async (changes) => {
+      currentConfig = makeConfig({
+        jobProviders: changes.jobProviders ?? {},
+      });
+      return currentConfig;
+    });
+
+    renderSettings();
+    fireEvent.click(screen.getByRole('button', { name: 'Providers' }));
+
+    const selects = screen.getAllByRole('combobox');
+    fireEvent.change(selects[2], { target: { value: '' } });
+
+    await waitFor(() => {
+      expect(apiMocks.updateConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobProviders: { reviewer: null },
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect((screen.getAllByRole('combobox')[2] as HTMLSelectElement).value).toBe('');
+    });
+  });
 });
