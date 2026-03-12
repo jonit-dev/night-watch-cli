@@ -39,6 +39,9 @@ coverage/
 # Claim files (ephemeral local state)
 *.claim
 
+# QA artifacts (generated, not source)
+qa-artifacts/
+
 .npmrc
 
 night-watch.config.json

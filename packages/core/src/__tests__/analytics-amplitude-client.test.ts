@@ -3,7 +3,11 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { fetchAmplitudeData, buildAuthHeader, buildDateRange } from '../amplitude-client.js';
+import {
+  fetchAmplitudeData,
+  buildAuthHeader,
+  buildDateRange,
+} from '../analytics/amplitude-client.js';
 
 // Mock global fetch
 const mockFetch = vi.fn();

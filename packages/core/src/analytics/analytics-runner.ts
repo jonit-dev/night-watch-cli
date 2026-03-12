@@ -10,7 +10,7 @@ import { BoardColumnName } from '../board/types.js';
 import { createBoardProvider } from '../board/factory.js';
 import { INightWatchConfig } from '../types.js';
 import { resolveJobProvider } from '../config.js';
-import { CLAUDE_MODEL_IDS, PROVIDER_COMMANDS } from '../constants.js';
+import { CLAUDE_MODEL_IDS, DEFAULT_ANALYTICS_PROMPT, PROVIDER_COMMANDS } from '../constants.js';
 import { executeScriptWithOutput } from '../utils/shell.js';
 import { createLogger } from '../utils/logger.js';
 import { fetchAmplitudeData } from './amplitude-client.js';
@@ -68,7 +68,8 @@ export async function runAnalytics(
   const data = await fetchAmplitudeData(apiKey, secretKey, config.analytics.lookbackDays);
 
   // 2. Build prompt
-  const prompt = `${config.analytics.analysisPrompt}\n\n--- AMPLITUDE DATA ---\n${JSON.stringify(data, null, 2)}`;
+  const systemPrompt = config.analytics.analysisPrompt?.trim() || DEFAULT_ANALYTICS_PROMPT;
+  const prompt = `${systemPrompt}\n\n--- AMPLITUDE DATA ---\n${JSON.stringify(data, null, 2)}`;
 
   // 3. Write prompt to temp file
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nw-analytics-'));
