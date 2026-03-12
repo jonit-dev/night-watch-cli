@@ -42,11 +42,11 @@ export function QuickStart() {
         </motion.div>
 
         <div className="flex flex-wrap items-center justify-center gap-6 text-sm">
-          <a href="#docs/walkthrough" className="text-indigo-400 hover:text-indigo-300 transition-colors underline underline-offset-4">5-minute walkthrough</a>
+          <a href="https://github.com/jonit-dev/night-watch-cli/blob/master/README.md" target="_blank" rel="noreferrer" className="text-indigo-400 hover:text-indigo-300 transition-colors underline underline-offset-4">5-minute walkthrough</a>
           <span className="text-gray-700">•</span>
-          <a href="#docs" className="text-indigo-400 hover:text-indigo-300 transition-colors underline underline-offset-4">Full docs</a>
+          <a href="https://github.com/jonit-dev/night-watch-cli/blob/master/README.md" target="_blank" rel="noreferrer" className="text-indigo-400 hover:text-indigo-300 transition-colors underline underline-offset-4">Full docs</a>
           <span className="text-gray-700">•</span>
-          <a href="#docs/commands" className="text-indigo-400 hover:text-indigo-300 transition-colors underline underline-offset-4">Commands reference</a>
+          <a href="https://github.com/jonit-dev/night-watch-cli/blob/master/README.md" target="_blank" rel="noreferrer" className="text-indigo-400 hover:text-indigo-300 transition-colors underline underline-offset-4">Commands reference</a>
         </div>
       </div>
     </section>

@@ -19,7 +19,7 @@ export function Footer() {
             <Github className="w-4 h-4" /> GitHub
           </a>
           <a href="https://npmjs.com/package/@jonit-dev/night-watch-cli" className="hover:text-white transition-colors">npm</a>
-          <a href="#docs" className="hover:text-white transition-colors">Docs</a>
+          <a href="https://github.com/jonit-dev/night-watch-cli/blob/master/README.md" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">Docs</a>
           <a href="#license" className="hover:text-white transition-colors">License (MIT)</a>
         </div>
         

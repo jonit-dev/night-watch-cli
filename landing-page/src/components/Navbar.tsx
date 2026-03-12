@@ -22,7 +22,7 @@ export function Navbar() {
           <a href="#features" className="hover:text-white transition-colors">Features</a>
           <a href="#how-it-works" className="hover:text-white transition-colors">How It Works</a>
           <a href="#agents" className="hover:text-white transition-colors">Agents</a>
-          <a href="https://github.com/jonit-dev/night-watch-cli/tree/master/docs" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">Docs</a>
+          <a href="https://github.com/jonit-dev/night-watch-cli/blob/master/README.md" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">Docs</a>
         </nav>
         
         <div className="hidden md:flex items-center gap-4">
@@ -51,7 +51,7 @@ export function Navbar() {
             <a href="#features" onClick={() => setIsOpen(false)} className="hover:text-white transition-colors px-2 py-1">Features</a>
             <a href="#how-it-works" onClick={() => setIsOpen(false)} className="hover:text-white transition-colors px-2 py-1">How It Works</a>
             <a href="#agents" onClick={() => setIsOpen(false)} className="hover:text-white transition-colors px-2 py-1">Agents</a>
-            <a href="https://github.com/jonit-dev/night-watch-cli/tree/master/docs" target="_blank" rel="noreferrer" onClick={() => setIsOpen(false)} className="hover:text-white transition-colors px-2 py-1">Docs</a>
+            <a href="https://github.com/jonit-dev/night-watch-cli/blob/master/README.md" target="_blank" rel="noreferrer" onClick={() => setIsOpen(false)} className="hover:text-white transition-colors px-2 py-1">Docs</a>
             <div className="h-px bg-white/10 my-2"></div>
             <a href="https://github.com/jonit-dev/night-watch-cli" target="_blank" rel="noreferrer" className="flex items-center gap-2 hover:text-white transition-colors px-2 py-1">
               <Github className="w-5 h-5" /> GitHub
