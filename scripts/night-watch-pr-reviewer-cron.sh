@@ -105,6 +105,45 @@ extract_review_score_from_text() {
     | grep -oP '\d+(?=/100)' || echo ""
 }
 
+# Extract the full body of the most recent review comment containing a score.
+# Uses jq to process complete JSON strings, correctly handling multi-line bodies.
+# Returns the review comment text (up to 8000 chars, truncated for prompt injection).
+get_pr_latest_review_body() {
+  local pr_number="${1:-}"
+  local repo="${2:-}"
+  local review_body=""
+  # jq regex to match score patterns like "Score: 72/100" or "**Overall Score:** 85/100"
+  local score_regex='(?:Overall\s+)?Score:\*?\*?\s*[0-9]+/100'
+
+  if [ -z "${pr_number}" ]; then
+    echo ""
+    return
+  fi
+
+  # Use jq to select the last comment body containing a score pattern.
+  # jq processes the full JSON string (including embedded newlines), so multi-line
+  # review bodies are matched correctly. "m" flag enables multi-line mode in jq regex.
+  review_body=$(
+    gh pr view "${pr_number}" --json comments \
+      --jq "[.comments[].body | select(test(\"${score_regex}\"; \"m\"))] | last // empty" 2>/dev/null || true
+  )
+
+  # Fallback to gh api if pr view returned nothing (e.g. auth scope differences)
+  if [ -z "${review_body}" ] && [ -n "${repo}" ]; then
+    review_body=$(
+      gh api "repos/${repo}/issues/${pr_number}/comments" \
+        --jq "[.[].body | select(test(\"${score_regex}\"; \"m\"))] | last // empty" 2>/dev/null || true
+    )
+  fi
+
+  # Truncate to 8000 chars to avoid prompt bloat
+  if [ ${#review_body} -gt 8000 ]; then
+    review_body="${review_body:0:8000}"
+  fi
+
+  printf '%s' "${review_body}"
+}
+
 # ── Global Job Queue Gate ────────────────────────────────────────────────────
 # Acquire global gate before per-project lock to serialize jobs across projects.
 # When gate is busy, enqueue the job and exit cleanly.
@@ -663,7 +702,17 @@ while IFS=$'\t' read -r pr_number pr_branch pr_labels; do
     } | awk '!seen[$0]++'
   )
   LATEST_SCORE=$(extract_review_score_from_text "${ALL_COMMENTS}")
-  if [ -n "${LATEST_SCORE}" ] && [ "${LATEST_SCORE}" -lt "${MIN_REVIEW_SCORE}" ]; then
+
+  # Review-first, fix-later flow:
+  # - No review yet → mark as needs_review (Claude will post review, exit without fixing)
+  # - Review exists, score < threshold → mark as needs_fix (Claude will fix all issues)
+  # - Review exists, score >= threshold → skip (no action needed)
+  if [ -z "${LATEST_SCORE}" ]; then
+    # No review yet - this PR needs a review to be posted
+    log "INFO: PR #${pr_number} (${pr_branch}) has no review score yet - marking as needs_review"
+    NEEDS_WORK=1
+    PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
+  elif [ "${LATEST_SCORE}" -lt "${MIN_REVIEW_SCORE}" ]; then
     log "INFO: PR #${pr_number} (${pr_branch}) has review score ${LATEST_SCORE}/100 (threshold: ${MIN_REVIEW_SCORE})"
     NEEDS_WORK=1
     PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
@@ -674,7 +723,7 @@ done < <(
 )
 
 if [ "${NEEDS_WORK}" -eq 0 ]; then
-  log "SKIP: All ${OPEN_PRS} open PR(s) have passing CI and review score >= ${MIN_REVIEW_SCORE} (or no score yet)"
+  log "SKIP: All ${OPEN_PRS} open PR(s) have passing CI and review score >= ${MIN_REVIEW_SCORE} (all reviews posted)"
 
   # ── Auto-merge eligible PRs ───────────────────────────────
   if [ "${NW_AUTO_MERGE:-0}" = "1" ]; then
@@ -983,10 +1032,22 @@ if [ -n "${TARGET_PR}" ]; then
   else
     TARGET_SCOPE_PROMPT+=$'- failing checks: none detected\n'
   fi
+
   if [ -n "${TARGET_SCORE}" ]; then
     TARGET_SCOPE_PROMPT+=$'- latest review score: '"${TARGET_SCORE}"$'/100\n'
+    # Review-first, fix-later flow: inject review body when score < threshold
+    if [ "${TARGET_SCORE}" -lt "${MIN_REVIEW_SCORE}" ]; then
+      TARGET_REVIEW_BODY=$(get_pr_latest_review_body "${TARGET_PR}" "${REPO}")
+      if [ -n "${TARGET_REVIEW_BODY}" ]; then
+        TARGET_SCOPE_PROMPT+=$'\n\n## Latest Review Feedback\nThe following review was posted for this PR. Address ALL issues mentioned:\n'"${TARGET_REVIEW_BODY}"$'\n'
+      else
+        TARGET_SCOPE_PROMPT+=$'\n\n## Latest Review Feedback\n- action: fix (review score below threshold)\n'
+      fi
+    fi
   else
+    # No review yet - instruct Claude to post a review
     TARGET_SCOPE_PROMPT+=$'- latest review score: not found\n'
+    TARGET_SCOPE_PROMPT+=$'\n\n## Action Required\n- action: review (no review exists yet)\n- Post a review comment with a score using the criteria from .github/prompts/pr-review.md\n- Do NOT fix anything - just review and exit\n'
   fi
 fi
 
