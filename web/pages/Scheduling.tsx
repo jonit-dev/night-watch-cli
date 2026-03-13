@@ -12,6 +12,7 @@ import {
   BarChart2,
   Plus,
   Trash2,
+  Zap,
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -737,12 +738,99 @@ const Scheduling: React.FC = () => {
             onApplyTemplate={applyTemplate}
           />
 
+          <div className="flex justify-end pt-4">
+            <Button
+              variant="ghost"
+              onClick={() => {
+                if (config) {
+                  const resetTemplate = resolveActiveTemplate(
+                    config.scheduleBundleId,
+                    config.cronSchedule,
+                    config.reviewerSchedule,
+                    config.qa?.schedule || '45 2,14 * * *',
+                    config.audit?.schedule || '50 3 * * 1',
+                    config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+                  );
+                  const resetBuckets = config.queue?.providerBuckets ?? {};
+                  setEditState({
+                    form: {
+                      cronSchedule: config.cronSchedule || '5 */3 * * *',
+                      reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
+                      qa: config.qa || { schedule: '45 2,14 * * *', enabled: true },
+                      audit: config.audit || { schedule: '50 3 * * 1', enabled: true },
+                      analytics: config.analytics || { schedule: '0 6 * * 1', enabled: false },
+                      roadmapScanner: {
+                        enabled: config.roadmapScanner?.enabled ?? true,
+                        slicerSchedule: config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+                      },
+                      scheduleBundleId: config.scheduleBundleId ?? null,
+                      schedulingPriority: config.schedulingPriority ?? 3,
+                      cronScheduleOffset: config.cronScheduleOffset ?? 0,
+                      globalQueueEnabled: config.queue?.enabled ?? true,
+                    },
+                    scheduleMode: resetTemplate ? 'template' : 'custom',
+                    selectedTemplateId: resetTemplate?.id ?? '',
+                    isDirty: false,
+                    queueMode: config.queue?.mode ?? 'auto',
+                    providerBuckets: Object.entries(resetBuckets).map(([key, val]) => ({
+                      key,
+                      maxConcurrency: val.maxConcurrency,
+                    })),
+                  });
+                  setShowAddBucket(false);
+                  setNewBucketKey('');
+                  setNewBucketConcurrency('1');
+                }
+              }}
+              disabled={!editState.isDirty}
+            >
+              Reset
+            </Button>
+            <Button onClick={handleSaveAndInstall} loading={saving} disabled={!editState.isDirty}>
+              <Check className="h-4 w-4 mr-2" />
+              Save & Install
+            </Button>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: 'crontab',
+      label: 'Crontab',
+      content: (
+        <Card className="p-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <Calendar className="h-5 w-5 text-slate-400" />
+            <h3 className="text-lg font-semibold text-slate-200">Active Crontab Entries</h3>
+          </div>
+          {scheduleInfo.entries.length === 0 ? (
+            <div className="text-slate-500 text-sm">No crontab entries found.</div>
+          ) : (
+            <div className="space-y-2">
+              {scheduleInfo.entries.map((entry, idx) => (
+                <div key={idx} className="bg-slate-950/50 rounded-lg p-3 font-mono text-sm text-slate-300 border border-slate-800">
+                  {entry}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      ),
+    },
+    {
+      id: 'parallelism',
+      label: 'Parallelism',
+      content: (
+        <div className="space-y-6">
           <Card className="p-6 space-y-6">
-            <div>
-              <h3 className="text-lg font-medium text-slate-200 mb-1">Provider Buckets</h3>
-              <p className="text-sm text-slate-400">
-                Control how jobs from different AI providers are dispatched concurrently.
-              </p>
+            <div className="flex items-center gap-3">
+              <Zap className="h-5 w-5 text-indigo-400" />
+              <div>
+                <h3 className="text-lg font-medium text-slate-200">Provider Buckets</h3>
+                <p className="text-sm text-slate-400">
+                  Control how jobs from different AI providers are dispatched concurrently.
+                </p>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -753,10 +841,11 @@ const Scheduling: React.FC = () => {
                   setEditState((prev) => ({ ...prev, queueMode: val as QueueMode, isDirty: true }));
                 }}
                 options={[
+                  { label: 'Auto — detect providers, balance automatically', value: 'auto' },
                   { label: 'Conservative — one job at a time globally', value: 'conservative' },
                   { label: 'Provider-aware — per-bucket concurrency', value: 'provider-aware' },
                 ]}
-                helperText="Conservative is the default. Provider-aware allows jobs on different providers to run in parallel."
+                helperText="Auto (recommended) detects providers and allows cross-provider parallelism with no config. Provider-aware lets you set explicit per-bucket limits."
               />
               <Input
                 label="Global Max Concurrency"
@@ -906,40 +995,17 @@ const Scheduling: React.FC = () => {
               variant="ghost"
               onClick={() => {
                 if (config) {
-                  const resetTemplate = resolveActiveTemplate(
-                    config.scheduleBundleId,
-                    config.cronSchedule,
-                    config.reviewerSchedule,
-                    config.qa?.schedule || '45 2,14 * * *',
-                    config.audit?.schedule || '50 3 * * 1',
-                    config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
-                  );
                   const resetBuckets = config.queue?.providerBuckets ?? {};
-                  setEditState({
-                    form: {
-                      cronSchedule: config.cronSchedule || '5 */3 * * *',
-                      reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
-                      qa: config.qa || { schedule: '45 2,14 * * *', enabled: true },
-                      audit: config.audit || { schedule: '50 3 * * 1', enabled: true },
-                      analytics: config.analytics || { schedule: '0 6 * * 1', enabled: false },
-                      roadmapScanner: {
-                        enabled: config.roadmapScanner?.enabled ?? true,
-                        slicerSchedule: config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
-                      },
-                      scheduleBundleId: config.scheduleBundleId ?? null,
-                      schedulingPriority: config.schedulingPriority ?? 3,
-                      cronScheduleOffset: config.cronScheduleOffset ?? 0,
-                      globalQueueEnabled: config.queue?.enabled ?? true,
-                    },
-                    scheduleMode: resetTemplate ? 'template' : 'custom',
-                    selectedTemplateId: resetTemplate?.id ?? '',
-                    isDirty: false,
-                    queueMode: config.queue?.mode ?? 'conservative',
+                  setEditState((prev) => ({
+                    ...prev,
+                    queueMode: config.queue?.mode ?? 'auto',
+                    globalMaxConcurrency: config.queue?.maxConcurrency ?? 1,
                     providerBuckets: Object.entries(resetBuckets).map(([key, val]) => ({
                       key,
                       maxConcurrency: val.maxConcurrency,
                     })),
-                  });
+                    isDirty: false,
+                  }));
                   setShowAddBucket(false);
                   setNewBucketKey('');
                   setNewBucketConcurrency('1');
@@ -955,29 +1021,6 @@ const Scheduling: React.FC = () => {
             </Button>
           </div>
         </div>
-      ),
-    },
-    {
-      id: 'crontab',
-      label: 'Crontab',
-      content: (
-        <Card className="p-6">
-          <div className="flex items-center space-x-2 mb-4">
-            <Calendar className="h-5 w-5 text-slate-400" />
-            <h3 className="text-lg font-semibold text-slate-200">Active Crontab Entries</h3>
-          </div>
-          {scheduleInfo.entries.length === 0 ? (
-            <div className="text-slate-500 text-sm">No crontab entries found.</div>
-          ) : (
-            <div className="space-y-2">
-              {scheduleInfo.entries.map((entry, idx) => (
-                <div key={idx} className="bg-slate-950/50 rounded-lg p-3 font-mono text-sm text-slate-300 border border-slate-800">
-                  {entry}
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
       ),
     },
   ];

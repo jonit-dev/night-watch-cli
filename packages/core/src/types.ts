@@ -357,7 +357,7 @@ export type QueueEntryStatus = 'pending' | 'running' | 'expired' | 'dispatched';
 /**
  * Queue dispatch mode
  */
-export type QueueMode = 'conservative' | 'provider-aware';
+export type QueueMode = 'conservative' | 'provider-aware' | 'auto';
 
 /**
  * Per-provider-bucket capacity limits for provider-aware scheduling.

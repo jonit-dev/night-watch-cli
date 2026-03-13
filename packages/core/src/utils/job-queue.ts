@@ -494,6 +494,43 @@ export function dispatchNextJob(config?: IQueueConfig): IQueueEntry | null {
       return { ...entry, status: 'dispatched', dispatchedAt: now };
     }
 
+    // auto mode: dispatch first candidate whose provider bucket has no running job
+    if (mode === 'auto') {
+      const candidates = getPendingCandidates(db);
+      if (candidates.length === 0) {
+        logger.debug('Dispatch skipped: no pending jobs');
+        return null;
+      }
+
+      logger.debug('Auto dispatch: evaluating candidates', { candidateCount: candidates.length });
+
+      const inFlightByBucket = getInFlightCountByBucket(db);
+
+      for (const candidate of candidates) {
+        const bucketKey = candidate.providerKey ?? 'default';
+        if ((inFlightByBucket[bucketKey] ?? 0) === 0) {
+          db.prepare(
+            `UPDATE job_queue SET status = 'dispatched', dispatched_at = ? WHERE id = ?`,
+          ).run(now, candidate.id);
+
+          logger.info('Job dispatched (auto)', {
+            id: candidate.id,
+            jobType: candidate.jobType,
+            project: candidate.projectName,
+            priority: candidate.priority,
+            providerKey: candidate.providerKey ?? null,
+            waitSeconds: now - candidate.enqueuedAt,
+          });
+          return { ...candidate, status: 'dispatched', dispatchedAt: now };
+        }
+      }
+
+      logger.info('Dispatch skipped: all candidates blocked by provider concurrency (auto)', {
+        candidateCount: candidates.length,
+      });
+      return null;
+    }
+
     // provider-aware mode: find first candidate that fits bucket capacity
     const candidates = getPendingCandidates(db);
     if (candidates.length === 0) {

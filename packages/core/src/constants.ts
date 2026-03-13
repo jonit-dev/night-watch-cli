@@ -280,7 +280,7 @@ export const MAX_HISTORY_RECORDS_PER_PRD = 10;
 
 // Global Job Queue Configuration
 export const DEFAULT_QUEUE_ENABLED = true;
-export const DEFAULT_QUEUE_MODE: QueueMode = 'conservative';
+export const DEFAULT_QUEUE_MODE: QueueMode = 'auto';
 export const DEFAULT_QUEUE_MAX_CONCURRENCY = 1;
 export const DEFAULT_QUEUE_MAX_WAIT_TIME = 7200; // 2 hours in seconds
 // Default per-job queue priority mapping (derived from JOB_REGISTRY)

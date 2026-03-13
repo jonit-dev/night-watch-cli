@@ -1950,7 +1950,7 @@ describe('config', () => {
     it('should load queue defaults including mode and providerBuckets', () => {
       const config = loadConfig(tempDir);
 
-      expect(config.queue.mode).toBe('conservative');
+      expect(config.queue.mode).toBe('auto');
       expect(config.queue.providerBuckets).toEqual({});
     });
 
@@ -1970,7 +1970,7 @@ describe('config', () => {
       expect(config.queue.mode).toBe('provider-aware');
     });
 
-    it('ignores invalid queue mode and falls back to conservative', () => {
+    it('ignores invalid queue mode and falls back to auto', () => {
       const configPath = path.join(tempDir, 'night-watch.config.json');
       fs.writeFileSync(
         configPath,
@@ -1983,7 +1983,7 @@ describe('config', () => {
 
       const config = loadConfig(tempDir);
 
-      expect(config.queue.mode).toBe('conservative');
+      expect(config.queue.mode).toBe('auto');
     });
 
     it('loads providerBuckets from config file', () => {
