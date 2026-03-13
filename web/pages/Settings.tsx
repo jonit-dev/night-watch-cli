@@ -25,23 +25,21 @@ import {
   useApi,
 } from '../api';
 import WebhookEditor from '../components/settings/WebhookEditor.js';
-import TagInput from '../components/settings/TagInput.js';
 import PresetFormModal from '../components/providers/PresetFormModal.js';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import { IScheduleTemplate, resolveActiveTemplate } from '../utils/cron.js';
-import Input from '../components/ui/Input';
-import Select from '../components/ui/Select';
-import Switch from '../components/ui/Switch';
 import Tabs from '../components/ui/Tabs';
 import { useStore } from '../store/useStore';
-import ScheduleConfig from '../components/scheduling/ScheduleConfig.js';
 import GeneralTab from './settings/GeneralTab.js';
 import AiRuntimeTab from './settings/AiRuntimeTab.js';
 import JobsTab from './settings/JobsTab.js';
+import SchedulesTab from './settings/SchedulesTab.js';
+import IntegrationsTab from './settings/IntegrationsTab.js';
+import AdvancedTab from './settings/AdvancedTab.js';
+import { usePresetManagement } from '../hooks/usePresetManagement.js';
+import { BUILT_IN_PRESET_IDS } from '../constants/presets.js';
 
-/** Built-in preset IDs that cannot be deleted */
-const BUILT_IN_PRESET_IDS = ['claude', 'claude-sonnet-4-6', 'claude-opus-4-6', 'codex', 'glm-47', 'glm-5'];
 const JOB_PROVIDER_KEYS: Array<keyof IJobProviders> = ['executor', 'reviewer', 'qa', 'audit', 'slicer', 'analytics'];
 
 type ConfigForm = {
@@ -208,16 +206,7 @@ const Settings: React.FC = () => {
   const [scheduleMode, setScheduleMode] = React.useState<'template' | 'custom'>('template');
   const [selectedTemplateId, setSelectedTemplateId] = React.useState<string>('always-on');
   const [activeSettingsTab, setActiveSettingsTab] = React.useState<string>('general');
-
-  // Preset modal state
-  const [presetModalOpen, setPresetModalOpen] = React.useState(false);
-  const [editingPresetId, setEditingPresetId] = React.useState<string | null>(null);
-  const [editingPreset, setEditingPreset] = React.useState<IProviderPreset | null>(null);
-  const [deleteWarning, setDeleteWarning] = React.useState<{
-    presetId: string;
-    presetName: string;
-    references: string[];
-  } | null>(null);
+  const [highlightedSection, setHighlightedSection] = React.useState<string | null>(null);
 
   const {
     data: config,
@@ -231,6 +220,23 @@ const Settings: React.FC = () => {
     refetch: refetchDoctor,
   } = useApi(fetchDoctor, [selectedProjectId], { enabled: !globalModeLoading });
   const doctorChecks = doctorChecksData ?? [];
+
+  const updateField = <K extends keyof ConfigForm>(key: K, value: ConfigForm[K]) => {
+    setForm((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      return { ...prev, [key]: value };
+    });
+  };
+
+  // Preset management hook
+  const presetManagement = usePresetManagement(
+    form?.providerPresets ?? {},
+    form?.provider ?? 'claude',
+    form?.jobProviders ?? {},
+    updateField,
+  );
 
   React.useEffect(() => {
     fetchAllConfigs().then(setAllProjectConfigs).catch(console.error);
@@ -298,6 +304,14 @@ const Settings: React.FC = () => {
     }
   }, [form?.jobProviders]);
 
+  // Clear highlight after timeout
+  React.useEffect(() => {
+    if (highlightedSection) {
+      const timer = setTimeout(() => setHighlightedSection(null), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightedSection]);
+
   const handleEditJob = (projectId: string, jobType: string) => {
     if (projectId === projectName || projectId === 'current') {
       const jobsTabTypes = ['qa', 'audit', 'slicer', 'analytics'];
@@ -307,11 +321,7 @@ const Settings: React.FC = () => {
           const el = document.getElementById(`job-section-${jobType}`);
           if (el) {
             el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            el.classList.add('ring-2', 'ring-indigo-500', 'ring-offset-2', 'ring-offset-slate-900', 'rounded-lg');
-            setTimeout(
-              () => el.classList.remove('ring-2', 'ring-indigo-500', 'ring-offset-2', 'ring-offset-slate-900'),
-              2000,
-            );
+            setHighlightedSection(`job-section-${jobType}`);
           }
         }, 50);
         return;
@@ -327,14 +337,11 @@ const Settings: React.FC = () => {
           executor: 'job-schedule-executor',
           reviewer: 'job-schedule-reviewer',
         };
-        const el = document.getElementById(idMap[jobType] || '');
+        const sectionId = idMap[jobType] || '';
+        const el = document.getElementById(sectionId);
         if (el) {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.classList.add('ring-2', 'ring-indigo-500', 'ring-offset-2', 'ring-offset-slate-900', 'rounded-lg');
-          setTimeout(
-            () => el.classList.remove('ring-2', 'ring-indigo-500', 'ring-offset-2', 'ring-offset-slate-900'),
-            2000,
-          );
+          setHighlightedSection(sectionId);
         }
       }, 50);
     } else {
@@ -344,15 +351,6 @@ const Settings: React.FC = () => {
         type: 'info',
       });
     }
-  };
-
-  const updateField = <K extends keyof ConfigForm>(key: K, value: ConfigForm[K]) => {
-    setForm((prev) => {
-      if (!prev) {
-        return prev;
-      }
-      return { ...prev, [key]: value };
-    });
   };
 
   const switchToTemplateMode = () => {
@@ -618,231 +616,6 @@ const Settings: React.FC = () => {
     }
   };
 
-  // Get all available presets (built-in + custom)
-  const getAllPresets = (): Record<string, IProviderPreset> => {
-    const builtIn: Record<string, IProviderPreset> = {
-      claude: {
-        name: 'Claude',
-        command: 'claude',
-        promptFlag: '-p',
-        autoApproveFlag: '--dangerously-skip-permissions',
-      },
-      'claude-sonnet-4-6': {
-        name: 'Claude Sonnet 4.6',
-        command: 'claude',
-        promptFlag: '-p',
-        autoApproveFlag: '--dangerously-skip-permissions',
-        modelFlag: '--model',
-        model: 'claude-sonnet-4-6',
-      },
-      'claude-opus-4-6': {
-        name: 'Claude Opus 4.6',
-        command: 'claude',
-        promptFlag: '-p',
-        autoApproveFlag: '--dangerously-skip-permissions',
-        modelFlag: '--model',
-        model: 'claude-opus-4-6',
-      },
-      codex: { name: 'Codex', command: 'codex', subcommand: 'exec', autoApproveFlag: '--yolo', workdirFlag: '-C' },
-      'glm-47': {
-        name: 'GLM-4.7',
-        command: 'claude',
-        promptFlag: '-p',
-        autoApproveFlag: '--dangerously-skip-permissions',
-        modelFlag: '--model',
-        model: 'glm-4.7',
-        envVars: {
-          ANTHROPIC_BASE_URL: 'https://api.z.ai/api/anthropic',
-          API_TIMEOUT_MS: '3000000',
-          ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-4.7',
-          ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-4.7',
-        },
-      },
-      'glm-5': {
-        name: 'GLM-5',
-        command: 'claude',
-        promptFlag: '-p',
-        autoApproveFlag: '--dangerously-skip-permissions',
-        modelFlag: '--model',
-        model: 'glm-5',
-        envVars: {
-          ANTHROPIC_BASE_URL: 'https://api.z.ai/api/anthropic',
-          API_TIMEOUT_MS: '3000000',
-          ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-5',
-          ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-5',
-        },
-      },
-    };
-    return { ...builtIn, ...form?.providerPresets };
-  };
-
-  // Get preset options for select dropdowns (includes built-ins)
-  const getPresetOptions = (_customPresets: Record<string, IProviderPreset>): Array<{ label: string; value: string }> => {
-    const allPresets = getAllPresets();
-    return Object.entries(allPresets).map(([id, preset]) => ({
-      label: preset.name,
-      value: id,
-    }));
-  };
-
-  // Check if a preset is referenced by any job assignment
-  const getPresetReferences = (presetId: string, formData: ConfigForm): string[] => {
-    const references: string[] = [];
-
-    // Check global provider
-    if (formData.provider === presetId) {
-      references.push('Global Provider');
-    }
-
-    // Check job providers
-    const jobLabels: Record<string, string> = {
-      executor: 'Executor',
-      reviewer: 'Reviewer',
-      qa: 'QA',
-      audit: 'Audit',
-      slicer: 'Planner',
-      analytics: 'Analytics',
-    };
-
-    for (const [jobType, provider] of Object.entries(formData.jobProviders)) {
-      if (provider === presetId) {
-        references.push(jobLabels[jobType] ?? jobType);
-      }
-    }
-
-    return references;
-  };
-
-  // Open preset modal for adding new preset
-  const handleAddPreset = () => {
-    setEditingPresetId(null);
-    setEditingPreset(null);
-    setPresetModalOpen(true);
-  };
-
-  // Open preset modal for editing existing preset
-  const handleEditPreset = (presetId: string) => {
-    const allPresets = getAllPresets();
-    const preset = allPresets[presetId];
-    if (preset) {
-      setEditingPresetId(presetId);
-      setEditingPreset(preset);
-      setPresetModalOpen(true);
-    }
-  };
-
-  // Save preset (add or update) — immediately persists to server
-  const handleSavePreset = async (presetId: string, preset: IProviderPreset) => {
-    if (!form) return;
-
-    const isNew = !editingPresetId;
-    const updatedPresets = { ...form.providerPresets, [presetId]: preset };
-    updateField('providerPresets', updatedPresets);
-
-    try {
-      await updateConfig({ providerPresets: { [presetId]: preset } });
-      addToast({
-        title: isNew ? 'Preset Added' : 'Preset Updated',
-        message: isNew
-          ? `${preset.name} has been added. You can now assign it to jobs.`
-          : `${preset.name} has been saved.`,
-        type: 'success',
-      });
-    } catch (err) {
-      addToast({
-        title: 'Save Failed',
-        message: err instanceof Error ? err.message : 'Failed to save preset',
-        type: 'error',
-      });
-      // Revert local state on failure
-      updateField('providerPresets', form.providerPresets);
-    }
-  };
-
-  // Delete preset with protection check
-  const handleDeletePreset = (presetId: string) => {
-    if (!form) return;
-
-    // Prevent deletion of built-in presets
-    if (BUILT_IN_PRESET_IDS.includes(presetId)) {
-      addToast({
-        title: 'Cannot Delete',
-        message: 'Built-in presets cannot be deleted.',
-        type: 'error',
-      });
-      return;
-    }
-
-    // Check if preset is in use
-    const references = getPresetReferences(presetId, form);
-    if (references.length > 0) {
-      setDeleteWarning({
-        presetId,
-        presetName: getAllPresets()[presetId]?.name ?? presetId,
-        references,
-      });
-      return;
-    }
-
-    // Safe to delete
-    const updatedPresets = { ...form.providerPresets };
-    delete updatedPresets[presetId];
-    updateField('providerPresets', updatedPresets);
-
-    addToast({
-      title: 'Preset Deleted',
-      message: `${getAllPresets()[presetId]?.name ?? presetId} has been removed.`,
-      type: 'success',
-    });
-  };
-
-  // Reset built-in preset to defaults
-  const handleResetPreset = (presetId: string) => {
-    if (!form) return;
-
-    // Remove any custom override for this preset
-    const updatedPresets = { ...form.providerPresets };
-    delete updatedPresets[presetId];
-    updateField('providerPresets', updatedPresets);
-
-    addToast({
-      title: 'Preset Reset',
-      message: `${presetId} has been reset to built-in defaults.`,
-      type: 'success',
-    });
-  };
-
-  // Confirm deletion despite warnings
-  const handleConfirmDelete = () => {
-    if (!deleteWarning || !form) return;
-
-    const { presetId } = deleteWarning;
-    const updatedPresets = { ...form.providerPresets };
-    delete updatedPresets[presetId];
-    updateField('providerPresets', updatedPresets);
-
-    // Also clear any job assignments that reference this preset
-    const newJobProviders = { ...form.jobProviders };
-    for (const key of Object.keys(newJobProviders)) {
-      if (newJobProviders[key as keyof IJobProviders] === presetId) {
-        delete newJobProviders[key as keyof IJobProviders];
-      }
-    }
-    updateField('jobProviders', newJobProviders);
-
-    // Clear global provider if it was this preset
-    if (form.provider === presetId) {
-      updateField('provider', 'claude');
-    }
-
-    setDeleteWarning(null);
-    addToast({
-      title: 'Preset Deleted',
-      message: `${deleteWarning.presetName} has been removed and all references cleared.`,
-      type: 'success',
-    });
-  };
-
   if (configLoading || !form) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -861,6 +634,8 @@ const Settings: React.FC = () => {
       </div>
     );
   }
+
+  const highlightClass = 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-slate-900 rounded-lg';
 
   const tabs = [
     {
@@ -884,12 +659,12 @@ const Settings: React.FC = () => {
           form={form}
           updateField={updateField as <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => void}
           jobProvidersChangedRef={jobProvidersChangedRef}
-          getAllPresets={getAllPresets}
-          getPresetOptions={getPresetOptions}
-          handleEditPreset={handleEditPreset}
-          handleDeletePreset={handleDeletePreset}
-          handleResetPreset={handleResetPreset}
-          handleAddPreset={handleAddPreset}
+          getAllPresets={presetManagement.getAllPresets}
+          getPresetOptions={presetManagement.getPresetOptions}
+          handleEditPreset={presetManagement.handleEditPreset}
+          handleDeletePreset={presetManagement.handleDeletePreset}
+          handleResetPreset={presetManagement.handleResetPreset}
+          handleAddPreset={presetManagement.handleAddPreset}
         />
       ),
     },
@@ -908,7 +683,7 @@ const Settings: React.FC = () => {
       id: 'schedules',
       label: 'Schedules',
       content: (
-        <ScheduleConfig
+        <SchedulesTab
           form={{
             cronSchedule: form.cronSchedule,
             reviewerSchedule: form.reviewerSchedule,
@@ -959,146 +734,23 @@ const Settings: React.FC = () => {
       ),
     },
     {
-      id: 'roadmap',
-      label: 'Planner',
-      content: (
-        <Card className="p-6 space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-medium text-slate-200">Planner</h3>
-              <p className="text-sm text-slate-400">
-                Generate one PRD per run using ROADMAP.md first, then audit findings when roadmap work is exhausted
-              </p>
-            </div>
-            <Switch
-              checked={form.roadmapScanner.enabled}
-              aria-label="Enable planner"
-              onChange={handleRoadmapToggle}
-            />
-          </div>
-        </Card>
-      ),
-    },
-    {
       id: 'integrations',
       label: 'Integrations',
       content: (
-        <div className="space-y-6">
-          <Card className="p-6 space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-medium text-slate-200">Board Provider</h3>
-                <p className="text-sm text-slate-400">
-                  Track PRDs and their status using GitHub Projects or local SQLite
-                </p>
-              </div>
-              <Switch
-                checked={form.boardProvider.enabled}
-                onChange={(checked) => updateField('boardProvider', { ...form.boardProvider, enabled: checked })}
-              />
-            </div>
-            {form.boardProvider.enabled && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
-                <Select
-                  label="Board Provider"
-                  value={form.boardProvider.provider}
-                  onChange={(val) =>
-                    updateField('boardProvider', {
-                      ...form.boardProvider,
-                      provider: val as 'github' | 'local',
-                    })
-                  }
-                  options={[
-                    { label: 'GitHub Projects', value: 'github' },
-                    { label: 'Local (SQLite)', value: 'local' },
-                  ]}
-                />
-                {form.boardProvider.provider === 'github' && (
-                  <>
-                    <Input
-                      label="Project Number"
-                      type="number"
-                      value={String(form.boardProvider.projectNumber || '')}
-                      onChange={(e) =>
-                        updateField('boardProvider', {
-                          ...form.boardProvider,
-                          projectNumber: e.target.value ? Number(e.target.value) : undefined,
-                        })
-                      }
-                      helperText="GitHub Projects V2 project number"
-                    />
-                    <Input
-                      label="Repository"
-                      value={form.boardProvider.repo || ''}
-                      onChange={(e) =>
-                        updateField('boardProvider', {
-                          ...form.boardProvider,
-                          repo: e.target.value || undefined,
-                        })
-                      }
-                      helperText="owner/repo (auto-detected if empty)"
-                    />
-                  </>
-                )}
-                {form.boardProvider.provider === 'local' && (
-                  <div className="md:col-span-2">
-                    <p className="text-sm text-slate-400">
-                      Local board uses SQLite for storage — no additional configuration needed.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </Card>
-
-          <Card className="p-6">
-            <h3 className="text-lg font-medium text-slate-200 mb-2">Notification Webhooks</h3>
-            <WebhookEditor
-              notifications={form.notifications}
-              onChange={(notifications) => updateField('notifications', notifications)}
-            />
-          </Card>
-        </div>
+        <IntegrationsTab
+          form={form}
+          updateField={updateField as <K extends 'boardProvider' | 'notifications'>(key: K, value: ConfigForm[K]) => void}
+        />
       ),
     },
     {
       id: 'advanced',
       label: 'Advanced',
       content: (
-        <Card className="p-6 space-y-6">
-          <h3 className="text-lg font-medium text-slate-200">Advanced Settings</h3>
-          <p className="text-sm text-slate-400">Templates, retry policy, and PRD execution priority</p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Input
-              label="Templates Directory"
-              value={form.templatesDir}
-              onChange={(e) => updateField('templatesDir', e.target.value)}
-              helperText="Directory for custom template overrides"
-            />
-            <Input
-              label="Max Retries"
-              type="number"
-              min="1"
-              value={String(form.maxRetries)}
-              onChange={(e) => {
-                const val = Math.max(1, Number(e.target.value || 1));
-                updateField('maxRetries', val);
-              }}
-              helperText="Retry attempts for rate-limited API calls"
-            />
-          </div>
-
-          <div className="pt-4 border-t border-slate-800 space-y-4">
-            <TagInput
-              label="PRD Priority"
-              value={form.prdPriority}
-              onChange={(priority) => updateField('prdPriority', priority)}
-              placeholder="e.g., feature-x"
-              helpText="PRDs matching these names are executed first"
-            />
-          </div>
-        </Card>
+        <AdvancedTab
+          form={form}
+          updateField={updateField as <K extends 'templatesDir' | 'maxRetries' | 'prdPriority'>(key: K, value: ConfigForm[K]) => void}
+        />
       ),
     },
   ];
@@ -1175,25 +827,23 @@ const Settings: React.FC = () => {
 
       {/* Preset Form Modal */}
       <PresetFormModal
-        isOpen={presetModalOpen}
+        isOpen={presetManagement.presetModalOpen}
         onClose={() => {
-          setPresetModalOpen(false);
-          setEditingPresetId(null);
-          setEditingPreset(null);
+          presetManagement.setPresetModalOpen(false);
         }}
-        onSave={handleSavePreset}
-        presetId={editingPresetId}
-        preset={editingPreset}
-        isBuiltIn={editingPresetId ? BUILT_IN_PRESET_IDS.includes(editingPresetId) : false}
-        existingIds={Object.keys(getAllPresets())}
+        onSave={presetManagement.handleSavePreset}
+        presetId={presetManagement.editingPresetId}
+        preset={presetManagement.editingPreset}
+        isBuiltIn={presetManagement.editingPresetId ? (BUILT_IN_PRESET_IDS as readonly string[]).includes(presetManagement.editingPresetId) : false}
+        existingIds={Object.keys(presetManagement.getAllPresets())}
       />
 
       {/* Delete Warning Modal */}
-      {deleteWarning && (
+      {presetManagement.deleteWarning && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             className="fixed inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={() => setDeleteWarning(null)}
+            onClick={() => presetManagement.setDeleteWarning(null)}
             aria-hidden="true"
           />
           <div className="relative w-full max-w-md transform rounded-xl bg-slate-900 border border-slate-800 shadow-2xl p-6">
@@ -1202,10 +852,10 @@ const Settings: React.FC = () => {
               <h3 className="text-lg font-semibold text-slate-100">Cannot Delete Preset</h3>
             </div>
             <p className="text-sm text-slate-300 mb-4">
-              <strong>{deleteWarning.presetName}</strong> is currently assigned to the following jobs:
+              <strong>{presetManagement.deleteWarning.presetName}</strong> is currently assigned to the following jobs:
             </p>
             <ul className="list-disc list-inside text-sm text-slate-400 mb-4">
-              {deleteWarning.references.map((ref) => (
+              {presetManagement.deleteWarning.references.map((ref) => (
                 <li key={ref}>{ref}</li>
               ))}
             </ul>
@@ -1214,10 +864,10 @@ const Settings: React.FC = () => {
               the preset and clear all references.
             </p>
             <div className="flex justify-end gap-3">
-              <Button variant="ghost" onClick={() => setDeleteWarning(null)}>
+              <Button variant="ghost" onClick={() => presetManagement.setDeleteWarning(null)}>
                 Cancel
               </Button>
-              <Button variant="secondary" onClick={handleConfirmDelete} className="bg-red-600 hover:bg-red-700">
+              <Button variant="secondary" onClick={presetManagement.handleConfirmDelete} className="bg-red-600 hover:bg-red-700">
                 Force Delete
               </Button>
             </div>

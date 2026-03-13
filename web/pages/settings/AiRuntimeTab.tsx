@@ -7,8 +7,7 @@ import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
-
-const BUILT_IN_PRESET_IDS = ['claude', 'claude-sonnet-4-6', 'claude-opus-4-6', 'codex', 'glm-47', 'glm-5'];
+import { BUILT_IN_PRESET_IDS } from '../../constants/presets.js';
 
 interface IConfigFormAiRuntime {
   provider: string;
@@ -88,7 +87,7 @@ const AiRuntimeTab: React.FC<IAiRuntimeTabProps> = ({
 
           {/* Custom presets */}
           {Object.entries(form.providerPresets)
-            .filter(([id]) => !BUILT_IN_PRESET_IDS.includes(id))
+            .filter(([id]) => !(BUILT_IN_PRESET_IDS as readonly string[]).includes(id))
             .map(([presetId, preset]) => (
               <PresetCard
                 key={presetId}

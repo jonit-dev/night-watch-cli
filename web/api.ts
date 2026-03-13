@@ -617,7 +617,6 @@ export function useApi<T>(
     };
     doFetch();
   });
-  refetch.current = refetch.current.bind(refetch);
 
   // Initial fetch effect - shows loading state
   useEffect(() => {

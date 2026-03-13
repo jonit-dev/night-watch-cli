@@ -12,9 +12,12 @@ const apiMocks = vi.hoisted(() => ({
   fetchConfig: vi.fn(),
   fetchDoctor: vi.fn(),
   fetchAllConfigs: vi.fn(),
+  fetchGlobalNotifications: vi.fn(),
   updateConfig: vi.fn(),
   triggerInstallCron: vi.fn(),
   toggleRoadmapScanner: vi.fn(),
+  removeProject: vi.fn(),
+  updateGlobalNotifications: vi.fn(),
   refetchConfig: vi.fn(),
   refetchDoctor: vi.fn(),
 }));
@@ -128,9 +131,12 @@ vi.mock('../../api', () => ({
   fetchConfig: apiMocks.fetchConfig,
   fetchDoctor: apiMocks.fetchDoctor,
   fetchAllConfigs: apiMocks.fetchAllConfigs,
+  fetchGlobalNotifications: apiMocks.fetchGlobalNotifications,
   updateConfig: apiMocks.updateConfig,
   triggerInstallCron: apiMocks.triggerInstallCron,
   toggleRoadmapScanner: apiMocks.toggleRoadmapScanner,
+  removeProject: apiMocks.removeProject,
+  updateGlobalNotifications: apiMocks.updateGlobalNotifications,
   useApi: (fetchFn: unknown) => {
     if (fetchFn === apiMocks.fetchConfig) {
       return {
@@ -174,6 +180,7 @@ describe('Settings schedules mode sync', () => {
     apiMocks.triggerInstallCron.mockResolvedValue({ started: true });
     apiMocks.toggleRoadmapScanner.mockResolvedValue(currentConfig);
     apiMocks.fetchAllConfigs.mockResolvedValue([]);
+    apiMocks.fetchGlobalNotifications.mockResolvedValue({ webhook: null });
   });
 
   it('initializes schedule tab in template mode for a known bundle', async () => {

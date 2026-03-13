@@ -123,6 +123,7 @@ interface IssueDetailPanelProps {
 const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose, onMoved, onClosed }) => {
   const [moving, setMoving] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
   const { addToast } = useStore();
 
   const handleMove = async (column: BoardColumnName) => {
@@ -140,8 +141,8 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose, onM
     }
   };
 
-  const handleClose = async () => {
-    if (!confirm(`Close issue #${issue.number}: "${issue.title}"?`)) return;
+  const doClose = async () => {
+    setConfirmClose(false);
     setClosing(true);
     try {
       await closeBoardIssue(issue.number);
@@ -206,7 +207,7 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose, onM
               </a>
             )}
             <button
-              onClick={handleClose}
+              onClick={() => setConfirmClose(true)}
               disabled={closing}
               className="text-xs px-2.5 py-1 rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-colors disabled:opacity-50"
             >
@@ -214,6 +215,23 @@ const IssueDetailPanel: React.FC<IssueDetailPanelProps> = ({ issue, onClose, onM
             </button>
           </div>
         </div>
+
+        {/* Confirm Close Modal */}
+        {confirmClose && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setConfirmClose(false)} />
+            <div className="relative bg-[#0a0f1e] border border-white/10 rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+              <h3 className="text-sm font-semibold text-slate-100 mb-2">Close issue?</h3>
+              <p className="text-sm text-slate-400 mb-4">
+                Close issue #{issue.number}: &quot;{issue.title}&quot;?
+              </p>
+              <div className="flex justify-end space-x-3">
+                <Button variant="ghost" onClick={() => setConfirmClose(false)}>Cancel</Button>
+                <Button onClick={doClose}>Confirm</Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6">

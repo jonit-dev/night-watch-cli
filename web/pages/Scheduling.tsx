@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Pause,
   Play,
@@ -48,6 +48,21 @@ interface IScheduleEditState {
   scheduleMode: 'template' | 'custom';
   selectedTemplateId: string;
   isDirty: boolean;
+}
+
+interface IAgentInfo {
+  id: string;
+  name: string;
+  description: string;
+  icon: React.ReactNode;
+  enabled: boolean;
+  schedule: string;
+  nextRun: string | null;
+  delayInfo?: {
+    delayMinutes: number;
+    manualDelayMinutes: number;
+    balancedDelayMinutes: number;
+  };
 }
 
 const Scheduling: React.FC = () => {
@@ -438,63 +453,10 @@ const Scheduling: React.FC = () => {
       </div>
     );
   };
-  if (scheduleLoading || configLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-slate-400">Loading scheduling information...</div>
-      </div>
-    );
-  }
-  if (scheduleError || !scheduleInfo || !config) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full space-y-4">
-        <AlertCircle className="h-12 w-12 text-red-400" />
-        <div className="text-slate-300">Failed to load schedule information</div>
-        <div className="text-sm text-slate-500">{scheduleError?.message || 'Unknown error'}</div>
-        <Button onClick={() => { refetchSchedule(); refetchConfig(); }}>Retry</Button>
-      </div>
-    );
-  }
-  const isPaused = scheduleInfo.paused;
-  const statusColor = isPaused ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-green-500/10 text-green-400 border-green-500/20';
-  const statusText = isPaused ? 'Paused' : 'Active';
-  const activeTemplate = resolveActiveTemplate(
-    config.scheduleBundleId,
-    config.cronSchedule,
-    config.reviewerSchedule,
-    config.qa?.schedule || '45 2,14 * * *',
-    config.audit?.schedule || '50 3 * * 1',
-    config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
-  );
-  const formatScheduleLabel = (
-    job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics',
-    configuredCronExpr: string,
-    displayedCronExpr: string,
-  ): string => {
-    if (!activeTemplate || job === 'analytics') {
-      return cronToHuman(displayedCronExpr);
-    }
-    if (!isCronEquivalent(activeTemplate.schedules[job], configuredCronExpr)) {
-      return cronToHuman(displayedCronExpr);
-    }
-    return `${activeTemplate.label} - ${activeTemplate.hints[job]}`;
-  };
-  // Agent definitions
-  interface IAgentInfo {
-    id: string;
-    name: string;
-    description: string;
-    icon: React.ReactNode;
-    enabled: boolean;
-    schedule: string;
-    nextRun: string | null;
-    delayInfo?: {
-      delayMinutes: number;
-      manualDelayMinutes: number;
-      balancedDelayMinutes: number;
-    };
-  }
-  const agents: IAgentInfo[] = [
+  // Agent definitions — must be above early returns (Rules of Hooks)
+  const agents: IAgentInfo[] = useMemo(() => {
+    if (!config || !scheduleInfo) return [];
+    return [
     {
       id: 'executor',
       name: 'Executor',
@@ -555,7 +517,51 @@ const Scheduling: React.FC = () => {
       nextRun: scheduleInfo.analytics?.nextRun,
       delayInfo: scheduleInfo.analytics,
     },
-  ];
+  ]; }, [config, scheduleInfo]);
+
+  if (scheduleLoading || configLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-slate-400">Loading scheduling information...</div>
+      </div>
+    );
+  }
+  if (scheduleError || !scheduleInfo || !config) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full space-y-4">
+        <AlertCircle className="h-12 w-12 text-red-400" />
+        <div className="text-slate-300">Failed to load schedule information</div>
+        <div className="text-sm text-slate-500">{scheduleError?.message || 'Unknown error'}</div>
+        <Button onClick={() => { refetchSchedule(); refetchConfig(); }}>Retry</Button>
+      </div>
+    );
+  }
+
+  const isPaused = scheduleInfo.paused;
+  const statusColor = isPaused ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' : 'bg-green-500/10 text-green-400 border-green-500/20';
+  const statusText = isPaused ? 'Paused' : 'Active';
+  const activeTemplate = resolveActiveTemplate(
+    config.scheduleBundleId,
+    config.cronSchedule,
+    config.reviewerSchedule,
+    config.qa?.schedule || '45 2,14 * * *',
+    config.audit?.schedule || '50 3 * * 1',
+    config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+  );
+  const formatScheduleLabel = (
+    job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics',
+    configuredCronExpr: string,
+    displayedCronExpr: string,
+  ): string => {
+    if (!activeTemplate || job === 'analytics') {
+      return cronToHuman(displayedCronExpr);
+    }
+    if (!isCronEquivalent(activeTemplate.schedules[job], configuredCronExpr)) {
+      return cronToHuman(displayedCronExpr);
+    }
+    return `${activeTemplate.label} - ${activeTemplate.hints[job]}`;
+  };
+
   const tabs = [
     {
       id: 'overview',

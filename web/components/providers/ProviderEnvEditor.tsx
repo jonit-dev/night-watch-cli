@@ -2,6 +2,7 @@ import { Check, Edit2, Eye, EyeOff, Plus, Trash2, X } from 'lucide-react';
 import React from 'react';
 
 import Button from '../ui/Button.js';
+import { useStore } from '../../store/useStore';
 
 // Helper to check if a value looks sensitive
 const isSensitiveKey = (key: string): boolean => {
@@ -47,13 +48,14 @@ const ProviderEnvEditor: React.FC<IProviderEnvEditorProps> = ({ envVars, onChang
   const [newValue, setNewValue] = React.useState('');
   const [editingKey, setEditingKey] = React.useState<string | null>(null);
   const [editingValue, setEditingValue] = React.useState('');
+  const { addToast } = useStore();
 
   const handleAdd = () => {
     if (!newKey.trim()) return;
 
     // Validate key format (uppercase, underscores, numbers)
     if (!/^[A-Z_][A-Z0-9_]*$/.test(newKey)) {
-      alert('Key must be uppercase with underscores (e.g., API_KEY)');
+      addToast({ title: 'Invalid Key Format', message: 'Key must be uppercase with underscores (e.g., API_KEY)', type: 'error' });
       return;
     }
 
