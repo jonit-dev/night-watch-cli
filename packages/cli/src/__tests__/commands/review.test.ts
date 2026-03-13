@@ -310,6 +310,10 @@ describe('review command', () => {
       expect(shouldSendReviewNotification('skip_all_passing')).toBe(false);
     });
 
+    it('should suppress notifications when job is queued', () => {
+      expect(shouldSendReviewNotification('queued')).toBe(false);
+    });
+
     it('should send notifications for actionable outcomes', () => {
       expect(shouldSendReviewNotification('success_reviewed')).toBe(true);
       expect(shouldSendReviewNotification('failure')).toBe(true);

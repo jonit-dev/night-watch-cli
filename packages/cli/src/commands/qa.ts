@@ -46,6 +46,9 @@ export function shouldSendQaNotification(scriptStatus?: string): boolean {
   if (!scriptStatus) {
     return true;
   }
+  if (scriptStatus === 'queued') {
+    return false;
+  }
   return !scriptStatus.startsWith('skip_');
 }
 

@@ -293,6 +293,10 @@ describe('qa command', () => {
       expect(shouldSendQaNotification('skip_all_passing')).toBe(false);
     });
 
+    it('should suppress notifications when job is queued', () => {
+      expect(shouldSendQaNotification('queued')).toBe(false);
+    });
+
     it('should send notifications for actionable outcomes', () => {
       expect(shouldSendQaNotification('success_tested')).toBe(true);
       expect(shouldSendQaNotification('failure')).toBe(true);
