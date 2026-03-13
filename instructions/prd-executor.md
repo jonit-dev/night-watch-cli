@@ -63,16 +63,6 @@ flowchart TD
 - If two phases touch completely separate files → they are independent and CAN run in parallel
 - Database migrations always run first (blocking)
 
-### Migration Step (Pre-execution)
-
-Before launching any agent wave, check for and apply pending migrations:
-
-1. **Scan for new migration files** — list `supabase/migrations/` and identify any `.sql` files not yet applied to the production database.
-2. **Apply them via Supabase MCP** — use the `supabase-migrations` skill or execute the SQL directly through the Supabase Management API (`POST /v1/projects/{ref}/database/query`).
-3. **Verify** — confirm the tables/functions exist in the schema cache before proceeding.
-
-> **Why:** API phases that reference new tables will fail at runtime if migrations haven't been applied. Always apply migrations before code that depends on them goes live.
-
 ### Step 3: Create Task List
 
 Use `TaskCreate` to create one task per phase. Set up dependencies with `addBlockedBy`/`addBlocks`.
@@ -123,15 +113,10 @@ You are executing Phase [N] of a PRD.
 - Tests required
 - Acceptance criteria for this phase
 
-## Project Rules (from CLAUDE.md)
-- Docker-only stack - debug/log only through Docker
-- Never use process.env - use env.ts
-- Keep controllers thin; move logic to services
-- Use interfaces (IName) not type
-- Use constructor DI, not Container.get()
-- Use useLogger() instead of console.*
-- Use HttpStatus and enums, not string literals
-- After changes: yarn verify must pass
+## Project Rules
+- Follow all project conventions from AI assistant documentation files (e.g., CLAUDE.md, AGENTS.md, or similar)
+- Read existing code patterns before writing new code
+- Use the project's established patterns for imports, error handling, and naming
 
 ## Critical Instructions
 1. Read all relevant existing files BEFORE writing any code

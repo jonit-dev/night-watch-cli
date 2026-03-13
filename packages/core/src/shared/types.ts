@@ -44,7 +44,7 @@ export interface IProviderPreset {
 export type MergeMethod = 'squash' | 'merge' | 'rebase';
 
 /** Job types that can have per-job provider configuration */
-export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics';
+export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics' | 'planner';
 
 /** Per-job provider configuration */
 export interface IJobProviders {

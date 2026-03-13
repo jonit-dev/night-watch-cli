@@ -22,6 +22,7 @@ night-watch init --provider codex     # Use codex provider
 - `instructions/pr-reviewer.md` — PR review instructions
 - `instructions/qa.md` — QA instructions
 - `instructions/audit.md` — Audit instructions
+- `instructions/prd-creator.md` — PRD planner instructions
 - `night-watch.config.json` — Configuration file
 
 **Prerequisites:**
@@ -427,6 +428,38 @@ Finds matching PRs by checking for branches matching:
 - `{branchPrefix}{prdName}` (default: `night-watch/01-feature-name`)
 - `feat/{prdName}`
 - `feature/{prdName}`
+
+---
+
+## `night-watch plan`
+
+Plan a feature by running the prd-creator skill against your codebase. The configured AI provider explores the project, asks clarifying questions if needed, and writes a complete PRD file.
+
+```bash
+night-watch plan "Add user authentication with JWT"   # Plan a specific feature
+night-watch plan                                      # Launch provider interactively
+night-watch plan "Dark mode" --provider claude        # Override provider
+night-watch plan "Search" --timeout 3600              # Override max runtime (1 hour)
+night-watch plan "Feature" --dry-run                  # Show what would run
+```
+
+**What it does:**
+
+- Runs the configured AI provider with the `prd-creator` skill as instructions
+- The provider explores the codebase to understand patterns and architecture
+- Creates a structured PRD with phases, tests, and acceptance criteria
+- Writes the PRD to your configured PRD directory (e.g., `docs/PRDs/`)
+
+**Options:**
+
+- `[task]` — Feature/task description to plan (optional — provider runs interactively if omitted)
+- `--dry-run` — Show what would be executed without running
+- `--timeout <seconds>` — Override max runtime (default: 1800s / 30 min)
+- `--provider <string>` — AI provider to use (claude or codex)
+
+**Logs:**
+
+- Output logged to `logs/plan.log`
 
 ---
 

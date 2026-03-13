@@ -39,7 +39,7 @@ export interface IProviderPreset {
 /**
  * Job types that can have per-job provider configuration
  */
-export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics';
+export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics' | 'planner';
 
 /**
  * Per-job provider configuration
@@ -52,6 +52,7 @@ export interface IJobProviders {
   audit?: Provider;
   slicer?: Provider;
   analytics?: Provider;
+  planner?: Provider;
 }
 
 /**

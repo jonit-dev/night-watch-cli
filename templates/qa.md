@@ -98,17 +98,21 @@ Based on this output:
 
 ### Step 5: Run Tests
 
+Use the paths and commands discovered in Step 3. Run tests from the project root using the project's test runner.
+
 **UI Tests:**
 
 ```bash
-npx playwright test tests/e2e/qa/ --reporter=list
+# Use the playwright config and test directory discovered in Step 3
+npx playwright test <discovered-e2e-dir> --reporter=list
 ```
 
-**API Tests:**
+**API/Unit Tests:**
 
 ```bash
-npx vitest run tests/integration/qa/ --reporter=verbose
-# (or equivalent for the project's test runner)
+# Use the test runner and directory discovered in Step 3
+# e.g.: npx vitest run <discovered-test-dir> --reporter=verbose
+#       npx jest <discovered-test-dir> --verbose
 ```
 
 Capture the test output for the report.

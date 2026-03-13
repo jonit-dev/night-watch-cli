@@ -807,6 +807,22 @@ export function initCommand(program: Command): void {
       );
       templateSources.push({ name: 'audit.md', source: auditResult.source });
 
+      // Copy prd-creator.md template
+      const plannerResolution = resolveTemplatePath(
+        'prd-creator.md',
+        customTemplatesDir,
+        TEMPLATES_DIR,
+      );
+      const plannerResult = processTemplate(
+        'prd-creator.md',
+        path.join(instructionsDir, 'prd-creator.md'),
+        replacements,
+        force,
+        plannerResolution.path,
+        plannerResolution.source,
+      );
+      templateSources.push({ name: 'prd-creator.md', source: plannerResult.source });
+
       // Step 9: Create config file
       step(9, totalSteps, 'Creating configuration file...');
       const configPath = path.join(cwd, CONFIG_FILE_NAME);
@@ -914,6 +930,7 @@ export function initCommand(program: Command): void {
       filesTable.push(['', `instructions/pr-reviewer.md (${templateSources[2].source})`]);
       filesTable.push(['', `instructions/qa.md (${templateSources[3].source})`]);
       filesTable.push(['', `instructions/audit.md (${templateSources[4].source})`]);
+      filesTable.push(['', `instructions/prd-creator.md (${templateSources[5].source})`]);
       filesTable.push(['Config File', CONFIG_FILE_NAME]);
       filesTable.push(['Board Setup', boardSetupStatus]);
       filesTable.push(['Global Registry', '~/.night-watch/projects.json']);

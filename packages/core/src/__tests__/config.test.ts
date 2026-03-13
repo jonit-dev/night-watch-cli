@@ -1603,10 +1603,11 @@ describe('config', () => {
           qa: 'codex',
           audit: 'codex',
           slicer: 'codex',
+          planner: 'codex',
         },
       };
 
-      const jobTypes: JobType[] = ['executor', 'reviewer', 'qa', 'audit', 'slicer'];
+      const jobTypes: JobType[] = ['executor', 'reviewer', 'qa', 'audit', 'slicer', 'planner'];
       for (const jobType of jobTypes) {
         expect(resolveJobProvider(config, jobType)).toBe('codex');
       }

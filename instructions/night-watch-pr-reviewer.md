@@ -197,7 +197,7 @@ Parse the review score from the comment body. Look for patterns like:
    <If CI was fixed>### CI Failures Fixed:
    - <job>: <what was wrong and how it was fixed><end>
 
-   \`npm run verify\` passes locally. Ready for re-review.
+   Verification passes locally. Ready for re-review.
 
    Night Watch PR Reviewer"
    ```
