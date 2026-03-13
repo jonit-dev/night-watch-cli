@@ -106,7 +106,7 @@ const Scheduling: React.FC = () => {
     scheduleMode: 'template',
     selectedTemplateId: 'always-on',
     isDirty: false,
-    queueMode: 'conservative',
+    queueMode: 'auto',
     globalMaxConcurrency: 1,
     providerBuckets: [],
   });
@@ -189,7 +189,7 @@ const Scheduling: React.FC = () => {
         scheduleMode: detectedTemplate ? 'template' : 'custom',
         selectedTemplateId: detectedTemplate?.id ?? '',
         isDirty: false,
-        queueMode: config.queue?.mode ?? 'conservative',
+        queueMode: config.queue?.mode ?? 'auto',
         globalMaxConcurrency: config.queue?.maxConcurrency ?? 1,
         providerBuckets: Object.entries(rawBuckets).map(([key, val]) => ({
           key,
