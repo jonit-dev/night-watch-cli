@@ -56,6 +56,8 @@ export function getEventEmoji(event: NotificationEvent): string {
       return '\uD83D\uDCD6';
     case 'review_completed':
       return '\uD83D\uDD0D';
+    case 'review_ready_for_human':
+      return '\u2705';
     case 'rate_limit_fallback':
       return '\u26A0\uFE0F';
     case 'pr_auto_merged':
@@ -82,6 +84,8 @@ export function getEventTitle(event: NotificationEvent): string {
       return 'No Eligible Work';
     case 'review_completed':
       return 'PR Review Completed';
+    case 'review_ready_for_human':
+      return 'PR Ready for Human Review';
     case 'rate_limit_fallback':
       return 'Rate Limit Fallback';
     case 'pr_auto_merged':
@@ -108,6 +112,8 @@ export function getEventColor(event: NotificationEvent): number {
       return 0x95a5a6;
     case 'review_completed':
       return 0x0099ff;
+    case 'review_ready_for_human':
+      return 0x00c853;
     case 'rate_limit_fallback':
       return 0xffa500;
     case 'pr_auto_merged':
@@ -203,6 +209,8 @@ export function formatSlackPayload(ctx: INotificationContext): object {
     color = '#3498db';
   } else if (ctx.event === 'review_completed') {
     color = '#0099ff';
+  } else if (ctx.event === 'review_ready_for_human') {
+    color = '#00c853';
   } else {
     color = '#ff0000';
   }
@@ -300,6 +308,14 @@ export function formatTelegramPayload(ctx: INotificationContext): {
       } else {
         lines.push(escapeMarkdownV2(`🔁 Attempts: ${ctx.attempts}`));
       }
+    }
+
+    if (ctx.event === 'review_ready_for_human') {
+      lines.push('');
+      if (ctx.finalScore !== undefined) {
+        lines.push(escapeMarkdownV2(`🏆 Score: ${ctx.finalScore}/100 — no changes needed`));
+      }
+      lines.push(escapeMarkdownV2('👤 Action required: human review & merge'));
     }
 
     if (ctx.event === 'qa_completed' && (ctx.qaScreenshotUrls?.length ?? 0) > 0) {

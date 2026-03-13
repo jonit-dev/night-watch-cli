@@ -135,6 +135,7 @@ emit_final_status() {
   local auto_merge_failed="${4:-}"
   local attempts="${5:-1}"
   local final_score="${6:-}"
+  local no_changes="${7:-0}"
   local details=""
   local prs_summary=""
   local auto_merged_summary=""
@@ -157,15 +158,26 @@ emit_final_status() {
     if [ -n "${final_score}" ]; then
       details="${details}|final_score=${final_score}"
     fi
+    if [ "${no_changes}" = "1" ]; then
+      details="${details}|no_changes_needed=1"
+    fi
     log "DONE: PR reviewer completed successfully"
     if [ "${WORKER_MODE}" != "1" ]; then
-      send_telegram_status_message "🔍 Night Watch Reviewer: completed" "Project: ${PROJECT_NAME}
+      if [ "${no_changes}" = "1" ]; then
+        send_telegram_status_message "✅ Night Watch Reviewer: ready for human review" "Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Processed PRs: ${prs_summary}
+${final_score_line}
+No automated fixes needed — ready for human review & merge."
+      else
+        send_telegram_status_message "🔍 Night Watch Reviewer: completed" "Project: ${PROJECT_NAME}
 Provider (model): ${PROVIDER_MODEL_DISPLAY}
 Processed PRs: ${prs_summary}
 Attempts: ${attempts}
 ${final_score_line}
 Auto-merged PRs: ${auto_merged_summary}
 Auto-merge failed: ${auto_merge_failed_summary}"
+      fi
     fi
     emit_result "success_reviewed" "${details}"
   elif [ "${exit_code}" -eq 124 ]; then
@@ -969,6 +981,7 @@ REVIEWER_PROMPT_BASE="${REVIEWER_PROMPT_BASE}"$'\n\n'"## Reviewer Attribution (R
 EXIT_CODE=0
 ATTEMPTS_MADE=1
 FINAL_SCORE=""
+NO_CHANGES_NEEDED=0
 TARGET_SCOPE_PROMPT=""
 if [ -n "${TARGET_PR}" ]; then
   TARGET_SCOPE_PROMPT=$'\n\n## Target Scope\n- Only process PR #'"${TARGET_PR}"$'.\n- Ignore all other PRs.\n- If this PR no longer needs work, stop immediately.\n'
@@ -1013,6 +1026,12 @@ if [ -n "${TARGET_PR}" ]; then
   TOTAL_ATTEMPTS=$((REVIEWER_MAX_RETRIES + 1))
 fi
 RUN_STARTED_AT=$(date +%s)
+
+# Capture current HEAD of PR branch so we can detect if the reviewer pushed any commits.
+PR_BRANCH_HEAD_BEFORE=""
+if [ -n "${TARGET_PR}" ]; then
+  PR_BRANCH_HEAD_BEFORE=$(gh pr view "${TARGET_PR}" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")
+fi
 
 remaining_runtime_budget() {
   local now_ts
@@ -1194,6 +1213,16 @@ done
 
 cleanup_reviewer_worktrees "${REVIEW_WORKTREE_BASENAME}"
 
+# ── Detect no-changes run ────────────────────────────────────────────────────────
+# If the run succeeded and the PR branch HEAD is unchanged, the reviewer made no commits.
+if [ "${EXIT_CODE}" -eq 0 ] && [ -n "${TARGET_PR}" ] && [ -n "${PR_BRANCH_HEAD_BEFORE}" ]; then
+  PR_BRANCH_HEAD_AFTER=$(gh pr view "${TARGET_PR}" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")
+  if [ -n "${PR_BRANCH_HEAD_AFTER}" ] && [ "${PR_BRANCH_HEAD_BEFORE}" = "${PR_BRANCH_HEAD_AFTER}" ]; then
+    NO_CHANGES_NEEDED=1
+    log "INFO: PR #${TARGET_PR} — reviewer made no commits; marking as ready for human review"
+  fi
+fi
+
 # ── Auto-merge eligible PRs ─────────────────────────────────────────────────────
 # After the reviewer completes, check for PRs that are merge-ready and queue them
 # for auto-merge if enabled. Uses gh pr merge --auto to respect GitHub branch protection.
@@ -1268,4 +1297,4 @@ fi
 
 REVIEWER_TOTAL_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
 log "OUTCOME: exit_code=${EXIT_CODE} total_elapsed=${REVIEWER_TOTAL_ELAPSED}s prs=${PRS_NEEDING_WORK_CSV:-none} attempts=${ATTEMPTS_MADE}"
-emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${ATTEMPTS_MADE}" "${FINAL_SCORE}"
+emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${ATTEMPTS_MADE}" "${FINAL_SCORE}" "${NO_CHANGES_NEEDED}"

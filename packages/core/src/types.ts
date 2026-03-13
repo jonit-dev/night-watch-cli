@@ -301,6 +301,7 @@ export type NotificationEvent =
   | 'run_timeout'
   | 'run_no_work'
   | 'review_completed'
+  | 'review_ready_for_human'
   | 'pr_auto_merged'
   | 'rate_limit_fallback'
   | 'qa_completed';
