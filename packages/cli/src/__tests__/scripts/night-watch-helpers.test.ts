@@ -9,16 +9,24 @@ const repoRoot = path.resolve(__dirname, '../../../../../');
 const helpersScript = path.join(repoRoot, 'scripts', 'night-watch-helpers.sh');
 
 describe('night-watch helpers', () => {
-  it('uses NIGHT_WATCH_HOME when resolving the queue lock path', () => {
-    const result = spawnSync('bash', ['-lc', `source "${helpersScript}"; get_queue_lock_path`], {
-      encoding: 'utf-8',
-      env: {
-        ...process.env,
-        NIGHT_WATCH_HOME: '/tmp/night-watch-custom-home',
+  it('resolve_provider_key falls back to empty string when CLI is not found', () => {
+    // Call resolve_provider_key with a non-existent project dir; the helper
+    // falls back gracefully to an empty string when the CLI binary is missing.
+    const result = spawnSync(
+      'bash',
+      ['-lc', `source "${helpersScript}"; resolve_provider_key /tmp/no-such-project executor`],
+      {
+        encoding: 'utf-8',
+        env: {
+          ...process.env,
+          // Use a fake PATH so no real CLI binary is found
+          PATH: '/usr/bin:/bin',
+        },
       },
-    });
+    );
 
+    // The function always exits 0 (fallback) and writes an empty string
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe('/tmp/night-watch-custom-home/queue.lock');
+    expect(result.stdout.trim()).toBe('');
   });
 });

@@ -17,10 +17,12 @@ PROJECT_DIR="${1:?Usage: $0 /path/to/project}"
 PROJECT_NAME=$(basename "${PROJECT_DIR}")
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/plan.log"
+LOCK_FILE=""
 MAX_RUNTIME="${NW_PLAN_MAX_RUNTIME:-1800}"
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 PROVIDER_LABEL="${NW_PROVIDER_LABEL:-}"
+SCRIPT_TYPE="planner"
 SCRIPT_START_TIME=$(date +%s)
 
 mkdir -p "${LOG_DIR}"
@@ -53,6 +55,8 @@ if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
   exit 1
 fi
 
+PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
+LOCK_FILE="/tmp/night-watch-plan-${PROJECT_RUNTIME_KEY}.lock"
 PROVIDER_MODEL_DISPLAY=$(resolve_provider_model_display "${PROVIDER_CMD}" "${PROVIDER_LABEL}")
 PRD_DIR="${NW_PRD_DIR:-docs/PRDs}"
 PLAN_TASK="${NW_PLAN_TASK:-}"
@@ -61,6 +65,25 @@ rotate_log
 log_separator
 log "RUN-START: planner invoked project=${PROJECT_DIR} provider=${PROVIDER_CMD} dry_run=${NW_DRY_RUN:-0}"
 log "CONFIG: max_runtime=${MAX_RUNTIME}s prd_dir=${PRD_DIR}"
+
+if ! acquire_lock "${LOCK_FILE}"; then
+  exit 0
+fi
+# ── Global Job Queue Gate ────────────────────────────────────────────────────
+# Atomically claim a DB slot or enqueue for later dispatch — no flock needed.
+if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
+  if [ "${NW_QUEUE_DISPATCHED:-0}" = "1" ]; then
+    arm_global_queue_cleanup
+  else
+    claim_or_enqueue "${SCRIPT_TYPE}" "${PROJECT_DIR}"
+  fi
+fi
+# ──────────────────────────────────────────────────────────────────────────────
+cleanup_on_exit() {
+  rm -f "${LOCK_FILE}"
+}
+
+trap cleanup_on_exit EXIT
 
 # Dry-run mode
 if [ "${NW_DRY_RUN:-0}" = "1" ]; then

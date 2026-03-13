@@ -14,10 +14,12 @@ import type {
     INightWatchConfig,
     INotificationConfig,
     IPrdInfo,
+    IProviderBucketConfig,
     IProviderPreset,
     IPrInfo,
     IProcessInfo,
     IQaConfig,
+    IQueueConfig,
     IRoadmapItem,
     IRoadmapScannerConfig,
     IRoadmapStatus,
@@ -25,6 +27,7 @@ import type {
     IWebhookConfig,
     MergeMethod,
     QaArtifacts,
+    QueueMode,
 } from '@shared/types';
 import { DependencyList, useEffect, useRef, useState } from 'react';
 import { getWebJobDef } from './utils/jobs';
@@ -32,7 +35,9 @@ import { getWebJobDef } from './utils/jobs';
 // Re-export shared types so consumers can import from either place
 export type {
     ClaudeModel, IAnalyticsConfig, IAuditConfig, IBoardProviderConfig, IJobProviders, ILogInfo, INightWatchConfig,
-    INotificationConfig, IPrdInfo, IProviderPreset, IPrInfo, IProcessInfo, IQaConfig, IRoadmapItem, IRoadmapScannerConfig, IRoadmapStatus, IStatusSnapshot, IWebhookConfig, MergeMethod, QaArtifacts
+    INotificationConfig, IPrdInfo, IProviderBucketConfig, IProviderPreset, IPrInfo, IProcessInfo, IQaConfig,
+    IQueueConfig, IRoadmapItem, IRoadmapScannerConfig, IRoadmapStatus, IStatusSnapshot, IWebhookConfig,
+    MergeMethod, QaArtifacts, QueueMode
 };
 
 export type PrdWithContent = IPrdInfo & { content: string };

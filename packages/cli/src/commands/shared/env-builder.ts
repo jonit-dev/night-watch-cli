@@ -13,8 +13,9 @@ import {
   loadConfig,
   resolveJobProvider,
   resolvePreset,
+  resolveProviderBucketKey,
 } from '@night-watch/core';
-import type { JobType } from '@night-watch/core';
+import type { JobType, Provider } from '@night-watch/core';
 
 /**
  * Derive a human-friendly provider label for display in PR bodies, comments, and commits.
@@ -82,6 +83,15 @@ export function buildBaseEnvVars(
 
   // Human-friendly provider label for attribution in PRs, comments, commits
   env.NW_PROVIDER_LABEL = deriveProviderLabel(config, preset);
+
+  // Provider bucket key for per-bucket concurrency tracking
+  // Build the effective providerEnv for bucket key resolution:
+  // start with config.providerEnv (backward compat) then overlay preset.envVars
+  const effectiveProviderEnv: Record<string, string> = {
+    ...(config.providerEnv ?? {}),
+    ...(preset.envVars ?? {}),
+  };
+  env.NW_PROVIDER_KEY = resolveProviderBucketKey(preset.command as Provider, effectiveProviderEnv);
 
   // Default branch (empty = auto-detect in bash script)
   if (config.defaultBranch) {

@@ -201,11 +201,19 @@ export interface INightWatchConfig {
   queue: IQueueConfig;
 }
 
+export type QueueMode = 'conservative' | 'provider-aware';
+
+export interface IProviderBucketConfig {
+  maxConcurrency: number;
+}
+
 export interface IQueueConfig {
   enabled: boolean;
+  mode: QueueMode;
   maxConcurrency: number;
   maxWaitTime: number;
   priority: Record<string, number>;
+  providerBuckets: Record<string, IProviderBucketConfig>;
 }
 
 // ==================== Board Provider Config ====================

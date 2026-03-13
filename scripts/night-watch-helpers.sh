@@ -1029,55 +1029,13 @@ find_eligible_board_issue() {
 
 # ── Global Job Queue Gate ─────────────────────────────────────────────────────
 
-# Get the path to the queue lock file
-get_queue_lock_path() {
-  local queue_home="${NIGHT_WATCH_HOME:-${HOME}/.night-watch}"
-  printf "%s/%s" "${queue_home}" "queue.lock"
-}
-
-# Try to acquire the global queue gate using flock.
-# Uses a shared lock file (~/.night-watch/queue.lock).
-# Returns 0 if acquired (gate is free), 1 if busy.
-# Holds the lock fd open for the caller via GLOBAL_GATE_FD variable.
-acquire_global_gate() {
-  local lock_path
-  lock_path=$(get_queue_lock_path)
-
-  # Ensure the .night-watch directory exists
-  mkdir -p "$(dirname "${lock_path}")"
-
-  # Open the lock file as fd 200
-  exec 200>"${lock_path}"
-
-  # Try non-blocking flock
-  if flock --nonblock 200; then
-    GLOBAL_GATE_FD=200
-    return 0
-  else
-    GLOBAL_GATE_FD=""
-    return 1
-  fi
-}
-
-# Release the global queue gate
-release_global_gate() {
-  if [ -n "${GLOBAL_GATE_FD:-}" ]; then
-    flock --unlock "${GLOBAL_GATE_FD}" 2>/dev/null || true
-    exec 200>&-
-    GLOBAL_GATE_FD=""
-  fi
-}
-
 __night_watch_queue_cleanup() {
   local exit_code="${1:-0}"
-
   if [ "${NW_QUEUE_CLEANUP_ARMED:-0}" = "1" ]; then
     NW_QUEUE_CLEANUP_ARMED=0
     complete_queued_job
     dispatch_next_queued_job
-    release_global_gate
   fi
-
   return "${exit_code}"
 }
 
@@ -1088,6 +1046,35 @@ arm_global_queue_cleanup() {
 
   NW_QUEUE_CLEANUP_ARMED=1
   append_exit_trap "__night_watch_queue_cleanup \$?"
+}
+
+# Atomically claim a queue slot or enqueue for later dispatch.
+# Uses DB transaction (via `queue claim` CLI) for atomicity — no flock needed.
+# Sets NW_QUEUE_ENTRY_ID on success and arms the cleanup trap.
+# Calls enqueue_job and exits 0 if no slot is available.
+claim_or_enqueue() {
+  local script_type="${1:?script_type required}"
+  local project_dir="${2:?project_dir required}"
+  local provider_key
+  provider_key=$(resolve_provider_key "${project_dir}" "${script_type}")
+
+  local cli_bin
+  cli_bin=$(resolve_night_watch_cli) || {
+    log "ERROR: Cannot resolve night-watch CLI for claim"
+    return 1
+  }
+
+  local claim_id
+  if claim_id=$("${cli_bin}" queue claim "${script_type}" "${project_dir}" --provider-key "${provider_key}" 2>/dev/null); then
+    NW_QUEUE_ENTRY_ID="${claim_id}"
+    export NW_QUEUE_ENTRY_ID
+    arm_global_queue_cleanup
+    return 0
+  else
+    enqueue_job "${script_type}" "${project_dir}"
+    emit_result "queued"
+    exit 0
+  fi
 }
 
 # Enqueue the current job to the SQLite queue.
@@ -1115,12 +1102,29 @@ enqueue_job() {
 
   log "QUEUE: Enqueueing ${job_type} for ${project_name} (gate busy)"
 
-  "${cli_bin}" queue enqueue "${job_type}" "${project_dir}" --env "${env_json}" >> "${LOG_FILE:-/dev/null}" 2>&1 || {
+  local provider_key_arg=()
+  if [ -n "${NW_PROVIDER_KEY:-}" ]; then
+    provider_key_arg=(--provider-key "${NW_PROVIDER_KEY}")
+  fi
+
+  "${cli_bin}" queue enqueue "${job_type}" "${project_dir}" --env "${env_json}" "${provider_key_arg[@]}" >> "${LOG_FILE:-/dev/null}" 2>&1 || {
     log "WARN: Failed to enqueue job"
     return 1
   }
 
   return 0
+}
+
+# Resolve the provider bucket key for a given project and job type.
+# Uses the night-watch CLI to compute the canonical bucket key (e.g. claude-native, codex).
+# Prints the key to stdout, or an empty string if it cannot be resolved.
+# Usage: resolve_provider_key <project_dir> <job_type>
+resolve_provider_key() {
+  local project_dir="${1:?project_dir required}"
+  local job_type="${2:?job_type required}"
+  local cli_bin
+  cli_bin=$(resolve_night_watch_cli) || { printf ""; return 0; }
+  "${cli_bin}" queue resolve-key --project "${project_dir}" --job-type "${job_type}" 2>/dev/null || printf ""
 }
 
 # Dispatch the next queued job after the current job completes.
@@ -1141,16 +1145,6 @@ dispatch_next_queued_job() {
 
   # Call CLI to dispatch next job (this handles priority, expiration, and spawning)
   "${cli_bin}" queue dispatch --log "${LOG_FILE:-/dev/null}" 2>/dev/null || true
-}
-
-queue_can_start_now() {
-  local cli_bin
-  cli_bin=$(resolve_night_watch_cli) || {
-    log "WARN: Cannot resolve night-watch CLI for queue slot check"
-    return 0
-  }
-
-  "${cli_bin}" queue can-start >/dev/null 2>&1
 }
 
 complete_queued_job() {

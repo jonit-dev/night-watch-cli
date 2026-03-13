@@ -10,16 +10,20 @@ import {
   Search,
   ClipboardList,
   BarChart2,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
+import Input from '../components/ui/Input';
+import Select from '../components/ui/Select';
 import Switch from '../components/ui/Switch';
 import Tabs from '../components/ui/Tabs';
 import ScheduleConfig from '../components/scheduling/ScheduleConfig.js';
 import type { IScheduleConfigForm } from '../components/scheduling/ScheduleConfig.js';
 import ScheduleTimeline from '../components/scheduling/ScheduleTimeline.js';
 import { useStore } from '../store/useStore';
-import type { INightWatchConfig, IQueueAnalytics, IQueueStatus } from '../api';
+import type { INightWatchConfig, IQueueAnalytics, IQueueStatus, QueueMode } from '../api';
 import {
   fetchScheduleInfo,
   fetchConfig,
@@ -43,11 +47,19 @@ import {
 import type { IScheduleTemplate } from '../utils/cron.js';
 import { getWebJobDef } from '../utils/jobs';
 
+interface IProviderBucketEntry {
+  key: string;
+  maxConcurrency: number;
+}
+
 interface IScheduleEditState {
   form: IScheduleConfigForm;
   scheduleMode: 'template' | 'custom';
   selectedTemplateId: string;
   isDirty: boolean;
+  queueMode: QueueMode;
+  globalMaxConcurrency: number;
+  providerBuckets: IProviderBucketEntry[];
 }
 
 interface IAgentInfo {
@@ -93,7 +105,14 @@ const Scheduling: React.FC = () => {
     scheduleMode: 'template',
     selectedTemplateId: 'always-on',
     isDirty: false,
+    queueMode: 'conservative',
+    globalMaxConcurrency: 1,
+    providerBuckets: [],
   });
+
+  const [newBucketKey, setNewBucketKey] = useState('');
+  const [newBucketConcurrency, setNewBucketConcurrency] = useState('1');
+  const [showAddBucket, setShowAddBucket] = useState(false);
 
   const {
     data: scheduleInfo,
@@ -149,6 +168,7 @@ const Scheduling: React.FC = () => {
         config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
       );
       const detectedTemplate = scheduleMode;
+      const rawBuckets = config.queue?.providerBuckets ?? {};
       setEditState({
         form: {
           cronSchedule: config.cronSchedule || '5 */3 * * *',
@@ -168,6 +188,12 @@ const Scheduling: React.FC = () => {
         scheduleMode: detectedTemplate ? 'template' : 'custom',
         selectedTemplateId: detectedTemplate?.id ?? '',
         isDirty: false,
+        queueMode: config.queue?.mode ?? 'conservative',
+        globalMaxConcurrency: config.queue?.maxConcurrency ?? 1,
+        providerBuckets: Object.entries(rawBuckets).map(([key, val]) => ({
+          key,
+          maxConcurrency: val.maxConcurrency,
+        })),
       });
     }
   }, [config, editState.isDirty]);
@@ -368,6 +394,11 @@ const Scheduling: React.FC = () => {
         queue: {
           ...config.queue,
           enabled: editState.form.globalQueueEnabled ?? true,
+          mode: editState.queueMode,
+          maxConcurrency: editState.globalMaxConcurrency,
+          providerBuckets: Object.fromEntries(
+            editState.providerBuckets.map((b) => [b.key, { maxConcurrency: b.maxConcurrency }]),
+          ),
         },
         executorEnabled: config.executorEnabled,
         reviewerEnabled: config.reviewerEnabled,
@@ -705,6 +736,171 @@ const Scheduling: React.FC = () => {
             onSwitchToCustom={switchToCustomMode}
             onApplyTemplate={applyTemplate}
           />
+
+          <Card className="p-6 space-y-6">
+            <div>
+              <h3 className="text-lg font-medium text-slate-200 mb-1">Provider Buckets</h3>
+              <p className="text-sm text-slate-400">
+                Control how jobs from different AI providers are dispatched concurrently.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Select
+                label="Dispatch Mode"
+                value={editState.queueMode}
+                onChange={(val) => {
+                  setEditState((prev) => ({ ...prev, queueMode: val as QueueMode, isDirty: true }));
+                }}
+                options={[
+                  { label: 'Conservative — one job at a time globally', value: 'conservative' },
+                  { label: 'Provider-aware — per-bucket concurrency', value: 'provider-aware' },
+                ]}
+                helperText="Conservative is the default. Provider-aware allows jobs on different providers to run in parallel."
+              />
+              <Input
+                label="Global Max Concurrency"
+                type="number"
+                min="1"
+                max="20"
+                value={String(editState.globalMaxConcurrency)}
+                onChange={(e) => {
+                  const val = Math.min(20, Math.max(1, Number(e.target.value || 1)));
+                  setEditState((prev) => ({ ...prev, globalMaxConcurrency: val, isDirty: true }));
+                }}
+                helperText="Maximum concurrent jobs across all providers."
+              />
+            </div>
+
+            {editState.queueMode === 'provider-aware' && (
+              <div className="space-y-3 pt-2 border-t border-slate-800">
+                <div className="text-sm font-medium text-slate-300">Configured Buckets</div>
+
+                {editState.providerBuckets.length === 0 && (
+                  <div className="text-sm text-slate-500">
+                    No buckets configured. Add a bucket below to set per-provider concurrency limits.
+                  </div>
+                )}
+
+                {editState.providerBuckets.map((bucket, idx) => {
+                  const inFlight = queueAnalytics?.byProviderBucket?.[bucket.key]?.running ?? 0;
+                  return (
+                    <div
+                      key={bucket.key}
+                      className="flex items-center gap-3 p-3 rounded-lg border border-slate-800 bg-slate-950/50"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-mono text-slate-200 truncate">{bucket.key}</div>
+                        {inFlight > 0 && (
+                          <div className="text-xs text-amber-400 mt-0.5">{inFlight} running</div>
+                        )}
+                      </div>
+                      <div className="w-28 shrink-0">
+                        <Input
+                          type="number"
+                          min="1"
+                          max="10"
+                          value={String(bucket.maxConcurrency)}
+                          aria-label={`Max concurrency for ${bucket.key}`}
+                          onChange={(e) => {
+                            const val = Math.min(10, Math.max(1, Number(e.target.value || 1)));
+                            setEditState((prev) => {
+                              const updated = [...prev.providerBuckets];
+                              updated[idx] = { ...updated[idx], maxConcurrency: val };
+                              return { ...prev, providerBuckets: updated, isDirty: true };
+                            });
+                          }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`Remove bucket ${bucket.key}`}
+                        onClick={() => {
+                          setEditState((prev) => ({
+                            ...prev,
+                            providerBuckets: prev.providerBuckets.filter((_, i) => i !== idx),
+                            isDirty: true,
+                          }));
+                        }}
+                        className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+
+                {showAddBucket ? (
+                  <div className="flex items-end gap-3 p-3 rounded-lg border border-indigo-500/30 bg-indigo-950/20">
+                    <div className="flex-1 min-w-0">
+                      <Input
+                        label="Bucket Key"
+                        placeholder="e.g. claude-native, codex"
+                        value={newBucketKey}
+                        onChange={(e) => setNewBucketKey(e.target.value)}
+                        helperText="Provider bucket key"
+                      />
+                    </div>
+                    <div className="w-28 shrink-0">
+                      <Input
+                        label="Max Concurrency"
+                        type="number"
+                        min="1"
+                        max="10"
+                        value={newBucketConcurrency}
+                        onChange={(e) => setNewBucketConcurrency(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex gap-2 pb-0.5">
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          const trimmedKey = newBucketKey.trim();
+                          if (!trimmedKey) return;
+                          const concurrency = Math.min(10, Math.max(1, Number(newBucketConcurrency || 1)));
+                          setEditState((prev) => ({
+                            ...prev,
+                            providerBuckets: [
+                              ...prev.providerBuckets.filter((b) => b.key !== trimmedKey),
+                              { key: trimmedKey, maxConcurrency: concurrency },
+                            ],
+                            isDirty: true,
+                          }));
+                          setNewBucketKey('');
+                          setNewBucketConcurrency('1');
+                          setShowAddBucket(false);
+                        }}
+                        disabled={!newBucketKey.trim()}
+                      >
+                        Add
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setShowAddBucket(false);
+                          setNewBucketKey('');
+                          setNewBucketConcurrency('1');
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddBucket(true)}
+                    className="flex items-center gap-1.5 text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add Bucket
+                  </button>
+                )}
+              </div>
+            )}
+          </Card>
+
           <div className="flex justify-end pt-4">
             <Button
               variant="ghost"
@@ -718,6 +914,7 @@ const Scheduling: React.FC = () => {
                     config.audit?.schedule || '50 3 * * 1',
                     config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
                   );
+                  const resetBuckets = config.queue?.providerBuckets ?? {};
                   setEditState({
                     form: {
                       cronSchedule: config.cronSchedule || '5 */3 * * *',
@@ -737,7 +934,15 @@ const Scheduling: React.FC = () => {
                     scheduleMode: resetTemplate ? 'template' : 'custom',
                     selectedTemplateId: resetTemplate?.id ?? '',
                     isDirty: false,
+                    queueMode: config.queue?.mode ?? 'conservative',
+                    providerBuckets: Object.entries(resetBuckets).map(([key, val]) => ({
+                      key,
+                      maxConcurrency: val.maxConcurrency,
+                    })),
                   });
+                  setShowAddBucket(false);
+                  setNewBucketKey('');
+                  setNewBucketConcurrency('1');
                 }
               }}
               disabled={!editState.isDirty}

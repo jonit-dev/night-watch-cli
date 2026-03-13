@@ -85,6 +85,7 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     },
     queue: {
       enabled: true,
+      mode: 'conservative' as const,
       maxConcurrency: 1,
       maxWaitTime: 7200,
       priority: {
@@ -94,6 +95,7 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
         qa: 20,
         audit: 10,
       },
+      providerBuckets: {},
     },
     analytics: {
       enabled: true,

@@ -82,9 +82,6 @@ else
   LOCK_FILE="${GLOBAL_LOCK_FILE}"
 fi
 
-# ── Global Job Queue Gate ────────────────────────────────────────────────────
-# Acquire global gate before per-project lock to serialize jobs across projects.
-# When gate is busy, enqueue the job and exit cleanly.
 SCRIPT_TYPE="reviewer"
 
 emit_result() {
@@ -106,24 +103,12 @@ extract_review_score_from_text() {
 }
 
 # ── Global Job Queue Gate ────────────────────────────────────────────────────
-# Acquire global gate before per-project lock to serialize jobs across projects.
-# When gate is busy, enqueue the job and exit cleanly.
+# Atomically claim a DB slot or enqueue for later dispatch — no flock needed.
 if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
   if [ "${NW_QUEUE_DISPATCHED:-0}" = "1" ]; then
     arm_global_queue_cleanup
-  elif acquire_global_gate; then
-    if queue_can_start_now; then
-      arm_global_queue_cleanup
-    else
-      release_global_gate
-      enqueue_job "${SCRIPT_TYPE}" "${PROJECT_DIR}"
-      emit_result "queued"
-      exit 0
-    fi
   else
-    enqueue_job "${SCRIPT_TYPE}" "${PROJECT_DIR}"
-    emit_result "queued"
-    exit 0
+    claim_or_enqueue "${SCRIPT_TYPE}" "${PROJECT_DIR}"
   fi
 fi
 # ──────────────────────────────────────────────────────────────────────────────

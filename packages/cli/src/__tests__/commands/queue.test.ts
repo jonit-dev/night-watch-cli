@@ -25,6 +25,14 @@ vi.mock('@night-watch/core', () => ({
   loadConfig: vi.fn(),
   markJobRunning: vi.fn(),
   removeJob: vi.fn(),
+  resolveJobProvider: vi.fn(() => 'claude'),
+  resolvePreset: vi.fn(() => ({ command: 'claude', envVars: {} })),
+  resolveProviderBucketKey: vi.fn((provider: string, _env: Record<string, string>) =>
+    provider === 'codex' ? 'codex' : 'claude-native',
+  ),
+  canStartJob: vi.fn(),
+  claimJobSlot: vi.fn(),
+  updateJobStatus: vi.fn(),
 }));
 
 vi.mock('@/cli/commands/shared/env-builder.js', () => ({
@@ -33,7 +41,15 @@ vi.mock('@/cli/commands/shared/env-builder.js', () => ({
 
 import { spawn } from 'child_process';
 import { queueCommand } from '@/cli/commands/queue.js';
-import { dispatchNextJob, getScriptPath, loadConfig, markJobRunning } from '@night-watch/core';
+import {
+  dispatchNextJob,
+  getScriptPath,
+  loadConfig,
+  markJobRunning,
+  resolveJobProvider,
+  resolvePreset,
+  resolveProviderBucketKey,
+} from '@night-watch/core';
 import { buildQueuedJobEnv } from '@/cli/commands/shared/env-builder.js';
 
 function buildProgram(): Command {
@@ -163,6 +179,45 @@ describe('queue command', () => {
     // Provider env comes from the queued project's config (via buildQueuedJobEnv), not envJson
     expect(spawnEnv.ANTHROPIC_BASE_URL).toBe('https://project-a-proxy.com');
     expect(spawnEnv.NW_PROVIDER_CMD).toBe('claude');
+  });
+
+  describe('resolve-key', () => {
+    it('should return the bucket key for claude provider', async () => {
+      vi.mocked(loadConfig).mockReturnValue({ provider: 'claude', providerEnv: {} } as never);
+      vi.mocked(resolveJobProvider).mockReturnValue('claude');
+      vi.mocked(resolvePreset).mockReturnValue({ command: 'claude', envVars: {} } as never);
+      vi.mocked(resolveProviderBucketKey).mockReturnValue('claude-native');
+
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+      await runQueue(['resolve-key', '--project', '/projects/foo', '--job-type', 'executor']);
+
+      expect(resolveProviderBucketKey).toHaveBeenCalled();
+      expect(writeSpy).toHaveBeenCalledWith('claude-native\n');
+      expect(exitSpy).toHaveBeenCalledWith(0);
+
+      writeSpy.mockRestore();
+      exitSpy.mockRestore();
+    });
+
+    it('should return codex bucket key for codex provider', async () => {
+      vi.mocked(loadConfig).mockReturnValue({ provider: 'codex', providerEnv: {} } as never);
+      vi.mocked(resolveJobProvider).mockReturnValue('codex');
+      vi.mocked(resolvePreset).mockReturnValue({ command: 'codex', envVars: {} } as never);
+      vi.mocked(resolveProviderBucketKey).mockReturnValue('codex');
+
+      const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+      const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+      await runQueue(['resolve-key', '--project', '/projects/foo', '--job-type', 'executor']);
+
+      expect(writeSpy).toHaveBeenCalledWith('codex\n');
+      expect(exitSpy).toHaveBeenCalledWith(0);
+
+      writeSpy.mockRestore();
+      exitSpy.mockRestore();
+    });
   });
 
   it('dispatch preserves persisted NW queue markers', async () => {

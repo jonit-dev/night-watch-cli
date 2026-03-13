@@ -61,23 +61,13 @@ log "CONFIG: max_runtime=${MAX_RUNTIME}s roadmap_path=${NW_ROADMAP_PATH:-ROADMAP
 if ! acquire_lock "${LOCK_FILE}"; then
   exit 0
 fi
-# ── Global Job Queue Gate ──────────────────────────────────────
+# ── Global Job Queue Gate ────────────────────────────────────────────────────
+# Atomically claim a DB slot or enqueue for later dispatch — no flock needed.
 if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
   if [ "${NW_QUEUE_DISPATCHED:-0}" = "1" ]; then
     arm_global_queue_cleanup
-  elif acquire_global_gate; then
-    if queue_can_start_now; then
-      arm_global_queue_cleanup
-    else
-      release_global_gate
-      enqueue_job "slicer" "${PROJECT_DIR}"
-      emit_result "queued"
-      exit 0
-    fi
   else
-    enqueue_job "slicer" "${PROJECT_DIR}"
-    emit_result "queued"
-    exit 0
+    claim_or_enqueue "slicer" "${PROJECT_DIR}"
   fi
 fi
 # ──────────────────────────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import Database from 'better-sqlite3';
 
 import { runMigrations } from '../../storage/sqlite/migrations.js';
 import {
+  claimJobSlot,
   clearQueue,
   dispatchNextJob,
   enqueueJob,
@@ -45,6 +46,8 @@ function getLockPath(projectPath: string, jobType: JobType): string {
     case 'audit':
       return auditLockPath(projectPath);
     case 'slicer':
+      return plannerLockPath(projectPath);
+    case 'planner':
       return plannerLockPath(projectPath);
   }
 }
@@ -483,5 +486,104 @@ describe('enqueueJob stores providerKey but not pressure fields', () => {
     expect(entry?.providerKey).toBeUndefined();
     expect((entry as Record<string, unknown>)?.['aiPressure']).toBeUndefined();
     expect((entry as Record<string, unknown>)?.['runtimePressure']).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 1: claimJobSlot tests
+// ---------------------------------------------------------------------------
+
+describe('claimJobSlot', () => {
+  const baseConfig = {
+    enabled: true,
+    mode: 'conservative' as const,
+    maxConcurrency: 1,
+    maxWaitTime: 3600,
+    priority: { executor: 50, reviewer: 40, slicer: 30, qa: 20, audit: 10 },
+    providerBuckets: {},
+  };
+
+  it('should insert a running entry when global slot is available', () => {
+    const result = claimJobSlot('/p/a', 'a', 'executor', undefined, baseConfig);
+
+    expect(result.claimed).toBe(true);
+    if (!result.claimed) throw new Error('narrowing');
+
+    expect(result.id).toBeGreaterThan(0);
+
+    const entry = getQueueEntry(result.id);
+    expect(entry).not.toBeNull();
+    expect(entry?.status).toBe('running');
+    expect(entry?.jobType).toBe('executor');
+    expect(entry?.projectName).toBe('a');
+  });
+
+  it('should return { claimed: false } when at global maxConcurrency', () => {
+    // First: claim the only available slot with a live lock so reconcile does not expire it.
+    const projectPath = '/p/a';
+    const first = claimJobSlot(projectPath, 'a', 'executor', undefined, baseConfig);
+    expect(first.claimed).toBe(true);
+
+    // Create a live lock so the running row is not considered stale.
+    if (first.claimed) {
+      createLiveLock(projectPath);
+    }
+
+    // Second claim must be blocked — global maxConcurrency=1 is exhausted.
+    const second = claimJobSlot('/p/b', 'b', 'executor', undefined, baseConfig);
+    expect(second.claimed).toBe(false);
+  });
+
+  it('should return { claimed: false } when bucket is at capacity', () => {
+    const config = {
+      ...baseConfig,
+      maxConcurrency: 2, // global allows 2, but bucket allows only 1
+      providerBuckets: {
+        'claude-native': { maxConcurrency: 1 },
+      },
+    };
+
+    const projectPath = '/p/a';
+    const first = claimJobSlot(projectPath, 'a', 'executor', 'claude-native', config);
+    expect(first.claimed).toBe(true);
+
+    // Keep the row alive so reconcile does not expire it.
+    if (first.claimed) {
+      createLiveLock(projectPath);
+    }
+
+    // Second claim on the same bucket must be blocked.
+    const second = claimJobSlot('/p/b', 'b', 'executor', 'claude-native', config);
+    expect(second.claimed).toBe(false);
+  });
+
+  it('should allow concurrent jobs in different buckets', () => {
+    const config = {
+      ...baseConfig,
+      maxConcurrency: 2,
+      providerBuckets: {
+        'claude-native': { maxConcurrency: 1 },
+        codex: { maxConcurrency: 1 },
+      },
+    };
+
+    const projectPath = '/p/a';
+    const first = claimJobSlot(projectPath, 'a', 'executor', 'claude-native', config);
+    expect(first.claimed).toBe(true);
+
+    if (first.claimed) {
+      createLiveLock(projectPath);
+    }
+
+    // Different bucket — should succeed even though claude-native is occupied.
+    const second = claimJobSlot('/p/b', 'b', 'executor', 'codex', config);
+    expect(second.claimed).toBe(true);
+
+    if (second.claimed) {
+      expect(second.id).not.toBe((first as { claimed: true; id: number }).id);
+      const entry = getQueueEntry(second.id);
+      expect(entry?.status).toBe('running');
+      expect(entry?.providerKey).toBe('codex');
+    }
   });
 });

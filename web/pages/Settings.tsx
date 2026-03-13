@@ -157,6 +157,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   },
   queue: config.queue || {
     enabled: true,
+    mode: 'conservative' as const,
     maxConcurrency: 1,
     maxWaitTime: 7200,
     priority: {
@@ -166,6 +167,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
       qa: 20,
       audit: 10,
     },
+    providerBuckets: {},
   },
 });
 

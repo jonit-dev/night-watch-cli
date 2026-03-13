@@ -322,6 +322,3 @@ export function resolveProviderBucketKey(
     return `claude-proxy:${baseUrl}`;
   }
 }
-
-// Queue lock file path (relative to global config dir)
-export const QUEUE_LOCK_FILE_NAME = 'queue.lock';

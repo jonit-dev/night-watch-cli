@@ -11,7 +11,6 @@ import {
   DEFAULT_QUEUE_MAX_WAIT_TIME,
   DEFAULT_QUEUE_PRIORITY,
   GLOBAL_CONFIG_DIR,
-  QUEUE_LOCK_FILE_NAME,
   STATE_DB_FILE_NAME,
 } from '../constants.js';
 import type {
@@ -47,14 +46,6 @@ let _migrationsApplied = false;
 function getStateDbPath(): string {
   const base = process.env.NIGHT_WATCH_HOME || path.join(os.homedir(), GLOBAL_CONFIG_DIR);
   return path.join(base, STATE_DB_FILE_NAME);
-}
-
-/**
- * Get the path to the queue lock file
- */
-export function getQueueLockPath(): string {
-  const base = process.env.NIGHT_WATCH_HOME || path.join(os.homedir(), GLOBAL_CONFIG_DIR);
-  return path.join(base, QUEUE_LOCK_FILE_NAME);
 }
 
 /**
@@ -700,6 +691,135 @@ export function getQueueEntry(id: number): IQueueEntry | null {
       | Record<string, unknown>
       | undefined;
     return row ? rowToEntry(row) : null;
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Atomically check concurrency limits and, if a slot is available, insert a 'running' entry
+ * directly into the queue (no 'pending' → 'dispatched' → 'running' dance needed).
+ *
+ * The entire check-and-insert is executed inside a single SQLite transaction so no external
+ * locking (flock) is required — WAL mode + busy_timeout handle concurrent writers safely.
+ *
+ * @param projectPath - Absolute path to the project directory
+ * @param projectName - Human-readable project name
+ * @param jobType     - Type of job (executor, reviewer, qa, audit, slicer, …)
+ * @param providerKey - Optional provider bucket key (e.g. 'claude-native', 'codex')
+ * @param config      - Optional queue configuration (maxConcurrency, providerBuckets, …)
+ * @returns `{ claimed: false }` when no slot is available, or `{ claimed: true; id: number }`
+ *          with the newly-inserted queue entry id when a slot was successfully claimed.
+ */
+export function claimJobSlot(
+  projectPath: string,
+  projectName: string,
+  jobType: JobType,
+  providerKey: string | undefined,
+  config?: IQueueConfig,
+): { claimed: false } | { claimed: true; id: number } {
+  const db = openDb();
+  try {
+    const maxConcurrency = config?.maxConcurrency ?? 1;
+    const now = Math.floor(Date.now() / 1000);
+
+    const result = db.transaction((): { claimed: false } | { claimed: true; id: number } => {
+      // 1. Expire time-based stale jobs inside the transaction so the subsequent count is accurate.
+      const maxWaitTime = config?.maxWaitTime ?? DEFAULT_QUEUE_MAX_WAIT_TIME;
+      const cutoff = now - maxWaitTime;
+      db.prepare(
+        `UPDATE job_queue
+         SET status = 'expired', expired_at = ?
+         WHERE (status = 'pending' AND enqueued_at < ?)
+            OR (status IN ('dispatched', 'running') AND dispatched_at < ?)`,
+      ).run(now, cutoff, cutoff);
+
+      // 2. Expire stale running rows whose backing process is no longer alive.
+      const runningRows = db
+        .prepare(`SELECT * FROM job_queue WHERE status = 'running'`)
+        .all() as Array<Record<string, unknown>>;
+
+      for (const row of runningRows) {
+        const entry = rowToEntry(row);
+        const lockInfo = checkLockFile(getLockPathForJob(entry.projectPath, entry.jobType));
+        if (!lockInfo.running) {
+          db.prepare(`UPDATE job_queue SET status = 'expired', expired_at = ? WHERE id = ?`).run(
+            now,
+            entry.id,
+          );
+          logger.warn('claimJobSlot: expired stale running entry', {
+            id: entry.id,
+            jobType: entry.jobType,
+            project: entry.projectName,
+          });
+        }
+      }
+
+      // 3. Check global in-flight count.
+      const globalCount = (
+        db
+          .prepare(
+            `SELECT COUNT(*) as count FROM job_queue WHERE status IN ('running', 'dispatched')`,
+          )
+          .get() as { count: number }
+      ).count;
+
+      if (globalCount >= maxConcurrency) {
+        logger.debug('claimJobSlot: global concurrency limit reached', {
+          globalCount,
+          maxConcurrency,
+        });
+        return { claimed: false };
+      }
+
+      // 4. Check per-bucket concurrency when a providerKey and bucket config are present.
+      if (providerKey) {
+        const bucketConfig = config?.providerBuckets?.[providerKey];
+        if (bucketConfig) {
+          const bucketCount = (
+            db
+              .prepare(
+                `SELECT COUNT(*) as count FROM job_queue
+                 WHERE status IN ('running', 'dispatched') AND provider_key = ?`,
+              )
+              .get(providerKey) as { count: number }
+          ).count;
+
+          if (bucketCount >= bucketConfig.maxConcurrency) {
+            logger.debug('claimJobSlot: bucket concurrency limit reached', {
+              providerKey,
+              bucketCount,
+              bucketMax: bucketConfig.maxConcurrency,
+            });
+            return { claimed: false };
+          }
+        }
+      }
+
+      // 5. Slot available — insert a running entry directly.
+      const priority = getJobPriority(jobType, config);
+      const insertResult = db
+        .prepare(
+          `INSERT INTO job_queue
+             (project_path, project_name, job_type, priority, status, env_json, enqueued_at,
+              dispatched_at, provider_key)
+           VALUES (?, ?, ?, ?, 'running', '{}', ?, ?, ?)`,
+        )
+        .run(projectPath, projectName, jobType, priority, now, now, providerKey ?? null);
+
+      const id = insertResult.lastInsertRowid as number;
+      logger.info('claimJobSlot: slot claimed', {
+        id,
+        jobType,
+        project: projectName,
+        providerKey: providerKey ?? null,
+        globalCount,
+        maxConcurrency,
+      });
+      return { claimed: true, id };
+    })();
+
+    return result;
   } finally {
     db.close();
   }

@@ -12,6 +12,7 @@ import { Command } from 'commander';
 import {
   DEFAULT_QUEUE_MAX_WAIT_TIME,
   canStartJob,
+  claimJobSlot,
   clearQueue,
   dispatchNextJob,
   enqueueJob,
@@ -21,15 +22,18 @@ import {
   loadConfig,
   markJobRunning,
   removeJob,
+  resolveJobProvider,
+  resolvePreset,
+  resolveProviderBucketKey,
   updateJobStatus,
 } from '@night-watch/core';
-import type { IQueueEntry, JobType } from '@night-watch/core';
+import type { IQueueEntry, JobType, Provider } from '@night-watch/core';
 import { createLogger } from '@night-watch/core';
 import { buildQueuedJobEnv } from './shared/env-builder.js';
 
 const logger = createLogger('queue');
 
-const VALID_JOB_TYPES: JobType[] = ['executor', 'reviewer', 'qa', 'audit', 'slicer'];
+const VALID_JOB_TYPES: JobType[] = ['executor', 'reviewer', 'qa', 'audit', 'slicer', 'planner'];
 
 function formatTimestamp(unixTs: number | null): string {
   if (unixTs === null) return '-';
@@ -170,7 +174,8 @@ export function createQueueCommand(): Command {
     .command('enqueue <job-type> <project-dir>')
     .description('Manually enqueue a job')
     .option('--env <json>', 'JSON object of environment variables to store', '{}')
-    .action((jobType: string, projectDir: string, opts: { env?: string }) => {
+    .option('--provider-key <key>', 'Provider bucket key (e.g. claude-native, codex)')
+    .action((jobType: string, projectDir: string, opts: { env?: string; providerKey?: string }) => {
       if (!VALID_JOB_TYPES.includes(jobType as JobType)) {
         console.error(chalk.red(`Invalid job type: ${jobType}`));
         console.error(chalk.dim(`Valid types: ${VALID_JOB_TYPES.join(', ')}`));
@@ -189,9 +194,39 @@ export function createQueueCommand(): Command {
 
       const projectName = path.basename(projectDir);
       const queueConfig = loadConfig(projectDir).queue;
-      const id = enqueueJob(projectDir, projectName, jobType as JobType, envVars, queueConfig);
+      const id = enqueueJob(
+        projectDir,
+        projectName,
+        jobType as JobType,
+        envVars,
+        queueConfig,
+        opts.providerKey,
+      );
 
       console.log(chalk.green(`Enqueued ${jobType} for ${projectName} (ID: ${id})`));
+    });
+
+  // night-watch queue resolve-key
+  queue
+    .command('resolve-key')
+    .description('Resolve the provider bucket key for a given project and job type')
+    .requiredOption('--project <dir>', 'Project directory')
+    .requiredOption('--job-type <type>', 'Job type (executor, reviewer, qa, audit, slicer)')
+    .action((opts: { project: string; jobType: string }) => {
+      try {
+        const config = loadConfig(opts.project);
+        const presetId = resolveJobProvider(config, opts.jobType as JobType);
+        const preset = resolvePreset(config, presetId);
+        const effectiveProviderEnv: Record<string, string> = {
+          ...(config.providerEnv ?? {}),
+          ...(preset.envVars ?? {}),
+        };
+        const key = resolveProviderBucketKey(preset.command as Provider, effectiveProviderEnv);
+        process.stdout.write(`${key}\n`);
+      } catch {
+        process.stdout.write('');
+      }
+      process.exit(0);
     });
 
   // night-watch queue dispatch
@@ -266,6 +301,39 @@ export function createQueueCommand(): Command {
       }
     });
 
+  // night-watch queue claim
+  queue
+    .command('claim <job-type> <project-dir>')
+    .description(
+      'Atomically claim a concurrency slot and insert a running entry (used by cron scripts)',
+    )
+    .option('--provider-key <key>', 'Provider bucket key (e.g. claude-native, codex)')
+    .action((jobType: string, projectDir: string, opts: { providerKey?: string }) => {
+      if (!VALID_JOB_TYPES.includes(jobType as JobType)) {
+        console.error(`Invalid job type: ${jobType}`);
+        console.error(`Valid types: ${VALID_JOB_TYPES.join(', ')}`);
+        process.exit(1);
+      }
+
+      const queueConfig = loadConfig(projectDir).queue;
+      const projectName = path.basename(projectDir);
+      const result = claimJobSlot(
+        projectDir,
+        projectName,
+        jobType as JobType,
+        opts.providerKey,
+        queueConfig,
+      );
+
+      if (!result.claimed) {
+        process.exit(1);
+      }
+
+      // Print only the numeric ID so bash callers can capture it cleanly.
+      process.stdout.write(`${result.id}\n`);
+      process.exit(0);
+    });
+
   queue
     .command('complete <id>')
     .description('Remove a completed queue entry (used by cron scripts)')
@@ -320,11 +388,7 @@ export function createQueueCommand(): Command {
  * Provider identity (ANTHROPIC_BASE_URL, API keys, model ids) is always recomputed
  * from the queued job's own project config via buildQueuedJobEnv.
  */
-const QUEUE_MARKER_KEYS = new Set([
-  'NW_DRY_RUN',
-  'NW_CRON_TRIGGER',
-  'NW_DEFAULT_BRANCH',
-]);
+const QUEUE_MARKER_KEYS = new Set(['NW_DRY_RUN', 'NW_CRON_TRIGGER', 'NW_DEFAULT_BRANCH']);
 
 /**
  * Filter envJson to only pass through legitimate queue/runtime markers.
@@ -352,6 +416,8 @@ function getScriptNameForJobType(jobType: JobType): string | null {
       return 'night-watch-audit-cron.sh';
     case 'slicer':
       return 'night-watch-slicer-cron.sh';
+    case 'planner':
+      return 'night-watch-plan-cron.sh';
     default:
       return null;
   }

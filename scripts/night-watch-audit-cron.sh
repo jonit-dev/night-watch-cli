@@ -59,24 +59,13 @@ LOCK_FILE="/tmp/night-watch-audit-${PROJECT_RUNTIME_KEY}.lock"
 AUDIT_PROMPT_TEMPLATE="${SCRIPT_DIR}/../templates/audit.md"
 PROVIDER_MODEL_DISPLAY=$(resolve_provider_model_display "${PROVIDER_CMD}" "${PROVIDER_LABEL}")
 
-# Global gate: if queue is enabled and we can't acquire the global lock,
-# enqueue the job and exit. The dispatcher will run it later.
+# ── Global Job Queue Gate ────────────────────────────────────────────────────
+# Atomically claim a DB slot or enqueue for later dispatch — no flock needed.
 if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
   if [ "${NW_QUEUE_DISPATCHED:-0}" = "1" ]; then
     arm_global_queue_cleanup
-  elif acquire_global_gate; then
-    if queue_can_start_now; then
-      arm_global_queue_cleanup
-    else
-      release_global_gate
-      enqueue_job "${SCRIPT_TYPE}" "${PROJECT_DIR}"
-      emit_result "queued"
-      exit 0
-    fi
   else
-    enqueue_job "${SCRIPT_TYPE}" "${PROJECT_DIR}"
-    emit_result "queued"
-    exit 0
+    claim_or_enqueue "${SCRIPT_TYPE}" "${PROJECT_DIR}"
   fi
 fi
 
