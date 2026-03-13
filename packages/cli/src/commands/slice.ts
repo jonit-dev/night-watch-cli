@@ -360,15 +360,6 @@ export function sliceCommand(program: Command): void {
 
       try {
         await maybeApplyCronSchedulingDelay(config, 'slicer', projectDir);
-        if (!options.dryRun) {
-          await sendNotifications(config, {
-            event: 'run_started',
-            projectName: path.basename(projectDir),
-            exitCode: 0,
-            provider: config.provider,
-          });
-        }
-
         const result: ISliceResult = await sliceNextItem(projectDir, config);
 
         let issueSummary = '';
