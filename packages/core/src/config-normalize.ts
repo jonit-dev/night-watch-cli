@@ -287,7 +287,9 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
   if (rawQueue) {
     const rawMode = readString(rawQueue.mode);
     const mode: QueueMode =
-      rawMode === 'conservative' || rawMode === 'provider-aware' ? rawMode : DEFAULT_QUEUE.mode;
+      rawMode === 'conservative' || rawMode === 'provider-aware' || rawMode === 'auto'
+        ? rawMode
+        : DEFAULT_QUEUE.mode;
 
     const queue: IQueueConfig = {
       enabled: readBoolean(rawQueue.enabled) ?? DEFAULT_QUEUE.enabled,
