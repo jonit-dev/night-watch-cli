@@ -41,37 +41,48 @@ Create `night-watch.config.json` in your project root:
 
 > **Note:** All configuration fields can be customized from the Settings page in the Web UI. You no longer need to edit `night-watch.config.json` directly.
 
-| Field                 | Type         | Default                         | Description                                                     |
-| --------------------- | ------------ | ------------------------------- | --------------------------------------------------------------- |
-| `defaultBranch`       | string       | `""` (auto-detect)              | Default branch name (e.g. `main`)                               |
-| `provider`            | string       | `"claude"`                      | AI provider (`claude` or `codex`)                               |
-| `executorEnabled`     | boolean      | `true`                          | Enable the PRD executor                                         |
-| `reviewerEnabled`     | boolean      | `true`                          | Enable the PR reviewer                                          |
-| `prdDir`              | string       | `"docs/prds"`                   | Directory containing PRD files                                  |
-| `maxRuntime`          | number       | `7200`                          | Max runtime in seconds for PRD execution                        |
-| `reviewerMaxRuntime`  | number       | `3600`                          | Max runtime in seconds for PR reviewer                          |
-| `branchPrefix`        | string       | `"night-watch"`                 | Prefix for created branches                                     |
-| `branchPatterns`      | string[]     | `["feat/", "night-watch/"]`     | Branch patterns for PR reviewer                                 |
-| `minReviewScore`      | number       | `80`                            | Min review score (out of 100)                                   |
-| `maxLogSize`          | number       | `524288`                        | Max log file size in bytes (512 KB)                             |
-| `cronSchedule`        | string       | `"0 0-21 * * *"`                | Cron schedule for executor                                      |
-| `reviewerSchedule`    | string       | `"0 0,3,6,9,12,15,18,21 * * *"` | Cron schedule for reviewer                                      |
-| `scheduleBundleId`    | string\|null | `null`                          | Persisted schedule template id from Settings (e.g. `always-on`) |
-| `cronScheduleOffset`  | number       | `0`                             | Minute offset (0-59) applied to cron schedules during install   |
-| `maxRetries`          | number       | `3`                             | Retry attempts for rate-limited API calls                       |
-| `providerEnv`         | object       | `{}`                            | Custom env vars passed to the provider CLI                      |
-| `fallbackOnRateLimit` | boolean      | `false`                         | Fall back to native Claude when proxy returns 429               |
-| `claudeModel`         | string       | `"sonnet"`                      | Claude model for native execution (`"sonnet"` or `"opus"`)      |
-| `notifications`       | object       | `{ webhooks: [] }`              | Notification webhook configuration (see below)                  |
-| `prdPriority`         | string[]     | `[]`                            | PRDs matching these names are executed first                    |
-| `roadmapScanner`      | object       | (see below)                     | Roadmap scanner configuration                                   |
-| `templatesDir`        | string       | `".night-watch/templates"`      | Directory for custom template overrides                         |
-| `boardProvider`       | object       | (see below)                     | Board provider configuration for PRD tracking                   |
-| `jobProviders`        | object       | `{}`                            | Per-job provider configuration                                  |
-| `autoMerge`           | boolean      | `false`                         | Enable automatic merging of PRs that pass CI and review         |
-| `autoMergeMethod`     | string       | `"squash"`                      | Git merge method for auto-merge (`squash`, `merge`, `rebase`)   |
-| `qa`                  | object       | (see below)                     | QA process configuration                                        |
-| `audit`               | object       | (see below)                     | Code audit configuration                                        |
+| Field                   | Type         | Default                         | Description                                                     |
+| ----------------------- | ------------ | ------------------------------- | --------------------------------------------------------------- |
+| `defaultBranch`         | string       | `""` (auto-detect)              | Default branch name (e.g. `main`)                               |
+| `provider`              | string       | `"claude"`                      | AI provider preset ID (see [Provider Presets](technical/provider-presets.md)) |
+| `executorEnabled`       | boolean      | `true`                          | Enable the PRD executor                                         |
+| `reviewerEnabled`       | boolean      | `true`                          | Enable the PR reviewer                                          |
+| `prdDir`                | string       | `"docs/prds"`                   | Directory containing PRD files                                  |
+| `maxRuntime`            | number       | `7200`                          | Max runtime in seconds for PRD execution                        |
+| `sessionMaxRuntime`     | number\|null | `null`                          | Per-session runtime override (checkpoints and re-queues)        |
+| `reviewerMaxRuntime`    | number       | `3600`                          | Max runtime in seconds for PR reviewer                          |
+| `branchPrefix`          | string       | `"night-watch"`                 | Prefix for created branches                                     |
+| `branchPatterns`        | string[]     | `["feat/", "night-watch/"]`     | Branch patterns for PR reviewer                                 |
+| `minReviewScore`        | number       | `80`                            | Min review score (out of 100)                                   |
+| `maxLogSize`            | number       | `524288`                        | Max log file size in bytes (512 KB)                             |
+| `cronSchedule`          | string       | `"0 0-21 * * *"`                | Cron schedule for executor                                      |
+| `reviewerSchedule`      | string       | `"0 0,3,6,9,12,15,18,21 * * *"` | Cron schedule for reviewer                                      |
+| `scheduleBundleId`      | string\|null | `null`                          | Persisted schedule template id from Settings (e.g. `always-on`) |
+| `cronScheduleOffset`    | number       | `0`                             | Minute offset (0-59) applied to cron schedules during install   |
+| `schedulingPriority`    | number       | `3`                             | Cross-project scheduling priority (higher = earlier slot)       |
+| `maxRetries`            | number       | `3`                             | Retry attempts for rate-limited API calls                       |
+| `reviewerMaxRetries`    | number       | `2`                             | Max retry attempts for reviewer fix iterations per run          |
+| `reviewerRetryDelay`    | number       | `30`                            | Delay in seconds between reviewer retry attempts                 |
+| `reviewerMaxPrsPerRun`  | number       | `0`                             | Max PRs reviewer processes per run (`0` = unlimited)            |
+| `providerEnv`           | object       | `{}`                            | Custom env vars passed to the provider CLI                      |
+| `providerPresets`       | object       | `{}`                            | Custom provider preset definitions (see below)                  |
+| `providerLabel`         | string\|null | `null`                          | **@deprecated** Use `providerPresets[id].name` instead           |
+| `fallbackOnRateLimit`   | boolean      | `true`                          | Fall back to secondary preset on 429 responses                   |
+| `primaryFallbackPreset` | string\|null | `null`                          | First fallback preset ID for rate limit scenarios                |
+| `secondaryFallbackPreset`| string\|null | `null`                          | Second fallback preset ID                                       |
+| `claudeModel`           | string       | `"sonnet"`                      | Claude model for native execution (`"sonnet"` or `"opus"`)      |
+| `notifications`         | object       | `{ webhooks: [] }`              | Notification webhook configuration (see below)                  |
+| `prdPriority`           | string[]     | `[]`                            | PRDs matching these names are executed first                    |
+| `roadmapScanner`        | object       | (see below)                     | Roadmap scanner configuration                                   |
+| `templatesDir`          | string       | `".night-watch/templates"`      | Directory for custom template overrides                         |
+| `boardProvider`         | object       | (see below)                     | Board provider configuration for PRD tracking                   |
+| `jobProviders`          | object       | `{}`                            | Per-job provider configuration (see below)                      |
+| `queue`                 | object       | (see below)                     | Queue configuration for job execution (see below)               |
+| `autoMerge`             | boolean      | `false`                         | Enable automatic merging of PRs that pass CI and review         |
+| `autoMergeMethod`       | string       | `"squash"`                      | Git merge method for auto-merge (`squash`, `merge`, `rebase`)   |
+| `qa`                    | object       | (see below)                     | QA process configuration                                        |
+| `audit`                 | object       | (see below)                     | Code audit configuration                                        |
+| `analytics`             | object       | (see below)                     | Analytics job configuration                                     |
 
 ---
 
@@ -84,6 +95,7 @@ All Night Watch env vars are prefixed with `NW_`:
 | `NW_DEFAULT_BRANCH`         | `defaultBranch`                                       |
 | `NW_PRD_DIR`                | `prdDir`                                              |
 | `NW_MAX_RUNTIME`            | `maxRuntime`                                          |
+| `NW_SESSION_MAX_RUNTIME`    | `sessionMaxRuntime`                                   |
 | `NW_REVIEWER_MAX_RUNTIME`   | `reviewerMaxRuntime`                                  |
 | `NW_BRANCH_PREFIX`          | `branchPrefix`                                        |
 | `NW_BRANCH_PATTERNS`        | `branchPatterns` (JSON array or comma-separated)      |
@@ -91,12 +103,19 @@ All Night Watch env vars are prefixed with `NW_`:
 | `NW_MAX_LOG_SIZE`           | `maxLogSize`                                          |
 | `NW_CRON_SCHEDULE`          | `cronSchedule`                                        |
 | `NW_REVIEWER_SCHEDULE`      | `reviewerSchedule`                                    |
+| `NW_SCHEDULE_BUNDLE_ID`     | `scheduleBundleId`                                    |
+| `NW_CRON_SCHEDULE_OFFSET`   | `cronScheduleOffset`                                  |
+| `NW_SCHEDULING_PRIORITY`    | `schedulingPriority`                                  |
 | `NW_PROVIDER`               | `provider`                                            |
 | `NW_EXECUTOR_ENABLED`       | `executorEnabled`                                     |
 | `NW_REVIEWER_ENABLED`       | `reviewerEnabled`                                     |
 | `NW_REVIEWER_PARALLEL`      | reviewer parallel fan-out (`1` enabled, `0` disabled) |
 | `NW_FALLBACK_ON_RATE_LIMIT` | `fallbackOnRateLimit`                                 |
+| `NW_PRIMARY_FALLBACK_PRESET`| `primaryFallbackPreset`                               |
+| `NW_SECONDARY_FALLBACK_PRESET`| `secondaryFallbackPreset`                            |
 | `NW_CLAUDE_MODEL`           | `claudeModel`                                         |
+| `NW_QUEUE_ENABLED`          | `queue.enabled`                                       |
+| `NW_QUEUE_MODE`             | `queue.mode`                                          |
 
 ---
 
@@ -365,36 +384,6 @@ Track PRDs and their status using GitHub Projects or local SQLite.
 
 ---
 
-## Job Providers (`jobProviders`)
-
-Override the AI provider for specific job types.
-
-```json
-{
-  "jobProviders": {
-    "executor": "claude",
-    "reviewer": "codex",
-    "qa": "claude",
-    "audit": "claude",
-    "slicer": "claude"
-  }
-}
-```
-
-### Job Provider Fields
-
-| Field      | Type   | Default       | Description                |
-| ---------- | ------ | ------------- | -------------------------- |
-| `executor` | string | (uses global) | Provider for PRD execution |
-| `reviewer` | string | (uses global) | Provider for PR reviews    |
-| `qa`       | string | (uses global) | Provider for QA tasks      |
-| `audit`    | string | (uses global) | Provider for audit tasks   |
-| `slicer`   | string | (uses global) | Provider for slicer tasks  |
-
-Set to empty string or omit to use the global `provider` setting.
-
----
-
 ## Auto-Merge
 
 Automatically merge PRs that pass CI and meet the review score threshold.
@@ -426,3 +415,165 @@ Control which PRDs are executed first when multiple are pending.
 ```
 
 PRDs whose filename (without `.md` extension) matches an entry in the `prdPriority` array are executed before others. This is useful for prioritizing critical features or urgent fixes.
+
+---
+
+## Provider Presets (`providerPresets`)
+
+Provider presets define how Night Watch invokes AI provider CLIs. See [Provider Presets](technical/provider-presets.md) for complete documentation on built-in and custom presets.
+
+### Built-in Presets
+
+| Preset ID | Name | Description |
+|-----------|------|-------------|
+| `claude` | Claude | Standard Claude CLI |
+| `claude-sonnet-4-6` | Claude Sonnet 4.6 | Claude Sonnet 4.6 model |
+| `claude-opus-4-6` | Claude Opus 4.6 | Claude Opus 4.6 model |
+| `codex` | Codex | Codex CLI |
+| `glm-47` | GLM-4.7 | GLM-4.7 via proxy |
+| `glm-5` | GLM-5 | GLM-5 via proxy |
+
+### Custom Presets
+
+Override a built-in preset or add your own:
+
+```json
+{
+  "providerPresets": {
+    "my-custom-provider": {
+      "name": "My Custom Provider",
+      "command": "my-cli",
+      "promptFlag": "--prompt",
+      "autoApproveFlag": "--yes",
+      "modelFlag": "--model",
+      "model": "my-model-v1",
+      "envVars": {
+        "API_KEY": "your-key",
+        "API_BASE": "https://api.example.com"
+      }
+    }
+  },
+  "provider": "my-custom-provider"
+}
+```
+
+---
+
+## Queue Configuration (`queue`)
+
+The queue system controls job execution concurrency and scheduling. See [Queue Modes](technical/queue-modes.md) for complete documentation.
+
+```json
+{
+  "queue": {
+    "enabled": true,
+    "mode": "auto",
+    "maxConcurrency": 1,
+    "maxWaitTime": 7200,
+    "priority": {
+      "executor": 50,
+      "reviewer": 40,
+      "qa": 30,
+      "audit": 20,
+      "analytics": 10,
+      "planner": 5
+    },
+    "providerBuckets": {}
+  }
+}
+```
+
+### Queue Fields
+
+| Field            | Type    | Default          | Description                                                |
+| ---------------- | ------- | ---------------- | ---------------------------------------------------------- |
+| `enabled`        | boolean | `true`           | Enable the queue system                                     |
+| `mode`           | string  | `"auto"`         | Queue mode: `conservative`, `provider-aware`, or `auto`     |
+| `maxConcurrency` | number  | `1`              | Global max concurrent jobs                                 |
+| `maxWaitTime`    | number  | `7200`           | Max wait time in seconds before job expires                 |
+| `priority`       | object  | (see defaults)   | Job type priority for queue ordering                        |
+| `providerBuckets`| object  | `{}`             | Per-provider concurrency limits (provider-aware mode)        |
+
+### Queue Modes
+
+- **`conservative`** - Jobs execute one at a time (serial)
+- **`provider-aware`** - Parallel execution per-provider with custom limits
+- **`auto`** - Automatically selects best mode based on configuration
+
+---
+
+## Analytics Job (`analytics`)
+
+The analytics job processes Amplitude product analytics data and creates issues for findings.
+
+```json
+{
+  "analytics": {
+    "enabled": false,
+    "schedule": "0 6 * * 1",
+    "maxRuntime": 900,
+    "lookbackDays": 7,
+    "targetColumn": "Draft",
+    "analysisPrompt": "Analyze Amplitude data for actionable findings..."
+  }
+}
+```
+
+### Analytics Fields
+
+| Field          | Type    | Default               | Description                                      |
+| -------------- | ------- | --------------------- | ------------------------------------------------ |
+| `enabled`      | boolean | `false`               | Enable the analytics job                         |
+| `schedule`     | string  | `"0 6 * * 1"`         | Cron expression (weekly Monday 06:00)            |
+| `maxRuntime`   | number  | `900`                 | Maximum runtime in seconds (15 minutes)           |
+| `lookbackDays` | number  | `7`                   | Days of historical data to analyze               |
+| `targetColumn`| string  | `"Draft"`             | Board column for created issues                  |
+| `analysisPrompt`| string | (default prompt)      | Custom prompt for analysis                       |
+
+### Analytics Setup
+
+1. Configure Amplitude credentials in environment
+2. Enable the analytics job
+3. Run on schedule or via `night-watch run analytics`
+4. Issues are created in the target column with findings
+
+---
+
+## Environment Variables
+
+### Testing Override
+
+| Variable              | Purpose                                          |
+| --------------------- | ------------------------------------------------ |
+| `NIGHT_WATCH_HOME`    | Override Night Watch home directory (for testing) |
+
+---
+
+## Per-Job Providers
+
+Override the AI provider for specific job types. See [Per-Job Providers](technical/per-job-providers.md) for complete documentation.
+
+```json
+{
+  "provider": "claude",
+  "jobProviders": {
+    "executor": "claude-sonnet-4-6",
+    "reviewer": "claude",
+    "qa": "codex",
+    "audit": "claude-sonnet-4-6",
+    "analytics": "claude-opus-4-6",
+    "planner": "claude-sonnet-4-6"
+  }
+}
+```
+
+### Available Job Types
+
+| Job Type   | Description              |
+| ---------- | ------------------------ |
+| `executor` | PRD execution            |
+| `reviewer` | PR review                |
+| `qa`       | Playwright testing       |
+| `audit`    | Code quality audit       |
+| `analytics`| Amplitude analysis       |
+| `planner`  | Roadmap slicing          |
