@@ -3,14 +3,15 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const packageJson = JSON.parse(
-  fs.readFileSync(path.resolve(__dirname, '..', '..', 'package.json'), 'utf-8'),
-);
+const CLI_PKG_DIR = path.resolve(__dirname, '..', '..');
+const CLI_PATH = path.join(CLI_PKG_DIR, 'dist', 'cli.js');
+
+const packageJson = JSON.parse(fs.readFileSync(path.join(CLI_PKG_DIR, 'package.json'), 'utf-8'));
 
 describe('CLI', () => {
   describe('help output', () => {
     it('should show help text with all commands', () => {
-      const output = execSync('node dist/cli.js --help', {
+      const output = execSync(`node "${CLI_PATH}" --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -38,7 +39,7 @@ describe('CLI', () => {
     });
 
     it('should show init command help', () => {
-      const output = execSync('node dist/cli.js init --help', {
+      const output = execSync(`node "${CLI_PATH}" init --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -49,7 +50,7 @@ describe('CLI', () => {
     });
 
     it('should show run command help', () => {
-      const output = execSync('node dist/cli.js run --help', {
+      const output = execSync(`node "${CLI_PATH}" run --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -61,7 +62,7 @@ describe('CLI', () => {
     });
 
     it('should show review command help', () => {
-      const output = execSync('node dist/cli.js review --help', {
+      const output = execSync(`node "${CLI_PATH}" review --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -73,7 +74,7 @@ describe('CLI', () => {
     });
 
     it('should show install command help', () => {
-      const output = execSync('node dist/cli.js install --help', {
+      const output = execSync(`node "${CLI_PATH}" install --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -84,7 +85,7 @@ describe('CLI', () => {
     });
 
     it('should show uninstall command help', () => {
-      const output = execSync('node dist/cli.js uninstall --help', {
+      const output = execSync(`node "${CLI_PATH}" uninstall --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -94,7 +95,7 @@ describe('CLI', () => {
     });
 
     it('should show update command help', () => {
-      const output = execSync('node dist/cli.js update --help', {
+      const output = execSync(`node "${CLI_PATH}" update --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -106,7 +107,7 @@ describe('CLI', () => {
     });
 
     it('should show status command help', () => {
-      const output = execSync('node dist/cli.js status --help', {
+      const output = execSync(`node "${CLI_PATH}" status --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -117,7 +118,7 @@ describe('CLI', () => {
     });
 
     it('should show logs command help', () => {
-      const output = execSync('node dist/cli.js logs --help', {
+      const output = execSync(`node "${CLI_PATH}" logs --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -129,7 +130,7 @@ describe('CLI', () => {
     });
 
     it('should show doctor command help', () => {
-      const output = execSync('node dist/cli.js doctor --help', {
+      const output = execSync(`node "${CLI_PATH}" doctor --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -138,7 +139,7 @@ describe('CLI', () => {
     });
 
     it('should show prd command in help', () => {
-      const output = execSync('node dist/cli.js --help', {
+      const output = execSync(`node "${CLI_PATH}" --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -147,7 +148,7 @@ describe('CLI', () => {
     });
 
     it('should show prd create help', () => {
-      const output = execSync('node dist/cli.js prd create --help', {
+      const output = execSync(`node "${CLI_PATH}" prd create --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -158,7 +159,7 @@ describe('CLI', () => {
     });
 
     it('should show prd list help', () => {
-      const output = execSync('node dist/cli.js prd list --help', {
+      const output = execSync(`node "${CLI_PATH}" prd list --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -168,7 +169,7 @@ describe('CLI', () => {
     });
 
     it('should show prds command help', () => {
-      const output = execSync('node dist/cli.js prds --help', {
+      const output = execSync(`node "${CLI_PATH}" prds --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -178,7 +179,7 @@ describe('CLI', () => {
     });
 
     it('should show prs command help', () => {
-      const output = execSync('node dist/cli.js prs --help', {
+      const output = execSync(`node "${CLI_PATH}" prs --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -188,7 +189,7 @@ describe('CLI', () => {
     });
 
     it('should show cancel command help', () => {
-      const output = execSync('node dist/cli.js cancel --help', {
+      const output = execSync(`node "${CLI_PATH}" cancel --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -199,7 +200,7 @@ describe('CLI', () => {
     });
 
     it('should show retry command help', () => {
-      const output = execSync('node dist/cli.js retry --help', {
+      const output = execSync(`node "${CLI_PATH}" retry --help`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -211,7 +212,7 @@ describe('CLI', () => {
 
   describe('version output', () => {
     it('should show version', () => {
-      const output = execSync('node dist/cli.js --version', {
+      const output = execSync(`node "${CLI_PATH}" --version`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -222,7 +223,7 @@ describe('CLI', () => {
 
   describe('command execution', () => {
     it('should show dry-run output for run command', () => {
-      const output = execSync('node dist/cli.js run --dry-run', {
+      const output = execSync(`node "${CLI_PATH}" run --dry-run`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -238,7 +239,7 @@ describe('CLI', () => {
     }, 15000);
 
     it('should show dry-run output for review command', () => {
-      const output = execSync('node dist/cli.js review --dry-run', {
+      const output = execSync(`node "${CLI_PATH}" review --dry-run`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -254,7 +255,7 @@ describe('CLI', () => {
     });
 
     it('should show retry config in review dry-run output', () => {
-      const output = execSync('node dist/cli.js review --dry-run', {
+      const output = execSync(`node "${CLI_PATH}" review --dry-run`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -265,7 +266,7 @@ describe('CLI', () => {
     });
 
     it('should execute install command', () => {
-      const output = execSync('node dist/cli.js install', {
+      const output = execSync(`node "${CLI_PATH}" install`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -277,7 +278,7 @@ describe('CLI', () => {
     });
 
     it('should execute uninstall command', () => {
-      const output = execSync('node dist/cli.js uninstall', {
+      const output = execSync(`node "${CLI_PATH}" uninstall`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -286,7 +287,7 @@ describe('CLI', () => {
     });
 
     it('should execute status command', () => {
-      const output = execSync('node dist/cli.js status', {
+      const output = execSync(`node "${CLI_PATH}" status`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });
@@ -296,7 +297,7 @@ describe('CLI', () => {
     });
 
     it('should execute logs command', () => {
-      const output = execSync('node dist/cli.js logs', {
+      const output = execSync(`node "${CLI_PATH}" logs`, {
         encoding: 'utf-8',
         cwd: process.cwd(),
       });

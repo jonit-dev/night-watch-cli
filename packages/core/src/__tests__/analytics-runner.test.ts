@@ -275,6 +275,41 @@ describe('analytics-runner', () => {
     });
   });
 
+  it('should resolve provider command from custom preset when not in PROVIDER_COMMANDS', async () => {
+    const config = {
+      ...mockConfig,
+      provider: 'glm-5',
+      providerPresets: {
+        'glm-5': {
+          name: 'GLM-5',
+          command: 'claude',
+          promptFlag: '-p',
+          autoApproveFlag: '--dangerously-skip-permissions',
+          modelFlag: '--model',
+          model: 'glm-5',
+          envVars: {},
+        },
+      },
+    };
+
+    const { executeScriptWithOutput } = await import('../utils/shell.js');
+    vi.mocked(executeScriptWithOutput).mockResolvedValue({
+      exitCode: 0,
+      stdout: '[{"title": "Issue 1", "body": "Body 1"}]',
+      stderr: '',
+    });
+
+    const result = await runAnalytics(config, tempDir);
+
+    // Should succeed (not crash with "undefined: command not found")
+    expect(result.issuesCreated).toBe(1);
+
+    // Verify the script was written with the resolved command, not "undefined"
+    const scriptCall = vi.mocked(executeScriptWithOutput).mock.calls[0];
+    const scriptPath = scriptCall[0] as string;
+    expect(scriptPath).toContain('run-analytics.sh');
+  });
+
   it('should handle multiple issues from AI response', async () => {
     const { executeScriptWithOutput } = await import('../utils/shell.js');
     vi.mocked(executeScriptWithOutput).mockResolvedValue({

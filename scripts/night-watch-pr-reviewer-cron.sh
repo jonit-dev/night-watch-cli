@@ -830,12 +830,32 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
     worker_pr="${WORKER_PRS[$idx]}"
     worker_output="${WORKER_OUTPUTS[$idx]}"
 
+    # Guard: abort the wait loop when the global budget is exhausted
+    PARENT_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
+    PARENT_REMAINING=$(( MAX_RUNTIME - PARENT_ELAPSED ))
+    if [ "${PARENT_REMAINING}" -le 0 ]; then
+      log "PARALLEL: global timeout exhausted — killing remaining workers"
+      for remaining_idx in $(seq "${idx}" $(( ${#WORKER_PIDS[@]} - 1 ))); do
+        kill "${WORKER_PIDS[$remaining_idx]}" 2>/dev/null || true
+      done
+      EXIT_CODE=124
+      break
+    fi
+
+    # Watchdog: kill the worker if it outlives the remaining budget
+    ( sleep "${PARENT_REMAINING}" 2>/dev/null; kill "${worker_pid}" 2>/dev/null || true ) &
+    watchdog_pid=$!
+
     worker_exit_code=0
-    if wait "${worker_pid}"; then
+    if wait "${worker_pid}" 2>/dev/null; then
       worker_exit_code=0
     else
       worker_exit_code=$?
     fi
+
+    # Cancel the watchdog — the worker finished in time
+    kill "${watchdog_pid}" 2>/dev/null || true
+    wait "${watchdog_pid}" 2>/dev/null || true
 
     if [ -f "${worker_output}" ] && [ -s "${worker_output}" ]; then
       cat "${worker_output}" >> "${LOG_FILE}"

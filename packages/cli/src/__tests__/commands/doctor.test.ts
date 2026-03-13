@@ -8,7 +8,7 @@ import path from 'path';
 import { validateWebhook } from '@/cli/commands/doctor.js';
 import { IWebhookConfig } from '@night-watch/core/types.js';
 
-const CLI_PATH = path.join(process.cwd(), 'dist/cli.js');
+const CLI_PATH = path.resolve(__dirname, '..', '..', '..', 'dist', 'cli.js');
 const TSX_PATH = 'node';
 
 // Cache CLI outputs to avoid repeated spawns
@@ -40,9 +40,9 @@ function getDoctorHelp(): string {
 
 function getDoctorOutput(): string {
   if (!cachedDoctorOutput) {
-    const repoRoot = path.resolve(process.cwd(), '..', '..');
+    const repoRoot = path.resolve(__dirname, '..', '..', '..', '..', '..');
     try {
-      cachedDoctorOutput = execSync(`${TSX_PATH} ${CLI_PATH} doctor`, {
+      cachedDoctorOutput = execSync(`${TSX_PATH} "${CLI_PATH}" doctor`, {
         encoding: 'utf-8',
         cwd: repoRoot,
         stdio: 'pipe',

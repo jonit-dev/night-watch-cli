@@ -63,7 +63,11 @@ export async function fetchAmplitudeData(
   const allEventsParam = encodeURIComponent('{"event_type":"_all"}');
 
   const [activeUsers, eventSegmentation, retention, userSessions] = await Promise.allSettled([
-    amplitudeFetch(`${baseUrl}/users/active?start=${start}&end=${end}`, authHeader, 'active users'),
+    amplitudeFetch(
+      `${baseUrl}/users?m=active&start=${start}&end=${end}`,
+      authHeader,
+      'active users',
+    ),
     amplitudeFetch(
       `${baseUrl}/events/segmentation?start=${start}&end=${end}&e=${allEventsParam}`,
       authHeader,

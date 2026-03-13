@@ -242,7 +242,7 @@ count_prs_for_branch() {
   local branch_name="${2:?branch_name required}"
   local count
   count=$(
-    { gh pr list --state "${pr_state}" --json headRefName --jq '.[].headRefName' 2>/dev/null || true; } \
+    { gh pr list --state "${pr_state}" --limit 200 --json headRefName --jq '.[].headRefName' 2>/dev/null || true; } \
       | { grep -xF "${branch_name}" || true; } \
       | wc -l \
       | tr -d '[:space:]'
@@ -772,6 +772,20 @@ fi
 
 TOTAL_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
 log "OUTCOME: exit_code=${EXIT_CODE} total_elapsed=${TOTAL_ELAPSED}s prd=${ELIGIBLE_PRD} branch=${BRANCH_NAME}"
+
+# Detect false-success from budget exhaustion.
+# Claude exits 0 even when it hits the $ budget cap, so scan the log.
+if [ "${EXIT_CODE}" -eq 0 ] && grep -qiF 'Exceeded USD budget' "${LOG_FILE}" 2>/dev/null; then
+  log "WARN: provider exited 0 but budget was exceeded — reclassifying as failure"
+  if [ -n "${ISSUE_NUMBER}" ]; then
+    "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
+    "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
+      --body "Budget limit reached (via ${EFFECTIVE_PROVIDER_LABEL}). Moved back to Ready." 2>>"${LOG_FILE}" || true
+  fi
+  night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
+  emit_result "failure_budget_exceeded" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=budget_exceeded"
+  EXIT_CODE=1
+fi
 
 if [ ${EXIT_CODE} -eq 0 ]; then
   OPEN_PR_COUNT=$(count_prs_for_branch open "${BRANCH_NAME}")

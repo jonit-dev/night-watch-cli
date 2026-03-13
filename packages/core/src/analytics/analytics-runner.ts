@@ -9,7 +9,7 @@ import * as path from 'path';
 import { BoardColumnName } from '../board/types.js';
 import { createBoardProvider } from '../board/factory.js';
 import { INightWatchConfig } from '../types.js';
-import { resolveJobProvider } from '../config.js';
+import { resolveJobProvider, resolvePreset } from '../config.js';
 import { CLAUDE_MODEL_IDS, DEFAULT_ANALYTICS_PROMPT, PROVIDER_COMMANDS } from '../constants.js';
 import { executeScriptWithOutput } from '../utils/shell.js';
 import { createLogger } from '../utils/logger.js';
@@ -79,10 +79,17 @@ export async function runAnalytics(
   try {
     // 4. Invoke AI provider
     const provider = resolveJobProvider(config, 'analytics');
-    const providerCmd = PROVIDER_COMMANDS[provider];
+    let providerCmd = PROVIDER_COMMANDS[provider];
+
+    // Custom presets (e.g. glm-5) are not in PROVIDER_COMMANDS — resolve from preset
+    if (!providerCmd) {
+      const preset = resolvePreset(config, provider);
+      providerCmd = preset.command;
+    }
+
     let scriptContent: string;
 
-    if (provider === 'claude') {
+    if (providerCmd === 'claude') {
       const modelId = CLAUDE_MODEL_IDS[config.claudeModel ?? 'sonnet'];
       scriptContent = `#!/usr/bin/env bash\nset -euo pipefail\n${providerCmd} -p "$(cat ${promptFile})" --model ${modelId} --dangerously-skip-permissions 2>&1\n`;
     } else {

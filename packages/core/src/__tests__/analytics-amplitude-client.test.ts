@@ -167,6 +167,20 @@ describe('amplitude-client', () => {
       }
     });
 
+    it('should use /api/2/users?m=active for active users endpoint', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({}),
+      } as Response);
+
+      await fetchAmplitudeData('key', 'secret', 7);
+
+      const urls = mockFetch.mock.calls.map((call) => call[0] as string);
+      const activeUsersUrl = urls.find((u) => u.includes('/users'));
+      expect(activeUsersUrl).toContain('/api/2/users?m=active&start=');
+      expect(activeUsersUrl).not.toContain('/users/active');
+    });
+
     it('should include fetchedAt timestamp', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
