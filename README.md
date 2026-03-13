@@ -4,6 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen.svg)](https://nodejs.org/)
 [![Website](https://img.shields.io/badge/website-nightwatchcli.com-blue.svg)](https://nightwatchcli.com/)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2.svg?logo=discord&logoColor=white)](https://discord.gg/maCPEJzPXa)
 
 **Overnight PRD execution for AI-native devs and small teams**
 
