@@ -19,6 +19,7 @@
     "local": "yarn build && yarn link",
     "prepare": "husky",
     "deploy": "yarn workspace @jonit-dev/night-watch-cli deploy",
+    "deploy:beta": "yarn workspace @jonit-dev/night-watch-cli deploy:beta",
     "deploy:landing": "cd landing-page && yarn deploy"
   },
   "devDependencies": {

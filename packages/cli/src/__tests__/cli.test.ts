@@ -153,10 +153,8 @@ describe('CLI', () => {
       });
 
       expect(output).toContain('Generate a new PRD');
-      expect(output).toContain('--template');
-      expect(output).toContain('--deps');
-      expect(output).toContain('--phases');
-      expect(output).toContain('--no-number');
+      expect(output).toContain('--number');
+      expect(output).toContain('--model');
     });
 
     it('should show prd list help', () => {
