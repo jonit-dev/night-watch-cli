@@ -102,6 +102,7 @@ function getLockPathForJob(projectPath: string, jobType: JobType): string {
     case 'audit':
       return auditLockPath(projectPath);
     case 'slicer':
+    case 'planner':
       return plannerLockPath(projectPath);
     case 'analytics':
       return analyticsLockPath(projectPath);

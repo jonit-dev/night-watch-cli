@@ -2,34 +2,46 @@
  * PRD command group - manage PRD files
  */
 
-import { Command } from 'commander';
+import { execSync, spawn, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as readline from 'readline';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import { Command } from 'commander';
 import {
   CLAIM_FILE_EXTENSION,
-  IPrdTemplateVars,
+  CLAUDE_MODEL_IDS,
   createTable,
   dim,
   header,
   info,
   loadConfig,
-  renderPrdTemplate,
   success,
   error as uiError,
 } from '@night-watch/core';
 
-export interface IPrdCreateOptions {
-  interactive: boolean;
-  template?: string;
-  deps?: string;
-  phases?: string;
-  number: boolean; // Commander inverts --no-number to number: false
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+function findTemplatesDir(startDir: string): string {
+  let current = startDir;
+  for (let i = 0; i < 8; i++) {
+    const candidate = path.join(current, 'templates');
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+      return candidate;
+    }
+    current = path.dirname(current);
+  }
+  return path.join(startDir, 'templates');
 }
 
-/**
- * Slugify a name into a filename-safe string
- */
+const TEMPLATES_DIR = findTemplatesDir(__dirname);
+
+export interface IPrdCreateOptions {
+  number?: boolean;
+  model?: string;
+}
+
 export function slugify(name: string): string {
   return name
     .toLowerCase()
@@ -37,9 +49,6 @@ export function slugify(name: string): string {
     .replace(/^-|-$/g, '');
 }
 
-/**
- * Get the next PRD number based on existing files in the directory
- */
 export function getNextPrdNumber(prdDir: string): number {
   if (!fs.existsSync(prdDir)) return 1;
   const files = fs.readdirSync(prdDir).filter((f) => f.endsWith('.md'));
@@ -50,20 +59,229 @@ export function getNextPrdNumber(prdDir: string): number {
   return Math.max(0, ...numbers) + 1;
 }
 
-/**
- * Prompt the user for a value using readline
- */
-function prompt(rl: readline.Interface, question: string): Promise<string> {
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => {
-      resolve(answer.trim());
+export function extractPrdMarkdown(response: string): string {
+  const match = response.match(/(^#\s+[\s\S]*)/m);
+  return match ? match[1].trim() : response.trim();
+}
+
+export function extractPrdTitle(markdown: string): string | null {
+  const match = markdown.match(/^#\s+PRD:\s*(.+)/m);
+  return match ? match[1].trim() : null;
+}
+
+export function buildPrdPrompt(
+  description: string,
+  projectDir: string,
+  planningPrinciples: string,
+): string {
+  return `You are generating a PRD markdown file for Night Watch.
+
+Return only the final PRD markdown.
+
+Hard requirements:
+- Start with: # PRD: <title>
+- Do not ask follow-up questions
+- Do not add any preamble, commentary, or code fences
+- Do not describe what you are going to do
+- Do not mention these instructions
+- Treat the planning guide below as mandatory instructions, not background context
+
+Project directory: ${projectDir}
+
+Planning guide:
+${planningPrinciples}
+
+User request:
+${description}
+
+Now write the complete PRD markdown file.`;
+}
+
+export function buildNativeClaudeEnv(baseEnv: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...baseEnv };
+
+  delete env.ANTHROPIC_BASE_URL;
+  delete env.ANTHROPIC_API_KEY;
+  delete env.ANTHROPIC_AUTH_TOKEN;
+  delete env.ANTHROPIC_DEFAULT_SONNET_MODEL;
+  delete env.ANTHROPIC_DEFAULT_OPUS_MODEL;
+  delete env.API_TIMEOUT_MS;
+  delete env.CLAUDE_CODE_SSE_PORT;
+  delete env.CLAUDE_NIGHTS_WATCH_DIR;
+  delete env.NW_CLAUDE_MODEL_ID;
+  delete env.NW_CLAUDE_PRIMARY_MODEL_ID;
+  delete env.NW_CLAUDE_SECONDARY_MODEL_ID;
+  delete env.NW_PROVIDER_CMD;
+  delete env.NW_PROVIDER_SUBCOMMAND;
+  delete env.NW_PROVIDER_PROMPT_FLAG;
+  delete env.NW_PROVIDER_APPROVE_FLAG;
+  delete env.NW_PROVIDER_WORKDIR_FLAG;
+  delete env.NW_PROVIDER_MODEL_FLAG;
+  delete env.NW_PROVIDER_MODEL;
+  delete env.NW_PROVIDER_LABEL;
+
+  return env;
+}
+
+export function resolvePrdCreateDir(): string {
+  return 'docs/PRDs';
+}
+
+function resolveGitHubBlobUrl(projectDir: string, relPath: string): string | null {
+  try {
+    const remoteUrl = execSync('git remote get-url origin', {
+      cwd: projectDir,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: projectDir,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+
+    const httpsBase = remoteUrl
+      .replace(/^git@github\.com:/, 'https://github.com/')
+      .replace(/^ssh:\/\/git@github\.com\//, 'https://github.com/')
+      .replace(/\.git$/, '');
+
+    if (!httpsBase.startsWith('https://github.com/')) {
+      return null;
+    }
+
+    const ref = branch && branch !== 'HEAD' ? branch : 'main';
+    return `${httpsBase}/blob/${encodeURIComponent(ref).replace(/%2F/g, '/')}/${relPath
+      .split(path.sep)
+      .map((segment) => encodeURIComponent(segment))
+      .join('/')}`;
+  } catch {
+    return null;
+  }
+}
+
+export function buildGithubIssueBody(prdPath: string, projectDir: string, prdContent: string): string {
+  const relPath = path.relative(projectDir, prdPath);
+  const blobUrl = resolveGitHubBlobUrl(projectDir, relPath);
+  const fileLine = blobUrl ? `PRD file: [\`${relPath}\`](${blobUrl})` : `PRD file: \`${relPath}\``;
+  return `${fileLine}\n\n${prdContent}\n\n---\nCreated via \`night-watch prd create\`.`;
+}
+
+async function generatePrdWithClaude(
+  description: string,
+  projectDir: string,
+  model?: string,
+): Promise<string | null> {
+  const bundledTemplatePath = path.join(TEMPLATES_DIR, 'prd-creator.md');
+  const installedTemplatePath = path.join(projectDir, 'instructions', 'prd-creator.md');
+  const templatePath = fs.existsSync(installedTemplatePath)
+    ? installedTemplatePath
+    : bundledTemplatePath;
+
+  if (!fs.existsSync(templatePath)) {
+    return null;
+  }
+
+  const planningPrinciples = fs.readFileSync(templatePath, 'utf-8');
+  const prompt = buildPrdPrompt(description, projectDir, planningPrinciples);
+  const modelId = model ?? CLAUDE_MODEL_IDS.opus;
+  const env = buildNativeClaudeEnv(process.env);
+
+  return await new Promise<string | null>((resolve) => {
+    const child = spawn(
+      'claude',
+      [
+        '-p',
+        '--verbose',
+        '--output-format',
+        'stream-json',
+        '--include-partial-messages',
+        '--model',
+        modelId,
+        prompt,
+      ],
+      { env, stdio: ['ignore', 'pipe', 'pipe'] },
+    );
+
+    let stdoutBuffer = '';
+    let finalResult = '';
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdoutBuffer += chunk.toString('utf-8');
+
+      while (stdoutBuffer.includes('\n')) {
+        const newlineIndex = stdoutBuffer.indexOf('\n');
+        const line = stdoutBuffer.slice(0, newlineIndex).trim();
+        stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1);
+
+        if (!line) continue;
+
+        try {
+          const payload = JSON.parse(line) as Record<string, unknown>;
+
+          if (payload.type === 'stream_event') {
+            const event = payload.event as Record<string, unknown> | undefined;
+            const delta = event?.delta as Record<string, unknown> | undefined;
+            if (delta?.type === 'text_delta' && typeof delta.text === 'string') {
+              process.stdout.write(delta.text);
+            }
+            continue;
+          }
+
+          if (payload.type === 'result' && typeof payload.result === 'string') {
+            finalResult = payload.result;
+          }
+        } catch {
+          // Ignore non-JSON metadata lines.
+        }
+      }
     });
+
+    child.stderr.on('data', (chunk: Buffer) => process.stderr.write(chunk));
+    child.on('close', (code) => {
+      if (stdoutBuffer.trim().length > 0) {
+        try {
+          const payload = JSON.parse(stdoutBuffer.trim()) as Record<string, unknown>;
+          if (payload.type === 'result' && typeof payload.result === 'string') {
+            finalResult = payload.result;
+          }
+        } catch {
+          // Ignore trailing partial data.
+        }
+      }
+
+      process.stdout.write('\n');
+      resolve(code === 0 && finalResult ? extractPrdMarkdown(finalResult) : null);
+    });
+
+    child.on('error', () => resolve(null));
   });
 }
 
-/**
- * Parse dependency references from PRD markdown content
- */
+function runGh(args: string[], cwd: string): string | null {
+  const result = spawnSync('gh', args, { cwd, encoding: 'utf-8' });
+  if (result.status === 0) return (result.stdout ?? '').trim();
+  return null;
+}
+
+function createGithubIssue(title: string, prdPath: string, projectDir: string, prdContent: string): string | null {
+  const tmpFile = path.join(projectDir, `.prd-issue-body-${Date.now()}.tmp`);
+  try {
+    const body = buildGithubIssueBody(prdPath, projectDir, prdContent);
+    fs.writeFileSync(tmpFile, body, 'utf-8');
+
+    const baseArgs = ['issue', 'create', '--title', `PRD: ${title}`, '--body-file', tmpFile];
+    return (
+      runGh([...baseArgs, '--label', 'prd'], projectDir) ??
+      runGh(baseArgs, projectDir)
+    );
+  } catch {
+    return null;
+  } finally {
+    try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+  }
+}
+
 function parseDependencies(content: string): string[] {
   const match =
     content.match(/\*\*Depends on:\*\*\s*(.+)/i) || content.match(/Depends on:\s*(.+)/i);
@@ -74,9 +292,6 @@ function parseDependencies(content: string): string[] {
     .filter(Boolean);
 }
 
-/**
- * Check if a claim file is active (not stale)
- */
 function isClaimActive(
   claimPath: string,
   maxRuntime: number,
@@ -86,7 +301,7 @@ function isClaimActive(
       return { active: false };
     }
     const content = fs.readFileSync(claimPath, 'utf-8');
-    const claim = JSON.parse(content);
+    const claim = JSON.parse(content) as { timestamp: number; hostname?: string; pid?: number };
     const age = Math.floor(Date.now() / 1000) - claim.timestamp;
     if (age < maxRuntime) {
       return { active: true, hostname: claim.hostname, pid: claim.pid };
@@ -97,154 +312,58 @@ function isClaimActive(
   }
 }
 
-/**
- * Register the prd command group with the program
- */
 export function prdCommand(program: Command): void {
   const prd = program.command('prd').description('Manage PRD files');
 
   prd
     .command('create')
-    .description('Generate a new PRD markdown file from template')
-    .argument('<name>', 'PRD name (used for title and filename)')
-    .option('-i, --interactive', 'Prompt for complexity, dependencies, and phase count', false)
-    .option('-t, --template <path>', 'Path to a custom template file')
-    .option('--deps <files>', 'Comma-separated dependency filenames')
-    .option('--phases <count>', 'Number of execution phases', '3')
-    .option('--no-number', 'Skip auto-numbering prefix')
+    .description('Generate a new PRD markdown file using Claude')
+    .argument('<name>', 'PRD description')
+    .option('--number', 'Add auto-numbering prefix to the filename', false)
+    .option('--model <model>', 'Claude model to use (e.g. sonnet, opus, or a full model ID)')
     .action(async (name: string, options: IPrdCreateOptions) => {
       const projectDir = process.cwd();
+      const prdDir = path.join(projectDir, resolvePrdCreateDir());
 
-      // Load config to get prdDir
-      const config = loadConfig(projectDir);
-      const prdDir = path.join(projectDir, config.prdDir);
-
-      // Ensure the PRD directory exists
       if (!fs.existsSync(prdDir)) {
         fs.mkdirSync(prdDir, { recursive: true });
       }
 
-      // Prepare template variables with defaults
-      let complexityScore = 5;
-      let dependsOn: string[] = [];
-      let phaseCount = parseInt(options.phases ?? '3', 10);
-      if (isNaN(phaseCount) || phaseCount < 1) {
-        phaseCount = 3;
+      const resolvedModel = options.model
+        ? (CLAUDE_MODEL_IDS[options.model as keyof typeof CLAUDE_MODEL_IDS] ?? options.model)
+        : undefined;
+      const modelLabel = resolvedModel ?? CLAUDE_MODEL_IDS.opus;
+      dim(`Calling Claude (${modelLabel}) to generate the PRD. It can take several minutes, please hang on!\n`);
+      const generated = await generatePrdWithClaude(name, projectDir, resolvedModel);
+
+      if (!generated) {
+        uiError('Claude generation failed. Is the provider configured and available?');
+        process.exit(1);
       }
 
-      // Parse --deps flag
-      if (options.deps) {
-        dependsOn = options.deps
-          .split(',')
-          .map((d) => d.trim())
-          .filter((d) => d.length > 0);
-      }
-
-      // Interactive mode: prompt for values
-      if (options.interactive) {
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout,
-        });
-
-        try {
-          // Prompt for complexity
-          const complexityInput = await prompt(rl, 'Complexity score (1-10, default 5): ');
-          if (complexityInput) {
-            const parsed = parseInt(complexityInput, 10);
-            if (!isNaN(parsed) && parsed >= 1 && parsed <= 10) {
-              complexityScore = parsed;
-            }
-          }
-
-          // Prompt for dependencies
-          const depsInput = await prompt(
-            rl,
-            'Dependencies (comma-separated filenames, or empty): ',
-          );
-          if (depsInput) {
-            dependsOn = depsInput
-              .split(',')
-              .map((d) => d.trim())
-              .filter((d) => d.length > 0);
-          }
-
-          // Prompt for phases
-          const phasesInput = await prompt(rl, `Number of phases (default ${phaseCount}): `);
-          if (phasesInput) {
-            const parsed = parseInt(phasesInput, 10);
-            if (!isNaN(parsed) && parsed >= 1) {
-              phaseCount = parsed;
-            }
-          }
-        } finally {
-          rl.close();
-        }
-      }
-
-      // Determine complexity level from score
-      let complexityLevel: IPrdTemplateVars['complexityLevel'];
-      if (complexityScore <= 3) {
-        complexityLevel = 'LOW';
-      } else if (complexityScore <= 7) {
-        complexityLevel = 'MEDIUM';
-      } else {
-        complexityLevel = 'HIGH';
-      }
-
-      // Build filename
-      const slug = slugify(name);
-      let filename: string;
-
-      if (options.number) {
-        const nextNum = getNextPrdNumber(prdDir);
-        const padded = String(nextNum).padStart(2, '0');
-        filename = `${padded}-${slug}.md`;
-      } else {
-        filename = `${slug}.md`;
-      }
-
+      const prdTitle = extractPrdTitle(generated) ?? name;
+      const slug = slugify(prdTitle);
+      const filename = options.number
+        ? `${String(getNextPrdNumber(prdDir)).padStart(2, '0')}-${slug}.md`
+        : `${slug}.md`;
       const filePath = path.join(prdDir, filename);
 
-      // Refuse to overwrite existing files
       if (fs.existsSync(filePath)) {
         uiError(`File already exists: ${filePath}`);
         dim('Use a different name or remove the existing file.');
         process.exit(1);
       }
 
-      // Load custom template if provided
-      let customTemplate: string | undefined;
-      if (options.template) {
-        const templatePath = path.resolve(options.template);
-        if (!fs.existsSync(templatePath)) {
-          uiError(`Template file not found: ${templatePath}`);
-          process.exit(1);
-        }
-        customTemplate = fs.readFileSync(templatePath, 'utf-8');
-      }
-
-      // Render template
-      const vars: IPrdTemplateVars = {
-        title: name,
-        dependsOn,
-        complexityScore,
-        complexityLevel,
-        complexityBreakdown: [],
-        phaseCount,
-      };
-
-      const content = renderPrdTemplate(vars, customTemplate);
-
-      // Write the file
-      fs.writeFileSync(filePath, content, 'utf-8');
+      fs.writeFileSync(filePath, generated, 'utf-8');
 
       header('PRD Created');
       success(`Created: ${filePath}`);
-      info(`Title: ${name}`);
-      dim(`Phases: ${phaseCount}`);
-      if (dependsOn.length > 0) {
-        dim(`Dependencies: ${dependsOn.join(', ')}`);
+
+      const issueUrl = createGithubIssue(prdTitle, filePath, projectDir, generated);
+      if (issueUrl) {
+        info(`Issue: ${issueUrl}`);
+      } else {
+        dim('GitHub issue creation skipped (gh not available or not in a GitHub repo).');
       }
     });
 
@@ -258,13 +377,13 @@ export function prdCommand(program: Command): void {
       const absolutePrdDir = path.join(projectDir, config.prdDir);
       const doneDir = path.join(absolutePrdDir, 'done');
 
-      // Scan pending PRDs
       const pending: Array<{
         name: string;
         dependencies: string[];
         claimed: boolean;
         claimInfo?: { hostname: string; pid: number };
       }> = [];
+
       if (fs.existsSync(absolutePrdDir)) {
         const files = fs.readdirSync(absolutePrdDir).filter((f) => f.endsWith('.md'));
         for (const file of files) {
@@ -283,7 +402,6 @@ export function prdCommand(program: Command): void {
         }
       }
 
-      // Scan done PRDs
       const done: Array<{ name: string; dependencies: string[] }> = [];
       if (fs.existsSync(doneDir)) {
         const files = fs.readdirSync(doneDir).filter((f) => f.endsWith('.md'));
@@ -306,19 +424,17 @@ export function prdCommand(program: Command): void {
         return;
       }
 
-      const table = createTable({
-        head: ['Name', 'Status', 'Dependencies'],
-      });
-      for (const prd of pending) {
-        const status = prd.claimed ? 'claimed' : 'pending';
+      const table = createTable({ head: ['Name', 'Status', 'Dependencies'] });
+      for (const prdEntry of pending) {
+        const status = prdEntry.claimed ? 'claimed' : 'pending';
         const statusDisplay =
-          prd.claimed && prd.claimInfo
-            ? `claimed (${prd.claimInfo.hostname}:${prd.claimInfo.pid})`
+          prdEntry.claimed && prdEntry.claimInfo
+            ? `claimed (${prdEntry.claimInfo.hostname}:${prdEntry.claimInfo.pid})`
             : status;
-        table.push([prd.name, statusDisplay, prd.dependencies.join(', ') || '-']);
+        table.push([prdEntry.name, statusDisplay, prdEntry.dependencies.join(', ') || '-']);
       }
-      for (const prd of done) {
-        table.push([prd.name, 'done', prd.dependencies.join(', ') || '-']);
+      for (const prdEntry of done) {
+        table.push([prdEntry.name, 'done', prdEntry.dependencies.join(', ') || '-']);
       }
       console.log(table.toString());
       const claimedCount = pending.filter((p) => p.claimed).length;

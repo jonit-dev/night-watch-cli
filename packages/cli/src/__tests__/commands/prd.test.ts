@@ -9,12 +9,17 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { execSync } from 'child_process';
-import { slugify, getNextPrdNumber } from '@/cli/commands/prd.js';
+import {
+  slugify,
+  getNextPrdNumber,
+  buildPrdPrompt,
+  buildNativeClaudeEnv,
+  resolvePrdCreateDir,
+  extractPrdMarkdown,
+  extractPrdTitle,
+} from '@/cli/commands/prd.js';
 
-// Resolve the project root directory for running CLI commands
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
 const CLI_ROOT = path.resolve(__dirname, '..', '..');
-const TSCONFIG_PATH = path.join(CLI_ROOT, 'tsconfig.json');
 const NODE_BIN = process.execPath;
 const CLI_PATH = path.join(CLI_ROOT, '..', 'dist', 'cli.js');
 const NODE_CMD = `"${NODE_BIN}" "${CLI_PATH}"`;
@@ -80,127 +85,53 @@ describe('prd command', () => {
     });
   });
 
-  describe('prd create (integration)', () => {
-    let tempDir: string;
-    let prdDir: string;
+  describe('prd create helpers', () => {
+    it('builds a prompt that forces direct PRD output', () => {
+      const prompt = buildPrdPrompt(
+        'Add OAuth login',
+        '/tmp/project',
+        'Use phased delivery and concrete acceptance criteria.',
+      );
 
-    beforeEach(() => {
-      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nw-prd-test-'));
-      prdDir = path.join(tempDir, 'docs', 'PRDs', 'night-watch');
-      fs.mkdirSync(prdDir, { recursive: true });
-      fs.writeFileSync(
-        path.join(tempDir, 'night-watch.config.json'),
-        JSON.stringify({ prdDir: 'docs/PRDs/night-watch' }),
+      expect(prompt).toContain('Return only the final PRD markdown.');
+      expect(prompt).toContain('- Do not ask follow-up questions');
+      expect(prompt).toContain('Planning guide:');
+      expect(prompt).toContain('User request:\nAdd OAuth login');
+    });
+
+    it('strips proxy and provider-routing env vars for native Claude', () => {
+      const env = buildNativeClaudeEnv({
+        PATH: '/usr/bin',
+        ANTHROPIC_BASE_URL: 'https://proxy.example.com',
+        ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-5',
+        NW_CLAUDE_MODEL_ID: 'glm-5',
+        NW_PROVIDER_CMD: 'claude',
+      });
+
+      expect(env.PATH).toBe('/usr/bin');
+      expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
+      expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBeUndefined();
+      expect(env.NW_CLAUDE_MODEL_ID).toBeUndefined();
+      expect(env.NW_PROVIDER_CMD).toBeUndefined();
+    });
+
+    it('always uses docs/PRDs for prd create output', () => {
+      expect(resolvePrdCreateDir()).toBe('docs/PRDs');
+    });
+
+    it('extracts markdown and drops chatty preamble text', () => {
+      const output = extractPrdMarkdown('I will create that now.\n\n# PRD: OAuth\n\nBody');
+      expect(output).toBe('# PRD: OAuth\n\nBody');
+    });
+
+    it('extracts PRD title from markdown', () => {
+      expect(extractPrdTitle('# PRD: Morning Summary Command\n\nBody')).toBe(
+        'Morning Summary Command',
       );
     });
 
-    afterEach(() => {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    });
-
-    function runPrdCreate(args: string): string {
-      return execSync(`${NODE_CMD} prd create ${args}`, {
-        encoding: 'utf-8',
-        cwd: tempDir,
-        env: { ...process.env, NODE_ENV: 'test' },
-      });
-    }
-
-    it('should create PRD file in correct directory', () => {
-      const output = runPrdCreate('"Add User Auth"');
-
-      expect(output).toContain('Created');
-      expect(output).toContain('Add User Auth');
-
-      // File should exist with auto-numbering
-      const files = fs.readdirSync(prdDir).filter((f) => f.endsWith('.md'));
-      expect(files.length).toBe(1);
-      expect(files[0]).toBe('01-add-user-auth.md');
-    });
-
-    it('should skip numbering with --no-number', () => {
-      const output = runPrdCreate('--no-number "Setup Database"');
-
-      expect(output).toContain('Created');
-
-      const files = fs.readdirSync(prdDir).filter((f) => f.endsWith('.md'));
-      expect(files.length).toBe(1);
-      expect(files[0]).toBe('setup-database.md');
-    });
-
-    it('should parse --deps flag', () => {
-      runPrdCreate('"Auth Feature" --deps "01-setup.md,02-models.md"');
-
-      const files = fs.readdirSync(prdDir).filter((f) => f.endsWith('.md'));
-      expect(files.length).toBe(1);
-
-      const content = fs.readFileSync(path.join(prdDir, files[0]), 'utf-8');
-      expect(content).toContain('01-setup.md');
-      expect(content).toContain('02-models.md');
-      expect(content).toContain('Depends on:');
-    });
-
-    it('should use custom template with --template', () => {
-      const customTemplatePath = path.join(tempDir, 'custom.md');
-      fs.writeFileSync(customTemplatePath, '# Custom: {{TITLE}}\n\nPhases: {{PHASES}}\n');
-
-      runPrdCreate(`"My Feature" --template "${customTemplatePath}"`);
-
-      const files = fs.readdirSync(prdDir).filter((f) => f.endsWith('.md'));
-      expect(files.length).toBe(1);
-
-      const content = fs.readFileSync(path.join(prdDir, files[0]), 'utf-8');
-      expect(content).toContain('# Custom: My Feature');
-      expect(content).toContain('Phase 1:');
-    });
-
-    it('should not overwrite existing file', () => {
-      // Create the file that would be generated
-      fs.writeFileSync(path.join(prdDir, '01-existing.md'), 'existing content');
-
-      try {
-        runPrdCreate('"Existing"');
-        // Should not reach here
-        expect.unreachable('Should have thrown');
-      } catch (err: unknown) {
-        const error = err as { stderr?: string; status?: number };
-        expect(error.status).not.toBe(0);
-      }
-    });
-
-    it('should set correct phase count with --phases', () => {
-      runPrdCreate('"Multi Phase" --phases 5');
-
-      const files = fs.readdirSync(prdDir).filter((f) => f.endsWith('.md'));
-      const content = fs.readFileSync(path.join(prdDir, files[0]), 'utf-8');
-
-      expect(content).toContain('Phase 1:');
-      expect(content).toContain('Phase 5:');
-    });
-
-    it('should auto-number sequentially', () => {
-      // Create first PRD
-      runPrdCreate('"First PRD"');
-
-      // Create second PRD
-      runPrdCreate('"Second PRD"');
-
-      const files = fs
-        .readdirSync(prdDir)
-        .filter((f) => f.endsWith('.md'))
-        .sort();
-      expect(files).toContain('01-first-prd.md');
-      expect(files).toContain('02-second-prd.md');
-    });
-
-    it('should create prd directory if it does not exist', () => {
-      // Remove the prd directory
-      fs.rmSync(prdDir, { recursive: true, force: true });
-
-      const output = runPrdCreate('"New Feature"');
-
-      expect(output).toContain('Created');
-      expect(fs.existsSync(prdDir)).toBe(true);
+    it('returns null when no PRD title found', () => {
+      expect(extractPrdTitle('# Some Other Heading\n\nBody')).toBeNull();
     });
   });
 

@@ -563,36 +563,47 @@ night-watch serve --global     # Start in global mode (manage all registered pro
 Manage PRD files in your project.
 
 ```bash
-night-watch prd create <name>                    # Create a new PRD
-night-watch prd create <name> -i                 # Interactive mode (prompt for options)
-night-watch prd create <name> --deps "01-other.md"  # Specify dependencies
-night-watch prd create <name> --phases 5          # Set number of execution phases
-night-watch prd create <name> --no-number        # Skip auto-numbering prefix
-night-watch prd create <name> -t ./custom.template.md  # Use custom template
-night-watch prd list                             # List all PRDs with status
-night-watch prd list --json                      # Output as JSON
+night-watch prd create "Add user authentication"          # Generate PRD with Claude Opus (default)
+night-watch prd create "Add user authentication" --number # Add auto-numbering prefix (01-...)
+night-watch prd create "Add user authentication" --model sonnet  # Use a faster/cheaper model
+night-watch prd create "Add user authentication" --model claude-sonnet-4-6  # Full model ID
+night-watch prd list                                       # List all PRDs with status
+night-watch prd list --json                                # Output as JSON
 ```
 
 **Subcommands:**
 
-- `create` — Generate a new PRD markdown file from template
+- `create` — Generate a new PRD markdown file using Claude
 - `list` — List all PRDs with their status (pending, claimed, done) and dependencies
 
-**`create` flags:**
+**`create` options:**
 
-- `-i, --interactive` — Prompt for complexity score, dependencies, and phase count
-- `-t, --template <path>` — Path to a custom template file
-- `--deps <files>` — Comma-separated dependency filenames
-- `--phases <count>` — Number of execution phases (default: 3)
-- `--no-number` — Skip auto-numbering prefix in filename
+| Flag | Description |
+| --- | --- |
+| `--number` | Add an auto-incrementing numeric prefix to the filename (e.g. `01-feature.md`) |
+| `--model <model>` | Claude model to use. Accepts a short alias (`sonnet`, `opus`) or a full model ID. Defaults to `claude-opus-4-6`. |
 
 **What `create` does:**
 
-- Creates a new PRD file in your configured PRD directory (default: `docs/prds/`)
-- Auto-numbers files by default (e.g., `01-feature.md`, `02-bugfix.md`)
-- Slugifies the name for safe filenames
-- Refuses to overwrite existing files
-- Complexity score (1-10) determines complexity level: LOW (1-3), MEDIUM (4-7), HIGH (8-10)
+- Calls Claude (Opus by default) with the bundled `prd-creator.md` planning guide as context
+- Streams the PRD to the terminal as it is generated
+- Writes the finished PRD to `docs/PRDs/<slug>.md` (relative to `process.cwd()`)
+- Slugifies the title extracted from the generated markdown for the filename
+- Refuses to overwrite an existing file
+- Opens a GitHub issue with the PRD content if `gh` is authenticated and a remote is configured
+
+**Model selection:**
+
+| Value | Model used |
+| --- | --- |
+| _(default)_ | `claude-opus-4-6` |
+| `sonnet` | `claude-sonnet-4-6` |
+| `opus` | `claude-opus-4-6` |
+| any full ID | used verbatim (e.g. `claude-sonnet-4-6`) |
+
+**Custom planning guide:**
+
+If `instructions/prd-creator.md` exists in the project root, it is used instead of the bundled guide. Run `night-watch init` to scaffold a customizable copy.
 
 **What `list` shows:**
 
