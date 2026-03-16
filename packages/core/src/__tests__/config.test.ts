@@ -58,10 +58,10 @@ describe('config', () => {
       expect(config.branchPatterns).toEqual(['feat/', 'night-watch/']);
       expect(config.minReviewScore).toBe(80);
       expect(config.maxLogSize).toBe(524288);
-      expect(config.cronSchedule).toBe('5 */2 * * *');
+      expect(config.cronSchedule).toBe('5 * * * *');
       expect(config.reviewerSchedule).toBe('25 */3 * * *');
       expect(config.reviewerMaxPrsPerRun).toBe(0);
-      expect(config.scheduleBundleId).toBeNull();
+      expect(config.scheduleBundleId).toBe('always-on');
     });
 
     it('should return defaults with provider and reviewerEnabled', () => {
@@ -117,7 +117,7 @@ describe('config', () => {
       expect(config.branchPrefix).toBe('night-watch');
       expect(config.minReviewScore).toBe(80);
       expect(config.maxLogSize).toBe(524288);
-      expect(config.cronSchedule).toBe('5 */2 * * *');
+      expect(config.cronSchedule).toBe('5 * * * *');
       expect(config.reviewerSchedule).toBe('25 */3 * * *');
     });
 

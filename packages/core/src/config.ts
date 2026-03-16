@@ -67,7 +67,7 @@ export function getDefaultConfig(): INightWatchConfig {
     maxLogSize: DEFAULT_MAX_LOG_SIZE,
     cronSchedule: DEFAULT_CRON_SCHEDULE,
     reviewerSchedule: DEFAULT_REVIEWER_SCHEDULE,
-    scheduleBundleId: null,
+    scheduleBundleId: 'always-on',
     cronScheduleOffset: DEFAULT_CRON_SCHEDULE_OFFSET,
     schedulingPriority: DEFAULT_SCHEDULING_PRIORITY,
     maxRetries: DEFAULT_MAX_RETRIES,

@@ -332,7 +332,7 @@ describe('init command', () => {
       expect(config.provider).toBe('codex');
       expect(config.reviewerEnabled).toBe(false);
       expect(config.prdDir).toBe('custom/prds');
-      expect(config.scheduleBundleId).toBeNull();
+      expect(config.scheduleBundleId).toBe('always-on');
       expect(config.providerLabel).toBe('');
       expect(config.fallbackOnRateLimit).toBe(defaults.fallbackOnRateLimit);
       expect(config.cronSchedule).toBe(defaults.cronSchedule);

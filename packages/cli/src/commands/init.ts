@@ -346,7 +346,7 @@ export function buildInitConfig(params: {
     maxLogSize: defaults.maxLogSize,
     cronSchedule: defaults.cronSchedule,
     reviewerSchedule: defaults.reviewerSchedule,
-    scheduleBundleId: defaults.scheduleBundleId ?? null,
+    scheduleBundleId: defaults.scheduleBundleId ?? 'always-on',
     cronScheduleOffset: defaults.cronScheduleOffset,
     schedulingPriority: defaults.schedulingPriority,
     maxRetries: defaults.maxRetries,

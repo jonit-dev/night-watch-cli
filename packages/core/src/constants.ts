@@ -32,7 +32,7 @@ export const DEFAULT_MAX_RUNTIME = 7200;
 export const DEFAULT_REVIEWER_MAX_RUNTIME = 3600;
 
 // Cron Schedule Configuration
-export const DEFAULT_CRON_SCHEDULE = '5 */2 * * *';
+export const DEFAULT_CRON_SCHEDULE = '5 * * * *';
 export const DEFAULT_REVIEWER_SCHEDULE = '25 */3 * * *';
 
 // Schedule Offset
