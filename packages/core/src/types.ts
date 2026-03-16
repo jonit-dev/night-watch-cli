@@ -37,9 +37,52 @@ export interface IProviderPreset {
 }
 
 /**
+ * Days of the week (0 = Sunday, 6 = Saturday)
+ */
+export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+/**
  * Job types that can have per-job provider configuration
  */
 export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics' | 'planner';
+
+/**
+ * Time-based provider schedule override.
+ * Allows temporarily switching providers based on day of week and time window.
+ * The days array refers to the START day of the window; for cross-midnight windows,
+ * the after-midnight portion activates on the previous day.
+ */
+export interface IProviderScheduleOverride {
+  /** Human-friendly label for this override (e.g., "Night Surge - Claude") */
+  label: string;
+  /** Provider preset ID to use when this override is active */
+  presetId: string;
+  /**
+   * Days of the week when this override applies.
+   * For cross-midnight windows (e.g., 23:00-04:00), this refers to the START day.
+   * At 02:00 on Thursday, the window 23:00-04:00 checks if Wednesday (day 3) is in days.
+   */
+  days: DayOfWeek[];
+  /**
+   * Start time in 24-hour format (HH:mm).
+   * Example: "23:00" for 11 PM
+   */
+  startTime: string;
+  /**
+   * End time in 24-hour format (HH:mm).
+   * Example: "04:00" for 4 AM
+   * If endTime < startTime, the window crosses midnight.
+   */
+  endTime: string;
+  /**
+   * Optional job type filter. When null or undefined, applies to all jobs.
+   * When specified, only applies to the listed job types.
+   * Job-specific overrides take precedence over global overrides.
+   */
+  jobTypes?: JobType[] | null;
+  /** Whether this override is enabled */
+  enabled: boolean;
+}
 
 /**
  * Per-job provider configuration
@@ -238,6 +281,14 @@ export interface INightWatchConfig {
 
   /** Per-job provider configuration */
   jobProviders: IJobProviders;
+
+  /**
+   * Time-based provider schedule overrides.
+   * When an override is active at job dispatch time, it takes precedence over
+   * static per-job and global provider settings.
+   * Resolution precedence: CLI override > schedule override > per-job provider > global provider.
+   */
+  providerScheduleOverrides?: IProviderScheduleOverride[];
 
   /** Global job queue configuration */
   queue: IQueueConfig;

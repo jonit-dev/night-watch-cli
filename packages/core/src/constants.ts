@@ -10,6 +10,7 @@ import {
   IJobProviders,
   INotificationConfig,
   IProviderPreset,
+  IProviderScheduleOverride,
   IQaConfig,
   IQueueConfig,
   IRoadmapScannerConfig,
@@ -176,6 +177,9 @@ export const VALID_JOB_TYPES: JobType[] = getValidJobTypes();
 
 // Default per-job provider configuration (empty = use global provider)
 export const DEFAULT_JOB_PROVIDERS: IJobProviders = {};
+
+// Default provider schedule overrides (empty = no time-based overrides)
+export const DEFAULT_PROVIDER_SCHEDULE_OVERRIDES: IProviderScheduleOverride[] = [];
 
 /**
  * Built-in provider presets. These are the default configurations for known providers.

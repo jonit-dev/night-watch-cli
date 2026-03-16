@@ -1,8 +1,9 @@
 import { Plus } from 'lucide-react';
 import React from 'react';
-import { IJobProviders, IProviderPreset } from '../../api';
+import { IJobProviders, IProviderPreset, IProviderScheduleOverride } from '../../api';
 import ProviderEnvEditor from '../../components/providers/ProviderEnvEditor.js';
 import PresetCard from '../../components/providers/PresetCard.js';
+import ScheduleOverrideEditor from '../../components/providers/ScheduleOverrideEditor.js';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import Input from '../../components/ui/Input';
@@ -15,6 +16,7 @@ interface IConfigFormAiRuntime {
   jobProviders: IJobProviders;
   primaryFallbackPreset: string;
   secondaryFallbackPreset: string;
+  providerScheduleOverrides: IProviderScheduleOverride[];
   providerEnv: Record<string, string>;
   minReviewScore: number;
   maxRuntime: number;
@@ -197,6 +199,24 @@ const AiRuntimeTab: React.FC<IAiRuntimeTabProps> = ({
             helperText="Used only if the primary fallback preset is also rate-limited"
           />
         </div>
+      </Card>
+
+      {/* Schedule Overrides Card */}
+      <Card className="p-6 space-y-6">
+        <div>
+          <h3 className="text-lg font-medium text-slate-200">Provider Schedule Overrides</h3>
+          <p className="text-sm text-slate-400 mt-1">
+            Temporarily switch providers based on day of week and time windows
+          </p>
+        </div>
+        <ScheduleOverrideEditor
+          overrides={form.providerScheduleOverrides}
+          onChange={(overrides) => updateField('providerScheduleOverrides', overrides)}
+          presetOptions={Object.entries(getAllPresets()).map(([id, preset]) => ({
+            label: preset.name,
+            value: id,
+          }))}
+        />
       </Card>
 
       {/* Provider Environment Variables Card */}

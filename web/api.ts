@@ -6,6 +6,7 @@
 
 import type {
     ClaudeModel,
+    DayOfWeek,
     IAnalyticsConfig,
     IAuditConfig,
     IBoardProviderConfig,
@@ -16,6 +17,7 @@ import type {
     IPrdInfo,
     IProviderBucketConfig,
     IProviderPreset,
+    IProviderScheduleOverride,
     IPrInfo,
     IProcessInfo,
     IQaConfig,
@@ -25,6 +27,7 @@ import type {
     IRoadmapStatus,
     IStatusSnapshot,
     IWebhookConfig,
+    JobType,
     MergeMethod,
     QaArtifacts,
     QueueMode,
@@ -34,10 +37,10 @@ import { getWebJobDef } from './utils/jobs';
 
 // Re-export shared types so consumers can import from either place
 export type {
-    ClaudeModel, IAnalyticsConfig, IAuditConfig, IBoardProviderConfig, IJobProviders, ILogInfo, INightWatchConfig,
-    INotificationConfig, IPrdInfo, IProviderBucketConfig, IProviderPreset, IPrInfo, IProcessInfo, IQaConfig,
+    ClaudeModel, DayOfWeek, IAnalyticsConfig, IAuditConfig, IBoardProviderConfig, IJobProviders, ILogInfo, INightWatchConfig,
+    INotificationConfig, IPrdInfo, IProviderBucketConfig, IProviderPreset, IProviderScheduleOverride, IPrInfo, IProcessInfo, IQaConfig,
     IQueueConfig, IRoadmapItem, IRoadmapScannerConfig, IRoadmapStatus, IStatusSnapshot, IWebhookConfig,
-    MergeMethod, QaArtifacts, QueueMode
+    JobType, MergeMethod, QaArtifacts, QueueMode
 };
 
 export type PrdWithContent = IPrdInfo & { content: string };

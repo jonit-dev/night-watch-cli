@@ -6,10 +6,12 @@
 import { BoardProviderType, IBoardProviderConfig } from './board/types.js';
 import {
   ClaudeModel,
+  DayOfWeek,
   IJobProviders,
   INightWatchConfig,
   IProviderBucketConfig,
   IProviderPreset,
+  IProviderScheduleOverride,
   IQueueConfig,
   IRoadmapScannerConfig,
   IWebhookConfig,
@@ -280,6 +282,80 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
     }
     if (Object.keys(jobProviders).length > 0) {
       normalized.jobProviders = jobProviders;
+    }
+  }
+
+  // Parse provider schedule overrides
+  const rawScheduleOverrides = readObject(rawConfig.providerScheduleOverrides);
+  if (rawScheduleOverrides) {
+    if (Array.isArray(rawScheduleOverrides)) {
+      const overrides: IProviderScheduleOverride[] = [];
+      const timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+      for (const rawOverride of rawScheduleOverrides) {
+        if (rawOverride && typeof rawOverride === 'object') {
+          const overrideObj = rawOverride as Record<string, unknown>;
+
+          const label = readString(overrideObj.label);
+          const presetId = readString(overrideObj.presetId);
+          const startTime = readString(overrideObj.startTime);
+          const endTime = readString(overrideObj.endTime);
+          const rawDays = overrideObj.days;
+          const rawJobTypes = overrideObj.jobTypes;
+          const enabled = readBoolean(overrideObj.enabled);
+
+          // Validate required fields
+          if (!label || !presetId || !startTime || !endTime) {
+            continue; // Skip invalid overrides
+          }
+
+          // Validate time format
+          if (!timeRegex.test(startTime) || !timeRegex.test(endTime)) {
+            continue; // Skip invalid time formats
+          }
+
+          // Validate and filter days array
+          const days: DayOfWeek[] = [];
+          if (Array.isArray(rawDays)) {
+            for (const day of rawDays) {
+              if (typeof day === 'number' && Number.isInteger(day) && day >= 0 && day <= 6) {
+                days.push(day as DayOfWeek);
+              }
+            }
+          }
+          if (days.length === 0) {
+            continue; // Skip overrides with no valid days
+          }
+
+          // Validate and filter jobTypes if present
+          let jobTypes: JobType[] | undefined;
+          if (Array.isArray(rawJobTypes) && rawJobTypes.length > 0) {
+            jobTypes = [];
+            for (const jt of rawJobTypes) {
+              if (typeof jt === 'string' && VALID_JOB_TYPES.includes(jt as JobType)) {
+                jobTypes.push(jt as JobType);
+              }
+            }
+            if (jobTypes.length === 0) {
+              jobTypes = undefined; // Empty array treated as undefined (applies to all)
+            }
+          }
+
+          overrides.push({
+            label: label.trim(),
+            presetId: presetId.trim(),
+            days,
+            startTime,
+            endTime,
+            jobTypes,
+            enabled: enabled ?? true, // Default to true if not specified
+          });
+        }
+      }
+
+      if (overrides.length > 0) {
+        normalized.providerScheduleOverrides = overrides;
+      }
     }
   }
 

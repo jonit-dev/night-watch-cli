@@ -799,6 +799,403 @@ describe('server API', () => {
       expect(response.status).toBe(200);
     });
 
+    it('should accept valid providerScheduleOverrides', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            {
+              label: 'Night Surge',
+              presetId: 'claude-opus-4-6',
+              days: [0, 1, 2, 3, 4, 5, 6],
+              startTime: '23:00',
+              endTime: '04:00',
+              enabled: true,
+            },
+          ],
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('providerScheduleOverrides');
+      expect(response.body.providerScheduleOverrides).toHaveLength(1);
+      expect(response.body.providerScheduleOverrides[0].label).toBe('Night Surge');
+    });
+
+    it('should accept providerScheduleOverrides with minimal fields', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            {
+              label: 'Weekend Codex',
+              presetId: 'codex',
+              days: [0, 6],
+              startTime: '09:00',
+              endTime: '17:00',
+            },
+          ],
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.providerScheduleOverrides[0].enabled).toBe(true);
+      expect(response.body.providerScheduleOverrides[0].jobTypes).toBeUndefined();
+    });
+
+    it('should accept providerScheduleOverrides with jobTypes filter', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            {
+              label: 'Executor Only',
+              presetId: 'claude',
+              days: [1, 2, 3, 4, 5],
+              startTime: '09:00',
+              endTime: '17:00',
+              jobTypes: ['executor'],
+            },
+          ],
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.providerScheduleOverrides[0].jobTypes).toEqual(['executor']);
+    });
+
+    it('should reject providerScheduleOverrides that is not an array', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ providerScheduleOverrides: 'not-an-array' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('providerScheduleOverrides must be an array');
+    });
+
+    it('should reject providerScheduleOverrides with missing label', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            {
+              presetId: 'claude',
+              days: [0],
+              startTime: '00:00',
+              endTime: '01:00',
+            },
+          ],
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('label must be a non-empty string');
+    });
+
+    it('should reject providerScheduleOverrides with empty label', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            {
+              label: '',
+              presetId: 'claude',
+              days: [0],
+              startTime: '00:00',
+              endTime: '01:00',
+            },
+          ],
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('label must be a non-empty string');
+    });
+
+    it('should reject providerScheduleOverrides with missing presetId', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            {
+              label: 'Missing Preset',
+              days: [0],
+              startTime: '00:00',
+              endTime: '01:00',
+            },
+          ],
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('presetId must be a non-empty string');
+    });
+
+    it('should reject providerScheduleOverrides with invalid startTime format', async () => {
+      const invalidTimes = ['25:00', '12:60', '24:00', 'abc', '12:3'];
+      for (const invalidTime of invalidTimes) {
+        const response = await request(app)
+          .put('/api/config')
+          .send({
+            providerScheduleOverrides: [
+              {
+                label: 'Invalid Start Time',
+                presetId: 'claude',
+                days: [0],
+                startTime: invalidTime,
+                endTime: '01:00',
+              },
+            ],
+          });
+
+        expect(response.status).toBe(400);
+        expect(response.body.error).toContain('startTime must be in HH:mm format');
+      }
+    });
+
+    it('should reject providerScheduleOverrides with invalid endTime format', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            {
+              label: 'Invalid End Time',
+              presetId: 'claude',
+              days: [0],
+              startTime: '00:00',
+              endTime: '25:00',
+            },
+          ],
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('endTime must be in HH:mm format');
+    });
+
+    it('should accept valid time formats in providerScheduleOverrides', async () => {
+      const validTimes = ['00:00', '09:00', '23:59', '12:30', '01:05'];
+      for (const validTime of validTimes) {
+        const response = await request(app)
+          .put('/api/config')
+          .send({
+            providerScheduleOverrides: [
+              {
+                label: 'Valid Time',
+                presetId: 'claude',
+                days: [0],
+                startTime: validTime,
+                endTime: '01:00',
+              },
+            ],
+          });
+
+        expect(response.status).toBe(200);
+      }
+    });
+
+    it('should reject providerScheduleOverrides with empty days array', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            {
+              label: 'Empty Days',
+              presetId: 'claude',
+              days: [],
+              startTime: '00:00',
+              endTime: '01:00',
+            },
+          ],
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('days must be a non-empty array');
+    });
+
+    it('should reject providerScheduleOverrides with invalid day values', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            {
+              label: 'Invalid Days',
+              presetId: 'claude',
+              days: [-1, 7, 8],
+              startTime: '00:00',
+              endTime: '01:00',
+            },
+          ],
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('days contains invalid day');
+    });
+
+    it('should accept valid day values (0-6) in providerScheduleOverrides', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            {
+              label: 'All Days',
+              presetId: 'claude',
+              days: [0, 1, 2, 3, 4, 5, 6],
+              startTime: '00:00',
+              endTime: '23:59',
+            },
+          ],
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.providerScheduleOverrides[0].days).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    });
+
+    it('should reject providerScheduleOverrides with invalid jobTypes', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            {
+              label: 'Invalid JobTypes',
+              presetId: 'claude',
+              days: [0],
+              startTime: '00:00',
+              endTime: '01:00',
+              jobTypes: ['executor', 'invalid-job'],
+            },
+          ],
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('jobTypes contains invalid job type');
+    });
+
+    it('should accept valid jobTypes in providerScheduleOverrides', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            {
+              label: 'Multiple JobTypes',
+              presetId: 'claude',
+              days: [0],
+              startTime: '00:00',
+              endTime: '01:00',
+              jobTypes: ['executor', 'reviewer', 'qa'],
+            },
+          ],
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.providerScheduleOverrides[0].jobTypes).toEqual([
+        'executor',
+        'reviewer',
+        'qa',
+      ]);
+    });
+
+    it('should reject providerScheduleOverrides with non-array jobTypes', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            {
+              label: 'Non-Array JobTypes',
+              presetId: 'claude',
+              days: [0],
+              startTime: '00:00',
+              endTime: '01:00',
+              jobTypes: 'executor',
+            },
+          ],
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('jobTypes must be an array or null');
+    });
+
+    it('should reject providerScheduleOverrides with invalid enabled value', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            {
+              label: 'Invalid Enabled',
+              presetId: 'claude',
+              days: [0],
+              startTime: '00:00',
+              endTime: '01:00',
+              enabled: 'true',
+            },
+          ],
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('enabled must be a boolean');
+    });
+
+    it('should accept providerScheduleOverrides with enabled=false', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            {
+              label: 'Disabled Override',
+              presetId: 'claude',
+              days: [0],
+              startTime: '00:00',
+              endTime: '01:00',
+              enabled: false,
+            },
+          ],
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.providerScheduleOverrides[0].enabled).toBe(false);
+    });
+
+    it('should accept multiple valid providerScheduleOverrides', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            {
+              label: 'Night Surge',
+              presetId: 'claude-opus-4-6',
+              days: [0, 1, 2, 3, 4, 5, 6],
+              startTime: '23:00',
+              endTime: '04:00',
+              enabled: true,
+            },
+            {
+              label: 'Weekend Codex',
+              presetId: 'codex',
+              days: [0, 6],
+              startTime: '09:00',
+              endTime: '17:00',
+              jobTypes: ['executor'],
+            },
+          ],
+        });
+
+      expect(response.status).toBe(200);
+      expect(response.body.providerScheduleOverrides).toHaveLength(2);
+    });
+
+    it('should reject providerScheduleOverrides with non-object override', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({
+          providerScheduleOverrides: [
+            'not-an-object',
+            {
+              label: 'Valid Override',
+              presetId: 'claude',
+              days: [0],
+              startTime: '00:00',
+              endTime: '01:00',
+            },
+          ],
+        });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('must be an object');
+    });
+
     it('should validate prdDir is non-empty string', async () => {
       const response = await request(app).put('/api/config').send({ prdDir: '' });
 

@@ -6,6 +6,7 @@ import { Request, Response, Router } from 'express';
 import { CronExpressionParser } from 'cron-parser';
 
 import {
+  DayOfWeek,
   IGlobalNotificationsConfig,
   INightWatchConfig,
   IProviderPreset,
@@ -296,6 +297,75 @@ function validateConfigChanges(
         (typeof provider !== 'string' || provider.trim().length === 0)
       ) {
         return `Invalid provider in jobProviders.${jobType}: ${provider}. Must be a non-empty string (preset ID)`;
+      }
+    }
+  }
+
+  // providerScheduleOverrides validation
+  if (changes.providerScheduleOverrides !== undefined) {
+    if (!Array.isArray(changes.providerScheduleOverrides)) {
+      return 'providerScheduleOverrides must be an array';
+    }
+
+    const timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
+    const validDays: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6];
+
+    for (let i = 0; i < changes.providerScheduleOverrides.length; i++) {
+      const override = changes.providerScheduleOverrides[i];
+      const prefix = `providerScheduleOverrides[${i}]`;
+
+      if (typeof override !== 'object' || override === null) {
+        return `${prefix} must be an object`;
+      }
+
+      // Validate required fields
+      if (typeof override.label !== 'string' || override.label.trim().length === 0) {
+        return `${prefix}.label must be a non-empty string`;
+      }
+
+      if (typeof override.presetId !== 'string' || override.presetId.trim().length === 0) {
+        return `${prefix}.presetId must be a non-empty string`;
+      }
+
+      if (typeof override.startTime !== 'string') {
+        return `${prefix}.startTime must be a string`;
+      }
+      if (!timeRegex.test(override.startTime)) {
+        return `${prefix}.startTime must be in HH:mm format (00:00-23:59)`;
+      }
+
+      if (typeof override.endTime !== 'string') {
+        return `${prefix}.endTime must be a string`;
+      }
+      if (!timeRegex.test(override.endTime)) {
+        return `${prefix}.endTime must be in HH:mm format (00:00-23:59)`;
+      }
+
+      // Validate days array
+      if (!Array.isArray(override.days) || override.days.length === 0) {
+        return `${prefix}.days must be a non-empty array`;
+      }
+      for (const day of override.days) {
+        if (!validDays.includes(day as DayOfWeek)) {
+          return `${prefix}.days contains invalid day: ${day}. Must be integers 0-6 (0=Sunday, 6=Saturday)`;
+        }
+      }
+
+      // Validate jobTypes if present
+      if (override.jobTypes !== undefined && override.jobTypes !== null) {
+        if (!Array.isArray(override.jobTypes)) {
+          return `${prefix}.jobTypes must be an array or null`;
+        }
+        for (const jt of override.jobTypes) {
+          if (!VALID_JOB_TYPES.includes(jt as JobType)) {
+            return `${prefix}.jobTypes contains invalid job type: ${jt}. Must be one of: ${VALID_JOB_TYPES.join(', ')}`;
+          }
+        }
+      }
+
+      // Validate enabled if present
+      if (override.enabled !== undefined && typeof override.enabled !== 'boolean') {
+        return `${prefix}.enabled must be a boolean`;
       }
     }
   }

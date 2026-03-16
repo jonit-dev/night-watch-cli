@@ -13,6 +13,7 @@ import {
   INightWatchConfig,
   INotificationConfig,
   IProviderPreset,
+  IProviderScheduleOverride,
   IQaConfig,
   IRoadmapScannerConfig,
   IWebhookConfig,
@@ -80,6 +81,7 @@ type ConfigForm = {
   primaryFallbackPreset: string;
   secondaryFallbackPreset: string;
   claudeModel: ClaudeModel;
+  providerScheduleOverrides: IProviderScheduleOverride[];
   qa: IQaConfig;
   audit: IAuditConfig;
   analytics: IAnalyticsConfig;
@@ -133,6 +135,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   primaryFallbackPreset: config.primaryFallbackPreset ?? '',
   secondaryFallbackPreset: config.secondaryFallbackPreset ?? '',
   claudeModel: config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet',
+  providerScheduleOverrides: config.providerScheduleOverrides ?? [],
   qa: config.qa || {
     enabled: true,
     schedule: '45 2,14 * * *',
@@ -466,6 +469,7 @@ const Settings: React.FC = () => {
         primaryFallbackPreset: form.primaryFallbackPreset || undefined,
         secondaryFallbackPreset: form.secondaryFallbackPreset || undefined,
         claudeModel: form.primaryFallbackModel,
+        providerScheduleOverrides: form.providerScheduleOverrides,
         qa: form.qa,
         audit: form.audit,
         analytics: form.analytics,

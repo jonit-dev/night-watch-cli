@@ -43,6 +43,9 @@ export interface IProviderPreset {
 /** Git merge methods for auto-merge */
 export type MergeMethod = 'squash' | 'merge' | 'rebase';
 
+/** Days of the week (0 = Sunday, 6 = Saturday) */
+export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
 /** Job types that can have per-job provider configuration */
 export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics' | 'planner';
 
@@ -54,6 +57,27 @@ export interface IJobProviders {
   audit?: Provider;
   slicer?: Provider;
   analytics?: Provider;
+}
+
+/**
+ * Time-based provider schedule override.
+ * Allows temporarily switching providers based on day of week and time window.
+ */
+export interface IProviderScheduleOverride {
+  /** Human-friendly label for this override */
+  label: string;
+  /** Provider preset ID to use when this override is active */
+  presetId: string;
+  /** Days of the week when this override applies (0 = Sunday, 6 = Saturday) */
+  days: DayOfWeek[];
+  /** Start time in 24-hour format (HH:mm) */
+  startTime: string;
+  /** End time in 24-hour format (HH:mm) */
+  endTime: string;
+  /** Optional job type filter. null/undefined = all jobs */
+  jobTypes?: JobType[] | null;
+  /** Whether this override is enabled */
+  enabled: boolean;
 }
 
 // ==================== Provider Strategy ====================
@@ -199,6 +223,8 @@ export interface INightWatchConfig {
   audit: IAuditConfig;
   analytics: IAnalyticsConfig;
   queue: IQueueConfig;
+  /** Time-based provider schedule overrides */
+  providerScheduleOverrides?: IProviderScheduleOverride[];
 }
 
 export type QueueMode = 'conservative' | 'provider-aware';

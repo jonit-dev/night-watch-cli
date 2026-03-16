@@ -6,8 +6,19 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { loadConfig, getDefaultConfig, resolveJobProvider, resolvePreset } from '../config.js';
-import { INightWatchConfig, JobType, IProviderPreset } from '../types.js';
+import {
+  loadConfig,
+  getDefaultConfig,
+  resolveJobProvider,
+  resolvePreset,
+  findActiveScheduleOverride,
+} from '../config.js';
+import {
+  INightWatchConfig,
+  JobType,
+  IProviderPreset,
+  IProviderScheduleOverride,
+} from '../types.js';
 import type { IQaConfig, IAuditConfig, IAnalyticsConfig } from '../types.js';
 
 describe('config', () => {
@@ -1641,6 +1652,222 @@ describe('config', () => {
       };
 
       expect(resolveJobProvider(config, 'executor' as JobType)).toBe('claude');
+    });
+
+    describe('schedule overrides', () => {
+      // Helper to create dates in local time for consistent testing
+      // Note: These dates assume the test runner is in a timezone where
+      // the dates fall on the expected days of week.
+      const createDate = (isoString: string): Date => {
+        const d = new Date(isoString);
+        return d;
+      };
+
+      const nightSurgeOverride: IProviderScheduleOverride = {
+        label: 'Night Surge - Claude',
+        presetId: 'claude-opus-4-6',
+        days: [1, 2, 3, 4, 5], // Weekdays (Mon=1, Fri=5)
+        startTime: '23:00',
+        endTime: '04:00',
+        enabled: true,
+      };
+
+      const dayOverride: IProviderScheduleOverride = {
+        label: 'Day Worker - Codex',
+        presetId: 'codex',
+        days: [1, 2, 3, 4, 5], // Weekdays
+        startTime: '09:00',
+        endTime: '17:00',
+        enabled: true,
+      };
+
+      it('should return override preset when time matches (within window)', () => {
+        const config: INightWatchConfig = {
+          ...getDefaultConfig(),
+          provider: 'claude',
+          providerScheduleOverrides: [nightSurgeOverride],
+        };
+
+        // Create a date that is guaranteed to be a weekday at 23:30
+        // March 17, 2026 is a Tuesday - use local time (no Z suffix)
+        const tuesday2330 = createDate('2026-03-17T23:30:00');
+        expect(resolveJobProvider(config, 'executor' as JobType, tuesday2330)).toBe(
+          'claude-opus-4-6',
+        );
+      });
+
+      it('should fall through to static provider when outside time window', () => {
+        const config: INightWatchConfig = {
+          ...getDefaultConfig(),
+          provider: 'claude',
+          providerScheduleOverrides: [nightSurgeOverride],
+        };
+
+        // Tuesday at 10:00 - outside the night surge window (23:00-04:00)
+        const tuesday1000 = createDate('2026-03-17T10:00:00');
+        expect(resolveJobProvider(config, 'executor' as JobType, tuesday1000)).toBe('claude');
+      });
+
+      it('should match cross-midnight window at 02:00 (previous day check)', () => {
+        const config: INightWatchConfig = {
+          ...getDefaultConfig(),
+          provider: 'claude',
+          providerScheduleOverrides: [nightSurgeOverride],
+        };
+
+        // Thursday at 02:00 - should match because Wednesday (day 3) is in days
+        // and the window 23:00-04:00 crosses midnight
+        // March 19, 2026 is a Thursday
+        const thursday0200 = createDate('2026-03-19T02:00:00');
+        expect(resolveJobProvider(config, 'executor' as JobType, thursday0200)).toBe(
+          'claude-opus-4-6',
+        );
+      });
+
+      it('should prefer job-specific override over global override', () => {
+        const jobSpecificOverride: IProviderScheduleOverride = {
+          ...nightSurgeOverride,
+          jobTypes: ['executor'],
+        };
+
+        const config: INightWatchConfig = {
+          ...getDefaultConfig(),
+          provider: 'claude',
+          providerScheduleOverrides: [nightSurgeOverride, jobSpecificOverride],
+        };
+
+        // Tuesday at 23:30 - executor should use job-specific override
+        const tuesday2330 = createDate('2026-03-17T23:30:00');
+        expect(resolveJobProvider(config, 'executor' as JobType, tuesday2330)).toBe(
+          'claude-opus-4-6',
+        );
+      });
+
+      it('should skip disabled overrides', () => {
+        const disabledOverride: IProviderScheduleOverride = {
+          ...nightSurgeOverride,
+          enabled: false,
+        };
+
+        const config: INightWatchConfig = {
+          ...getDefaultConfig(),
+          provider: 'claude',
+          providerScheduleOverrides: [disabledOverride],
+        };
+
+        const tuesday2330 = createDate('2026-03-17T23:30:00');
+        expect(resolveJobProvider(config, 'executor' as JobType, tuesday2330)).toBe('claude');
+      });
+
+      it('should not match on wrong day of week', () => {
+        const config: INightWatchConfig = {
+          ...getDefaultConfig(),
+          provider: 'claude',
+          providerScheduleOverrides: [nightSurgeOverride],
+        };
+
+        // Saturday at 23:30 - day 6, not in [1,2,3,4,5]
+        // March 22, 2026 is a Sunday (day 0), but in some timezones it might still be Saturday
+        // Let's use March 21, 2026 which is a Saturday
+        const saturday2330 = createDate('2026-03-21T23:30:00');
+        expect(resolveJobProvider(config, 'executor' as JobType, saturday2330)).toBe('claude');
+      });
+
+      it('should have CLI override beat schedule overrides', () => {
+        const config: INightWatchConfig = {
+          ...getDefaultConfig(),
+          provider: 'claude',
+          providerScheduleOverrides: [nightSurgeOverride],
+          _cliProviderOverride: 'codex',
+        };
+
+        const tuesday2330 = createDate('2026-03-17T23:30:00');
+        expect(resolveJobProvider(config, 'executor' as JobType, tuesday2330)).toBe('codex');
+      });
+
+      it('should handle same-day window (09:00-17:00)', () => {
+        const config: INightWatchConfig = {
+          ...getDefaultConfig(),
+          provider: 'claude',
+          providerScheduleOverrides: [dayOverride],
+        };
+
+        // Tuesday at 14:00 - within same-day window
+        const tuesday1400 = createDate('2026-03-17T14:00:00');
+        expect(resolveJobProvider(config, 'executor' as JobType, tuesday1400)).toBe('codex');
+
+        // Tuesday at 18:00 - outside same-day window
+        const tuesday1800 = createDate('2026-03-17T18:00:00');
+        expect(resolveJobProvider(config, 'executor' as JobType, tuesday1800)).toBe('claude');
+      });
+
+      it('first matching override of same specificity wins', () => {
+        const firstOverride: IProviderScheduleOverride = {
+          ...nightSurgeOverride,
+          presetId: 'first-override',
+        };
+
+        const secondOverride: IProviderScheduleOverride = {
+          ...nightSurgeOverride,
+          presetId: 'second-override',
+        };
+
+        const config: INightWatchConfig = {
+          ...getDefaultConfig(),
+          provider: 'claude',
+          providerScheduleOverrides: [firstOverride, secondOverride],
+        };
+
+        const tuesday2330 = createDate('2026-03-17T23:30:00');
+        expect(resolveJobProvider(config, 'executor' as JobType, tuesday2330)).toBe(
+          'first-override',
+        );
+      });
+
+      it('should only apply job-specific overrides to matching jobs', () => {
+        const executorOverride: IProviderScheduleOverride = {
+          ...nightSurgeOverride,
+          presetId: 'executor-only',
+          jobTypes: ['executor'],
+        };
+
+        const config: INightWatchConfig = {
+          ...getDefaultConfig(),
+          provider: 'claude',
+          providerScheduleOverrides: [executorOverride],
+        };
+
+        const tuesday2330 = createDate('2026-03-17T23:30:00');
+        expect(resolveJobProvider(config, 'executor' as JobType, tuesday2330)).toBe(
+          'executor-only',
+        );
+        expect(resolveJobProvider(config, 'reviewer' as JobType, tuesday2330)).toBe('claude');
+      });
+    });
+
+    describe('findActiveScheduleOverride', () => {
+      it('should return null when no overrides are active', () => {
+        const overrides: IProviderScheduleOverride[] = [
+          {
+            label: 'Night Surge',
+            presetId: 'claude-opus-4-6',
+            days: [1, 2, 3, 4, 5], // Weekdays only
+            startTime: '23:00',
+            endTime: '04:00',
+            enabled: true,
+          },
+        ];
+
+        // Sunday at noon - no override active (not a weekday)
+        // March 22, 2026 is a Sunday
+        const sunday1200 = new Date('2026-03-22T12:00:00');
+        expect(findActiveScheduleOverride(overrides, 'executor' as JobType, sunday1200)).toBeNull();
+      });
+
+      it('should return null for empty overrides array', () => {
+        const sunday1200 = new Date('2026-03-22T12:00:00');
+        expect(findActiveScheduleOverride([], 'executor' as JobType, sunday1200)).toBeNull();
+      });
     });
   });
 
