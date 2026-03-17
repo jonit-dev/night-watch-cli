@@ -144,8 +144,12 @@ async function sendRunCompletionNotifications(
   // Enrich with PR details on success (graceful — null if gh fails)
   let prDetails: IPrDetails | null = null;
   if (event === 'run_succeeded') {
+    const prUrl = scriptResult?.data.pr_url;
     const branch = scriptResult?.data.branch;
-    if (branch) {
+    if (prUrl) {
+      prDetails = fetchPrDetailsForBranch(prUrl, projectDir);
+    }
+    if (!prDetails && branch) {
       prDetails = fetchPrDetailsForBranch(branch, projectDir);
     }
     if (!prDetails) {
