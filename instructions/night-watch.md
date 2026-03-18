@@ -13,19 +13,21 @@ If `NW_BOARD_ENABLED` is set to `true` in the environment, use board mode instea
 
 4. **Branch naming**: `night-watch/<issue-number>-<slugified-title>` (e.g., `night-watch/42-my-feature`)
 
-5. **Create worktree and implement** as normal (create branch, worktree, implement, test, commit).
+5. **Create worktree and implement** as normal (create branch, worktree, implement, write tests, commit).
 
-6. **Open PR**: Include `Closes #<issue-number>` in the PR body so the issue auto-closes when merged:
+6. **Open PR immediately** — do this BEFORE running final verification. Include `Closes #<issue-number>` in the PR body so the issue auto-closes when merged:
 
    ```
    gh pr create --title "feat: <short title>" --body "Closes #<number>\n\n<summary>"
    ```
 
-7. **Move to Review**: `night-watch board move-issue <number> --column "Review"`
+7. **Post-PR verification**: Run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
 
-8. **Comment on issue**: `night-watch board comment <number> --body "PR opened: <url>"`
+8. **Move to Review**: `night-watch board move-issue <number> --column "Review"`
 
-9. **Clean up** worktree and **STOP** — one task per run.
+9. **Comment on issue**: `night-watch board comment <number> --body "PR opened: <url>"`
+
+10. **STOP immediately** — do NOT do any additional work, visual checks, or exploration. One task per run.
 
 ---
 
@@ -69,9 +71,7 @@ If `NW_BOARD_ENABLED` is set to `true` in the environment, use board mode instea
 
    f. **Write tests** as specified in each PRD phase (the prd-executor agents handle this per-phase).
 
-   g. **Final verification**: After all phases complete, run the project's test/lint commands (e.g., `npm test`, `npm run lint`, `npm run verify` or equivalent). Fix issues until it passes.
-
-   h. **Commit** all changes:
+   g. **Commit** all changes:
 
    ```
    git add <files>
@@ -82,16 +82,18 @@ If `NW_BOARD_ENABLED` is set to `true` in the environment, use board mode instea
    Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
    ```
 
-   i. **Push and open PR**:
+   h. **Push and open PR** — do this BEFORE running final verification:
 
    ```
    git push -u origin night-watch/<prd-name>
    gh pr create --title "feat: <short title>" --body "<summary with PRD reference>"
    ```
 
+   i. **Post-PR verification**: Now run the project's test/lint commands (e.g., `npm test`, `npm run lint`, `npm run verify` or equivalent). If anything fails, fix it, commit, and push again.
+
    j. **Mark PRD as done**: `night-watch prd done <filename>`
 
-   k. **STOP after this PRD**. Do NOT continue to the next PRD. One PRD per run prevents timeouts and reduces risk. The next cron trigger will pick up the next PRD.
+   k. **STOP immediately**. Do NOT continue to the next PRD, and do NOT do any additional work, visual checks, or exploration. One PRD per run prevents timeouts and reduces risk. The next cron trigger will pick up the next PRD.
 
 5. **On failure**: Do NOT mark the PRD as done. Log the failure and clean up worktree. **Stop** -- do not attempt the next PRD.
 

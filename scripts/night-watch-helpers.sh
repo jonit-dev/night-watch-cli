@@ -306,7 +306,12 @@ log() {
   fi
   local msg="[$(date '+%Y-%m-%d %H:%M:%S')] [PID:$$]${elapsed_str} $*"
   echo "${msg}" >> "${log_file}"
-  echo "${msg}" >&2
+  # When invoked via cron, stdout/stderr are already redirected to the log file
+  # by the crontab entry (>> executor.log 2>&1), so echoing to stderr would
+  # duplicate every log line in the file.
+  if [ "${NW_CRON_TRIGGER:-0}" != "1" ]; then
+    echo "${msg}" >&2
+  fi
 }
 
 # Write a visual separator line to the log to delimit separate runs.

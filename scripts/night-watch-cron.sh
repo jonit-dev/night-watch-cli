@@ -416,15 +416,16 @@ Read ${EXECUTOR_PROMPT_REF} and follow the FULL execution pipeline:
 3. Create a task list with one task per phase
 4. Execute phases in parallel waves using agent swarms — launch ALL independent phases concurrently
 5. Run the project's verify/test command between waves to catch issues early
-6. After all phases complete, run final verification and fix any issues
 Follow all CLAUDE.md conventions (if present).
 
-## Finalize
-- Commit all changes, push, and open a PR:
+## Finalize — open the PR FIRST, then verify
+- Commit all changes, push, and open the PR immediately:
   git push -u origin ${BRANCH_NAME}
   gh pr create --title \"feat: <short title>\" --body \"Closes #${ISSUE_NUMBER}
 
 <summary>\"
+- After the PR is open, run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
+- STOP immediately after the final push — do NOT do any additional work, visual checks, or exploration.
 - Do NOT process any other issues — only issue #${ISSUE_NUMBER}"
 else
   PROMPT_PRD_PATH="${PRD_DIR_REL}/${ELIGIBLE_PRD}"
@@ -444,13 +445,14 @@ Read ${EXECUTOR_PROMPT_REF} and follow the FULL execution pipeline:
 3. Create a task list with one task per phase
 4. Execute phases in parallel waves using agent swarms — launch ALL independent phases concurrently
 5. Run the project's verify/test command between waves to catch issues early
-6. After all phases complete, run final verification and fix any issues
 Follow all CLAUDE.md conventions (if present).
 
-## Finalize
-- Commit all changes, push, and open a PR:
+## Finalize — open the PR FIRST, then verify
+- Commit all changes, push, and open the PR immediately:
   git push -u origin ${BRANCH_NAME}
   gh pr create --title \"feat: <short title>\" --body \"<summary referencing PRD>\"
+- After the PR is open, run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
+- STOP immediately after the final push — do NOT do any additional work, visual checks, or exploration.
 - Do NOT move the PRD to done/ — the cron script handles that
 - Do NOT process any other PRDs — only ${ELIGIBLE_PRD}"
 fi
@@ -597,12 +599,14 @@ The previous session ran out of context window. Progress has been committed on b
 Read ${EXECUTOR_PROMPT_REF} and follow the FULL execution pipeline for remaining phases only.
 Follow all CLAUDE.md conventions (if present).
 
-## Finalize
-- Commit all changes, push, and open a PR:
+## Finalize — open the PR FIRST, then verify
+- Commit all changes, push, and open the PR immediately:
   git push -u origin ${BRANCH_NAME}
   gh pr create --title \"feat: <short title>\" --body \"Closes #${ISSUE_NUMBER}
 
 <summary>\"
+- After the PR is open, run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
+- STOP immediately after the final push — do NOT do any additional work, visual checks, or exploration.
 - Do NOT process any other issues — only issue #${ISSUE_NUMBER}"
     else
       PROMPT="Continue implementing the PRD at ${PRD_DIR_REL}/${ELIGIBLE_PRD}
@@ -625,10 +629,12 @@ The previous session ran out of context window. Progress has been committed on b
 Read ${EXECUTOR_PROMPT_REF} and follow the FULL execution pipeline for remaining phases only.
 Follow all CLAUDE.md conventions (if present).
 
-## Finalize
-- Commit all changes, push, and open a PR:
+## Finalize — open the PR FIRST, then verify
+- Commit all changes, push, and open the PR immediately:
   git push -u origin ${BRANCH_NAME}
   gh pr create --title \"feat: <short title>\" --body \"<summary referencing PRD>\"
+- After the PR is open, run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
+- STOP immediately after the final push — do NOT do any additional work, visual checks, or exploration.
 - Do NOT move the PRD to done/ — the cron script handles that
 - Do NOT process any other PRDs — only ${ELIGIBLE_PRD}"
     fi

@@ -38,9 +38,7 @@ You are the Night Watch agent. Your job is to autonomously pick up PRD tickets a
 
    f. **Write tests** as specified in each PRD phase (the prd-executor agents handle this per-phase).
 
-   g. **Final verification**: After all phases complete, run the project's test/lint commands (e.g., `npm test`, `npm run lint`, `npm run verify` or equivalent). Fix issues until it passes.
-
-   h. **Commit** all changes:
+   g. **Commit** all changes:
 
    ```
    git add <files>
@@ -51,16 +49,18 @@ You are the Night Watch agent. Your job is to autonomously pick up PRD tickets a
    Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
    ```
 
-   i. **Push and open PR**:
+   h. **Push and open PR** — do this BEFORE running final verification:
 
    ```
    git push -u origin night-watch/<prd-name>
    gh pr create --title "feat: <short title>" --body "<summary with PRD reference>"
    ```
 
+   i. **Post-PR verification**: Now run the project's test/lint commands (e.g., `npm test`, `npm run lint`, `npm run verify` or equivalent). If anything fails, fix it, commit, and push again.
+
    j. **Mark PRD as done**: `night-watch prd done <filename>`
 
-   k. **STOP after this PRD**. Do NOT continue to the next PRD. One PRD per run prevents timeouts and reduces risk. The next cron trigger will pick up the next PRD.
+   k. **STOP immediately**. Do NOT continue to the next PRD, and do NOT do any additional work, visual checks, or exploration. One PRD per run prevents timeouts and reduces risk. The next cron trigger will pick up the next PRD.
 
 5. **On failure**: Do NOT mark the PRD as done. Log the failure and clean up worktree. **Stop** -- do not attempt the next PRD.
 
