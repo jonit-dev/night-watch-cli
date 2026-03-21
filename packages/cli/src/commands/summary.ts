@@ -3,9 +3,19 @@
  * Shows a "morning briefing" combining job runs, PRs, and queue status
  */
 
+import path from 'path';
+
 import { Command } from 'commander';
 import chalk from 'chalk';
-import { createTable, dim, getSummaryData, header, info, loadConfig } from '@night-watch/core';
+import {
+  DEFAULT_SUMMARY_WINDOW_HOURS,
+  createTable,
+  dim,
+  getSummaryData,
+  header,
+  info,
+  loadConfig,
+} from '@night-watch/core';
 import type { IPrInfo } from '@night-watch/core';
 
 export interface ISummaryOptions {
@@ -60,7 +70,7 @@ function formatJobStatus(status: string): string {
  * Extract project name from path
  */
 function getProjectName(projectPath: string): string {
-  return projectPath.split('/').pop() || projectPath;
+  return path.basename(projectPath) || projectPath;
 }
 
 /**
@@ -77,13 +87,21 @@ export function summaryCommand(program: Command): void {
   program
     .command('summary')
     .description('Show a summary of recent Night Watch activity')
-    .option('--hours <n>', 'Time window in hours (default: 12)', '12')
+    .option(
+      '--hours <n>',
+      'Time window in hours (default: 12)',
+      String(DEFAULT_SUMMARY_WINDOW_HOURS),
+    )
     .option('--json', 'Output summary as JSON')
     .action(async (options: ISummaryOptions) => {
       try {
         const projectDir = process.cwd();
         const config = loadConfig(projectDir);
-        const hours = parseInt(options.hours || '12', 10);
+        const hours = parseInt(options.hours || String(DEFAULT_SUMMARY_WINDOW_HOURS), 10);
+        if (isNaN(hours) || hours <= 0) {
+          console.error('Error: --hours must be a positive integer');
+          process.exit(1);
+        }
 
         const data = await getSummaryData(projectDir, hours, config.branchPatterns);
 
@@ -103,35 +121,32 @@ export function summaryCommand(program: Command): void {
         if (data.jobRuns.length === 0) {
           info('No recent activity in this time window.');
           console.log();
-          return;
-        }
+        } else {
+          // Job counts with colored indicators
+          const countParts: string[] = [];
+          if (data.counts.succeeded > 0) {
+            countParts.push(chalk.green(`✓ ${data.counts.succeeded} succeeded`));
+          }
+          if (data.counts.failed > 0) {
+            countParts.push(chalk.red(`✗ ${data.counts.failed} failed`));
+          }
+          if (data.counts.timedOut > 0) {
+            countParts.push(chalk.yellow(`⏱ ${data.counts.timedOut} timed out`));
+          }
+          if (data.counts.rateLimited > 0) {
+            countParts.push(chalk.magenta(`⏳ ${data.counts.rateLimited} rate limited`));
+          }
+          if (data.counts.skipped > 0) {
+            countParts.push(chalk.dim(`${data.counts.skipped} skipped`));
+          }
 
-        // Job counts with colored indicators
-        const countParts: string[] = [];
-        if (data.counts.succeeded > 0) {
-          countParts.push(chalk.green(`✓ ${data.counts.succeeded} succeeded`));
-        }
-        if (data.counts.failed > 0) {
-          countParts.push(chalk.red(`✗ ${data.counts.failed} failed`));
-        }
-        if (data.counts.timedOut > 0) {
-          countParts.push(chalk.yellow(`⏱ ${data.counts.timedOut} timed out`));
-        }
-        if (data.counts.rateLimited > 0) {
-          countParts.push(chalk.magenta(`⏳ ${data.counts.rateLimited} rate limited`));
-        }
-        if (data.counts.skipped > 0) {
-          countParts.push(chalk.dim(`${data.counts.skipped} skipped`));
-        }
+          console.log(`Jobs Executed: ${data.counts.total}`);
+          if (countParts.length > 0) {
+            console.log(`  ${countParts.join('   ')}`);
+          }
+          console.log();
 
-        console.log(`Jobs Executed: ${data.counts.total}`);
-        if (countParts.length > 0) {
-          console.log(`  ${countParts.join('   ')}`);
-        }
-        console.log();
-
-        // Job runs table
-        if (data.jobRuns.length > 0) {
+          // Job runs table
           const table = createTable({
             head: ['Job', 'Status', 'Project', 'Provider', 'Duration'],
             colWidths: [12, 12, 20, 12, 12],
@@ -182,7 +197,7 @@ export function summaryCommand(program: Command): void {
           const jobTypes = [...new Set(data.pendingQueueItems.map((item) => item.jobType))];
           const projectNames = [...new Set(data.pendingQueueItems.map((item) => item.projectName))];
           dim(
-            `Queue: ${data.pendingQueueItems.length} pending (${jobTypes.join(', ')}) for ${projectNames.join(', ')})`,
+            `Queue: ${data.pendingQueueItems.length} pending (${jobTypes.join(', ')}) for ${projectNames.join(', ')}`,
           );
           console.log();
         }

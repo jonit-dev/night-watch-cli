@@ -3,6 +3,7 @@
  * Provides a "morning briefing" combining job runs, PRs, and queue status
  */
 
+import { DEFAULT_SUMMARY_WINDOW_HOURS } from '../constants.js';
 import type { IJobRunAnalytics, IQueueEntry } from '../types.js';
 import type { IPrInfo } from './status-data.js';
 import { collectPrInfo } from './status-data.js';
@@ -132,7 +133,7 @@ function buildActionItems(
  */
 export async function getSummaryData(
   projectDir: string,
-  windowHours = 12,
+  windowHours = DEFAULT_SUMMARY_WINDOW_HOURS,
   branchPatterns: string[] = [],
 ): Promise<ISummaryData> {
   // Get job runs analytics
