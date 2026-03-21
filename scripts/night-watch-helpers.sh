@@ -589,6 +589,11 @@ cleanup_worktrees() {
   local project_name
   project_name=$(basename "${project_dir}")
 
+  # Clear stale worktree registrations first. This fixes cases where a
+  # worktree directory was deleted out-of-band (for example by an agent
+  # runtime crash), leaving Git thinking the branch is still in use.
+  git -C "${project_dir}" worktree prune >/dev/null 2>&1 || true
+
   local match_token="${project_name}-nw"
   if [ -n "${scope}" ]; then
     match_token="${scope}"
@@ -602,6 +607,10 @@ cleanup_worktrees() {
         log "CLEANUP: Removing leftover worktree ${wt}"
         git -C "${project_dir}" worktree remove --force "${wt}" 2>/dev/null || true
       done || true
+
+  # Prune again after removals so Git drops any admin entries left behind by
+  # force-removal or previously broken worktrees outside Night Watch naming.
+  git -C "${project_dir}" worktree prune >/dev/null 2>&1 || true
 }
 
 # Pick the best available ref for creating a new detached worktree.
