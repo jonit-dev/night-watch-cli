@@ -2,7 +2,7 @@
 
 The CLI is the published entry point to Night Watch. It uses Commander.js to expose 24 commands that orchestrate PRD execution, PR review, cron management, and the web dashboard.
 
-> Related: [Commands Reference](commands.md) | [Configuration](configuration.md) | [Core Package](core-package.md) | [Build Pipeline](build-pipeline.md)
+> Related: [Commands Reference](commands.md) | [Configuration](configuration.md) | [Core Package](core-package.md) | [Build Pipeline](../architecture/build-pipeline.md)
 
 ---
 

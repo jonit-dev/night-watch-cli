@@ -1,6 +1,6 @@
 # Local CLI Testing
 
-> Related: [DEV-ONBOARDING](DEV-ONBOARDING.md) | [Build Pipeline](build-pipeline.md) | [Contributing](contributing.md) | [CLI Package](cli-package.md)
+> Related: [DEV-ONBOARDING](DEV-ONBOARDING.md) | [Build Pipeline](../architecture/build-pipeline.md) | [Contributing](contributing.md) | [CLI Package](../reference/cli-package.md)
 
 How to test the CLI locally without publishing to npm.
 

@@ -2,7 +2,7 @@
 
 How Night Watch is compiled, bundled, tested, and published.
 
-> Related: [CLI Package](cli-package.md) | [DEV-ONBOARDING](DEV-ONBOARDING.md) | [Local Testing](local-testing.md)
+> Related: [CLI Package](../reference/cli-package.md) | [DEV-ONBOARDING](../guides/DEV-ONBOARDING.md) | [Local Testing](../guides/local-testing.md)
 
 ---
 

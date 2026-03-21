@@ -1,6 +1,6 @@
 # Night Watch Web UI
 
-> Related: [Server API](server-api.md) | [Architecture Overview](architecture-overview.md) | [DEV-ONBOARDING](DEV-ONBOARDING.md) | [CLI Package](cli-package.md)
+> Related: [Server API](../reference/server-api.md) | [Architecture Overview](../architecture/architecture-overview.md) | [DEV-ONBOARDING](../guides/DEV-ONBOARDING.md) | [CLI Package](../reference/cli-package.md)
 
 ## Global Layout
 

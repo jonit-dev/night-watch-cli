@@ -1,6 +1,6 @@
 # Ticket/PRD Format Guide
 
-> Related: [Architecture Overview](architecture-overview.md) | [Commands Reference](commands.md) | [Configuration](configuration.md) | [Walkthrough](walkthrough.md)
+> Related: [Architecture Overview](../architecture/architecture-overview.md) | [Commands Reference](../reference/commands.md) | [Configuration](../reference/configuration.md) | [Walkthrough](../guides/walkthrough.md)
 
 Night Watch supports two workflow modes:
 

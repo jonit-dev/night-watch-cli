@@ -2,7 +2,7 @@
 
 The server package provides an Express REST API with SSE for real-time updates. It serves the web dashboard and supports both single-project and multi-project modes.
 
-> Related: [Architecture Overview](architecture-overview.md) | [Core Package](core-package.md) | [CLI Package](cli-package.md) | [Web UI](WEB-UI.md)
+> Related: [Architecture Overview](../architecture/architecture-overview.md) | [Core Package](core-package.md) | [CLI Package](cli-package.md) | [Web UI](../integrations/WEB-UI.md)
 
 ---
 

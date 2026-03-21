@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-> Related: [Commands Reference](commands.md) | [Configuration](configuration.md) | [Bash Scripts](bash-scripts.md) | [Local Testing](local-testing.md)
+> Related: [Commands Reference](../reference/commands.md) | [Configuration](../reference/configuration.md) | [Bash Scripts](../reference/bash-scripts.md) | [Local Testing](local-testing.md)
 
 ---
 

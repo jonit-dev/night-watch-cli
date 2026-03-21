@@ -218,6 +218,12 @@ Full documentation is available at **[nightwatchcli.com](https://nightwatchcli.c
 
 ---
 
+## Inspiration
+
+- [Night Shift by Jamon Holmgren](https://jamon.dev/night-shift) — An agentic day/night workflow with persona-based review loops, documentation-as-routing, and structured 16-step agent execution. Many ideas here influenced Night Watch's design.
+
+---
+
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.

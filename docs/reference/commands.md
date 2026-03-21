@@ -425,6 +425,7 @@ Displays totals for each status at the bottom of the output.
 **Branch matching:**
 
 Finds matching PRs by checking for branches matching:
+
 - `{branchPrefix}{prdName}` (default: `night-watch/01-feature-name`)
 - `feat/{prdName}`
 - `feature/{prdName}`
@@ -578,9 +579,9 @@ night-watch prd list --json                                # Output as JSON
 
 **`create` options:**
 
-| Flag | Description |
-| --- | --- |
-| `--number` | Add an auto-incrementing numeric prefix to the filename (e.g. `01-feature.md`) |
+| Flag              | Description                                                                                                      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `--number`        | Add an auto-incrementing numeric prefix to the filename (e.g. `01-feature.md`)                                   |
 | `--model <model>` | Claude model to use. Accepts a short alias (`sonnet`, `opus`) or a full model ID. Defaults to `claude-opus-4-6`. |
 
 **What `create` does:**
@@ -594,11 +595,11 @@ night-watch prd list --json                                # Output as JSON
 
 **Model selection:**
 
-| Value | Model used |
-| --- | --- |
-| _(default)_ | `claude-opus-4-6` |
-| `sonnet` | `claude-sonnet-4-6` |
-| `opus` | `claude-opus-4-6` |
+| Value       | Model used                               |
+| ----------- | ---------------------------------------- |
+| _(default)_ | `claude-opus-4-6`                        |
+| `sonnet`    | `claude-sonnet-4-6`                      |
+| `opus`      | `claude-opus-4-6`                        |
 | any full ID | used verbatim (e.g. `claude-sonnet-4-6`) |
 
 **Custom planning guide:**

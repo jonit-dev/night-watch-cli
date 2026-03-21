@@ -204,10 +204,10 @@ night-watch uninstall
 
 ## Next Steps
 
-- [Configuration](configuration.md) — Customize schedules, providers, notifications
-- [PRD Format](prd-format.md) — Write better PRDs with dependencies
-- [Commands Reference](commands.md) — All available commands
-- [Architecture](architecture-overview.md) — How Night Watch works under the hood
+- [Configuration](../reference/configuration.md) — Customize schedules, providers, notifications
+- [PRD Format](../PRDs/prd-format.md) — Write better PRDs with dependencies
+- [Commands Reference](../reference/commands.md) — All available commands
+- [Architecture](../architecture/architecture-overview.md) — How Night Watch works under the hood
 
 ---
 

@@ -1,6 +1,6 @@
 # Bash Scripts Architecture
 
-> Related: [Architecture Overview](architecture-overview.md) | [Commands Reference](commands.md) | [Configuration](configuration.md)
+> Related: [Architecture Overview](../architecture/architecture-overview.md) | [Commands Reference](commands.md) | [Configuration](configuration.md)
 
 Night Watch's core execution layer is implemented in Bash scripts. These scripts handle process management, git operations, lock files, and provider invocation. The Node.js CLI is a thin wrapper that configures environment variables and spawns these scripts.
 

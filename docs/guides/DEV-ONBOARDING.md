@@ -223,16 +223,16 @@ beforeEach(() => {
 
 For detailed technical docs on each subsystem:
 
-| Document                                          | What it covers                                      |
-| ------------------------------------------------- | --------------------------------------------------- |
-| [Core Package](core-package.md)                   | DI container, repositories, config loader, types    |
-| [CLI Package](cli-package.md)                     | All 24 commands, command pattern, script execution  |
-| [Server & API](server-api.md)                     | REST endpoints, SSE, middleware, multi-project mode |
-| [Build Pipeline](build-pipeline.md)               | TypeScript → esbuild bundling, CI/CD, publishing    |
-| [Architecture Overview](architecture-overview.md) | High-level diagrams and flows                       |
-| [Configuration](configuration.md)                 | All config fields, env vars, webhooks               |
-| [Commands Reference](commands.md)                 | CLI command usage examples                          |
-| [Web UI](WEB-UI.md)                               | Dashboard pages and UI spec                         |
+| Document                                                          | What it covers                                      |
+| ----------------------------------------------------------------- | --------------------------------------------------- |
+| [Core Package](../reference/core-package.md)                      | DI container, repositories, config loader, types    |
+| [CLI Package](../reference/cli-package.md)                        | All 24 commands, command pattern, script execution  |
+| [Server & API](../reference/server-api.md)                        | REST endpoints, SSE, middleware, multi-project mode |
+| [Build Pipeline](../architecture/build-pipeline.md)               | TypeScript → esbuild bundling, CI/CD, publishing    |
+| [Architecture Overview](../architecture/architecture-overview.md) | High-level diagrams and flows                       |
+| [Configuration](../reference/configuration.md)                    | All config fields, env vars, webhooks               |
+| [Commands Reference](../reference/commands.md)                    | CLI command usage examples                          |
+| [Web UI](../integrations/WEB-UI.md)                               | Dashboard pages and UI spec                         |
 
 ---
 
@@ -287,7 +287,7 @@ Night Watch env vars all use the `NW_` prefix:
 | `NW_FALLBACK_ON_RATE_LIMIT` | Enable rate-limit fallback       |
 | `NW_CLAUDE_MODEL`           | Claude model: `sonnet` or `opus` |
 
-See [configuration.md](configuration.md) for the full list.
+See [configuration.md](../reference/configuration.md) for the full list.
 
 ---
 
@@ -336,6 +336,6 @@ alias nw-dev="cd ~/projects/night-watch-cli && yarn dev --"
 
 ## Further Reading
 
-- [PRD Format](prd-format.md) — How to write PRDs
+- [PRD Format](../PRDs/prd-format.md) — How to write PRDs
 - [Local Testing](local-testing.md) — Testing the CLI locally
 - [Troubleshooting](troubleshooting.md) — Common issues and fixes

@@ -2,7 +2,7 @@
 
 The core package contains all domain logic, storage, configuration, and shared types. Both `cli` and `server` depend on it.
 
-> Related: [Architecture Overview](architecture-overview.md) | [DEV-ONBOARDING](DEV-ONBOARDING.md)
+> Related: [Architecture Overview](../architecture/architecture-overview.md) | [DEV-ONBOARDING](../guides/DEV-ONBOARDING.md)
 
 ---
 

@@ -1,6 +1,6 @@
 # Night Watch CLI - Architecture Overview
 
-> Related: [DEV-ONBOARDING](DEV-ONBOARDING.md) | [Core Package](core-package.md) | [CLI Package](cli-package.md) | [Server API](server-api.md) | [Build Pipeline](build-pipeline.md)
+> Related: [DEV-ONBOARDING](../guides/DEV-ONBOARDING.md) | [Core Package](../reference/core-package.md) | [CLI Package](../reference/cli-package.md) | [Server API](../reference/server-api.md) | [Build Pipeline](build-pipeline.md)
 
 Night Watch CLI is a cron-driven PRD execution system for well-scoped engineering work. It uses AI provider CLIs (Claude, Codex) plus scheduled automation to implement queued work, open pull requests, and close the loop with review, QA, and audit workflows.
 
