@@ -131,6 +131,12 @@ export const NIGHT_WATCH_LABELS: ILabelDefinition[] = [
       color: '5319e7',
     }),
   ),
+  // Operational labels
+  {
+    name: 'analytics',
+    description: 'Created by the analytics job for Amplitude findings',
+    color: '1d76db',
+  },
 ];
 
 // ---------------------------------------------------------------------------

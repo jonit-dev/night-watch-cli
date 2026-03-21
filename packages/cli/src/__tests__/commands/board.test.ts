@@ -532,6 +532,7 @@ describe('board commands', () => {
       expect(allOutput).toContain('P0');
       expect(allOutput).toContain('reliability');
       expect(allOutput).toContain('short-term');
+      expect(allOutput).toContain('analytics');
     });
   });
 

@@ -342,5 +342,24 @@ describe('analytics-runner', () => {
     const result = await runAnalytics(mockConfig, tempDir);
 
     expect(result.issuesCreated).toBe(1); // Only second issue succeeded
+    expect(result.summary).toBe('Created 1 of 2 issue(s) from analytics insights (1 failed)');
+  });
+
+  it('should report when all issue creations fail', async () => {
+    mockBoardProvider.createIssue.mockRejectedValue(new Error('Failed'));
+
+    const { executeScriptWithOutput } = await import('../utils/shell.js');
+    vi.mocked(executeScriptWithOutput).mockResolvedValue({
+      exitCode: 0,
+      stdout: '[{"title": "Issue 1", "body": "Body 1"}]',
+      stderr: '',
+    });
+
+    const result = await runAnalytics(mockConfig, tempDir);
+
+    expect(result.issuesCreated).toBe(0);
+    expect(result.summary).toBe(
+      'Found 1 actionable insight(s), but failed to create board issue(s)',
+    );
   });
 });

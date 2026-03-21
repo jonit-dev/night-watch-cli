@@ -262,7 +262,7 @@ export function boardCommand(program: Command): void {
   // ---------------------------------------------------------------------------
   board
     .command('setup-labels')
-    .description('Create Night Watch priority, category, and horizon labels in the GitHub repo')
+    .description('Create Night Watch labels in the GitHub repo')
     .option('--dry-run', 'Show what labels would be created without creating them')
     .action(async (options: { dryRun?: boolean }) =>
       run(async () => {

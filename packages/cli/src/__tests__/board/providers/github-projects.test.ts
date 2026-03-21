@@ -520,6 +520,75 @@ describe('GitHubProjectsProvider', () => {
       const updateArgs = updateCall![1] as string[];
       expect(updateArgs).toContain('optionId=opt-ready');
     });
+
+    it('retries without labels when GitHub reports a missing label', async () => {
+      queueCachePrimingMocks();
+
+      mockExecFileSync
+        // gh issue create with missing label -> retry
+        .mockImplementationOnce(() => {
+          throw new Error(
+            "Command failed: gh issue create --label analytics\ncould not add label: 'analytics' not found\n",
+          );
+        })
+        // gh issue create retry without labels -> returns URL
+        .mockReturnValueOnce('https://github.com/owner/repo/issues/9\n' as unknown as Buffer)
+        // gh api repos/owner/repo/issues/9 --jq .node_id
+        .mockReturnValueOnce('issue-node-id-9\n' as unknown as Buffer)
+        // addProjectV2ItemById
+        .mockReturnValueOnce(
+          gqlResponse({
+            addProjectV2ItemById: { item: { id: 'item-node-id-9' } },
+          }) as unknown as Buffer,
+        )
+        // updateProjectV2ItemFieldValue
+        .mockReturnValueOnce(
+          gqlResponse({
+            updateProjectV2ItemFieldValue: {
+              projectV2Item: { id: 'item-node-id-9' },
+            },
+          }) as unknown as Buffer,
+        )
+        // gh issue view
+        .mockReturnValueOnce(
+          JSON.stringify({
+            number: 9,
+            title: 'Analytics Finding',
+            body: 'body',
+            url: 'https://github.com/owner/repo/issues/9',
+            id: 'issue-node-id-9',
+            labels: [],
+            assignees: [],
+          }) as unknown as Buffer,
+        )
+        // getAllIssues
+        .mockReturnValueOnce(
+          makeItemsResponse([
+            { id: '9', number: 9, title: 'Analytics Finding', statusName: 'Draft' },
+          ]) as unknown as Buffer,
+        );
+
+      const provider = new GitHubProjectsProvider(mockConfig, CWD);
+      const issue = await provider.createIssue({
+        title: 'Analytics Finding',
+        body: 'body',
+        labels: ['analytics'],
+      });
+
+      expect(issue.number).toBe(9);
+      expect(issue.labels).toEqual([]);
+
+      const createCalls = mockExecFileSync.mock.calls.filter(
+        (c) =>
+          Array.isArray(c[1]) &&
+          (c[1] as string[])[0] === 'issue' &&
+          (c[1] as string[])[1] === 'create',
+      );
+
+      expect(createCalls).toHaveLength(2);
+      expect(createCalls[0]![1]).toContain('--label');
+      expect(createCalls[1]![1]).not.toContain('--label');
+    });
   });
 
   // -------------------------------------------------------------------------

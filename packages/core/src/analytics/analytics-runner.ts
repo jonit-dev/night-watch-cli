@@ -142,9 +142,20 @@ export async function runAnalytics(
       }
     }
 
+    const failed = issues.length - created;
+    let summary: string;
+
+    if (created === issues.length) {
+      summary = `Created ${created} issue(s) from analytics insights`;
+    } else if (created === 0) {
+      summary = `Found ${issues.length} actionable insight(s), but failed to create board issue(s)`;
+    } else {
+      summary = `Created ${created} of ${issues.length} issue(s) from analytics insights (${failed} failed)`;
+    }
+
     return {
       issuesCreated: created,
-      summary: `Created ${created} issue(s) from analytics insights`,
+      summary,
     };
   } finally {
     // Clean up temp files

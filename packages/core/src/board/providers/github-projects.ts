@@ -9,6 +9,7 @@ import {
   IBoardProvider,
   ICreateIssueInput,
 } from '@/board/types.js';
+import { createLogger } from '@/utils/logger.js';
 import { graphql } from './github-graphql.js';
 import { GitHubProjectsBase } from './github-projects-base.js';
 import type {
@@ -19,8 +20,55 @@ import type {
 } from './github-projects-types.js';
 
 const execFileAsync = promisify(execFile);
+const logger = createLogger('github-board');
+
+function formatExecFileError(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function isMissingLabelError(err: unknown): boolean {
+  const message = formatExecFileError(err);
+  return /could not add label/i.test(message) || /label.*not found/i.test(message);
+}
 
 export class GitHubProjectsProvider extends GitHubProjectsBase implements IBoardProvider {
+  private async createRepositoryIssue(
+    repo: string,
+    input: ICreateIssueInput,
+  ): Promise<{ issueUrl: string; appliedLabels: string[] }> {
+    const requestedLabels = input.labels ?? [];
+    const buildIssueArgs = (labels: string[]): string[] => {
+      const args = ['issue', 'create', '--title', input.title, '--body', input.body, '--repo', repo];
+      if (labels.length > 0) {
+        args.push('--label', labels.join(','));
+      }
+      return args;
+    };
+
+    try {
+      const { stdout } = await execFileAsync('gh', buildIssueArgs(requestedLabels), {
+        cwd: this.cwd,
+        encoding: 'utf-8',
+      });
+      return { issueUrl: stdout.trim(), appliedLabels: requestedLabels };
+    } catch (err) {
+      if (requestedLabels.length > 0 && isMissingLabelError(err)) {
+        logger.warn('Issue creation failed due to missing labels; retrying without labels', {
+          repo,
+          title: input.title,
+          labels: requestedLabels,
+        });
+
+        const { stdout } = await execFileAsync('gh', buildIssueArgs([]), {
+          cwd: this.cwd,
+          encoding: 'utf-8',
+        });
+        return { issueUrl: stdout.trim(), appliedLabels: [] };
+      }
+      throw err;
+    }
+  }
+
   async setupBoard(title: string): Promise<IBoardInfo> {
     const owner = await this.getRepoOwner();
 
@@ -127,26 +175,7 @@ export class GitHubProjectsProvider extends GitHubProjectsBase implements IBoard
   async createIssue(input: ICreateIssueInput): Promise<IBoardIssue> {
     const repo = await this.getRepo();
     const { projectId, fieldId, optionIds } = await this.ensureProjectCache();
-
-    const issueArgs = [
-      'issue',
-      'create',
-      '--title',
-      input.title,
-      '--body',
-      input.body,
-      '--repo',
-      repo,
-    ];
-    if (input.labels && input.labels.length > 0) {
-      issueArgs.push('--label', input.labels.join(','));
-    }
-
-    const { stdout: issueUrlRaw } = await execFileAsync('gh', issueArgs, {
-      cwd: this.cwd,
-      encoding: 'utf-8',
-    });
-    const issueUrl = issueUrlRaw.trim();
+    const { issueUrl, appliedLabels } = await this.createRepositoryIssue(repo, input);
     const issueNumber = parseInt(issueUrl.split('/').pop() ?? '', 10);
     if (!issueNumber) throw new Error(`Failed to parse issue number from URL: ${issueUrl}`);
 
@@ -187,7 +216,7 @@ export class GitHubProjectsProvider extends GitHubProjectsBase implements IBoard
       body: input.body,
       url: issueJson.url,
       column: targetColumn,
-      labels: input.labels ?? [],
+      labels: appliedLabels,
       assignees: [],
     };
   }

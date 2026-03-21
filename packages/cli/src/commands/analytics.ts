@@ -89,11 +89,7 @@ export function analyticsCommand(program: Command): void {
         await maybeApplyCronSchedulingDelay(config, 'analytics', projectDir);
         const result = await runAnalytics(config, projectDir);
 
-        if (result.issuesCreated > 0) {
-          spinner.succeed(`Analytics complete — ${result.summary}`);
-        } else {
-          spinner.succeed('Analytics complete — no actionable insights found');
-        }
+        spinner.succeed(`Analytics complete — ${result.summary}`);
       } catch (err) {
         spinner.fail(`Analytics failed: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
