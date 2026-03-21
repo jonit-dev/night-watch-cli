@@ -299,6 +299,7 @@ describe('qa command', () => {
 
     it('should send notifications for actionable outcomes', () => {
       expect(shouldSendQaNotification('success_tested')).toBe(true);
+      expect(shouldSendQaNotification('warning_qa')).toBe(true);
       expect(shouldSendQaNotification('failure')).toBe(true);
       expect(shouldSendQaNotification('timeout')).toBe(true);
     });
@@ -356,11 +357,28 @@ describe('qa command', () => {
       const exitCode = 0;
       const status = 'success_tested';
       const isSkip = status.startsWith('skip_');
+      const isWarning = status === 'warning_qa';
       const message =
         exitCode === 0 && isSkip
           ? 'QA process completed (no PRs needed QA)'
-          : 'QA process completed successfully';
+          : exitCode === 0 && isWarning
+            ? 'QA process completed with warnings'
+            : 'QA process completed successfully';
       expect(message).toBe('QA process completed successfully');
+    });
+
+    it('should show "completed with warnings" for warning_qa status', () => {
+      const exitCode = 0;
+      const status = 'warning_qa';
+      const isSkip = status.startsWith('skip_');
+      const isWarning = status === 'warning_qa';
+      const message =
+        exitCode === 0 && isSkip
+          ? 'QA process completed (no PRs needed QA)'
+          : exitCode === 0 && isWarning
+            ? 'QA process completed with warnings'
+            : 'QA process completed successfully';
+      expect(message).toBe('QA process completed with warnings');
     });
 
     it('should show exit code on failure', () => {
@@ -396,6 +414,10 @@ describe('qa command', () => {
       expect(shouldSendQaNotification('success_tested')).toBe(true);
     });
 
+    it('should send notification for warning_qa', () => {
+      expect(shouldSendQaNotification('warning_qa')).toBe(true);
+    });
+
     it('should send notification for failure', () => {
       expect(shouldSendQaNotification('failure')).toBe(true);
     });
@@ -421,6 +443,13 @@ describe('qa command', () => {
       // Even with skip status, exit code is 0
       expect(scriptExitCode).toBe(0);
       expect(status.startsWith('skip_')).toBe(true);
+    });
+
+    it('should exit with code 0 on warning status', () => {
+      const scriptExitCode = 0;
+      const status = 'warning_qa';
+      expect(scriptExitCode).toBe(0);
+      expect(status).toBe('warning_qa');
     });
 
     it('should exit with code 1 on script failure', () => {

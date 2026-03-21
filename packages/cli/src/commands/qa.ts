@@ -229,6 +229,8 @@ export function qaCommand(program: Command): void {
             spinner.succeed('QA process queued — another job is currently running');
           } else if (scriptResult?.status?.startsWith('skip_')) {
             spinner.succeed('QA process completed (no PRs needed QA)');
+          } else if (scriptResult?.status === 'warning_qa') {
+            spinner.succeed('QA process completed with warnings');
           } else {
             spinner.succeed('QA process completed successfully');
           }

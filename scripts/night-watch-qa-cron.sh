@@ -330,8 +330,8 @@ validate_qa_evidence() {
   fi
 
   if ! pr_has_qa_generated_files "${pr_number}"; then
-    log "FAIL-QA-EVIDENCE: PR #${pr_number} has QA marker comment but no qa-artifacts/ or tests/*/qa/ files"
-    return 1
+    log "WARN-QA-EVIDENCE: PR #${pr_number} has QA marker comment but no qa-artifacts/ or tests/*/qa/ files"
+    return 2
   fi
 
   if [ "${QA_ARTIFACTS}" = "screenshot" ] || [ "${QA_ARTIFACTS}" = "both" ]; then
@@ -490,10 +490,12 @@ PASSING_PRS_CSV=""
 ISSUES_FOUND_PRS_CSV=""
 NO_TESTS_PRS_CSV=""
 UNCLASSIFIED_PRS_CSV=""
+WARNING_PRS_CSV=""
 FAILED_AUTOMATION_PRS_CSV=""
 FAILED_PR=""
 FAILED_REASON="unknown"
 QA_SCREENSHOT_SUMMARY=""
+QA_WARNING_SUMMARY=""
 
 # Process each PR that needs QA
 for pr_ref in ${PRS_NEEDING_QA}; do
@@ -595,34 +597,45 @@ for pr_ref in ${PRS_NEEDING_QA}; do
       FAILED_PR="#${pr_num}"
       FAILED_REASON="invalid_provider_output"
       EXIT_CODE=1
-    elif ! validate_qa_evidence "${pr_num}"; then
-      FAILED_AUTOMATION_PRS_CSV=$(append_csv "${FAILED_AUTOMATION_PRS_CSV}" "#${pr_num}")
-      FAILED_PR="#${pr_num}"
-      FAILED_REASON="qa_evidence_validation_failed"
-      EXIT_CODE=1
     else
-      QA_OUTCOME=$(classify_qa_comment_outcome "${pr_num}")
-      case "${QA_OUTCOME}" in
-        passing)
-          PASSING_PRS_CSV=$(append_csv "${PASSING_PRS_CSV}" "#${pr_num}")
-          ;;
-        issues_found)
-          ISSUES_FOUND_PRS_CSV=$(append_csv "${ISSUES_FOUND_PRS_CSV}" "#${pr_num}")
-          ;;
-        no_tests_needed)
-          NO_TESTS_PRS_CSV=$(append_csv "${NO_TESTS_PRS_CSV}" "#${pr_num}")
-          ;;
-        *)
-          UNCLASSIFIED_PRS_CSV=$(append_csv "${UNCLASSIFIED_PRS_CSV}" "#${pr_num}")
-          ;;
-      esac
-
-      PR_FIRST_SCREENSHOT=$(get_qa_screenshot_links "${pr_num}" | head -n 1 || true)
-      if [ -n "${PR_FIRST_SCREENSHOT}" ]; then
-        QA_SCREENSHOT_SUMMARY="${QA_SCREENSHOT_SUMMARY}${QA_SCREENSHOT_SUMMARY:+$'\n'}#${pr_num}: ${PR_FIRST_SCREENSHOT}"
+      if validate_qa_evidence "${pr_num}"; then
+        QA_EVIDENCE_STATUS=0
+      else
+        QA_EVIDENCE_STATUS=$?
       fi
+      if [ ${QA_EVIDENCE_STATUS} -eq 2 ]; then
+        WARNING_PRS_CSV=$(append_csv "${WARNING_PRS_CSV}" "#${pr_num}")
+        QA_WARNING_SUMMARY="${QA_WARNING_SUMMARY}${QA_WARNING_SUMMARY:+$'\n'}#${pr_num}: no qa-artifacts/ or tests/*/qa/ files"
+        log "QA: PR #${pr_num} — provider completed with warning-only QA evidence"
+      elif [ ${QA_EVIDENCE_STATUS} -ne 0 ]; then
+        FAILED_AUTOMATION_PRS_CSV=$(append_csv "${FAILED_AUTOMATION_PRS_CSV}" "#${pr_num}")
+        FAILED_PR="#${pr_num}"
+        FAILED_REASON="qa_evidence_validation_failed"
+        EXIT_CODE=1
+      else
+        QA_OUTCOME=$(classify_qa_comment_outcome "${pr_num}")
+        case "${QA_OUTCOME}" in
+          passing)
+            PASSING_PRS_CSV=$(append_csv "${PASSING_PRS_CSV}" "#${pr_num}")
+            ;;
+          issues_found)
+            ISSUES_FOUND_PRS_CSV=$(append_csv "${ISSUES_FOUND_PRS_CSV}" "#${pr_num}")
+            ;;
+          no_tests_needed)
+            NO_TESTS_PRS_CSV=$(append_csv "${NO_TESTS_PRS_CSV}" "#${pr_num}")
+            ;;
+          *)
+            UNCLASSIFIED_PRS_CSV=$(append_csv "${UNCLASSIFIED_PRS_CSV}" "#${pr_num}")
+            ;;
+        esac
 
-      log "QA: PR #${pr_num} — provider completed with verifiable QA evidence"
+        PR_FIRST_SCREENSHOT=$(get_qa_screenshot_links "${pr_num}" | head -n 1 || true)
+        if [ -n "${PR_FIRST_SCREENSHOT}" ]; then
+          QA_SCREENSHOT_SUMMARY="${QA_SCREENSHOT_SUMMARY}${QA_SCREENSHOT_SUMMARY:+$'\n'}#${pr_num}: ${PR_FIRST_SCREENSHOT}"
+        fi
+
+        log "QA: PR #${pr_num} — provider completed with verifiable QA evidence"
+      fi
     fi
   fi
 
@@ -636,6 +649,7 @@ PASSING_PRS_SUMMARY=$(csv_or_none "${PASSING_PRS_CSV}")
 ISSUES_FOUND_PRS_SUMMARY=$(csv_or_none "${ISSUES_FOUND_PRS_CSV}")
 NO_TESTS_PRS_SUMMARY=$(csv_or_none "${NO_TESTS_PRS_CSV}")
 UNCLASSIFIED_PRS_SUMMARY=$(csv_or_none "${UNCLASSIFIED_PRS_CSV}")
+WARNING_PRS_SUMMARY=$(csv_or_none "${WARNING_PRS_CSV}")
 FAILED_AUTOMATION_PRS_SUMMARY=$(csv_or_none "${FAILED_AUTOMATION_PRS_CSV}")
 FAILED_PR_SUMMARY=$(csv_or_none "${FAILED_PR}")
 
@@ -643,8 +657,36 @@ QA_TOTAL_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
 log "OUTCOME: exit_code=${EXIT_CODE} total_elapsed=${QA_TOTAL_ELAPSED}s processed_prs=${FINAL_PROCESSED_PRS_CSV:-none}"
 
 if [ ${EXIT_CODE} -eq 0 ]; then
-  log "DONE: QA runner completed successfully"
-  TELEGRAM_SUCCESS_BODY="Project: ${PROJECT_NAME}
+  if [ -n "${WARNING_PRS_CSV}" ]; then
+    log "DONE-WARN: QA runner completed with warnings"
+    TELEGRAM_WARNING_BODY="Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Artifacts: ${QA_ARTIFACTS_DESC} (mode=${QA_ARTIFACTS})
+Processed PRs: ${FINAL_PROCESSED_PRS_CSV}
+Passing tests: ${PASSING_PRS_SUMMARY}
+Issues found by tests: ${ISSUES_FOUND_PRS_SUMMARY}
+No tests needed: ${NO_TESTS_PRS_SUMMARY}
+Reported (unclassified): ${UNCLASSIFIED_PRS_SUMMARY}
+Warnings: ${WARNING_PRS_SUMMARY}"
+    if [ -n "${QA_WARNING_SUMMARY}" ]; then
+      TELEGRAM_WARNING_BODY="${TELEGRAM_WARNING_BODY}
+Warning details:
+${QA_WARNING_SUMMARY}"
+    fi
+    if [ -n "${QA_SCREENSHOT_SUMMARY}" ]; then
+      TELEGRAM_WARNING_BODY="${TELEGRAM_WARNING_BODY}
+Screenshot links:
+${QA_SCREENSHOT_SUMMARY}"
+    fi
+    send_telegram_status_message "🧪 Night Watch QA: warning" "${TELEGRAM_WARNING_BODY}"
+    if [ -n "${REPO}" ]; then
+      emit_result "warning_qa" "prs=${FINAL_PROCESSED_PRS_CSV}|passing=${PASSING_PRS_SUMMARY}|issues=${ISSUES_FOUND_PRS_SUMMARY}|no_tests=${NO_TESTS_PRS_SUMMARY}|unclassified=${UNCLASSIFIED_PRS_SUMMARY}|warnings=${WARNING_PRS_SUMMARY}|repo=${REPO}"
+    else
+      emit_result "warning_qa" "prs=${FINAL_PROCESSED_PRS_CSV}|passing=${PASSING_PRS_SUMMARY}|issues=${ISSUES_FOUND_PRS_SUMMARY}|no_tests=${NO_TESTS_PRS_SUMMARY}|unclassified=${UNCLASSIFIED_PRS_SUMMARY}|warnings=${WARNING_PRS_SUMMARY}"
+    fi
+  else
+    log "DONE: QA runner completed successfully"
+    TELEGRAM_SUCCESS_BODY="Project: ${PROJECT_NAME}
 Provider (model): ${PROVIDER_MODEL_DISPLAY}
 Artifacts: ${QA_ARTIFACTS_DESC} (mode=${QA_ARTIFACTS})
 Processed PRs: ${FINAL_PROCESSED_PRS_CSV}
@@ -652,16 +694,17 @@ Passing tests: ${PASSING_PRS_SUMMARY}
 Issues found by tests: ${ISSUES_FOUND_PRS_SUMMARY}
 No tests needed: ${NO_TESTS_PRS_SUMMARY}
 Reported (unclassified): ${UNCLASSIFIED_PRS_SUMMARY}"
-  if [ -n "${QA_SCREENSHOT_SUMMARY}" ]; then
-    TELEGRAM_SUCCESS_BODY="${TELEGRAM_SUCCESS_BODY}
+    if [ -n "${QA_SCREENSHOT_SUMMARY}" ]; then
+      TELEGRAM_SUCCESS_BODY="${TELEGRAM_SUCCESS_BODY}
 Screenshot links:
 ${QA_SCREENSHOT_SUMMARY}"
-  fi
-  send_telegram_status_message "🧪 Night Watch QA: completed" "${TELEGRAM_SUCCESS_BODY}"
-  if [ -n "${REPO}" ]; then
-    emit_result "success_qa" "prs=${FINAL_PROCESSED_PRS_CSV}|passing=${PASSING_PRS_SUMMARY}|issues=${ISSUES_FOUND_PRS_SUMMARY}|no_tests=${NO_TESTS_PRS_SUMMARY}|unclassified=${UNCLASSIFIED_PRS_SUMMARY}|repo=${REPO}"
-  else
-    emit_result "success_qa" "prs=${FINAL_PROCESSED_PRS_CSV}|passing=${PASSING_PRS_SUMMARY}|issues=${ISSUES_FOUND_PRS_SUMMARY}|no_tests=${NO_TESTS_PRS_SUMMARY}|unclassified=${UNCLASSIFIED_PRS_SUMMARY}"
+    fi
+    send_telegram_status_message "🧪 Night Watch QA: completed" "${TELEGRAM_SUCCESS_BODY}"
+    if [ -n "${REPO}" ]; then
+      emit_result "success_qa" "prs=${FINAL_PROCESSED_PRS_CSV}|passing=${PASSING_PRS_SUMMARY}|issues=${ISSUES_FOUND_PRS_SUMMARY}|no_tests=${NO_TESTS_PRS_SUMMARY}|unclassified=${UNCLASSIFIED_PRS_SUMMARY}|repo=${REPO}"
+    else
+      emit_result "success_qa" "prs=${FINAL_PROCESSED_PRS_CSV}|passing=${PASSING_PRS_SUMMARY}|issues=${ISSUES_FOUND_PRS_SUMMARY}|no_tests=${NO_TESTS_PRS_SUMMARY}|unclassified=${UNCLASSIFIED_PRS_SUMMARY}"
+    fi
   fi
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: QA runner killed after ${MAX_RUNTIME}s"
