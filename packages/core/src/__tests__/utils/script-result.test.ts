@@ -37,6 +37,22 @@ describe("parseScriptResult", () => {
     });
   });
 
+  it("should parse no-change review metadata", () => {
+    const result = parseScriptResult(
+      "NIGHT_WATCH_RESULT:success_reviewed|prs=#41,#42|attempts=1|final_score=95|no_changes_prs=#41,#42\n"
+    );
+
+    expect(result).toEqual({
+      status: "success_reviewed",
+      data: {
+        prs: "#41,#42",
+        attempts: "1",
+        final_score: "95",
+        no_changes_prs: "#41,#42",
+      },
+    });
+  });
+
   it("should return null when no marker exists", () => {
     expect(parseScriptResult("plain output")).toBeNull();
   });

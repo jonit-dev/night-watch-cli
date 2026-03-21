@@ -31,6 +31,7 @@ import {
   parseAutoMergedPrNumbers,
   parseReviewedPrNumbers,
   parseRetryAttempts,
+  buildReviewNotificationTargets,
   isFailingCheck,
   shouldSendReviewNotification,
 } from '@/cli/commands/review.js';
@@ -352,6 +353,25 @@ describe('review command', () => {
     it('returns empty array when value is missing', () => {
       expect(parseReviewedPrNumbers(undefined)).toEqual([]);
       expect(parseReviewedPrNumbers('')).toEqual([]);
+    });
+  });
+
+  describe('buildReviewNotificationTargets', () => {
+    it('marks only the explicitly listed PRs as no-changes in multi-PR runs', () => {
+      expect(buildReviewNotificationTargets([12, 34], [34], false)).toEqual([
+        { prNumber: 12, noChangesNeeded: false },
+        { prNumber: 34, noChangesNeeded: true },
+      ]);
+    });
+
+    it('applies legacy no_changes_needed only when a single PR was reviewed', () => {
+      expect(buildReviewNotificationTargets([12], [], true)).toEqual([
+        { prNumber: 12, noChangesNeeded: true },
+      ]);
+      expect(buildReviewNotificationTargets([12, 34], [], true)).toEqual([
+        { prNumber: 12, noChangesNeeded: false },
+        { prNumber: 34, noChangesNeeded: false },
+      ]);
     });
   });
 

@@ -196,6 +196,21 @@ describe('notification utilities', () => {
       expect(payload.text).toContain('final score: 92/100');
     });
 
+    it('should include human review guidance for no-change review payloads', () => {
+      const payload = formatTelegramPayload({
+        ...baseCtx,
+        event: 'review_ready_for_human',
+        prUrl: 'https://github.com/user/repo/pull/42',
+        prTitle: 'feat: no changes needed',
+        prNumber: 42,
+        finalScore: 96,
+      });
+
+      expect(payload.text).toContain('Ready for Human Review');
+      expect(payload.text).toContain('Score: 96/100');
+      expect(payload.text).toContain('Action required: human review & merge');
+    });
+
     it('should include QA screenshot links when present', () => {
       const payload = formatTelegramPayload({
         ...baseCtx,

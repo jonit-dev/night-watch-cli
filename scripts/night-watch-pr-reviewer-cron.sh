@@ -121,6 +121,7 @@ emit_final_status() {
   local attempts="${5:-1}"
   local final_score="${6:-}"
   local no_changes="${7:-0}"
+  local no_changes_prs="${8:-}"
   local details=""
   local prs_summary=""
   local auto_merged_summary=""
@@ -145,6 +146,9 @@ emit_final_status() {
     fi
     if [ "${no_changes}" = "1" ]; then
       details="${details}|no_changes_needed=1"
+    fi
+    if [ -n "${no_changes_prs}" ]; then
+      details="${details}|no_changes_prs=${no_changes_prs}"
     fi
     log "DONE: PR reviewer completed successfully"
     if [ "${WORKER_MODE}" != "1" ]; then
@@ -822,6 +826,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
   EXIT_CODE=0
   AUTO_MERGED_PRS=""
   AUTO_MERGE_FAILED_PRS=""
+  NO_CHANGES_PRS=""
   MAX_WORKER_ATTEMPTS=1
   MAX_WORKER_FINAL_SCORE=""
 
@@ -867,9 +872,15 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
     worker_auto_merge_failed=$(printf '%s' "${worker_result}" | grep -oP '(?<=auto_merge_failed=)[^|]+' || true)
     worker_attempts=$(printf '%s' "${worker_result}" | grep -oP '(?<=attempts=)[^|]+' || true)
     worker_final_score=$(printf '%s' "${worker_result}" | grep -oP '(?<=final_score=)[^|]+' || true)
+    worker_no_changes=$(printf '%s' "${worker_result}" | grep -oP '(?<=no_changes_needed=)[^|]+' || true)
+    worker_no_changes_prs=$(printf '%s' "${worker_result}" | grep -oP '(?<=no_changes_prs=)[^|]+' || true)
 
     AUTO_MERGED_PRS=$(append_csv "${AUTO_MERGED_PRS}" "${worker_auto_merged}")
     AUTO_MERGE_FAILED_PRS=$(append_csv "${AUTO_MERGE_FAILED_PRS}" "${worker_auto_merge_failed}")
+    NO_CHANGES_PRS=$(append_csv "${NO_CHANGES_PRS}" "${worker_no_changes_prs}")
+    if [ -z "${worker_no_changes_prs}" ] && [ "${worker_no_changes}" = "1" ]; then
+      NO_CHANGES_PRS=$(append_csv "${NO_CHANGES_PRS}" "#${worker_pr}")
+    fi
 
     if [[ "${worker_attempts}" =~ ^[0-9]+$ ]] && [ "${worker_attempts}" -gt "${MAX_WORKER_ATTEMPTS}" ]; then
       MAX_WORKER_ATTEMPTS="${worker_attempts}"
@@ -910,7 +921,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
   # worker runs may have left behind.
   cleanup_reviewer_worktrees
 
-  emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${MAX_WORKER_ATTEMPTS}" "${MAX_WORKER_FINAL_SCORE}"
+  emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${MAX_WORKER_ATTEMPTS}" "${MAX_WORKER_FINAL_SCORE}" "0" "${NO_CHANGES_PRS}"
   exit 0
 fi
 
@@ -987,6 +998,7 @@ EXIT_CODE=0
 ATTEMPTS_MADE=1
 FINAL_SCORE=""
 NO_CHANGES_NEEDED=0
+NO_CHANGES_PRS=""
 TARGET_SCOPE_PROMPT=""
 if [ -n "${TARGET_PR}" ]; then
   TARGET_SCOPE_PROMPT=$'\n\n## Target Scope\n- Only process PR #'"${TARGET_PR}"$'.\n- Ignore all other PRs.\n- If this PR no longer needs work, stop immediately.\n'
@@ -1224,6 +1236,7 @@ if [ "${EXIT_CODE}" -eq 0 ] && [ -n "${TARGET_PR}" ] && [ -n "${PR_BRANCH_HEAD_B
   PR_BRANCH_HEAD_AFTER=$(gh pr view "${TARGET_PR}" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")
   if [ -n "${PR_BRANCH_HEAD_AFTER}" ] && [ "${PR_BRANCH_HEAD_BEFORE}" = "${PR_BRANCH_HEAD_AFTER}" ]; then
     NO_CHANGES_NEEDED=1
+    NO_CHANGES_PRS="#${TARGET_PR}"
     log "INFO: PR #${TARGET_PR} — reviewer made no commits; marking as ready for human review"
   fi
 fi
@@ -1302,4 +1315,4 @@ fi
 
 REVIEWER_TOTAL_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
 log "OUTCOME: exit_code=${EXIT_CODE} total_elapsed=${REVIEWER_TOTAL_ELAPSED}s prs=${PRS_NEEDING_WORK_CSV:-none} attempts=${ATTEMPTS_MADE}"
-emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${ATTEMPTS_MADE}" "${FINAL_SCORE}" "${NO_CHANGES_NEEDED}"
+emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${ATTEMPTS_MADE}" "${FINAL_SCORE}" "${NO_CHANGES_NEEDED}" "${NO_CHANGES_PRS}"

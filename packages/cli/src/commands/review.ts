@@ -91,6 +91,28 @@ export function parseReviewedPrNumbers(raw?: string): number[] {
 }
 
 /**
+ * Build per-PR review notification targets from the script result payload.
+ * Legacy no_changes_needed is only trustworthy when exactly one PR was reviewed.
+ */
+export function buildReviewNotificationTargets(
+  reviewedPrNumbers: number[],
+  noChangesPrNumbers: number[],
+  legacyNoChangesNeeded = false,
+): Array<{ prNumber: number; noChangesNeeded: boolean }> {
+  const uniqueReviewedPrNumbers = Array.from(new Set(reviewedPrNumbers));
+  const noChangesSet = new Set(noChangesPrNumbers);
+
+  if (legacyNoChangesNeeded && uniqueReviewedPrNumbers.length === 1) {
+    noChangesSet.add(uniqueReviewedPrNumbers[0]);
+  }
+
+  return uniqueReviewedPrNumbers.map((prNumber) => ({
+    prNumber,
+    noChangesNeeded: noChangesSet.has(prNumber),
+  }));
+}
+
+/**
  * Parse retry attempts from script result data.
  * Returns the number of attempts (defaults to 1 if not present or invalid).
  */
@@ -471,19 +493,16 @@ export function reviewCommand(program: Command): void {
           }
 
           // Enrich with PR details (graceful — null if gh fails)
-          let prDetails: IPrDetails | null = null;
+          let fallbackPrDetails: IPrDetails | null = null;
           if (!skipNotification && exitCode === 0) {
-            const prsRaw = scriptResult?.data.prs;
-            const firstPrToken = prsRaw?.split(',')[0]?.trim();
-            if (firstPrToken) {
-              const parsedNumber = parseInt(firstPrToken.replace(/^#/, ''), 10);
-              if (!Number.isNaN(parsedNumber)) {
-                prDetails = fetchPrDetailsByNumber(parsedNumber, projectDir);
-              }
+            const reviewedPrNumbers = parseReviewedPrNumbers(scriptResult?.data.prs);
+            const firstReviewedPrNumber = reviewedPrNumbers[0];
+            if (firstReviewedPrNumber !== undefined) {
+              fallbackPrDetails = fetchPrDetailsByNumber(firstReviewedPrNumber, projectDir);
             }
 
-            if (!prDetails) {
-              prDetails = fetchReviewedPrDetails(config.branchPatterns, projectDir);
+            if (!fallbackPrDetails) {
+              fallbackPrDetails = fetchReviewedPrDetails(config.branchPatterns, projectDir);
             }
           }
 
@@ -491,31 +510,70 @@ export function reviewCommand(program: Command): void {
             // Extract retry attempts from script result
             const attempts = parseRetryAttempts(scriptResult?.data.attempts);
             const finalScore = parseFinalReviewScore(scriptResult?.data.final_score);
-            const noChangesNeeded = scriptResult?.data.no_changes_needed === '1';
+            const legacyNoChangesNeeded = scriptResult?.data.no_changes_needed === '1';
+            const reviewedPrNumbers = parseReviewedPrNumbers(scriptResult?.data.prs);
+            const noChangesPrNumbers = parseReviewedPrNumbers(scriptResult?.data.no_changes_prs);
+            const fallbackPrNumber = fallbackPrDetails?.number;
+            const notificationTargets = buildReviewNotificationTargets(
+              reviewedPrNumbers.length > 0
+                ? reviewedPrNumbers
+                : fallbackPrNumber !== undefined
+                  ? [fallbackPrNumber]
+                  : [],
+              noChangesPrNumbers,
+              legacyNoChangesNeeded,
+            );
 
-            // When no changes were made and score is already passing, post a PR comment
-            // and label the PR as ready for human review.
-            if (noChangesNeeded && prDetails?.number) {
-              postReadyForHumanReviewComment(prDetails.number, finalScore, projectDir);
+            if (notificationTargets.length === 0) {
+              const reviewEvent = legacyNoChangesNeeded
+                ? ('review_ready_for_human' as const)
+                : ('review_completed' as const);
+              await sendNotifications(config, {
+                event: reviewEvent,
+                projectName: path.basename(projectDir),
+                exitCode,
+                provider: formatProviderDisplay(envVars.NW_PROVIDER_CMD, envVars.NW_PROVIDER_LABEL),
+                prUrl: fallbackPrDetails?.url,
+                prTitle: fallbackPrDetails?.title,
+                prBody: fallbackPrDetails?.body,
+                prNumber: fallbackPrDetails?.number,
+                filesChanged: fallbackPrDetails?.changedFiles,
+                additions: fallbackPrDetails?.additions,
+                deletions: fallbackPrDetails?.deletions,
+                attempts,
+                finalScore,
+              });
+            } else {
+              for (const target of notificationTargets) {
+                const prDetails =
+                  fallbackPrDetails?.number === target.prNumber
+                    ? fallbackPrDetails
+                    : fetchPrDetailsByNumber(target.prNumber, projectDir);
+
+                if (target.noChangesNeeded && prDetails?.number) {
+                  postReadyForHumanReviewComment(prDetails.number, finalScore, projectDir);
+                }
+
+                const reviewEvent = target.noChangesNeeded
+                  ? ('review_ready_for_human' as const)
+                  : ('review_completed' as const);
+                await sendNotifications(config, {
+                  event: reviewEvent,
+                  projectName: path.basename(projectDir),
+                  exitCode,
+                  provider: formatProviderDisplay(envVars.NW_PROVIDER_CMD, envVars.NW_PROVIDER_LABEL),
+                  prUrl: prDetails?.url,
+                  prTitle: prDetails?.title,
+                  prBody: prDetails?.body,
+                  prNumber: prDetails?.number ?? target.prNumber,
+                  filesChanged: prDetails?.changedFiles,
+                  additions: prDetails?.additions,
+                  deletions: prDetails?.deletions,
+                  attempts,
+                  finalScore,
+                });
+              }
             }
-
-            const reviewEvent = noChangesNeeded ? ('review_ready_for_human' as const) : ('review_completed' as const);
-            const _reviewCtx = {
-              event: reviewEvent,
-              projectName: path.basename(projectDir),
-              exitCode,
-              provider: formatProviderDisplay(envVars.NW_PROVIDER_CMD, envVars.NW_PROVIDER_LABEL),
-              prUrl: prDetails?.url,
-              prTitle: prDetails?.title,
-              prBody: prDetails?.body,
-              prNumber: prDetails?.number,
-              filesChanged: prDetails?.changedFiles,
-              additions: prDetails?.additions,
-              deletions: prDetails?.deletions,
-              attempts,
-              finalScore,
-            };
-            await sendNotifications(config, _reviewCtx);
           }
 
           const autoMergedPrNumbers = parseAutoMergedPrNumbers(scriptResult?.data.auto_merged);
