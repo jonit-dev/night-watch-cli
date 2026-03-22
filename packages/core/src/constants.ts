@@ -28,6 +28,9 @@ export const DEFAULT_DEFAULT_BRANCH = ''; // empty = auto-detect
 // PRD Configuration
 export const DEFAULT_PRD_DIR = 'docs/prds';
 
+// Summary Configuration
+export const DEFAULT_SUMMARY_WINDOW_HOURS = 12;
+
 // Runtime Configuration (in seconds)
 export const DEFAULT_MAX_RUNTIME = 7200;
 export const DEFAULT_REVIEWER_MAX_RUNTIME = 3600;

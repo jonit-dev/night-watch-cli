@@ -31,6 +31,7 @@ import { createStateCommand } from './commands/state.js';
 import { boardCommand } from './commands/board.js';
 import { queueCommand } from './commands/queue.js';
 import { notifyCommand } from './commands/notify.js';
+import { summaryCommand } from './commands/summary.js';
 
 // Find the package root (works from both src/ in dev and dist/src/ in production)
 const __filename = fileURLToPath(import.meta.url);
@@ -124,5 +125,8 @@ queueCommand(program);
 
 // Register notify command (send notification events from bash scripts)
 notifyCommand(program);
+
+// Register summary command (morning briefing)
+summaryCommand(program);
 
 program.parse();
