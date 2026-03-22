@@ -32,7 +32,7 @@ interface AppState {
 
   // Command palette state
   commandPaletteOpen: boolean;
-  setCommandPaletteOpen: (v: boolean) => void;
+  setCommandPaletteOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
 
   // Activity center state
   activityCenterOpen: boolean;
@@ -78,7 +78,9 @@ export const useStore = create<AppState>((set, get) => ({
   removeToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
 
   commandPaletteOpen: false,
-  setCommandPaletteOpen: (v) => set({ commandPaletteOpen: v }),
+  setCommandPaletteOpen: (v) => set((state) => ({
+    commandPaletteOpen: typeof v === 'function' ? v(state.commandPaletteOpen) : v,
+  })),
 
   // Activity center state
   activityCenterOpen: false,

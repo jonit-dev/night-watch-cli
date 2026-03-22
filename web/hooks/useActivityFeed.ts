@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useStore } from '../store/useStore.js';
 import { fetchLogs } from '../api.js';
 import { WEB_JOB_REGISTRY } from '../utils/jobs.js';
@@ -54,8 +54,8 @@ function parseLogEntryForEvent(logLine: string, agentName: string): IActivityEve
   const tsMatch = logLine.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/);
   const timestamp = tsMatch ? new Date(tsMatch[1]) : new Date();
 
-  if (logLine.includes('[ERROR]') || logLine.includes('error') || logLine.includes('failed') || logLine.includes('Failed')) {
-    const errorMatch = logLine.match(/(?:error|failed|Error|Failed)[:\s]*(.+)/i);
+  if (logLine.includes('[ERROR]') || logLine.includes('[error]') || /\bError:/.test(logLine) || /\bFailed\b/.test(logLine)) {
+    const errorMatch = logLine.match(/(?:\[ERROR\]|Error:|Failed)\s*(.+)/i);
     return {
       id: generateEventId(),
       type: 'agent_failed',
@@ -136,18 +136,18 @@ export function useActivityFeed(): {
         }
       });
 
-      const wasPaused = prevStatus.crontab?.installed;
-      const isPaused = status.crontab?.installed;
-      if (wasPaused && !isPaused) {
-        newEvents.push({
-          id: generateEventId(),
-          type: 'automation_resumed',
-          ts: new Date(),
-        });
-      } else if (!wasPaused && isPaused) {
+      const wasInstalled = prevStatus.crontab?.installed;
+      const isInstalled = status.crontab?.installed;
+      if (wasInstalled && !isInstalled) {
         newEvents.push({
           id: generateEventId(),
           type: 'automation_paused',
+          ts: new Date(),
+        });
+      } else if (!wasInstalled && isInstalled) {
+        newEvents.push({
+          id: generateEventId(),
+          type: 'automation_resumed',
           ts: new Date(),
         });
       }
@@ -218,20 +218,24 @@ export function useActivityFeed(): {
     fetchInitialEvents();
   }, []);
 
-  const groupedEvents: IDayGroup[] = [];
-  const grouped = new Map<string, IActivityEvent[]>();
+  const groupedEvents = useMemo((): IDayGroup[] => {
+    const result: IDayGroup[] = [];
+    const grouped = new Map<string, IActivityEvent[]>();
 
-  events.forEach((event) => {
-    const label = getDayLabel(event.ts);
-    if (!grouped.has(label)) {
-      grouped.set(label, []);
-    }
-    grouped.get(label)!.push(event);
-  });
+    events.forEach((event) => {
+      const label = getDayLabel(event.ts);
+      if (!grouped.has(label)) {
+        grouped.set(label, []);
+      }
+      grouped.get(label)!.push(event);
+    });
 
-  grouped.forEach((groupEvents, label) => {
-    groupedEvents.push({ label, events: groupEvents });
-  });
+    grouped.forEach((groupEvts, label) => {
+      result.push({ label, events: groupEvts });
+    });
+
+    return result;
+  }, [events]);
 
   return { events, groupedEvents, hasUnread, markAsRead };
 }

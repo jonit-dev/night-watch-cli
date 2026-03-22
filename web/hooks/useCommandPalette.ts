@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore.js';
 
 export function useCommandPalette(): void {
-  const { commandPaletteOpen, setCommandPaletteOpen } = useStore();
+  const { setCommandPaletteOpen } = useStore();
   const navigate = useNavigate();
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
@@ -12,7 +12,7 @@ export function useCommandPalette(): void {
     // Cmd+K / Ctrl+K to Toggle command palette
     if (isShortcut && (e.key === 'k' || e.key === 'K')) {
       e.preventDefault();
-      setCommandPaletteOpen(!commandPaletteOpen);
+      setCommandPaletteOpen((prev: boolean) => !prev);
       return;
     }
 
@@ -39,10 +39,10 @@ export function useCommandPalette(): void {
     }
 
     // Escape to close command palette
-    if (commandPaletteOpen && e.key === 'Escape') {
+    if (e.key === 'Escape') {
       setCommandPaletteOpen(false);
     }
-  }, [commandPaletteOpen, navigate, setCommandPaletteOpen]);
+  }, [navigate, setCommandPaletteOpen]);
 
   // Register keyboard listener
   useEffect(() => {
@@ -51,22 +51,4 @@ export function useCommandPalette(): void {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [handleKeyDown]);
-
-  // Close on click outside
-  useEffect(() => {
-    if (!commandPaletteOpen) return;
-
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      const isInsidePalette = target.closest('[data-command-palette]') !== null;
-      if (!isInsidePalette) {
-        setCommandPaletteOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [commandPaletteOpen, setCommandPaletteOpen]);
 }
