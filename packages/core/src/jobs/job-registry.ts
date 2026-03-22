@@ -127,6 +127,7 @@ export const JOB_REGISTRY: IJobDefinition[] = [
       },
       { name: 'skipLabel', type: 'string', defaultValue: 'skip-qa' },
       { name: 'autoInstallPlaywright', type: 'boolean', defaultValue: true },
+      { name: 'validatedLabel', type: 'string', defaultValue: 'e2e-validated' },
     ],
     defaultConfig: {
       enabled: true,
@@ -136,11 +137,13 @@ export const JOB_REGISTRY: IJobDefinition[] = [
       artifacts: 'both',
       skipLabel: 'skip-qa',
       autoInstallPlaywright: true,
+      validatedLabel: 'e2e-validated',
     } as IBaseJobConfig & {
       branchPatterns: string[];
       artifacts: string;
       skipLabel: string;
       autoInstallPlaywright: boolean;
+      validatedLabel: string;
     },
   },
   {

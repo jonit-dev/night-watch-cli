@@ -123,6 +123,7 @@ export const DEFAULT_QA_MAX_RUNTIME = 3600; // 1 hour
 export const DEFAULT_QA_ARTIFACTS: QaArtifacts = 'both';
 export const DEFAULT_QA_SKIP_LABEL = 'skip-qa';
 export const DEFAULT_QA_AUTO_INSTALL_PLAYWRIGHT = true;
+export const DEFAULT_QA_VALIDATED_LABEL = 'e2e-validated';
 
 export const DEFAULT_QA: IQaConfig = {
   enabled: DEFAULT_QA_ENABLED,
@@ -132,6 +133,7 @@ export const DEFAULT_QA: IQaConfig = {
   artifacts: DEFAULT_QA_ARTIFACTS,
   skipLabel: DEFAULT_QA_SKIP_LABEL,
   autoInstallPlaywright: DEFAULT_QA_AUTO_INSTALL_PLAYWRIGHT,
+  validatedLabel: DEFAULT_QA_VALIDATED_LABEL,
 };
 
 export const QA_LOG_NAME = 'night-watch-qa';

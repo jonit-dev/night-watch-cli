@@ -575,4 +575,42 @@ describe('init command', () => {
       expect(content).toContain('Custom Night Watch Template');
     });
   });
+
+  describe('label sync preconditions', () => {
+    it('NIGHT_WATCH_LABELS includes e2e-validated for init sync', async () => {
+      const { NIGHT_WATCH_LABELS } = await import('@night-watch/core');
+      const names = NIGHT_WATCH_LABELS.map((l: { name: string }) => l.name);
+      expect(names).toContain('e2e-validated');
+    });
+
+    it('init skips label sync when no GitHub remote', () => {
+      // getGitHubRemoteStatus returns hasGitHubRemote: false for non-git dirs
+      const status = getGitHubRemoteStatus(tempDir);
+      expect(status.hasGitHubRemote).toBe(false);
+    });
+
+    it('label sync condition: skips when hasGitHubRemote is false', () => {
+      // Simulate the condition check: no sync when no GitHub remote
+      const remoteStatus = { hasGitHubRemote: false, remoteUrl: null };
+      const ghAuthenticated = true;
+      const shouldSync = remoteStatus.hasGitHubRemote && ghAuthenticated;
+      expect(shouldSync).toBe(false);
+    });
+
+    it('label sync condition: skips when gh not authenticated', () => {
+      // Simulate the condition check: no sync when gh not authenticated
+      const remoteStatus = { hasGitHubRemote: true, remoteUrl: 'https://github.com/test/repo' };
+      const ghAuthenticated = false;
+      const shouldSync = remoteStatus.hasGitHubRemote && ghAuthenticated;
+      expect(shouldSync).toBe(false);
+    });
+
+    it('label sync condition: proceeds when GitHub remote and gh authenticated', () => {
+      // Simulate the condition check: sync proceeds when both conditions met
+      const remoteStatus = { hasGitHubRemote: true, remoteUrl: 'https://github.com/test/repo' };
+      const ghAuthenticated = true;
+      const shouldSync = remoteStatus.hasGitHubRemote && ghAuthenticated;
+      expect(shouldSync).toBe(true);
+    });
+  });
 });

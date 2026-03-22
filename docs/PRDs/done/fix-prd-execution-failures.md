@@ -14,6 +14,7 @@ PRD execution is failing consistently across projects (night-watch-cli, autopilo
 When the proxy returns 429, the system correctly triggers a native Claude fallback. **However, if native Claude is also rate-limited**, the fallback exits with code 1 and the system records `provider_exit` instead of `rate_limited`.
 
 **Evidence from `logs/executor.log`:**
+
 ```
 API Error: 429 {"error":{"code":"1308","message":"Usage limit reached for 5 hour..."}}
 RATE-LIMITED: Proxy quota exhausted — triggering native Claude fallback
@@ -24,6 +25,7 @@ FAIL: Night watch exited with code 1 while processing 69-ux-revamp...
 ```
 
 **Impact:** The system records a `failure` with `reason=provider_exit` instead of `rate_limited`, which:
+
 - Triggers a long cooldown (max_runtime-based) instead of a rate-limit-appropriate retry
 - Sends misleading failure notifications
 - Prevents the PRD from being retried once the rate limit resets
@@ -33,6 +35,7 @@ FAIL: Night watch exited with code 1 while processing 69-ux-revamp...
 The function scans `tail -50` of the shared `executor.log` file, but log entries from **previous runs** can bleed into the current run's error detail.
 
 **Evidence:** Issue #70's failure detail contains issue #69's error message:
+
 ```
 detail=[2026-03-07 00:40:59] [PID:75449] FAIL: Night watch exited with code 1 while processing 69-ux-revamp...
 ```
@@ -44,6 +47,7 @@ This happens because the log is append-only and `latest_failure_detail()` doesn'
 In filesystem mode, `code-cleanup-q1-2026.md` was selected and executed despite the work already being merged to master. Claude correctly identified the work was done but didn't create a PR. The cron script then recorded `failure_no_pr_after_success`.
 
 **Evidence:**
+
 ```
 OUTCOME: exit_code=0 total_elapsed=363s prd=code-cleanup-q1-2026.md
 WARN: claude exited 0 but no open/merged PR found on night-watch/code-cleanup-q1-2026
@@ -62,6 +66,7 @@ This is a pre-existing filesystem mode issue (stale PRDs not moved to `done/`).
 After the native Claude fallback runs (line ~626), check if the fallback also hit a rate limit before falling through to the generic failure handler.
 
 **Implementation:**
+
 1. After `RATE_LIMIT_FALLBACK_TRIGGERED` block (lines 603-632), if `EXIT_CODE != 0`, scan fallback output for rate-limit indicators (`"hit your limit"`, `429`, `"Usage limit"`)
 2. If detected, set a new flag `DOUBLE_RATE_LIMITED=1`
 3. In the outcome handler (lines 711-726), when `DOUBLE_RATE_LIMITED=1`:
@@ -72,6 +77,7 @@ After the native Claude fallback runs (line ~626), check if the fallback also hi
 **Specific changes in `night-watch-cron.sh`:**
 
 After line 632 (`fi` closing the fallback block), add:
+
 ```bash
 # Detect double rate-limit: both proxy AND native Claude exhausted
 DOUBLE_RATE_LIMITED=0
@@ -84,6 +90,7 @@ fi
 ```
 
 In the outcome handler, add a new branch before the generic `else` on line 711:
+
 ```bash
 elif [ "${DOUBLE_RATE_LIMITED}" = "1" ]; then
   if [ -n "${ISSUE_NUMBER}" ]; then
@@ -102,6 +109,7 @@ elif [ "${DOUBLE_RATE_LIMITED}" = "1" ]; then
 Modify `latest_failure_detail()` to accept an optional `since_line` parameter that filters to only lines written during the current run.
 
 **Implementation:**
+
 1. Change `latest_failure_detail()` (lines 79-92) to accept a second parameter `since_line`
 2. Use `tail -n +${since_line}` instead of `tail -50` when `since_line` is provided
 3. At the call site (line 712), pass the `LOG_LINE_BEFORE` captured at the start of the current attempt
@@ -109,6 +117,7 @@ Modify `latest_failure_detail()` to accept an optional `since_line` parameter th
 **Specific changes:**
 
 Replace `latest_failure_detail()`:
+
 ```bash
 latest_failure_detail() {
   local log_file="${1:?log_file required}"
@@ -138,6 +147,7 @@ latest_failure_detail() {
 ```
 
 Update call site at line 712:
+
 ```bash
 PROVIDER_ERROR_DETAIL=$(latest_failure_detail "${LOG_FILE}" "${LOG_LINE_BEFORE}")
 ```
@@ -182,6 +192,6 @@ This is already handled — the `code-cleanup-q1-2026.md` issue was a one-time s
 
 ## Files to Modify
 
-| File | Change |
-|------|--------|
+| File                          | Change                                                               |
+| ----------------------------- | -------------------------------------------------------------------- |
 | `scripts/night-watch-cron.sh` | Add double-rate-limit detection, scope failure detail to current run |
