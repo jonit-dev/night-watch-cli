@@ -137,6 +137,11 @@ export const NIGHT_WATCH_LABELS: ILabelDefinition[] = [
     description: 'Created by the analytics job for Amplitude findings',
     color: '1d76db',
   },
+  {
+    name: 'e2e-validated',
+    description: 'PR acceptance requirements validated by e2e/integration tests',
+    color: '0e8a16',
+  },
 ];
 
 // ---------------------------------------------------------------------------

@@ -573,7 +573,7 @@ export function initCommand(program: Command): void {
       const cwd = process.cwd();
       const force = options.force || false;
       const prdDir = options.prdDir || DEFAULT_PRD_DIR;
-      const totalSteps = 13;
+      const totalSteps = 14;
       const interactive = isInteractiveInitSession();
 
       console.log();
@@ -891,8 +891,41 @@ export function initCommand(program: Command): void {
         }
       }
 
-      // Step 11: Register in global registry
-      step(11, totalSteps, 'Registering project in global registry...');
+      // Step 11: Sync Night Watch labels to GitHub
+      step(11, totalSteps, 'Syncing Night Watch labels to GitHub...');
+      let labelSyncStatus = 'Skipped';
+      if (!remoteStatus.hasGitHubRemote || !ghAuthenticated) {
+        labelSyncStatus = !remoteStatus.hasGitHubRemote
+          ? 'Skipped (no GitHub remote)'
+          : 'Skipped (gh auth required)';
+        info('Skipping label sync (no GitHub remote or gh not authenticated).');
+      } else {
+        try {
+          const { NIGHT_WATCH_LABELS } = await import('@night-watch/core');
+          let created = 0;
+          for (const label of NIGHT_WATCH_LABELS) {
+            try {
+              execSync(
+                `gh label create "${label.name}" --description "${label.description}" --color "${label.color}" --force`,
+                { cwd, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] },
+              );
+              created++;
+            } catch {
+              // Label creation is best-effort
+            }
+          }
+          labelSyncStatus = `Synced ${created}/${NIGHT_WATCH_LABELS.length} labels`;
+          success(`Synced ${created}/${NIGHT_WATCH_LABELS.length} labels to GitHub`);
+        } catch (labelErr) {
+          labelSyncStatus = 'Failed';
+          warn(
+            `Could not sync labels: ${labelErr instanceof Error ? labelErr.message : String(labelErr)}`,
+          );
+        }
+      }
+
+      // Step 12: Register in global registry
+      step(12, totalSteps, 'Registering project in global registry...');
       try {
         const { registerProject } = await import('@night-watch/core');
         const entry = registerProject(cwd);
@@ -903,8 +936,8 @@ export function initCommand(program: Command): void {
         );
       }
 
-      // Step 12: Install AI skills
-      step(12, totalSteps, 'Installing Night Watch skills...');
+      // Step 13: Install AI skills
+      step(13, totalSteps, 'Installing Night Watch skills...');
       const skillsResult = installSkills(cwd, selectedProvider, force, TEMPLATES_DIR);
       if (skillsResult.installed > 0) {
         success(`Installed ${skillsResult.installed} skills to ${skillsResult.location}`);
@@ -918,7 +951,7 @@ export function initCommand(program: Command): void {
       }
 
       // Print summary
-      step(13, totalSteps, 'Initialization complete!');
+      step(14, totalSteps, 'Initialization complete!');
 
       // Summary with table
       header('Initialization Complete');
@@ -933,6 +966,7 @@ export function initCommand(program: Command): void {
       filesTable.push(['', `instructions/prd-creator.md (${templateSources[5].source})`]);
       filesTable.push(['Config File', CONFIG_FILE_NAME]);
       filesTable.push(['Board Setup', boardSetupStatus]);
+      filesTable.push(['Label Sync', labelSyncStatus]);
       filesTable.push(['Global Registry', '~/.night-watch/projects.json']);
       let skillsSummary: string;
       if (skillsResult.installed > 0) {

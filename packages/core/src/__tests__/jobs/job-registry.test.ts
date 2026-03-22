@@ -66,6 +66,23 @@ describe('getJobDef', () => {
     expect(def!.name).toBe('QA');
   });
 
+  it('qa job has validatedLabel extra field', () => {
+    const def = getJobDef('qa');
+    expect(def).toBeDefined();
+    expect(def!.extraFields).toContainEqual(
+      expect.objectContaining({ name: 'validatedLabel' }),
+    );
+  });
+
+  it('qa job validatedLabel extra field has correct defaults', () => {
+    const def = getJobDef('qa');
+    expect(def).toBeDefined();
+    const field = def!.extraFields?.find((f) => f.name === 'validatedLabel');
+    expect(field).toBeDefined();
+    expect(field!.type).toBe('string');
+    expect(field!.defaultValue).toBe('e2e-validated');
+  });
+
   it('returns correct definition for slicer', () => {
     const def = getJobDef('slicer');
     expect(def).toBeDefined();

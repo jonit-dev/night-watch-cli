@@ -7,6 +7,7 @@
 **Problem:** Adding a new job type (e.g., analytics) requires touching 15+ files across 4 packages — types, constants, config normalization, env parsing, CLI command, server routes, API client, Scheduling UI, Settings UI, schedule templates, and more. Each job's state shape is inconsistent (executor/reviewer use top-level flat fields, qa/audit/analytics use nested config objects, slicer lives inside `roadmapScanner`).
 
 **Files Analyzed:**
+
 - `packages/core/src/types.ts` — `JobType`, `IJobProviders`, `INightWatchConfig`, `IQaConfig`, `IAuditConfig`, `IAnalyticsConfig`
 - `packages/core/src/shared/types.ts` — duplicated type definitions for web contract
 - `packages/core/src/constants.ts` — `DEFAULT_*` per job, `VALID_JOB_TYPES`, `DEFAULT_QUEUE_PRIORITY`, `LOG_FILE_NAMES`
@@ -22,6 +23,7 @@
 - `web/store/useStore.ts` — minimal Zustand, no job-specific state
 
 **Current Behavior:**
+
 - 6 job types exist: `executor`, `reviewer`, `qa`, `audit`, `slicer`, `analytics`
 - Executor/reviewer use flat top-level config fields (`cronSchedule`, `reviewerSchedule`, `executorEnabled`, `reviewerEnabled`)
 - QA/audit/analytics use nested config objects (`config.qa`, `config.audit`, `config.analytics`) with common shape: `{ enabled, schedule, maxRuntime, ...extras }`
@@ -32,6 +34,7 @@
 ## 2. Solution
 
 **Approach:**
+
 1. Create a **Job Registry** in `packages/core/src/jobs/` that defines each job's metadata, defaults, config access patterns, and env parsing rules in a single object
 2. Extract a **`IBaseJobConfig`** interface (`{ enabled, schedule, maxRuntime }`) that all job configs extend
 3. Replace per-job boilerplate in `config-normalize.ts` and `config-env.ts` with generic registry-driven loops
@@ -39,6 +42,7 @@
 5. Add a **Zustand `jobs` slice** that provides computed job state derived from `status.config` so components don't need to know each job's config shape
 
 **Architecture Diagram:**
+
 ```mermaid
 flowchart TB
     subgraph Core["@night-watch/core"]
@@ -63,12 +67,14 @@ flowchart TB
 ```
 
 **Key Decisions:**
+
 - **Migrate executor/reviewer to nested config**: All jobs will use `config.jobs.{id}: { enabled, schedule, maxRuntime, ...extras }`. Auto-detect legacy flat format and migrate on load. This is a breaking config change but gives uniform access patterns.
 - **Registry is a const array, not DI**: Simple, testable, no runtime overhead
 - **Web job registry stores React components directly** for icons (type-safe, tree-shakeable)
 - **Generic `triggerJob(jobId)`** replaces per-job `triggerRun()`, `triggerReview()` etc. (keep old functions as thin wrappers for backward compat)
 
 **Data Changes:**
+
 - `INightWatchConfig` gains `jobs: Record<JobType, IBaseJobConfig & extras>` — replaces flat executor/reviewer fields and nested qa/audit/analytics objects
 - Legacy flat fields (`cronSchedule`, `reviewerSchedule`, `executorEnabled`, `reviewerEnabled`) and nested objects (`qa`, `audit`, `analytics`, `roadmapScanner.slicerSchedule`) auto-detected and migrated on config load
 - Config file rewritten in new format on first save after migration
@@ -100,6 +106,7 @@ sequenceDiagram
 **User-visible outcome:** Job registry exists and is the single source of truth for job metadata. All constants derived from it. Tests prove registry drives normalization.
 
 **Files (5):**
+
 - `packages/core/src/jobs/job-registry.ts` — **NEW** — `IJobDefinition` interface + `JOB_REGISTRY` array + accessor utilities
 - `packages/core/src/jobs/index.ts` — **NEW** — barrel exports
 - `packages/core/src/types.ts` — add `IBaseJobConfig` interface
@@ -110,21 +117,22 @@ sequenceDiagram
 
 - [ ] Define `IBaseJobConfig` interface: `{ enabled: boolean; schedule: string; maxRuntime: number }`
 - [ ] Define `IJobDefinition<TConfig extends IBaseJobConfig = IBaseJobConfig>` interface with:
+
   ```typescript
   interface IJobDefinition<TConfig extends IBaseJobConfig = IBaseJobConfig> {
     id: JobType;
-    name: string;                    // "Executor", "QA", "Auditor"
-    description: string;             // "Creates implementation PRs from PRDs"
-    cliCommand: string;              // "run", "review", "qa", "audit", "planner", "analytics"
-    logName: string;                 // "executor", "reviewer", "night-watch-qa", etc.
-    lockSuffix: string;              // ".lock", "-r.lock", "-qa.lock", etc.
-    queuePriority: number;           // 50, 40, 30, 20, 10
+    name: string; // "Executor", "QA", "Auditor"
+    description: string; // "Creates implementation PRs from PRDs"
+    cliCommand: string; // "run", "review", "qa", "audit", "planner", "analytics"
+    logName: string; // "executor", "reviewer", "night-watch-qa", etc.
+    lockSuffix: string; // ".lock", "-r.lock", "-qa.lock", etc.
+    queuePriority: number; // 50, 40, 30, 20, 10
 
     // Env var prefix for NW_* overrides
-    envPrefix: string;               // "NW_EXECUTOR", "NW_QA", "NW_AUDIT", etc.
+    envPrefix: string; // "NW_EXECUTOR", "NW_QA", "NW_AUDIT", etc.
 
     // Extra config field normalizers (beyond enabled/schedule/maxRuntime)
-    extraFields?: IExtraFieldDef[];  // e.g., QA's branchPatterns, artifacts, etc.
+    extraFields?: IExtraFieldDef[]; // e.g., QA's branchPatterns, artifacts, etc.
 
     // Defaults
     defaultConfig: TConfig;
@@ -133,6 +141,7 @@ sequenceDiagram
     migrateLegacy?: (raw: Record<string, unknown>) => Partial<TConfig> | undefined;
   }
   ```
+
 - [ ] Create `JOB_REGISTRY` const array with entries for all 6 job types
 - [ ] Create utility functions: `getJobDef(id)`, `getAllJobDefs()`, `getJobDefByCommand(cmd)`
 - [ ] Derive `VALID_JOB_TYPES`, `DEFAULT_QUEUE_PRIORITY`, `LOG_FILE_NAMES` from registry (keep exports stable)
@@ -154,6 +163,7 @@ sequenceDiagram
 **User-visible outcome:** `config-normalize.ts` and `config-env.ts` use generic loops. Legacy flat config auto-migrated. Adding a job config section no longer requires per-job blocks.
 
 **Files (5):**
+
 - `packages/core/src/jobs/job-registry.ts` — add `normalizeJobConfig()` and `buildJobEnvOverrides()` generic helpers
 - `packages/core/src/config-normalize.ts` — replace per-job normalization blocks with registry loop + legacy migration
 - `packages/core/src/config-env.ts` — replace per-job env blocks with registry loop
@@ -161,6 +171,7 @@ sequenceDiagram
 - `packages/core/src/__tests__/config-normalize.test.ts` — verify normalization + migration
 
 **Implementation:**
+
 - [ ] Add `normalizeJobConfig(rawConfig, jobDef)` that reads raw object, applies defaults, validates fields
 - [ ] Each `IJobDefinition` declares `extraFields` for job-specific fields beyond `{ enabled, schedule, maxRuntime }`
 - [ ] Add `migrateLegacyConfig(raw)` that detects old format (e.g., `cronSchedule` exists at top level) and transforms to new `jobs: { executor: { ... }, ... }` shape
@@ -184,17 +195,19 @@ sequenceDiagram
 **User-visible outcome:** Scheduling and Settings pages read job definitions from a registry instead of hardcoded arrays. Zustand provides computed job state.
 
 **Files (4):**
+
 - `web/utils/jobs.ts` — **NEW** — Web-side job registry with UI metadata
 - `web/store/useStore.ts` — add `jobs` computed slice derived from `status.config`
 - `web/api.ts` — add generic `triggerJob(jobId)` function
 - `web/utils/cron.ts` — derive schedule template keys from registry
 
 **Implementation:**
+
 - [ ] Create `IWebJobDefinition` extending core `IJobDefinition` with UI fields:
   ```typescript
   interface IWebJobDefinition extends IJobDefinition {
-    icon: string;              // lucide icon component name
-    triggerEndpoint: string;   // '/api/actions/qa'
+    icon: string; // lucide icon component name
+    triggerEndpoint: string; // '/api/actions/qa'
     scheduleTemplateKey: string; // key in IScheduleTemplate.schedules
     settingsSection?: 'general' | 'advanced'; // where in Settings to show
   }
@@ -223,11 +236,13 @@ sequenceDiagram
 **User-visible outcome:** Scheduling page renders job cards from the registry. Adding a new job automatically shows it in Scheduling.
 
 **Files (3):**
+
 - `web/pages/Scheduling.tsx` — replace hardcoded `agents` array with registry-driven rendering
 - `web/components/scheduling/ScheduleConfig.tsx` — use registry for form fields
 - `web/utils/cron.ts` — update `IScheduleTemplate` to be extensible
 
 **Implementation:**
+
 - [ ] Replace the hardcoded `agents: IAgentInfo[]` array with `WEB_JOB_REGISTRY.map(job => ...)`
 - [ ] Replace `handleJobToggle` if/else chain with generic `job.buildEnabledPatch(enabled, config)`
 - [ ] Replace `handleTriggerJob` map with generic `triggerJob(job.id)`
@@ -247,11 +262,13 @@ sequenceDiagram
 **User-visible outcome:** Settings page job config sections rendered from registry. Adding a new job auto-shows its settings.
 
 **Files (3):**
+
 - `web/pages/Settings.tsx` — replace per-job settings JSX blocks with registry loop
 - `web/components/dashboard/AgentStatusBar.tsx` — use registry for process status
 - `packages/server/src/routes/action.routes.ts` — generate routes from registry
 
 **Implementation:**
+
 - [ ] Settings: iterate `WEB_JOB_REGISTRY` to render job config sections
 - [ ] Each `IWebJobDefinition` can declare its settings fields: `settingsFields: ISettingsField[]`
 - [ ] `AgentStatusBar`: derive process list from registry instead of hardcoded

@@ -58,6 +58,7 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
       artifacts: 'both',
       skipLabel: 'skip-qa',
       autoInstallPlaywright: true,
+      validatedLabel: 'e2e-validated',
     },
     ...overrides,
   } as INightWatchConfig;
@@ -168,6 +169,35 @@ describe('qa command', () => {
       const env = buildEnvVars(config, options);
 
       expect(env.NW_QA_SKIP_LABEL).toBe('skip-qa');
+    });
+
+    it('should set NW_QA_VALIDATED_LABEL from config', () => {
+      const config = createTestConfig();
+      const options: IQaOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_QA_VALIDATED_LABEL).toBe('e2e-validated');
+    });
+
+    it('should use custom validatedLabel from config', () => {
+      const config = createTestConfig({
+        qa: {
+          enabled: true,
+          schedule: '30 1,7,13,19 * * *',
+          maxRuntime: 3600,
+          branchPatterns: [],
+          artifacts: 'both',
+          skipLabel: 'skip-qa',
+          autoInstallPlaywright: true,
+          validatedLabel: 'custom-e2e-label',
+        },
+      });
+      const options: IQaOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_QA_VALIDATED_LABEL).toBe('custom-e2e-label');
     });
 
     it('should set NW_QA_AUTO_INSTALL_PLAYWRIGHT to 1 when true', () => {
