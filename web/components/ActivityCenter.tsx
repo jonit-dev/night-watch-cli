@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { X, CheckCircle, AlertCircle, Pause, Play, GitPullRequest, Clock } from 'lucide-react';
 import { useStore } from '../store/useStore.js';
 import { useActivityFeed } from '../hooks/useActivityFeed.js';
-import type { IActivityEvent } from '../hooks/useActivityFeed';
+import type { IActivityEvent } from '../hooks/useActivityFeed.js';
 
 function getEventIcon(type: IActivityEvent['type']): React.ReactNode {
   switch (type) {
@@ -32,7 +32,6 @@ function formatRelativeTime(date: Date): string {
   const diffDays = Math.floor(diffHours / 24);
 
   if (diffSeconds < 60) return 'just now';
-  if (diffMinutes < 1) return `${diffSeconds}s ago`;
   if (diffMinutes < 60) return `${diffMinutes}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
   return `${diffDays}d ago`;

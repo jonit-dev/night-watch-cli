@@ -1,7 +1,7 @@
 import React from 'react';
 import { Search, AlertTriangle } from 'lucide-react';
-import { JOB_DEFINITIONS } from '../../utils/jobs.js';
-import { useStore } from '../../store/useStore.js';
+import { JOB_DEFINITIONS } from '../utils/jobs.js';
+import { useStore } from '../store/useStore.js';
 
 interface ILogFilterBarProps {
   selectedAgent: string | null;

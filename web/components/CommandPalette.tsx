@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Play,
   Pause,
   Search,
   ChevronRight,
-  Loader,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore.js';
@@ -96,27 +95,6 @@ const CommandPalette: React.FC = () => {
       }
     });
 
-    // Stop commands (only show for running agents)
-    WEB_JOB_REGISTRY.forEach((job) => {
-      const status = agentStatusMap[job.processName] ?? 'unknown';
-      const canStop = status === 'running';
-
-      if (canStop) {
-        result.push({
-          id: `stop-${job.id}`,
-          label: `Stop ${job.label}`,
-          category: 'agents',
-          icon: <Pause className="h-4 w-4" />,
-          action: async () => {
-            // For now, we stop via cancel API which stops individual jobs
-            // This is a simplified stop that only affects the currently running process
-            // A proper implementation would require more sophisticated process management
-            addToast({ title: 'Stop Requested', message: `Stop request sent for ${job.label}. Use terminal to force stop.`, type: 'info' });
-          },
-        });
-      }
-    });
-
     // Scheduling commands
     const isPaused = scheduleInfo?.paused ?? false;
     result.push({
@@ -152,7 +130,7 @@ const CommandPalette: React.FC = () => {
     });
 
     return result;
-  }, [status?.processes, scheduleInfo?.paused, addToast]);
+  }, [status?.processes, scheduleInfo?.paused, addToast, navigate, agentStatus]);
 
   // Filter commands by search term
   const filteredCommands = useMemo(() => {
