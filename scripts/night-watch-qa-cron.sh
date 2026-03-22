@@ -25,6 +25,7 @@ PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 PROVIDER_LABEL="${NW_PROVIDER_LABEL:-}"
 BRANCH_PATTERNS_RAW="${NW_BRANCH_PATTERNS:-feat/,night-watch/}"
 SKIP_LABEL="${NW_QA_SKIP_LABEL:-skip-qa}"
+VALIDATED_LABEL="${NW_QA_VALIDATED_LABEL:-e2e-validated}"
 QA_ARTIFACTS="${NW_QA_ARTIFACTS:-both}"
 QA_AUTO_INSTALL_PLAYWRIGHT="${NW_QA_AUTO_INSTALL_PLAYWRIGHT:-1}"
 SCRIPT_START_TIME=$(date +%s)
@@ -53,6 +54,16 @@ emit_result() {
   else
     echo "NIGHT_WATCH_RESULT:${status}"
   fi
+}
+
+LABEL_ENSURED=0
+ensure_validated_label() {
+  if [ "${LABEL_ENSURED}" -eq 1 ]; then return 0; fi
+  gh label create "${VALIDATED_LABEL}" \
+    --description "PR acceptance requirements validated by e2e/integration tests" \
+    --color "0e8a16" \
+    --force 2>/dev/null || true
+  LABEL_ENSURED=1
 }
 
 # ── Global Job Queue Gate ────────────────────────────────────────────────────
@@ -487,6 +498,7 @@ fi
 EXIT_CODE=0
 PROCESSED_PRS_CSV=""
 PASSING_PRS_CSV=""
+VALIDATED_PRS_CSV=""
 ISSUES_FOUND_PRS_CSV=""
 NO_TESTS_PRS_CSV=""
 UNCLASSIFIED_PRS_CSV=""
@@ -617,12 +629,23 @@ for pr_ref in ${PRS_NEEDING_QA}; do
         case "${QA_OUTCOME}" in
           passing)
             PASSING_PRS_CSV=$(append_csv "${PASSING_PRS_CSV}" "#${pr_num}")
+            # Apply e2e-validated label
+            ensure_validated_label
+            gh pr edit "${pr_num}" --add-label "${VALIDATED_LABEL}" 2>/dev/null || true
+            VALIDATED_PRS_CSV=$(append_csv "${VALIDATED_PRS_CSV}" "#${pr_num}")
+            log "QA: PR #${pr_num} — added '${VALIDATED_LABEL}' label (tests passing)"
             ;;
           issues_found)
             ISSUES_FOUND_PRS_CSV=$(append_csv "${ISSUES_FOUND_PRS_CSV}" "#${pr_num}")
+            # Remove e2e-validated label if present
+            gh pr edit "${pr_num}" --remove-label "${VALIDATED_LABEL}" 2>/dev/null || true
+            log "QA: PR #${pr_num} — removed '${VALIDATED_LABEL}' label (issues found)"
             ;;
           no_tests_needed)
             NO_TESTS_PRS_CSV=$(append_csv "${NO_TESTS_PRS_CSV}" "#${pr_num}")
+            # Remove e2e-validated label — no tests doesn't prove acceptance
+            gh pr edit "${pr_num}" --remove-label "${VALIDATED_LABEL}" 2>/dev/null || true
+            log "QA: PR #${pr_num} — removed '${VALIDATED_LABEL}' label (no tests needed)"
             ;;
           *)
             UNCLASSIFIED_PRS_CSV=$(append_csv "${UNCLASSIFIED_PRS_CSV}" "#${pr_num}")
@@ -646,6 +669,7 @@ cleanup_worktrees "${PROJECT_DIR}"
 
 FINAL_PROCESSED_PRS_CSV="${PROCESSED_PRS_CSV:-${PRS_NEEDING_QA_CSV}}"
 PASSING_PRS_SUMMARY=$(csv_or_none "${PASSING_PRS_CSV}")
+VALIDATED_PRS_SUMMARY=$(csv_or_none "${VALIDATED_PRS_CSV}")
 ISSUES_FOUND_PRS_SUMMARY=$(csv_or_none "${ISSUES_FOUND_PRS_CSV}")
 NO_TESTS_PRS_SUMMARY=$(csv_or_none "${NO_TESTS_PRS_CSV}")
 UNCLASSIFIED_PRS_SUMMARY=$(csv_or_none "${UNCLASSIFIED_PRS_CSV}")
@@ -664,6 +688,7 @@ Provider (model): ${PROVIDER_MODEL_DISPLAY}
 Artifacts: ${QA_ARTIFACTS_DESC} (mode=${QA_ARTIFACTS})
 Processed PRs: ${FINAL_PROCESSED_PRS_CSV}
 Passing tests: ${PASSING_PRS_SUMMARY}
+E2E validated: ${VALIDATED_PRS_SUMMARY}
 Issues found by tests: ${ISSUES_FOUND_PRS_SUMMARY}
 No tests needed: ${NO_TESTS_PRS_SUMMARY}
 Reported (unclassified): ${UNCLASSIFIED_PRS_SUMMARY}
@@ -680,9 +705,9 @@ ${QA_SCREENSHOT_SUMMARY}"
     fi
     send_telegram_status_message "🧪 Night Watch QA: warning" "${TELEGRAM_WARNING_BODY}"
     if [ -n "${REPO}" ]; then
-      emit_result "warning_qa" "prs=${FINAL_PROCESSED_PRS_CSV}|passing=${PASSING_PRS_SUMMARY}|issues=${ISSUES_FOUND_PRS_SUMMARY}|no_tests=${NO_TESTS_PRS_SUMMARY}|unclassified=${UNCLASSIFIED_PRS_SUMMARY}|warnings=${WARNING_PRS_SUMMARY}|repo=${REPO}"
+      emit_result "warning_qa" "prs=${FINAL_PROCESSED_PRS_CSV}|passing=${PASSING_PRS_SUMMARY}|validated=${VALIDATED_PRS_SUMMARY}|issues=${ISSUES_FOUND_PRS_SUMMARY}|no_tests=${NO_TESTS_PRS_SUMMARY}|unclassified=${UNCLASSIFIED_PRS_SUMMARY}|warnings=${WARNING_PRS_SUMMARY}|repo=${REPO}"
     else
-      emit_result "warning_qa" "prs=${FINAL_PROCESSED_PRS_CSV}|passing=${PASSING_PRS_SUMMARY}|issues=${ISSUES_FOUND_PRS_SUMMARY}|no_tests=${NO_TESTS_PRS_SUMMARY}|unclassified=${UNCLASSIFIED_PRS_SUMMARY}|warnings=${WARNING_PRS_SUMMARY}"
+      emit_result "warning_qa" "prs=${FINAL_PROCESSED_PRS_CSV}|passing=${PASSING_PRS_SUMMARY}|validated=${VALIDATED_PRS_SUMMARY}|issues=${ISSUES_FOUND_PRS_SUMMARY}|no_tests=${NO_TESTS_PRS_SUMMARY}|unclassified=${UNCLASSIFIED_PRS_SUMMARY}|warnings=${WARNING_PRS_SUMMARY}"
     fi
   else
     log "DONE: QA runner completed successfully"
@@ -691,6 +716,7 @@ Provider (model): ${PROVIDER_MODEL_DISPLAY}
 Artifacts: ${QA_ARTIFACTS_DESC} (mode=${QA_ARTIFACTS})
 Processed PRs: ${FINAL_PROCESSED_PRS_CSV}
 Passing tests: ${PASSING_PRS_SUMMARY}
+E2E validated: ${VALIDATED_PRS_SUMMARY}
 Issues found by tests: ${ISSUES_FOUND_PRS_SUMMARY}
 No tests needed: ${NO_TESTS_PRS_SUMMARY}
 Reported (unclassified): ${UNCLASSIFIED_PRS_SUMMARY}"
@@ -701,9 +727,9 @@ ${QA_SCREENSHOT_SUMMARY}"
     fi
     send_telegram_status_message "🧪 Night Watch QA: completed" "${TELEGRAM_SUCCESS_BODY}"
     if [ -n "${REPO}" ]; then
-      emit_result "success_qa" "prs=${FINAL_PROCESSED_PRS_CSV}|passing=${PASSING_PRS_SUMMARY}|issues=${ISSUES_FOUND_PRS_SUMMARY}|no_tests=${NO_TESTS_PRS_SUMMARY}|unclassified=${UNCLASSIFIED_PRS_SUMMARY}|repo=${REPO}"
+      emit_result "success_qa" "prs=${FINAL_PROCESSED_PRS_CSV}|passing=${PASSING_PRS_SUMMARY}|validated=${VALIDATED_PRS_SUMMARY}|issues=${ISSUES_FOUND_PRS_SUMMARY}|no_tests=${NO_TESTS_PRS_SUMMARY}|unclassified=${UNCLASSIFIED_PRS_SUMMARY}|repo=${REPO}"
     else
-      emit_result "success_qa" "prs=${FINAL_PROCESSED_PRS_CSV}|passing=${PASSING_PRS_SUMMARY}|issues=${ISSUES_FOUND_PRS_SUMMARY}|no_tests=${NO_TESTS_PRS_SUMMARY}|unclassified=${UNCLASSIFIED_PRS_SUMMARY}"
+      emit_result "success_qa" "prs=${FINAL_PROCESSED_PRS_CSV}|passing=${PASSING_PRS_SUMMARY}|validated=${VALIDATED_PRS_SUMMARY}|issues=${ISSUES_FOUND_PRS_SUMMARY}|no_tests=${NO_TESTS_PRS_SUMMARY}|unclassified=${UNCLASSIFIED_PRS_SUMMARY}"
     fi
   fi
 elif [ ${EXIT_CODE} -eq 124 ]; then

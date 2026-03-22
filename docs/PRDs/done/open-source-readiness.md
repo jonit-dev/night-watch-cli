@@ -7,6 +7,7 @@
 **Problem:** The project is missing standard OSS community files and has several bugs in README/CI that would hurt a public launch.
 
 **Files Analyzed:**
+
 - `README.md` — install command wrong, broken doc link, From Source uses npm not yarn
 - `.github/workflows/ci.yml` — targets `main` but default branch is `master`
 - `docs/contributing.md` — exists but not auto-discovered by GitHub (needs root copy)
@@ -15,6 +16,7 @@
 - No `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CHANGELOG.md` at root
 
 **Current Behavior:**
+
 - `npm install -g night-watch-cli` installs wrong/nonexistent package (real npm package is `@jonit-dev/night-watch-cli`)
 - `npm` badge links to wrong package name
 - CI push trigger never fires (wrong branch `main` vs `master`)
@@ -25,6 +27,7 @@
 ## 2. Solution
 
 **Approach:**
+
 - Fix README bugs (install command, badge, broken link, From Source yarn command)
 - Fix CI workflow branch targets
 - Create community files: CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, CHANGELOG.md
@@ -32,6 +35,7 @@
 - Clean up web/README.md
 
 **Key Decisions:**
+
 - CONTRIBUTING.md goes in `.github/` so GitHub auto-links it; also keep `docs/contributing.md` unchanged
 - Use Contributor Covenant v2.1 for CODE_OF_CONDUCT.md
 - CHANGELOG.md starts from current version with a brief history
@@ -44,6 +48,7 @@
 ### Phase 1: Fix README and CI bugs
 
 **Files (4):**
+
 - `README.md` — fix install command, badge, broken link, From Source yarn
 - `.github/workflows/ci.yml` — fix branch target main → master
 
@@ -79,6 +84,7 @@
 | Manual: `docs/architecture-overview.md` exists | File accessible |
 
 **Verification:**
+
 - `yarn verify` passes (no TS/lint changes, but ensures nothing broken)
 
 ---
@@ -86,6 +92,7 @@
 ### Phase 2: Community files — CONTRIBUTING, CODE_OF_CONDUCT, SECURITY
 
 **Files (3):**
+
 - `.github/CONTRIBUTING.md` — auto-discovered by GitHub
 - `CODE_OF_CONDUCT.md` — project root
 - `SECURITY.md` — project root
@@ -99,6 +106,7 @@
 - [ ] Create `SECURITY.md` at project root — vulnerability reporting via GitHub private security advisory
 
 **Content for `.github/CONTRIBUTING.md`:**
+
 ```markdown
 # Contributing to Night Watch CLI
 
@@ -113,6 +121,7 @@ Thank you for your interest in contributing!
 ## Reporting Bugs
 
 Open an issue using the **Bug Report** template. Include:
+
 - Night Watch version (`night-watch --version`)
 - OS and Node.js version
 - Your `night-watch.config.json` (redact any API keys or tokens)
@@ -121,6 +130,7 @@ Open an issue using the **Bug Report** template. Include:
 ## Requesting Features
 
 Open an issue using the **Feature Request** template. Describe:
+
 - The problem you're solving
 - Your proposed solution
 - Alternatives you considered
@@ -145,6 +155,7 @@ This project follows the [Contributor Covenant Code of Conduct](../CODE_OF_CONDU
 **Content for `CODE_OF_CONDUCT.md`:** Use Contributor Covenant v2.1 standard text with contact email placeholder.
 
 **Content for `SECURITY.md`:**
+
 ```markdown
 # Security Policy
 
@@ -162,6 +173,7 @@ You should expect an acknowledgement within 48 hours. If a vulnerability is conf
 ```
 
 **Verification:**
+
 - `yarn verify` passes
 - GitHub shows CONTRIBUTING link on Issues/PRs page after pushing
 
@@ -170,6 +182,7 @@ You should expect an acknowledgement within 48 hours. If a vulnerability is conf
 ### Phase 3: GitHub templates and CHANGELOG
 
 **Files (4):**
+
 - `.github/ISSUE_TEMPLATE/bug_report.md`
 - `.github/ISSUE_TEMPLATE/feature_request.md`
 - `.github/pull_request_template.md`
@@ -183,6 +196,7 @@ You should expect an acknowledgement within 48 hours. If a vulnerability is conf
 - [ ] Create `CHANGELOG.md` starting from current version `1.7.94` with brief history
 
 **Bug report template fields:**
+
 - Night Watch version
 - OS + Node.js version
 - Config (redacted)
@@ -191,12 +205,14 @@ You should expect an acknowledgement within 48 hours. If a vulnerability is conf
 - Relevant logs
 
 **Feature request template fields:**
+
 - Problem statement
 - Proposed solution
 - Alternatives considered
 - Additional context
 
 **PR template fields:**
+
 - Summary of changes
 - Related issue (closes #)
 - Type of change (bug fix / feature / docs / refactor)
@@ -205,6 +221,7 @@ You should expect an acknowledgement within 48 hours. If a vulnerability is conf
 **CHANGELOG.md:** Start with current version block, note it covers changes from initial public release. Keep it brief — one block per recent milestone, not per patch.
 
 **Verification:**
+
 - `yarn verify` passes
 - New issue on GitHub shows template selector
 - New PR on GitHub shows template pre-filled
@@ -214,12 +231,15 @@ You should expect an acknowledgement within 48 hours. If a vulnerability is conf
 ### Phase 4: Cleanup web/README.md
 
 **Files (1):**
+
 - `web/README.md`
 
 **Implementation:**
+
 - [ ] Replace Google AI Studio boilerplate content with a brief description of the Night Watch web dashboard: what it is, how to start it (`yarn dev` from `web/`), and a link to `docs/WEB-UI.md` for full docs.
 
 **Verification:**
+
 - `yarn verify` passes
 - `web/README.md` no longer references Google AI Studio or unrelated tooling
 
