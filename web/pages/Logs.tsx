@@ -1,19 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Pause, Play, Search, ArrowDownCircle, AlertCircle } from 'lucide-react';
-import Button from '../components/ui/Button';
-import { useApi, fetchLogs } from '../api';
-import { useStore } from '../store/useStore';
+import { Pause, Play, ArrowDownCircle, AlertCircle } from 'lucide-react';
+import Button from '../components/ui/Button.js';
+import LogFilterBar from '../components/LogFilterBar.js';
+import { useApi, fetchLogs } from '../api.js';
+import { useStore } from '../store/useStore.js';
 import { JOB_DEFINITIONS } from '../utils/jobs.js';
 
 type LogName = string;
 
 const Logs: React.FC = () => {
   const [autoScroll, setAutoScroll] = useState(true);
-  const [filter, setFilter] = useState('');
   const [activeLog, setActiveLog] = useState<LogName>('executor');
   const scrollRef = useRef<HTMLDivElement>(null);
   const { selectedProjectId, globalModeLoading } = useStore();
   const status = useStore((s) => s.status);
+
+  // New filter state
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [errorsOnly, setErrorsOnly] = useState(false);
 
   const { data: logData, loading: logLoading, error: logError, refetch: refetchLogs } = useApi(
     () => fetchLogs(activeLog, 500),
@@ -41,12 +46,63 @@ const Logs: React.FC = () => {
     return () => window.clearInterval(intervalId);
   }, [autoScroll, activeLog, refetchLogs]);
 
-  const filteredLogs = logs.filter(log => log.toLowerCase().includes(filter.toLowerCase()));
-
-  const handleLogChange = (logName: LogName) => {
-    setActiveLog(logName);
-    setFilter('');
+  // Handle agent selection - also switch the log file
+  const handleSelectAgent = (agent: string | null) => {
+    setSelectedAgent(agent);
+    if (agent) {
+      setActiveLog(agent);
+    }
+    setSearchTerm('');
   };
+
+  // Parse log line to extract agent name from [agent-name] prefix
+  const parseLogAgent = (log: string): string | null => {
+    const match = log.match(/\[(\w+)\]/);
+    if (match) {
+      const agentName = match[1].toLowerCase();
+      // Check if it matches one of our known agents
+      const knownAgent = JOB_DEFINITIONS.find(
+        (j) => j.processName.toLowerCase() === agentName || j.label.toLowerCase() === agentName
+      );
+      return knownAgent?.processName ?? null;
+    }
+    return null;
+  };
+
+  // Filter logs based on selected agent, search term, and errors only
+  const filteredLogs = logs.filter((log) => {
+    // Agent filter - check if log contains the agent prefix
+    if (selectedAgent) {
+      const logAgent = parseLogAgent(log);
+      // Also check if the log line contains the selected agent name anywhere
+      const containsAgent = log.toLowerCase().includes(selectedAgent.toLowerCase());
+      if (logAgent !== selectedAgent && !containsAgent) {
+        return false;
+      }
+    }
+
+    // Search term filter
+    if (searchTerm && !log.toLowerCase().includes(searchTerm.toLowerCase())) {
+      return false;
+    }
+
+    // Errors only filter
+    if (errorsOnly) {
+      const hasError = log.includes('[ERROR]') ||
+                     log.includes('[error]') ||
+                     log.includes('error:') ||
+                     log.includes('Error:') ||
+                     log.includes('failed') ||
+                     log.includes('Failed') ||
+                     log.includes('exception') ||
+                     log.includes('Exception');
+      if (!hasError) {
+        return false;
+      }
+    }
+
+    return true;
+  });
 
   const getProcessStatus = (logName: LogName) => {
     if (!status?.processes) return false;
@@ -67,39 +123,20 @@ const Logs: React.FC = () => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
+      {/* Filter Bar */}
+      <div className="mb-4 bg-slate-900 p-4 rounded-lg border border-slate-800 shadow-sm">
+        <LogFilterBar
+          selectedAgent={selectedAgent}
+          onSelectAgent={handleSelectAgent}
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          errorsOnly={errorsOnly}
+          onErrorsOnlyChange={setErrorsOnly}
+        />
+      </div>
+
       {/* Controls */}
-      <div className="flex items-center justify-between mb-4 bg-slate-900 p-2 rounded-lg border border-slate-800 shadow-sm">
-         <div className="flex items-center space-x-2">
-            <div className="relative group">
-               <input
-                 type="text"
-                 placeholder="Filter logs..."
-                 className="pl-9 pr-4 py-1.5 rounded-md border border-slate-700 bg-slate-950 text-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-64 placeholder:text-slate-600"
-                 value={filter}
-                 onChange={(e) => setFilter(e.target.value)}
-               />
-               <Search className="absolute left-2.5 top-2 h-4 w-4 text-slate-500 group-focus-within:text-indigo-400" />
-            </div>
-            <div className="h-6 w-px bg-slate-700 mx-2"></div>
-            <div className="flex space-x-1">
-              {JOB_DEFINITIONS.map(({ processName, label }) => (
-                <button
-                  key={processName}
-                  onClick={() => handleLogChange(processName)}
-                  className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                    activeLog === processName
-                      ? 'bg-slate-800 text-slate-200 shadow-sm border border-slate-700'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                  }`}
-                >
-                  <div className="flex items-center space-x-2">
-                    <span>{label}</span>
-                    {getProcessStatus(processName) && <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>}
-                  </div>
-                </button>
-              ))}
-            </div>
-         </div>
+      <div className="flex items-center justify-end mb-4 bg-slate-900 p-2 rounded-lg border border-slate-800 shadow-sm">
          <div className="flex items-center space-x-2">
             <Button size="sm" variant="ghost" onClick={() => refetchLogs()}>
                <ArrowDownCircle className="h-4 w-4 mr-2" />
@@ -117,7 +154,7 @@ const Logs: React.FC = () => {
          {/* Stats Bar */}
          <div className="bg-slate-950/50 backdrop-blur text-xs text-slate-500 px-4 py-1.5 flex justify-between border-b border-slate-800">
             <span>File: {activeLog}.log</span>
-            <span>{filteredLogs.length} lines</span>
+            <span>{filteredLogs.length} lines {searchTerm || errorsOnly || selectedAgent ? `(filtered from ${logs.length})` : ''}</span>
          </div>
 
          {/* Content */}
@@ -129,12 +166,12 @@ const Logs: React.FC = () => {
               <div className="flex items-center justify-center h-full text-slate-500">Loading logs...</div>
             ) : filteredLogs.length === 0 ? (
               <div className="flex items-center justify-center h-full text-slate-500">
-                {filter ? 'No logs match your filter' : 'No logs yet — logs will appear after the first run'}
+                {searchTerm || errorsOnly ? 'No logs match your filters' : 'No logs yet — logs will appear after the first run'}
               </div>
             ) : (
               filteredLogs.map((log, idx) => {
-                 const isError = log.includes('[ERROR]');
-                 const isWarn = log.includes('[WARN]');
+                 const isError = log.includes('[ERROR]') || log.includes('[error]') || log.includes('error:');
+                 const isWarn = log.includes('[WARN]') || log.includes('[warning]');
                  return (
                    <div key={idx} className={`leading-6 hover:bg-slate-800/50 px-2 rounded -mx-2 ${isError ? 'text-red-400' : isWarn ? 'text-amber-400' : 'text-slate-300'}`}>
                       <span className="text-slate-600 select-none w-10 inline-block text-right mr-4 text-xs opacity-50">{idx + 1}</span>

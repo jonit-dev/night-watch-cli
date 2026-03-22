@@ -30,6 +30,14 @@ interface AppState {
   addToast: (toast: Omit<ToastMessage, 'id'>) => void;
   removeToast: (id: string) => void;
 
+  // Command palette state
+  commandPaletteOpen: boolean;
+  setCommandPaletteOpen: (v: boolean) => void;
+
+  // Activity center state
+  activityCenterOpen: boolean;
+  setActivityCenterOpen: (v: boolean) => void;
+
   // Status state (single source of truth, synced via SSE + polling)
   status: IStatusSnapshot | null;
   setStatus: (s: IStatusSnapshot) => void;
@@ -68,6 +76,13 @@ export const useStore = create<AppState>((set, get) => ({
     }, 5000);
   },
   removeToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
+
+  commandPaletteOpen: false,
+  setCommandPaletteOpen: (v) => set({ commandPaletteOpen: v }),
+
+  // Activity center state
+  activityCenterOpen: false,
+  setActivityCenterOpen: (v) => set({ activityCenterOpen: v }),
 
   // Status state (single source of truth, updated by useStatusSync)
   status: null,

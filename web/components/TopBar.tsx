@@ -1,9 +1,11 @@
 import React from 'react';
 import { Search, Bell, Wifi, WifiOff } from 'lucide-react';
-import { useStore } from '../store/useStore';
+import { useStore } from '../store/useStore.js';
+import { useActivityFeed } from '../hooks/useActivityFeed.js';
 
 const TopBar: React.FC = () => {
-  const { projectName } = useStore();
+  const { projectName, setActivityCenterOpen } = useStore();
+  const { hasUnread } = useActivityFeed();
   const isLive = true; // Mock connection status
 
   return (
@@ -13,9 +15,9 @@ const TopBar: React.FC = () => {
            <div className="text-xs font-mono text-indigo-400 mb-0.5 tracking-tight">Active Project</div>
            <h1 className="text-xl font-semibold text-white tracking-tight leading-none">{projectName}</h1>
         </div>
-        
+
         <div className="h-8 w-px bg-white/10 mx-2"></div>
-        
+
         <div className={`flex items-center space-x-2 text-xs font-medium px-3 py-1.5 rounded-full border transition-colors ${isLive ? 'bg-emerald-500/5 text-emerald-400 border-emerald-500/20 shadow-[0_0_10px_-4px_rgba(16,185,129,0.3)]' : 'bg-red-500/5 text-red-400 border-red-500/20'}`}>
           {isLive ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
           <span className="uppercase tracking-wider text-[10px]">{isLive ? 'Online' : 'Offline'}</span>
@@ -35,12 +37,17 @@ const TopBar: React.FC = () => {
 
         {/* Actions */}
         <div className="flex items-center space-x-3">
-          <button className="p-2.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-full relative transition-all">
+          <button
+            className="p-2.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-full relative transition-all"
+            onClick={() => setActivityCenterOpen(true)}
+          >
             <Bell className="h-5 w-5" />
-            <span className="absolute top-2.5 right-2.5 h-2 w-2 bg-red-500 rounded-full ring-2 ring-[#030712]"></span>
+            {hasUnread && (
+              <span className="absolute top-2.5 right-2.5 h-2 w-2 bg-red-500 rounded-full ring-2 ring-[#030712]"></span>
+            )}
           </button>
         </div>
-        
+
         <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 ring-2 ring-white/10 flex items-center justify-center text-white font-bold text-xs shadow-lg">
           AD
         </div>
