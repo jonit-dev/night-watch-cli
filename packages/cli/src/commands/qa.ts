@@ -100,6 +100,7 @@ export function buildEnvVars(
 
   // QA-specific settings
   env.NW_QA_SKIP_LABEL = config.qa.skipLabel;
+  env.NW_QA_VALIDATED_LABEL = config.qa.validatedLabel;
   env.NW_QA_ARTIFACTS = config.qa.artifacts;
   env.NW_QA_AUTO_INSTALL_PLAYWRIGHT = config.qa.autoInstallPlaywright ? '1' : '0';
   env.NW_CLAUDE_MODEL_ID =
@@ -190,6 +191,7 @@ export function qaCommand(program: Command): void {
           config.qa.branchPatterns.length > 0 ? config.qa.branchPatterns : config.branchPatterns;
         configTable.push(['Branch Patterns', branchPatterns.join(', ')]);
         configTable.push(['Skip Label', config.qa.skipLabel]);
+        configTable.push(['Validated Label', config.qa.validatedLabel]);
         configTable.push(['Artifacts', config.qa.artifacts]);
         configTable.push([
           'Auto-install Playwright',

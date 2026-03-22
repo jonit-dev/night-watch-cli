@@ -318,6 +318,8 @@ export interface IQaConfig {
   skipLabel: string;
   /** Auto-install Playwright if missing during QA run */
   autoInstallPlaywright: boolean;
+  /** GitHub label to apply when e2e tests pass (proves acceptance requirements met) */
+  validatedLabel: string;
 }
 
 export interface IAuditConfig {
