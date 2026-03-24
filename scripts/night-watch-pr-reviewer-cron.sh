@@ -105,7 +105,9 @@ extract_review_score_from_text() {
 # ── Global Job Queue Gate ────────────────────────────────────────────────────
 # Atomically claim a DB slot or enqueue for later dispatch — no flock needed.
 if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
-  if [ "${NW_QUEUE_DISPATCHED:-0}" = "1" ]; then
+  if [ "${NW_QUEUE_INHERITED_SLOT:-0}" = "1" ]; then
+    :
+  elif [ "${NW_QUEUE_DISPATCHED:-0}" = "1" ]; then
     arm_global_queue_cleanup
   else
     claim_or_enqueue "${SCRIPT_TYPE}" "${PROJECT_DIR}"
@@ -814,6 +816,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
       NW_TARGET_PR="${pr_number}" \
       NW_REVIEWER_WORKER_MODE="1" \
       NW_REVIEWER_PARALLEL="0" \
+      NW_QUEUE_INHERITED_SLOT="1" \
       bash "${SCRIPT_DIR}/night-watch-pr-reviewer-cron.sh" "${PROJECT_DIR}" > "${worker_output}" 2>&1
     ) &
 
@@ -922,7 +925,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
   cleanup_reviewer_worktrees
 
   emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${MAX_WORKER_ATTEMPTS}" "${MAX_WORKER_FINAL_SCORE}" "0" "${NO_CHANGES_PRS}"
-  exit 0
+  exit "${EXIT_CODE}"
 fi
 
 REVIEW_RUN_TOKEN="${PROJECT_RUNTIME_KEY}-$$"

@@ -220,7 +220,7 @@ describe('queue command', () => {
     });
   });
 
-  it('dispatch preserves persisted NW queue markers', async () => {
+  it('dispatch preserves persisted reviewer runtime markers from the queue entry', async () => {
     vi.mocked(buildQueuedJobEnv).mockReturnValue({
       NW_PROVIDER_CMD: 'claude',
     });
@@ -235,6 +235,11 @@ describe('queue command', () => {
       envJson: {
         NW_DRY_RUN: '1',
         NW_CRON_TRIGGER: '1',
+        NW_TARGET_PR: '92',
+        NW_REVIEWER_WORKER_MODE: '1',
+        NW_REVIEWER_PARALLEL: '0',
+        NW_REVIEWER_MAX_RUNTIME: '1800',
+        NW_BRANCH_PATTERNS: 'night-watch/',
         ANTHROPIC_BASE_URL: 'https://wrong-proxy.com',
       },
       enqueuedAt: 300,
@@ -256,6 +261,11 @@ describe('queue command', () => {
     // Legitimate queue markers from envJson are preserved
     expect(spawnEnv.NW_DRY_RUN).toBe('1');
     expect(spawnEnv.NW_CRON_TRIGGER).toBe('1');
+    expect(spawnEnv.NW_TARGET_PR).toBe('92');
+    expect(spawnEnv.NW_REVIEWER_WORKER_MODE).toBe('1');
+    expect(spawnEnv.NW_REVIEWER_PARALLEL).toBe('0');
+    expect(spawnEnv.NW_REVIEWER_MAX_RUNTIME).toBe('1800');
+    expect(spawnEnv.NW_BRANCH_PATTERNS).toBe('night-watch/');
 
     // Non-queue-marker keys from envJson are dropped (provider identity must come from config)
     expect(spawnEnv.ANTHROPIC_BASE_URL).not.toBe('https://wrong-proxy.com');

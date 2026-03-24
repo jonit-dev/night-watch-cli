@@ -388,7 +388,24 @@ export function createQueueCommand(): Command {
  * Provider identity (ANTHROPIC_BASE_URL, API keys, model ids) is always recomputed
  * from the queued job's own project config via buildQueuedJobEnv.
  */
-const QUEUE_MARKER_KEYS = new Set(['NW_DRY_RUN', 'NW_CRON_TRIGGER', 'NW_DEFAULT_BRANCH']);
+const QUEUE_MARKER_KEYS = new Set([
+  'NW_DRY_RUN',
+  'NW_CRON_TRIGGER',
+  'NW_DEFAULT_BRANCH',
+  'NW_TARGET_PR',
+  'NW_REVIEWER_WORKER_MODE',
+  'NW_REVIEWER_PARALLEL',
+  'NW_REVIEWER_WORKER_STAGGER',
+  'NW_REVIEWER_MAX_RUNTIME',
+  'NW_REVIEWER_MAX_RETRIES',
+  'NW_REVIEWER_RETRY_DELAY',
+  'NW_REVIEWER_MAX_PRS_PER_RUN',
+  'NW_MIN_REVIEW_SCORE',
+  'NW_BRANCH_PATTERNS',
+  'NW_PRD_DIR',
+  'NW_AUTO_MERGE',
+  'NW_AUTO_MERGE_METHOD',
+]);
 
 /**
  * Filter envJson to only pass through legitimate queue/runtime markers.
