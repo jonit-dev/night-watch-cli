@@ -281,6 +281,7 @@ export interface IPrInfo {
   url: string;
   ciStatus: 'pass' | 'fail' | 'pending' | 'unknown';
   reviewScore: number | null;
+  labels: string[];
 }
 
 // ==================== Log Info ====================

@@ -36,6 +36,8 @@ export interface IInstallOptions {
   audit?: boolean;
   noAnalytics?: boolean;
   analytics?: boolean;
+  noPrResolver?: boolean;
+  prResolver?: boolean;
   force?: boolean;
 }
 
@@ -147,6 +149,8 @@ export function performInstall(
     audit?: boolean;
     noAnalytics?: boolean;
     analytics?: boolean;
+    noPrResolver?: boolean;
+    prResolver?: boolean;
     force?: boolean;
   },
 ): IInstallResult {
@@ -245,6 +249,16 @@ export function performInstall(
       entries.push(analyticsEntry);
     }
 
+    // PR Resolver entry (if enabled and noPrResolver not set)
+    const disablePrResolver = options?.noPrResolver === true || options?.prResolver === false;
+    const installPrResolver = disablePrResolver ? false : config.prResolver.enabled;
+    if (installPrResolver) {
+      const prResolverSchedule = config.prResolver.schedule;
+      const prResolverLog = path.join(logDir, 'pr-resolver.log');
+      const prResolverEntry = `${prResolverSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} resolve >> ${shellQuote(prResolverLog)} 2>&1  ${marker}`;
+      entries.push(prResolverEntry);
+    }
+
     const existingEntries = new Set(
       Array.from(new Set([...getEntries(marker), ...getProjectEntries(projectDir)])),
     );
@@ -280,6 +294,7 @@ export function installCommand(program: Command): void {
     .option('--no-qa', 'Skip installing QA cron')
     .option('--no-audit', 'Skip installing audit cron')
     .option('--no-analytics', 'Skip installing analytics cron')
+    .option('--no-pr-resolver', 'Skip installing PR resolver cron')
     .option('-f, --force', 'Replace existing cron entries for this project')
     .action(async (options: IInstallOptions) => {
       try {
@@ -409,6 +424,21 @@ export function installCommand(program: Command): void {
           entries.push(analyticsEntry);
         }
 
+        // Determine if PR resolver should be installed
+        const disablePrResolver =
+          options.noPrResolver === true ||
+          (options as Record<string, unknown>).prResolver === false;
+        const installPrResolver = disablePrResolver ? false : config.prResolver.enabled;
+
+        // PR Resolver entry (if enabled)
+        let prResolverLog: string | undefined;
+        if (installPrResolver) {
+          prResolverLog = path.join(logDir, 'pr-resolver.log');
+          const prResolverSchedule = config.prResolver.schedule;
+          const prResolverEntry = `${prResolverSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} resolve >> ${shellQuote(prResolverLog)} 2>&1  ${marker}`;
+          entries.push(prResolverEntry);
+        }
+
         // Add all entries
         const existingEntrySet = new Set(existingEntries);
         const currentCrontab = readCrontab();
@@ -442,6 +472,9 @@ export function installCommand(program: Command): void {
         }
         if (installAnalytics && analyticsLog) {
           dim(`  Analytics: ${analyticsLog}`);
+        }
+        if (installPrResolver && prResolverLog) {
+          dim(`  PR Resolver: ${prResolverLog}`);
         }
         console.log();
         dim('To uninstall, run: night-watch uninstall');

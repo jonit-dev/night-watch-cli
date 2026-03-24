@@ -230,11 +230,66 @@ describe('getSummaryData', () => {
     it('should count mixed job statuses correctly', async () => {
       vi.mocked(getJobRunsAnalytics).mockReturnValue({
         recentRuns: [
-          { id: 1, projectPath: tempDir, jobType: 'executor', providerKey: 'claude', status: 'success', startedAt: 1, finishedAt: 2, waitSeconds: 0, durationSeconds: 1, throttledCount: 0 },
-          { id: 2, projectPath: tempDir, jobType: 'executor', providerKey: 'claude', status: 'failure', startedAt: 1, finishedAt: 2, waitSeconds: 0, durationSeconds: 1, throttledCount: 0 },
-          { id: 3, projectPath: tempDir, jobType: 'executor', providerKey: 'claude', status: 'timeout', startedAt: 1, finishedAt: 2, waitSeconds: 0, durationSeconds: 1, throttledCount: 0 },
-          { id: 4, projectPath: tempDir, jobType: 'executor', providerKey: 'claude', status: 'rate_limited', startedAt: 1, finishedAt: 2, waitSeconds: 0, durationSeconds: 1, throttledCount: 0 },
-          { id: 5, projectPath: tempDir, jobType: 'executor', providerKey: 'claude', status: 'skipped', startedAt: 1, finishedAt: 2, waitSeconds: 0, durationSeconds: 1, throttledCount: 0 },
+          {
+            id: 1,
+            projectPath: tempDir,
+            jobType: 'executor',
+            providerKey: 'claude',
+            status: 'success',
+            startedAt: 1,
+            finishedAt: 2,
+            waitSeconds: 0,
+            durationSeconds: 1,
+            throttledCount: 0,
+          },
+          {
+            id: 2,
+            projectPath: tempDir,
+            jobType: 'executor',
+            providerKey: 'claude',
+            status: 'failure',
+            startedAt: 1,
+            finishedAt: 2,
+            waitSeconds: 0,
+            durationSeconds: 1,
+            throttledCount: 0,
+          },
+          {
+            id: 3,
+            projectPath: tempDir,
+            jobType: 'executor',
+            providerKey: 'claude',
+            status: 'timeout',
+            startedAt: 1,
+            finishedAt: 2,
+            waitSeconds: 0,
+            durationSeconds: 1,
+            throttledCount: 0,
+          },
+          {
+            id: 4,
+            projectPath: tempDir,
+            jobType: 'executor',
+            providerKey: 'claude',
+            status: 'rate_limited',
+            startedAt: 1,
+            finishedAt: 2,
+            waitSeconds: 0,
+            durationSeconds: 1,
+            throttledCount: 0,
+          },
+          {
+            id: 5,
+            projectPath: tempDir,
+            jobType: 'executor',
+            providerKey: 'claude',
+            status: 'skipped',
+            startedAt: 1,
+            finishedAt: 2,
+            waitSeconds: 0,
+            durationSeconds: 1,
+            throttledCount: 0,
+          },
         ],
         byProviderBucket: {},
         averageWaitSeconds: null,
@@ -385,6 +440,7 @@ describe('getSummaryData', () => {
           url: 'https://github.com/test/repo/pull/42',
           ciStatus: 'fail',
           reviewScore: null,
+          labels: [],
         },
       ]);
 
@@ -392,6 +448,25 @@ describe('getSummaryData', () => {
       const ciActionItem = data.actionItems.find((item) => item.includes('PR #42'));
       expect(ciActionItem).toBeDefined();
       expect(ciActionItem).toContain('failing CI');
+    });
+
+    it('should include action item for PRs with ready-to-merge label', async () => {
+      vi.mocked(collectPrInfo).mockResolvedValue([
+        {
+          number: 7,
+          title: 'Ready PR',
+          branch: 'feat/ready',
+          url: 'https://github.com/test/repo/pull/7',
+          ciStatus: 'pass',
+          reviewScore: 100,
+          labels: ['ready-to-merge'],
+        },
+      ]);
+
+      const data = await getSummaryData(tempDir);
+      const readyActionItem = data.actionItems.find((item) => item.includes('ready-to-merge'));
+      expect(readyActionItem).toBeDefined();
+      expect(readyActionItem).toContain('1 PR');
     });
 
     it('should include action item for pending queue items', async () => {
@@ -469,8 +544,30 @@ describe('getSummaryData', () => {
     it('should use plural "jobs" for multiple items', async () => {
       vi.mocked(getJobRunsAnalytics).mockReturnValue({
         recentRuns: [
-          { id: 1, projectPath: tempDir, jobType: 'executor', providerKey: 'claude', status: 'failure', startedAt: 1, finishedAt: 2, waitSeconds: 0, durationSeconds: 1, throttledCount: 0 },
-          { id: 2, projectPath: tempDir, jobType: 'executor', providerKey: 'claude', status: 'failure', startedAt: 1, finishedAt: 2, waitSeconds: 0, durationSeconds: 1, throttledCount: 0 },
+          {
+            id: 1,
+            projectPath: tempDir,
+            jobType: 'executor',
+            providerKey: 'claude',
+            status: 'failure',
+            startedAt: 1,
+            finishedAt: 2,
+            waitSeconds: 0,
+            durationSeconds: 1,
+            throttledCount: 0,
+          },
+          {
+            id: 2,
+            projectPath: tempDir,
+            jobType: 'executor',
+            providerKey: 'claude',
+            status: 'failure',
+            startedAt: 1,
+            finishedAt: 2,
+            waitSeconds: 0,
+            durationSeconds: 1,
+            throttledCount: 0,
+          },
         ],
         byProviderBucket: {},
         averageWaitSeconds: null,
@@ -497,6 +594,7 @@ describe('getSummaryData', () => {
           url: 'https://github.com/test/repo/pull/1',
           ciStatus: 'pass',
           reviewScore: 85,
+          labels: [],
         },
       ]);
 

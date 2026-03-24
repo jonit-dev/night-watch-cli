@@ -44,7 +44,15 @@ export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 /**
  * Job types that can have per-job provider configuration
  */
-export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics' | 'planner';
+export type JobType =
+  | 'executor'
+  | 'reviewer'
+  | 'qa'
+  | 'audit'
+  | 'slicer'
+  | 'analytics'
+  | 'planner'
+  | 'pr-resolver';
 
 /**
  * Time-based provider schedule override.
@@ -96,6 +104,7 @@ export interface IJobProviders {
   slicer?: Provider;
   analytics?: Provider;
   planner?: Provider;
+  'pr-resolver'?: Provider;
 }
 
 /**
@@ -279,6 +288,9 @@ export interface INightWatchConfig {
   /** Analytics job configuration (Amplitude integration) */
   analytics: IAnalyticsConfig;
 
+  /** PR conflict resolver configuration */
+  prResolver: IPrResolverConfig;
+
   /** Per-job provider configuration */
   jobProviders: IJobProviders;
 
@@ -346,6 +358,27 @@ export interface IAnalyticsConfig {
   analysisPrompt: string;
 }
 
+export interface IPrResolverConfig {
+  /** Whether the PR resolver is enabled */
+  enabled: boolean;
+  /** Cron schedule for PR resolver execution */
+  schedule: string;
+  /** Maximum runtime in seconds for the PR resolver */
+  maxRuntime: number;
+  /** Branch patterns to filter which PRs to process (empty = all) */
+  branchPatterns: string[];
+  /** Maximum number of PRs to process per run (0 = unlimited) */
+  maxPrsPerRun: number;
+  /** Per-PR timeout in seconds */
+  perPrTimeout: number;
+  /** Whether to use AI to resolve merge conflicts */
+  aiConflictResolution: boolean;
+  /** Whether to use AI to address review comments */
+  aiReviewResolution: boolean;
+  /** GitHub label to apply to conflict-free PRs */
+  readyLabel: string;
+}
+
 export type WebhookType = 'slack' | 'discord' | 'telegram';
 export type NotificationEvent =
   | 'run_started'
@@ -357,7 +390,10 @@ export type NotificationEvent =
   | 'review_ready_for_human'
   | 'pr_auto_merged'
   | 'rate_limit_fallback'
-  | 'qa_completed';
+  | 'qa_completed'
+  | 'pr_resolver_completed'
+  | 'pr_resolver_conflict_resolved'
+  | 'pr_resolver_failed';
 
 /**
  * Git merge methods for auto-merge

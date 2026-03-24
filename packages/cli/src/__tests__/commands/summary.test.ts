@@ -359,6 +359,7 @@ describe('summary command', () => {
           url: 'https://github.com/test/repo/pull/42',
           ciStatus: 'fail',
           reviewScore: null,
+          labels: [],
         },
       ]);
 

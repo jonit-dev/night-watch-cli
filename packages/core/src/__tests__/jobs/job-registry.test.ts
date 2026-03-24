@@ -20,11 +20,11 @@ import {
 import { VALID_JOB_TYPES, DEFAULT_QUEUE_PRIORITY, LOG_FILE_NAMES } from '../../constants.js';
 
 describe('JOB_REGISTRY', () => {
-  it('should define all 6 job types', () => {
-    expect(JOB_REGISTRY).toHaveLength(6);
+  it('should define all 7 job types', () => {
+    expect(JOB_REGISTRY).toHaveLength(7);
   });
 
-  it('should include executor, reviewer, qa, audit, slicer, analytics', () => {
+  it('should include executor, reviewer, qa, audit, slicer, analytics, pr-resolver', () => {
     const ids = JOB_REGISTRY.map((j) => j.id);
     expect(ids).toContain('executor');
     expect(ids).toContain('reviewer');
@@ -32,6 +32,11 @@ describe('JOB_REGISTRY', () => {
     expect(ids).toContain('audit');
     expect(ids).toContain('slicer');
     expect(ids).toContain('analytics');
+    expect(ids).toContain('pr-resolver');
+  });
+
+  it('should include pr-resolver in job registry', () => {
+    expect(getJobDef('pr-resolver')).toBeDefined();
   });
 
   it('each job definition has required fields', () => {
@@ -124,15 +129,16 @@ describe('getJobDefByLogName', () => {
 });
 
 describe('getValidJobTypes', () => {
-  it('returns all 6 job types', () => {
+  it('returns all 7 job types', () => {
     const types = getValidJobTypes();
-    expect(types).toHaveLength(6);
+    expect(types).toHaveLength(7);
     expect(types).toContain('executor');
     expect(types).toContain('reviewer');
     expect(types).toContain('qa');
     expect(types).toContain('audit');
     expect(types).toContain('slicer');
     expect(types).toContain('analytics');
+    expect(types).toContain('pr-resolver');
   });
 });
 
@@ -145,12 +151,19 @@ describe('getDefaultQueuePriority', () => {
     expect(typeof priority.audit).toBe('number');
     expect(typeof priority.slicer).toBe('number');
     expect(typeof priority.analytics).toBe('number');
+    expect(typeof priority['pr-resolver']).toBe('number');
   });
 
   it('executor has highest priority', () => {
     const priority = getDefaultQueuePriority();
     expect(priority.executor).toBeGreaterThan(priority.reviewer);
     expect(priority.reviewer).toBeGreaterThan(priority.qa);
+  });
+
+  it('pr-resolver has priority between reviewer and slicer', () => {
+    const priority = getDefaultQueuePriority();
+    expect(priority['pr-resolver']).toBeGreaterThan(priority.slicer);
+    expect(priority['pr-resolver']).toBeLessThan(priority.reviewer);
   });
 });
 
@@ -304,6 +317,50 @@ describe('normalizeJobConfig', () => {
     const analyticsDef = getJobDef('analytics')!;
     const result = normalizeJobConfig({ targetColumn: 'NotAColumn' }, analyticsDef);
     expect(result.targetColumn).toBe('Draft');
+  });
+
+  it('pr-resolver has correct defaults', () => {
+    const def = getJobDef('pr-resolver')!;
+    expect(def.defaultConfig.schedule).toBe('15 6,14,22 * * *');
+    expect(def.defaultConfig.maxRuntime).toBe(3600);
+    expect(def.queuePriority).toBe(35);
+  });
+
+  it('normalizeJobConfig handles pr-resolver extra fields with defaults', () => {
+    const def = getJobDef('pr-resolver')!;
+    const result = normalizeJobConfig({}, def);
+    expect(result.enabled).toBe(true);
+    expect(result.schedule).toBe('15 6,14,22 * * *');
+    expect(result.maxRuntime).toBe(3600);
+    expect(result.branchPatterns).toEqual([]);
+    expect(result.maxPrsPerRun).toBe(0);
+    expect(result.perPrTimeout).toBe(600);
+    expect(result.aiConflictResolution).toBe(true);
+    expect(result.aiReviewResolution).toBe(false);
+    expect(result.readyLabel).toBe('ready-to-merge');
+  });
+
+  it('normalizeJobConfig handles pr-resolver extra fields with custom values', () => {
+    const def = getJobDef('pr-resolver')!;
+    const result = normalizeJobConfig(
+      {
+        enabled: false,
+        branchPatterns: ['feat/', 'fix/'],
+        maxPrsPerRun: 5,
+        perPrTimeout: 300,
+        aiConflictResolution: false,
+        aiReviewResolution: true,
+        readyLabel: 'merge-ready',
+      },
+      def,
+    );
+    expect(result.enabled).toBe(false);
+    expect(result.branchPatterns).toEqual(['feat/', 'fix/']);
+    expect(result.maxPrsPerRun).toBe(5);
+    expect(result.perPrTimeout).toBe(300);
+    expect(result.aiConflictResolution).toBe(false);
+    expect(result.aiReviewResolution).toBe(true);
+    expect(result.readyLabel).toBe('merge-ready');
   });
 });
 

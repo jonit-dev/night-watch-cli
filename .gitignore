@@ -45,3 +45,4 @@ qa-artifacts/
 .npmrc
 
 night-watch.config.json
+.worktrees

@@ -31,6 +31,7 @@ import {
   checkLockFile,
   executorLockPath,
   plannerLockPath,
+  prResolverLockPath,
   qaLockPath,
   reviewerLockPath,
 } from './status-data.js';
@@ -97,6 +98,8 @@ function getLockPathForJob(projectPath: string, jobType: JobType): string {
       return plannerLockPath(projectPath);
     case 'analytics':
       return analyticsLockPath(projectPath);
+    case 'pr-resolver':
+      return prResolverLockPath(projectPath);
   }
 }
 

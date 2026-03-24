@@ -75,3 +75,48 @@ teardown() {
 
   [ "${result}" = "02-test-prd.md" ]
 }
+
+# ── pr-resolver lock acquisition ─────────────────────────────────────────────
+
+@test "pr-resolver lock acquisition: acquire_lock succeeds when no lock exists" {
+  local test_lock="/tmp/nw-test-resolver-$$.lock"
+
+  # Ensure clean state
+  rm -f "${test_lock}"
+
+  run acquire_lock "${test_lock}"
+  [ "$status" -eq 0 ]
+  [ -f "${test_lock}" ]
+
+  # PID written to lock file must be the current test process
+  local lock_pid
+  lock_pid=$(cat "${test_lock}")
+  [ -n "${lock_pid}" ]
+
+  rm -f "${test_lock}"
+}
+
+@test "pr-resolver lock acquisition: acquire_lock fails when active lock exists" {
+  local test_lock="/tmp/nw-test-resolver-active-$$.lock"
+
+  # Write current PID as an active lock holder
+  echo $$ > "${test_lock}"
+
+  run acquire_lock "${test_lock}"
+  [ "$status" -eq 1 ]
+
+  rm -f "${test_lock}"
+}
+
+@test "pr-resolver lock acquisition: acquire_lock removes stale lock and succeeds" {
+  local test_lock="/tmp/nw-test-resolver-stale-$$.lock"
+
+  # Write a PID that does not exist (use a very high number unlikely to be running)
+  echo "999999999" > "${test_lock}"
+
+  run acquire_lock "${test_lock}"
+  [ "$status" -eq 0 ]
+  [ -f "${test_lock}" ]
+
+  rm -f "${test_lock}"
+}

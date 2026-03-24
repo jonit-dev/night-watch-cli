@@ -7,6 +7,7 @@
 **Problem:** The QA job generates and runs e2e/integration tests on PRs, but there is no way to prove at a glance that a PR's acceptance requirements have been validated. Developers and reviewers must manually inspect QA comments to know if tests passed. There is no GitHub label signaling "this PR's e2e tests prove the work is done."
 
 **Files Analyzed:**
+
 - `packages/cli/scripts/night-watch-qa-cron.sh` — QA bash script, classifies QA outcomes (passing, issues_found, no_tests_needed, unclassified)
 - `packages/core/src/board/labels.ts` — label taxonomy (priority, category, horizon, operational)
 - `packages/core/src/constants.ts` — `DEFAULT_QA_SKIP_LABEL`, other QA defaults
@@ -15,6 +16,7 @@
 - `packages/cli/src/commands/qa.ts` — QA command, parses script results
 
 **Current Behavior:**
+
 - QA job runs Playwright tests, posts a `<!-- night-watch-qa-marker -->` comment on each PR with results
 - `classify_qa_comment_outcome()` already classifies outcomes as `passing`, `issues_found`, `no_tests_needed`, `unclassified`
 - `validate_qa_evidence()` already validates QA evidence quality (marker exists, artifacts present)
@@ -25,6 +27,7 @@
 ## 2. Solution
 
 **Approach:**
+
 1. Add an `e2e-validated` label definition to the label taxonomy in `labels.ts`
 2. After QA processes each PR, if the outcome is `passing` → apply the `e2e-validated` label via `gh pr edit --add-label`; if outcome is `issues_found` or `no_tests_needed` → remove the label (idempotent)
 3. Ensure the label exists on GitHub before applying: add `gh label create` in the QA script (idempotent, `--force` updates if exists)
@@ -32,6 +35,7 @@
 5. Make the label name configurable via `IQaConfig.validatedLabel` with default `e2e-validated`
 
 **Architecture Diagram:**
+
 ```mermaid
 flowchart LR
     QA[QA Script] --> CLASSIFY[classify_qa_comment_outcome]
@@ -42,6 +46,7 @@ flowchart LR
 ```
 
 **Key Decisions:**
+
 - **Reuse existing `classify_qa_comment_outcome()`** — no new classification logic needed; the infrastructure already tells us if tests pass
 - **Idempotent label operations** — `--add-label` and `--remove-label` are no-ops if already present/absent; `gh label create --force` updates existing
 - **Configurable label name** — `config.qa.validatedLabel` (default: `e2e-validated`) allows customization
@@ -49,6 +54,7 @@ flowchart LR
 - **Init syncs all labels** — `night-watch init` step now creates all `NIGHT_WATCH_LABELS` on GitHub (including e2e-validated)
 
 **Data Changes:**
+
 - `IQaConfig` gains `validatedLabel: string` field (default: `e2e-validated`)
 - `NIGHT_WATCH_LABELS` array gains `e2e-validated` entry
 - No database changes
@@ -80,6 +86,7 @@ sequenceDiagram
 **User-visible outcome:** `e2e-validated` label appears in `NIGHT_WATCH_LABELS`, `IQaConfig` has a `validatedLabel` field, and config normalizes correctly.
 
 **Files (5):**
+
 - `packages/core/src/board/labels.ts` — add `e2e-validated` to `NIGHT_WATCH_LABELS`
 - `packages/core/src/types.ts` — add `validatedLabel: string` to `IQaConfig`
 - `packages/core/src/constants.ts` — add `DEFAULT_QA_VALIDATED_LABEL` constant, update `DEFAULT_QA`
@@ -119,6 +126,7 @@ sequenceDiagram
 | `packages/core/src/__tests__/board/labels.test.ts` | `NIGHT_WATCH_LABELS includes e2e-validated` | `expect(NIGHT_WATCH_LABELS.map(l => l.name)).toContain('e2e-validated')` |
 
 **Verification Plan:**
+
 1. **Unit Tests:** Registry field check, label presence check, config normalization
 2. **Evidence:** `yarn verify` passes, `yarn test` passes
 
@@ -129,6 +137,7 @@ sequenceDiagram
 **User-visible outcome:** After QA runs on a PR, the `e2e-validated` label is automatically added if tests pass, or removed if tests fail/are not needed.
 
 **Files (2):**
+
 - `packages/cli/scripts/night-watch-qa-cron.sh` — add label application logic after classification
 - `packages/cli/src/commands/qa.ts` — pass `validatedLabel` to env vars
 
@@ -188,6 +197,7 @@ sequenceDiagram
 | `packages/cli/src/__tests__/commands/qa.test.ts` | `buildEnvVars uses custom validatedLabel from config` | custom label value passed through |
 
 **Verification Plan:**
+
 1. **Unit Tests:** Env var presence, custom label passthrough
 2. **Manual test:** Run `night-watch qa --dry-run` and verify `NW_QA_VALIDATED_LABEL` appears in env vars
 3. **Manual test:** Run `night-watch qa` on a repo with a PR that has passing tests → label applied
@@ -200,6 +210,7 @@ sequenceDiagram
 **User-visible outcome:** `night-watch init` creates all Night Watch labels (including `e2e-validated`) on GitHub when the repo has a GitHub remote and `gh` is authenticated.
 
 **Files (2):**
+
 - `packages/cli/src/commands/init.ts` — add label sync step
 - `packages/core/src/board/labels.ts` — export exists, no changes needed (consumed by init)
 
@@ -228,7 +239,9 @@ sequenceDiagram
       }
       success(`Synced ${created}/${NIGHT_WATCH_LABELS.length} labels to GitHub`);
     } catch (labelErr) {
-      warn(`Could not sync labels: ${labelErr instanceof Error ? labelErr.message : String(labelErr)}`);
+      warn(
+        `Could not sync labels: ${labelErr instanceof Error ? labelErr.message : String(labelErr)}`,
+      );
     }
   }
   ```
@@ -242,6 +255,7 @@ sequenceDiagram
 | `packages/cli/src/__tests__/commands/init.test.ts` | `init skips label sync when no GitHub remote` | no label creation calls |
 
 **Verification Plan:**
+
 1. **Unit Tests:** Label sync invocation, skip conditions
 2. **Manual test:** Run `night-watch init --force` in a project with GitHub remote → labels visible on GitHub
 3. **Evidence:** `yarn verify` passes, labels visible at `https://github.com/{owner}/{repo}/labels`
@@ -253,6 +267,7 @@ sequenceDiagram
 **User-visible outcome:** `night-watch qa --dry-run` shows the validated label config. The emit_result output includes the label information for downstream notification consumers. The QA script idempotency check skips re-processing PRs that already have the label only when the QA comment is also present.
 
 **Files (2):**
+
 - `packages/cli/src/commands/qa.ts` — show validated label in dry-run config table
 - `packages/cli/scripts/night-watch-qa-cron.sh` — include validated label stats in emit_result
 
@@ -283,6 +298,7 @@ sequenceDiagram
 | `packages/cli/src/__tests__/commands/qa.test.ts` | `dry-run config table includes validatedLabel` | config output contains label name |
 
 **Verification Plan:**
+
 1. **Unit Tests:** Dry-run output includes validated label
 2. **Manual test:** `night-watch qa --dry-run` shows "Validated Label: e2e-validated"
 3. **Manual test:** After QA run, Telegram message includes "E2E validated" line

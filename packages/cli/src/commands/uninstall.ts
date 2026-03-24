@@ -55,7 +55,13 @@ export function performUninstall(
     if (!options?.keepLogs) {
       const logDir = path.join(projectDir, 'logs');
       if (fs.existsSync(logDir)) {
-        const logFiles = ['executor.log', 'reviewer.log', 'slicer.log', 'audit.log'];
+        const logFiles = [
+          'executor.log',
+          'reviewer.log',
+          'slicer.log',
+          'audit.log',
+          'pr-resolver.log',
+        ];
         logFiles.forEach((logFile) => {
           const logPath = path.join(logDir, logFile);
           if (fs.existsSync(logPath)) {
@@ -122,7 +128,13 @@ export function uninstallCommand(program: Command): void {
         if (!options.keepLogs) {
           const logDir = path.join(projectDir, 'logs');
           if (fs.existsSync(logDir)) {
-            const logFiles = ['executor.log', 'reviewer.log', 'slicer.log', 'audit.log'];
+            const logFiles = [
+              'executor.log',
+              'reviewer.log',
+              'slicer.log',
+              'audit.log',
+              'pr-resolver.log',
+            ];
             let logsRemoved = 0;
 
             logFiles.forEach((logFile) => {
