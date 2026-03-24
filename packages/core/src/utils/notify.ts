@@ -64,6 +64,12 @@ export function getEventEmoji(event: NotificationEvent): string {
       return '\uD83D\uDD00';
     case 'qa_completed':
       return '\uD83E\uDDEA';
+    case 'pr_resolver_completed':
+      return '\uD83D\uDD27';
+    case 'pr_resolver_conflict_resolved':
+      return '\u2705';
+    case 'pr_resolver_failed':
+      return '\u274C';
   }
 }
 
@@ -92,6 +98,12 @@ export function getEventTitle(event: NotificationEvent): string {
       return 'PR Auto-Merged';
     case 'qa_completed':
       return 'QA Completed';
+    case 'pr_resolver_completed':
+      return 'PR Resolver Completed';
+    case 'pr_resolver_conflict_resolved':
+      return 'PR Conflict Resolved';
+    case 'pr_resolver_failed':
+      return 'PR Resolver Failed';
   }
 }
 
@@ -120,6 +132,12 @@ export function getEventColor(event: NotificationEvent): number {
       return 0x9b59b6;
     case 'qa_completed':
       return 0x2ecc71;
+    case 'pr_resolver_completed':
+      return 0x00c853;
+    case 'pr_resolver_conflict_resolved':
+      return 0x00ff00;
+    case 'pr_resolver_failed':
+      return 0xff0000;
   }
 }
 

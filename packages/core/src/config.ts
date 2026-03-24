@@ -42,6 +42,7 @@ import {
   DEFAULT_PROVIDER,
   DEFAULT_PROVIDER_ENV,
   DEFAULT_PROVIDER_SCHEDULE_OVERRIDES,
+  DEFAULT_PR_RESOLVER,
   DEFAULT_QA,
   DEFAULT_QUEUE,
   DEFAULT_REVIEWER_ENABLED,
@@ -100,6 +101,7 @@ export function getDefaultConfig(): INightWatchConfig {
     qa: { ...DEFAULT_QA },
     audit: { ...DEFAULT_AUDIT },
     analytics: { ...DEFAULT_ANALYTICS },
+    prResolver: { ...DEFAULT_PR_RESOLVER },
     jobProviders: { ...DEFAULT_JOB_PROVIDERS },
     providerScheduleOverrides: [...DEFAULT_PROVIDER_SCHEDULE_OVERRIDES],
     queue: { ...DEFAULT_QUEUE },
@@ -178,7 +180,8 @@ function mergeConfigLayer(base: INightWatchConfig, layer: Partial<INightWatchCon
       _key === 'boardProvider' ||
       _key === 'qa' ||
       _key === 'audit' ||
-      _key === 'analytics'
+      _key === 'analytics' ||
+      _key === 'prResolver'
     ) {
       (base as unknown as Record<string, unknown>)[_key] = {
         ...(base[_key] as object),

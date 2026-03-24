@@ -657,6 +657,7 @@ describe('status-data utilities', () => {
         url: 'https://github.com/test/repo/pull/1',
         ciStatus: 'unknown',
         reviewScore: null,
+        labels: [],
       });
       expect(result[1]).toEqual({
         number: 2,
@@ -665,6 +666,7 @@ describe('status-data utilities', () => {
         url: 'https://github.com/test/repo/pull/2',
         ciStatus: 'unknown',
         reviewScore: null,
+        labels: [],
       });
     });
 

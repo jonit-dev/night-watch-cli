@@ -94,6 +94,17 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
       targetColumn: 'Draft' as const,
       analysisPrompt: '',
     },
+    prResolver: {
+      enabled: false,
+      schedule: '15 6,14,22 * * *',
+      maxRuntime: 3600,
+      branchPatterns: [],
+      maxPrsPerRun: 0,
+      perPrTimeout: 600,
+      aiConflictResolution: true,
+      aiReviewResolution: false,
+      readyLabel: 'ready-to-merge',
+    },
     jobProviders: {
       executor: undefined,
       reviewer: undefined,
@@ -345,5 +356,78 @@ describe('install command', () => {
 
     const hasQaEntry = result.entries.some((entry) => entry.includes("' qa "));
     expect(hasQaEntry).toBe(false);
+  });
+
+  it('should add pr-resolver crontab entry when prResolver.enabled is true', () => {
+    const config = createTestConfig({
+      prResolver: {
+        enabled: true,
+        schedule: '15 6,14,22 * * *',
+        maxRuntime: 3600,
+        branchPatterns: [],
+        maxPrsPerRun: 0,
+        perPrTimeout: 600,
+        aiConflictResolution: true,
+        aiReviewResolution: false,
+        readyLabel: 'ready-to-merge',
+      },
+    });
+    const result = performInstall(tempDir, config);
+
+    expect(result.success).toBe(true);
+    // executor + reviewer + pr-resolver = 3
+    expect(result.entries).toHaveLength(3);
+
+    const prResolverEntry = result.entries[2];
+    expect(prResolverEntry).toContain("' resolve ");
+    expect(prResolverEntry).toContain('pr-resolver.log');
+    expect(prResolverEntry).toContain('15 6,14,22 * * *');
+    expect(prResolverEntry).toContain('# night-watch-cli:');
+  });
+
+  it('should not include pr-resolver entry when prResolver.enabled is false', () => {
+    const config = createTestConfig({
+      prResolver: {
+        enabled: false,
+        schedule: '15 6,14,22 * * *',
+        maxRuntime: 3600,
+        branchPatterns: [],
+        maxPrsPerRun: 0,
+        perPrTimeout: 600,
+        aiConflictResolution: true,
+        aiReviewResolution: false,
+        readyLabel: 'ready-to-merge',
+      },
+    });
+    const result = performInstall(tempDir, config);
+
+    expect(result.success).toBe(true);
+    expect(result.entries).toHaveLength(2); // executor and reviewer only
+
+    const hasPrResolverEntry = result.entries.some((entry) => entry.includes("' resolve "));
+    expect(hasPrResolverEntry).toBe(false);
+  });
+
+  it('should skip pr-resolver entry when noPrResolver option is set', () => {
+    const config = createTestConfig({
+      prResolver: {
+        enabled: true,
+        schedule: '15 6,14,22 * * *',
+        maxRuntime: 3600,
+        branchPatterns: [],
+        maxPrsPerRun: 0,
+        perPrTimeout: 600,
+        aiConflictResolution: true,
+        aiReviewResolution: false,
+        readyLabel: 'ready-to-merge',
+      },
+    });
+    const result = performInstall(tempDir, config, { noPrResolver: true });
+
+    expect(result.success).toBe(true);
+    expect(result.entries).toHaveLength(2); // executor and reviewer only
+
+    const hasPrResolverEntry = result.entries.some((entry) => entry.includes("' resolve "));
+    expect(hasPrResolverEntry).toBe(false);
   });
 });

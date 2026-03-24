@@ -257,7 +257,7 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
     normalized.autoMergeMethod = mergeMethod as MergeMethod;
   }
 
-  // Registry-driven normalization for nested job configs (qa, audit, analytics)
+  // Registry-driven normalization for nested job configs (qa, audit, analytics, prResolver)
   // Executor/reviewer use flat top-level fields; slicer lives in roadmapScanner block above
   for (const jobId of ['qa', 'audit', 'analytics'] as const) {
     const jobDef = getJobDef(jobId);
@@ -266,6 +266,16 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
     if (rawJob) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (normalized as any)[jobId] = normalizeJobConfig(rawJob, jobDef);
+    }
+  }
+
+  // pr-resolver uses camelCase key 'prResolver' in the config file
+  const prResolverDef = getJobDef('pr-resolver');
+  if (prResolverDef) {
+    const rawJob = readObject(rawConfig.prResolver);
+    if (rawJob) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (normalized as any).prResolver = normalizeJobConfig(rawJob, prResolverDef);
     }
   }
 

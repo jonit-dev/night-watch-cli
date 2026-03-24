@@ -151,6 +151,7 @@ describe('dashboard command', () => {
           branch: 'feat/new-feature',
           ciStatus: 'pass' as const,
           reviewScore: 100,
+          labels: [],
         },
         {
           number: 2,
@@ -158,6 +159,7 @@ describe('dashboard command', () => {
           branch: 'night-watch/phase-1',
           ciStatus: 'fail' as const,
           reviewScore: 0,
+          labels: [],
         },
         {
           number: 3,
@@ -165,6 +167,7 @@ describe('dashboard command', () => {
           branch: 'feat/wip',
           ciStatus: 'pending' as const,
           reviewScore: null,
+          labels: [],
         },
         {
           number: 4,
@@ -172,6 +175,7 @@ describe('dashboard command', () => {
           branch: 'feat/unknown',
           ciStatus: 'unknown' as const,
           reviewScore: null,
+          labels: [],
         },
       ];
 
@@ -289,7 +293,14 @@ describe('dashboard command', () => {
       expect(processResult).toContain('executor: Not running');
 
       const prResult = renderPrPane([
-        { number: 1, title: 'Solo PR', branch: 'feat/solo', ciStatus: 'pass', reviewScore: null },
+        {
+          number: 1,
+          title: 'Solo PR',
+          branch: 'feat/solo',
+          ciStatus: 'pass',
+          reviewScore: null,
+          labels: [],
+        },
       ]);
       expect(prResult).toContain('#1 Solo PR');
       expect(prResult).toContain('feat/solo');

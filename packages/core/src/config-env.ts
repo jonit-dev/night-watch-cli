@@ -209,6 +209,23 @@ export function buildEnvOverrideConfig(
     }
   }
 
+  // pr-resolver uses camelCase key 'prResolver' in config; handled separately
+  const prResolverDef = getJobDef('pr-resolver');
+  if (prResolverDef) {
+    const currentBase =
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (env as any).prResolver ?? (fileConfig as any)?.prResolver ?? prResolverDef.defaultConfig;
+    const overrides = buildJobEnvOverrides(
+      prResolverDef.envPrefix,
+      currentBase as Record<string, unknown>,
+      prResolverDef.extraFields,
+    );
+    if (overrides) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (env as any).prResolver = overrides;
+    }
+  }
+
   // Per-job provider overrides (NW_JOB_PROVIDER_<JOBTYPE>)
   const jobProvidersEnv: IJobProviders = {};
   for (const jobType of VALID_JOB_TYPES) {

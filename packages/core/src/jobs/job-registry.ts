@@ -94,6 +94,43 @@ export const JOB_REGISTRY: IJobDefinition[] = [
     },
   },
   {
+    id: 'pr-resolver',
+    name: 'PR Conflict Solver',
+    description:
+      'Resolves merge conflicts via AI rebase; optionally addresses review comments and labels PRs ready-to-merge',
+    cliCommand: 'resolve',
+    logName: 'pr-resolver',
+    lockSuffix: '-pr-resolver.lock',
+    queuePriority: 35,
+    envPrefix: 'NW_PR_RESOLVER',
+    extraFields: [
+      { name: 'branchPatterns', type: 'string[]', defaultValue: [] },
+      { name: 'maxPrsPerRun', type: 'number', defaultValue: 0 },
+      { name: 'perPrTimeout', type: 'number', defaultValue: 600 },
+      { name: 'aiConflictResolution', type: 'boolean', defaultValue: true },
+      { name: 'aiReviewResolution', type: 'boolean', defaultValue: false },
+      { name: 'readyLabel', type: 'string', defaultValue: 'ready-to-merge' },
+    ],
+    defaultConfig: {
+      enabled: true,
+      schedule: '15 6,14,22 * * *',
+      maxRuntime: 3600,
+      branchPatterns: [],
+      maxPrsPerRun: 0,
+      perPrTimeout: 600,
+      aiConflictResolution: true,
+      aiReviewResolution: false,
+      readyLabel: 'ready-to-merge',
+    } as IBaseJobConfig & {
+      branchPatterns: string[];
+      maxPrsPerRun: number;
+      perPrTimeout: number;
+      aiConflictResolution: boolean;
+      aiReviewResolution: boolean;
+      readyLabel: string;
+    },
+  },
+  {
     id: 'slicer',
     name: 'Slicer',
     description: 'Generates PRDs from roadmap items',

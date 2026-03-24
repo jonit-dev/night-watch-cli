@@ -9,6 +9,7 @@ import {
   IAuditConfig,
   IJobProviders,
   INotificationConfig,
+  IPrResolverConfig,
   IProviderPreset,
   IProviderScheduleOverride,
   IQaConfig,
@@ -170,9 +171,32 @@ export const DEFAULT_ANALYTICS: IAnalyticsConfig = {
   analysisPrompt: DEFAULT_ANALYTICS_PROMPT,
 };
 
+// PR Resolver Configuration
+export const DEFAULT_PR_RESOLVER_ENABLED = true;
+export const DEFAULT_PR_RESOLVER_SCHEDULE = '15 6,14,22 * * *';
+export const DEFAULT_PR_RESOLVER_MAX_RUNTIME = 3600;
+export const DEFAULT_PR_RESOLVER_MAX_PRS_PER_RUN = 0;
+export const DEFAULT_PR_RESOLVER_PER_PR_TIMEOUT = 600;
+export const DEFAULT_PR_RESOLVER_AI_CONFLICT_RESOLUTION = true;
+export const DEFAULT_PR_RESOLVER_AI_REVIEW_RESOLUTION = false;
+export const DEFAULT_PR_RESOLVER_READY_LABEL = 'ready-to-merge';
+
+export const DEFAULT_PR_RESOLVER: IPrResolverConfig = {
+  enabled: DEFAULT_PR_RESOLVER_ENABLED,
+  schedule: DEFAULT_PR_RESOLVER_SCHEDULE,
+  maxRuntime: DEFAULT_PR_RESOLVER_MAX_RUNTIME,
+  branchPatterns: [],
+  maxPrsPerRun: DEFAULT_PR_RESOLVER_MAX_PRS_PER_RUN,
+  perPrTimeout: DEFAULT_PR_RESOLVER_PER_PR_TIMEOUT,
+  aiConflictResolution: DEFAULT_PR_RESOLVER_AI_CONFLICT_RESOLUTION,
+  aiReviewResolution: DEFAULT_PR_RESOLVER_AI_REVIEW_RESOLUTION,
+  readyLabel: DEFAULT_PR_RESOLVER_READY_LABEL,
+};
+
 export const AUDIT_LOG_NAME = 'audit';
 export const PLANNER_LOG_NAME = 'slicer';
 export const ANALYTICS_LOG_NAME = 'analytics';
+export const PR_RESOLVER_LOG_NAME = 'pr-resolver';
 
 // Valid providers (backward compat - derived from built-in presets)
 export const VALID_PROVIDERS: Provider[] = ['claude', 'codex'];

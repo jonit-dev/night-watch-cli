@@ -8,353 +8,324 @@ Score breakdown: +3 (10+ files) +2 (new components) +2 (complex state/real-time 
 
 ## 1. Context
 
-**Problem:** The Dashboard is overwhelming (too many widgets, duplicate info) and the Scheduling page is hard to understand (3 tabs with unclear purpose distinctions).
+**Problem:** The Dashboard is overwhelming (too many widgets, duplicate info) and the Scheduling page is hard to understand (5 tabs with unclear purpose distinctions).
 
 **Files Analyzed:**
+
 - `web/pages/Dashboard.tsx`
 - `web/pages/Scheduling.tsx`
+- `web/pages/Logs.tsx`
 - `web/components/Sidebar.tsx`
 - `web/components/TopBar.tsx`
 - `web/App.tsx`
+- `web/components/scheduling/ScheduleConfig.tsx`
 - `web/components/scheduling/ScheduleTimeline.tsx`
+- `web/components/dashboard/AgentStatusBar.tsx`
+- `web/store/useStore.ts`
+- `web/hooks/useStatusSync.ts`
 - `web/components/ui/{Button,Card,Badge,Tabs,Switch}.tsx`
 
-**Current Behavior:**
-- Dashboard has 7 distinct sections (stat cards, System Status card, Process Status card with 5 rows, Scheduling summary card with 5 rows, Board widget) — all visible simultaneously
-- "System Status" card shows Project/Provider/Last Updated — info redundant with the TopBar
-- "Scheduling" summary widget on Dashboard duplicates the Scheduling page
-- Scheduling page uses 3 tabs named "Overview", "Schedules", "Jobs" — "Overview" and "Schedules" sound nearly identical, causing confusion
-- "Jobs" tab is a tiny page (just 5 toggles) that doesn't warrant its own tab
-- Sidebar has 7 flat items with no grouping or labels — everything appears equally important
-- **Process state is not shared:** Dashboard owns the only SSE subscription (`useStatusStream`) and a local `streamedStatus` state. `Logs.tsx` makes its own independent `useApi(fetchStatus)` HTTP poll. These two can show contradictory process status (e.g., Executor running on Dashboard, Idle in Logs). Any future page that needs process status adds yet another independent poll.
+**Current Behavior (as of 2026-03-21):**
+
+- Dashboard: 4 stat cards + AgentStatusBar (compact 6-agent grid) + next automation teaser + GitHub Board widget — already cleaned up
+- Scheduling: 5-tab layout (Overview, Schedules, Crontab, Parallelism, individual job tabs) — still complex and hard to navigate
+- Sidebar: section labels (Overview / Work / Automation / Config) — already grouped
+- TopBar: Bell icon with red dot but no implementation behind it; no Settings icon — mostly clean
+- Shared state: `useStatusSync` in `App.tsx` writes to Zustand store; all pages read from store — already unified
+- Logs: reads `status` from store, independent log polling — correct
 
 ---
 
-## 2. Solution
+## 2. Completed Phases
 
-**Approach:**
-- **Shared state (Phase 0):** Lift `IStatusSnapshot` into the Zustand store. Single SSE subscription in `App.tsx` via `useStatusSync` hook. All pages read from the store — no contradictory process status across pages.
-- **Dashboard**: Remove low-value widgets (System Status card, Scheduling summary), compress the 5-process list into a compact Agent Status bar with inline controls. Make the page answer: "What's happening right now?"
-- **Scheduling**: Replace 3 ambiguous tabs with a single scrollable page. Extract the schedule editor from Settings into a shared `ScheduleConfig` component used by both pages (DRY). No more hidden redirect to Settings to edit schedules.
-- **Sidebar**: Add section labels to group nav items visually, rename "Scheduling" to "Automation" (it controls enablement too, not just timing)
-- **TopBar**: Remove the redundant Settings icon (Settings is already in the sidebar)
+### ✅ Phase 0: Shared status state
 
-**Architecture Diagram:**
-```mermaid
-flowchart LR
-    Dashboard["Dashboard\n(What's running now)"]
-    Scheduling["Scheduling / Automation\n(Configure & timeline)"]
-    Sidebar["Sidebar\n(Grouped nav)"]
-    TopBar["TopBar\n(Project + status only)"]
-```
+- `useStatusSync` hook exists at `web/hooks/useStatusSync.ts`
+- `status: IStatusSnapshot | null` in `web/store/useStore.ts`
+- `useStatusSync()` called in `App.tsx` — single SSE subscription app-wide
+- Dashboard and Logs both read from store
 
-**Key Decisions:**
-- Keep all existing data-fetching logic (`useApi`, `useStatusStream`, SSE) — only restructure the render layer
-- No new API calls needed; all data is already fetched
-- Reuse all existing `ui/` components (Card, Button, Switch, etc.)
-- Move Job toggles into the Agent cards on the Scheduling page (inline toggle = enable/disable right next to schedule)
+### ✅ Phase 1: Dashboard Cleanup
 
-**Data Changes:** None — store gains `status: IStatusSnapshot | null`, no schema changes
+- 4 stat cards: Board Ready, In Progress, Open PRs, Automation Status
+- `AgentStatusBar` (`web/components/dashboard/AgentStatusBar.tsx`) — 6-agent compact grid
+- "System Status" card removed
+- "Scheduling summary" card removed
+- "Next automation" teaser line added
 
----
+### ✅ Phase 3: Sidebar Navigation Grouping
 
-## 3. Integration Points
+- Section labels: OVERVIEW / WORK / AUTOMATION / CONFIG
+- Labels hidden when collapsed, visible when expanded
+- "Scheduling" nav item present under AUTOMATION
 
-```
-How will this feature be reached?
-✅ Entry point: existing routes (/, /scheduling, sidebar)
-✅ No new routes needed
-✅ No new API surface needed
-✅ User-facing: YES — all changes are visual
-```
+### ✅ Phase 4: TopBar Cleanup
+
+- Settings icon already removed from TopBar
+- Bell icon present (no Settings duplication)
 
 ---
 
-## 4. Execution Phases
+## 3. Remaining Work
 
 ---
 
-### Phase 0: Shared status state — single source of truth for process/system status
+### Phase 2 (Incomplete): Flatten Scheduling Page
 
-**Why first:** Phases 1 and 2 both render process status. If the state is not unified before those rewrites, each page will continue managing its own poll/SSE independently and showing different values.
+**Status:** `ScheduleConfig` component extracted ✅ — but `Scheduling.tsx` still uses 5 tabs ❌
 
-**Files (max 5):**
-- `web/store/useStore.ts` — add `status` + `setStatus` to the store
-- `web/hooks/useStatusSync.ts` — new hook: owns SSE subscription + polling, writes to store
-- `web/App.tsx` — call `useStatusSync()` at app root (single subscription for the whole app)
-- `web/pages/Dashboard.tsx` — remove local SSE/polling, read `status` from store
-- `web/pages/Logs.tsx` — remove independent `fetchStatus` call, read `status` from store
+**Problem:** Scheduling has tabs: Overview, Schedules, Crontab, Parallelism, plus per-job sub-tabs. "Overview" and "Schedules" are still confusing. "Crontab" and "Parallelism" are obscure labels for advanced config that buries the primary use case (seeing what runs when).
+
+**Files (max 4):**
+
+- `web/pages/Scheduling.tsx` — replace Tabs with flat scrollable sections
 
 **Implementation:**
 
-- [ ] `useStore.ts`: add two fields to `AppState`:
-  ```ts
-  status: IStatusSnapshot | null;
-  setStatus: (s: IStatusSnapshot) => void;
-  ```
-  Initialize `status: null`. `setStatus` uses `pickLatestSnapshot` to only update when the incoming snapshot is newer than the stored one (prevents stale SSE payload overwriting a fresher poll result). Import `IStatusSnapshot` from `@shared/types`.
-
-- [ ] `useStatusSync.ts`: new hook that extracts the logic currently in `Dashboard.tsx`:
-  ```ts
-  export const useStatusSync = () => {
-    const { setStatus, setProjectName, selectedProjectId, globalModeLoading } = useStore();
-    // 1. useApi(fetchStatus) with 30s polling + window focus refetch → calls setStatus
-    // 2. useStatusStream(snapshot => setStatus(snapshot)) for SSE fast path
-    // 3. useEffect on status: update projectName when status.projectName changes
-  };
-  ```
-  This is a direct move of the relevant `useEffect`/`useApi`/`useStatusStream` calls from Dashboard — no logic changes.
-
-- [ ] `App.tsx`: add `useStatusSync()` call at the top of the `App` component (after `useGlobalMode()`). This ensures the subscription is alive regardless of which route is active.
-
-- [ ] `Dashboard.tsx`:
-  - Remove `useApi(fetchStatus, ...)`, the `streamedStatus` local state, `useStatusStream`, `pickLatestSnapshot`, the 30s polling `useEffect`, and the window-focus `useEffect`
-  - Replace with: `const currentStatus = useStore((s) => s.status);`
-  - Remove `loading`/`error` from fetchStatus (status is now always available from store after first load; handle `status === null` with a loading state)
-  - Keep all handlers (`handleCancelProcess`, `handleForceClear`, `handleStartProcess`) — they call `refetch` after; replace that refetch with a store read (status auto-updates via SSE)
-
-- [ ] `Logs.tsx`:
-  - Remove `useApi(fetchStatus, ...)`
-  - Replace with: `const status = useStore((s) => s.status);`
-  - The `isProcessRunning` check reads from the same shared state
-
-**Tests Required:**
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `web/src/__tests__/useStatusSync.test.ts` | `writes SSE snapshot to store` | `setStatus` called with snapshot payload |
-| `web/src/__tests__/useStatusSync.test.ts` | `does not downgrade to older snapshot` | Store retains newer timestamp when stale SSE arrives |
-| `web/src/__tests__/Dashboard.test.tsx` | `reads process status from store, not local state` | No `useState(streamedStatus)` — uses store value |
-
-**User Verification:**
-- Action: Open Dashboard (Executor shows "Running"), then navigate to Logs tab
-- Expected: Logs page shows Executor as "Running" — same state, no flicker or contradiction
-
-**Checkpoint:** Run `prd-work-reviewer` agent after this phase.
-
----
-
-### Phase 1: Dashboard Cleanup — Focused overview of what's happening right now
-
-**Files (max 5):**
-- `web/pages/Dashboard.tsx` — major rewrite of render section only
-- `web/components/dashboard/AgentStatusBar.tsx` — new compact component
-
-**Implementation:**
-
-- [ ] Create `web/components/dashboard/AgentStatusBar.tsx`:
-  - Props: `processes: IStatusSnapshot['processes']`, `activePrd: string | null`, handlers for run/stop/clear
-  - Renders a horizontal grid (2-col on mobile, 5-col on desktop) of agent pills
-  - Each pill: colored status dot (pulsing if running) + agent name + either "Idle" or truncated PID/PRD info
-  - Action on click: shows a small inline popover/dropdown with "Run" or "Stop" + "View Log" links
-  - Or simpler: each pill has a tiny Run/Stop icon button directly inline (no popover)
-  - Keep all existing handler logic, just change the visual layout
-
-- [ ] Rewrite `Dashboard.tsx` render section:
-  - **Keep:** 4 stat cards (top row) — but rename "Cron Status" → "Automation" and show Active/Paused status
-  - **Remove:** "System Status" card (project/provider/lastUpdated) — this info is in TopBar and is low-value
-  - **Replace:** The 5-row verbose "Process Status" card → `<AgentStatusBar>` (compact, same data)
-  - **Remove:** The "Scheduling" summary card (5-row list of next run times) — users go to /scheduling for this
-  - **Keep:** "GitHub Board" widget (already compact, useful at-a-glance)
-  - **Add:** Under stat cards, a single "Next Automation Run" line (1 line: "Next: Executor in 12 min") as a teaser linking to /scheduling
-
-**Result layout:**
-```
-[Board Ready] [In Progress] [Open PRs] [Automation: Active]
-[AgentStatusBar: Executor ●  Reviewer ●  QA ●  Auditor ●  Planner ●]
-[Next automation: Executor in 12 min → Manage Schedules]
-[GitHub Board widget]
-```
-
-**Tests Required:**
-| Test File | Test Name | Assertion |
-|-----------|-----------|-----------|
-| `web/src/__tests__/AgentStatusBar.test.tsx` | `renders idle state for all agents when none running` | All pills show idle state |
-| `web/src/__tests__/AgentStatusBar.test.tsx` | `shows running state with pulse when process is running` | Pulse class present, PID shown |
-| `web/src/__tests__/AgentStatusBar.test.tsx` | `calls onStop handler when stop button clicked` | Mock called once |
-
-**User Verification:**
-- Action: Open `/` (Dashboard)
-- Expected: Page no longer shows "System Status" card or "Scheduling" summary card. Agent status is compact (one row or small grid, not 5 separate full-width cards). Cron status card now shows "Active" or "Paused".
-
-**Checkpoint:** Run `prd-work-reviewer` agent after this phase.
-
----
-
-### Phase 2: Extract `ScheduleConfig` component (DRY) — shared schedule editor for Scheduling + Settings
-
-**Root problem:** Settings has a fully-featured schedule editing UI (Template/Custom mode, `CronScheduleInput` for all 5 jobs, Scheduling Priority, Global Queue toggle, Extra Start Delay). The Scheduling page's "Edit" buttons silently redirect to `Settings?tab=schedules` — a hidden, jarring flow. Users on the Scheduling page have no obvious way to know where schedule editing lives.
-
-**Solution:** Extract the schedule editor from `Settings.tsx` into a standalone `ScheduleConfig` component. Both the Scheduling page and Settings use it — same component, no duplication.
-
-**Files (max 5):**
-- `web/components/scheduling/ScheduleConfig.tsx` — new shared component (extracted from Settings)
-- `web/pages/Settings.tsx` — replace schedule tab inline JSX with `<ScheduleConfig />`
-- `web/pages/Scheduling.tsx` — embed `<ScheduleConfig />` directly as a page section (no redirect)
-
-**Component interface for `ScheduleConfig`:**
-```tsx
-interface IScheduleConfigProps {
-  form: ConfigForm;                        // the editable config form state
-  scheduleMode: 'template' | 'custom';
-  selectedTemplateId: string | null;
-  onFieldChange: (field: keyof ConfigForm, value: unknown) => void;
-  onSwitchToTemplate: () => void;
-  onSwitchToCustom: () => void;
-  onApplyTemplate: (tpl: IScheduleTemplate) => void;
-  allProjectConfigs: Array<{ projectId: string; config: INightWatchConfig }>;
-  currentProjectId: string | null;
-  onEditJob: (projectId: string, jobType: string) => void;  // for ScheduleTimeline click-through
-}
-```
-
-**What to extract into `ScheduleConfig`:**
-- The Template / Custom toggle buttons
-- The `SCHEDULE_TEMPLATES` grid (template picker)
-- The `CronScheduleInput` grid (custom cron editors for all 5 jobs)
-- The Scheduling Priority `<Select>`, Global Queue `<Switch>`, Extra Start Delay `<Input>`
-- The `<ScheduleTimeline>` (currently duplicated — Settings has it in schedules tab, Scheduling has it in the Overview tab)
-
-**Settings.tsx changes:**
-- Replace the inline JSX inside the `schedules` tab `content:` with `<ScheduleConfig ...>` passing existing state/handlers
-- No logic changes, just moves JSX into the component
-
-**Scheduling.tsx changes (flat layout):**
-
-Replace the `<Tabs>` component entirely. New page structure:
+Delete the `<Tabs>` component and `activeTab` state. New flat page structure:
 
 ```
 Section A: Global Controls
-  [Automation: Active/Paused]  [Schedule Bundle label]  [Pause/Resume button]
+  [Automation: Active/Paused]  [Schedule bundle name]  [Pause/Resume button]
 
-Section B: Agents (merged Schedules + Jobs)
-  5 cards (2-col grid): icon + name + Switch toggle + schedule desc + next run + delay note
+Section B: Agent Schedule Cards
+  6 cards (2-col grid): icon + name + Switch toggle + "every 3h" desc + next run countdown + start delay badge
 
-Section C: Configure Schedules  ← NEW — was hidden in Settings
-  <ScheduleConfig /> — shows template picker or custom cron inputs + priority/queue/delay settings
-  With a "Save & Install" button below it
+Section C: Configure Schedules  ← was hidden in "Schedules" tab
+  <ScheduleConfig /> with template picker / custom cron inputs
+  [Save & Install] button
 
-Section D: Queue Analytics (collapsible, hidden by default)
-  [Running] [Pending] [Avg Wait] [Throttled]
-  <ProviderBucketSummary />
+Section D: Cron Entries  ← was "Crontab" tab
+  Installed crontab entries table (collapsible, default collapsed)
+  Enable/disable/remove per entry
+
+Section E: Parallelism & Queue  ← was "Parallelism" tab
+  Queue mode (Auto/Manual), global max concurrency, provider buckets
+  (collapsible, default collapsed)
 ```
 
-**Form state in Scheduling.tsx:**
-- The Scheduling page needs its own local `form` state (copy from current config on load, same pattern as Settings)
-- On "Save & Install": call `updateConfig(form)` then `triggerInstallCron()` (same as Settings save flow)
-- Reuse `scheduleMode`, `selectedTemplateId`, `applyTemplate`, `switchToTemplateMode`, `switchToCustomMode` logic — copy the same state shape from Settings
-
-**Implementation steps:**
-- [ ] Create `web/components/scheduling/ScheduleConfig.tsx` with the interface above; move JSX from Settings `schedules` tab content into it
-- [ ] Update `Settings.tsx`: replace the inlined schedule tab JSX with `<ScheduleConfig ...>`; verify Settings still works identically
-- [ ] In `Scheduling.tsx`: add `form` state (mirror Settings pattern), add `scheduleMode`/`selectedTemplateId` state
-- [ ] Delete `overviewTab`, `schedulesTab`, `jobsTab` variables
-- [ ] Write new flat `return` JSX: Section A (global controls) → Section B (agent cards with Switch+schedule+nextRun) → Section C (`<ScheduleConfig />` + Save button) → Section D (collapsible queue)
-- [ ] Remove the `navigate('/settings?tab=schedules...')` redirect from `handleEditJobOnTimeline` — it now scrolls to Section C instead
-- [ ] Add `expandedQueue` local state (default `false`) for the collapsible queue section
+- [ ] Remove `activeTab` state and `<Tabs>` import
+- [ ] Move Overview tab content → inline Sections A + B
+- [ ] Move Schedules tab content → Section C (already has `<ScheduleConfig />`)
+- [ ] Move Crontab tab content → Section D (collapsible `<details>` or state toggle)
+- [ ] Move Parallelism tab content → Section E (collapsible)
+- [ ] Replace `navigate('/settings?tab=schedules...')` redirect with `scrollIntoView` to Section C anchor
+- [ ] `expandedCrontab` + `expandedParallelism` local state (default `false`) for collapsible sections
+- [ ] `ScheduleTimeline` moves into Section B as a visual beneath the agent cards
 
 **Tests Required:**
 | Test File | Test Name | Assertion |
 |-----------|-----------|-----------|
-| `web/src/__tests__/ScheduleConfig.test.tsx` | `renders template picker by default` | Template cards visible |
-| `web/src/__tests__/ScheduleConfig.test.tsx` | `switches to custom cron inputs on Custom click` | CronScheduleInput fields visible |
-| `web/src/__tests__/Scheduling.test.tsx` | `shows all 5 agent cards` | 5 agent name elements rendered |
-| `web/src/__tests__/Scheduling.test.tsx` | `agent toggle calls handleJobToggle` | Mock API called with correct job |
-| `web/src/__tests__/Scheduling.test.tsx` | `ScheduleConfig section visible without clicking tabs` | Schedule config rendered directly on page |
+| `web/src/__tests__/Scheduling.test.tsx` | `renders all 6 agent cards without tabs` | 6 agent name elements, no Tabs component |
+| `web/src/__tests__/Scheduling.test.tsx` | `ScheduleConfig section visible without clicking tabs` | Schedule config rendered directly |
+| `web/src/__tests__/Scheduling.test.tsx` | `crontab section collapsed by default` | Crontab entries not visible initially |
+| `web/src/__tests__/Scheduling.test.tsx` | `expanding crontab section shows entries` | Entries visible after expand click |
 
 **User Verification:**
+
 - Action: Open `/scheduling`
-- Expected: No tabs. Scroll down past agents → see "Configure Schedules" section inline. Can edit schedules without going to Settings. Settings → Schedules tab still works identically (same component).
+- Expected: No tabs. Scroll down past agents → see "Configure Schedules" inline. Crontab and Parallelism are collapsed advanced sections at the bottom. No redirect to Settings needed.
 
-**Checkpoint:** Run `prd-work-reviewer` agent after this phase.
+**Checkpoint:** Run `prd-work-reviewer` after this phase.
 
 ---
 
-### Phase 3: Sidebar Navigation Grouping — Visual hierarchy for nav items
+### Phase 5: Command Palette (Cmd+K)
+
+**Why:** Power users trigger agents, navigate pages, and manage schedules frequently. Every action currently requires 2–4 clicks through the UI. A command palette eliminates navigation overhead and makes the tool feel fast.
 
 **Files (max 5):**
-- `web/components/Sidebar.tsx` — add section labels, rename one item
+
+- `web/components/CommandPalette.tsx` — new component
+- `web/hooks/useCommandPalette.ts` — keyboard shortcut registration + open/close state
+- `web/App.tsx` — render `<CommandPalette />` at root + `useCommandPalette()`
+- `web/store/useStore.ts` — add `commandPaletteOpen: boolean` + `setCommandPaletteOpen`
+
+**Component design:**
+
+```
+┌─────────────────────────────────────────────────┐
+│  🔍 Search commands or navigate...               │
+├─────────────────────────────────────────────────┤
+│  ── NAVIGATE ──                                  │
+│  → Dashboard                            ⌘1      │
+│  → Logs                                 ⌘2      │
+│  → Board                                ⌘3      │
+│  → Scheduling                           ⌘4      │
+│  → Settings                             ⌘,      │
+├─────────────────────────────────────────────────┤
+│  ── AGENTS ──                                    │
+│  ▶ Run Executor          [only if idle]          │
+│  ■ Stop Executor         [only if running]       │
+│  ▶ Run Reviewer                                  │
+│  ▶ Run QA                                        │
+│  ▶ Run Auditor                                   │
+│  ▶ Run Planner                                   │
+├─────────────────────────────────────────────────┤
+│  ── SCHEDULING ──                                │
+│  ⏸ Pause Automation      [only if active]        │
+│  ▶ Resume Automation     [only if paused]        │
+└─────────────────────────────────────────────────┘
+```
 
 **Implementation:**
 
-- [ ] Rename "Scheduling" nav item label to **"Automation"** and update its `path` to `/scheduling` (path stays the same, only label changes)
-- [ ] Add section labels between nav groups. Current flat list becomes:
-
-```
-── OVERVIEW ──
-  Home (Dashboard)
-  Logs
-
-── WORK ──
-  Board
-  Pull Requests
-  Roadmap
-
-── AUTOMATION ──
-  Automation (was: Scheduling)
-
-── CONFIG ──
-  Settings
-```
-
-- [ ] In `navItems` array, add a `section?: string` field to mark where section headers appear:
-  ```ts
-  { icon: Home, label: 'Dashboard', path: '/', section: 'Overview' },
-  { icon: Terminal, label: 'Logs', path: '/logs' },
-  { icon: Kanban, label: 'Board', path: '/board', section: 'Work' },
-  { icon: GitPullRequest, label: 'Pull Requests', path: '/prs', badge: openPrCount },
-  { icon: Map, label: 'Roadmap', path: '/roadmap' },
-  { icon: Calendar, label: 'Automation', path: '/scheduling', section: 'Automation' },
-  { icon: Settings, label: 'Settings', path: '/settings', section: 'Config' },
-  ```
-- [ ] Render section labels as `<li>` with `text-[10px] font-bold text-slate-600 uppercase tracking-widest px-3.5 pt-4 pb-1` only when sidebar is NOT collapsed
-- [ ] Section labels hidden when sidebar is collapsed (collapsed mode shows only icons)
+- [ ] `useCommandPalette.ts`: registers `keydown` listener for `Cmd+K` / `Ctrl+K`; writes `commandPaletteOpen` to store
+- [ ] `CommandPalette.tsx`: modal overlay (semi-transparent backdrop), search input, grouped command list
+  - Filter commands by search term (fuzzy or substring match)
+  - Keyboard navigation: `↑`/`↓` to move, `Enter` to execute, `Esc` to close
+  - Commands: navigate (uses `useNavigate`), trigger agent (calls `triggerJob` API), toggle automation
+  - Agent trigger commands conditionally shown based on `useStore(s => s.status)` — only show "Run X" if X is idle
+- [ ] `App.tsx`: add `<CommandPalette />` after routes, call `useCommandPalette()`
+- [ ] `useStore.ts`: add `commandPaletteOpen` + `setCommandPaletteOpen` to store
 
 **Tests Required:**
 | Test File | Test Name | Assertion |
 |-----------|-----------|-----------|
-| `web/src/__tests__/Sidebar.test.tsx` | `shows section labels when expanded` | "OVERVIEW", "WORK", "AUTOMATION", "CONFIG" visible |
-| `web/src/__tests__/Sidebar.test.tsx` | `hides section labels when collapsed` | No section label text visible in collapsed state |
-| `web/src/__tests__/Sidebar.test.tsx` | `Scheduling item label is now Automation` | Nav link text is "Automation" |
+| `web/src/__tests__/CommandPalette.test.tsx` | `opens on Cmd+K` | Palette visible after keydown event |
+| `web/src/__tests__/CommandPalette.test.tsx` | `closes on Escape` | Palette hidden after Escape |
+| `web/src/__tests__/CommandPalette.test.tsx` | `filters commands by search term` | Only matching commands shown |
+| `web/src/__tests__/CommandPalette.test.tsx` | `navigates to page on Enter` | navigate called with correct path |
+| `web/src/__tests__/CommandPalette.test.tsx` | `shows Run agent only when idle` | Run command absent when process running |
 
 **User Verification:**
-- Action: Open any page, look at the sidebar
-- Expected: 4 clear group labels visible. "Scheduling" is now labeled "Automation". Groups make it immediately obvious where Board/PRs live vs configuration vs logs.
 
-**Checkpoint:** Run `prd-work-reviewer` agent after this phase.
+- Action: Press `Cmd+K` on any page
+- Expected: Palette opens. Type "exec" → "Run Executor" appears. Press Enter → executor triggered. Press Escape → closes.
+
+**Checkpoint:** Run `prd-work-reviewer` after this phase.
 
 ---
 
-### Phase 4: TopBar Cleanup — Remove redundant icons
+### Phase 6: Notification / Activity Center
+
+**Why:** The TopBar Bell icon has a red dot but no implementation. Users have no way to see what happened recently (which PRDs ran, which failed, when schedules last fired) without digging through Logs. An activity feed surfaces this at a glance.
 
 **Files (max 5):**
-- `web/components/TopBar.tsx`
+
+- `web/components/ActivityCenter.tsx` — slide-out panel
+- `web/hooks/useActivityFeed.ts` — assembles activity events from status + logs API
+- `web/components/TopBar.tsx` — wire Bell button to open panel
+- `web/store/useStore.ts` — add `activityCenterOpen: boolean` + `setActivityCenterOpen`
+
+**Activity event types (derive from existing data, no new API needed):**
+
+```ts
+type IActivityEvent =
+  | { type: 'agent_completed'; agent: string; duration: string; prd?: string; ts: Date }
+  | { type: 'agent_failed'; agent: string; error: string; ts: Date }
+  | { type: 'schedule_fired'; agent: string; ts: Date }
+  | { type: 'automation_paused' | 'automation_resumed'; ts: Date }
+  | { type: 'pr_opened'; number: number; title: string; ts: Date };
+```
+
+**Panel design (slide-out from right, 360px wide):**
+
+```
+┌─ Activity ─────────────────── [×] ─┐
+│ Today                               │
+│ ● Executor completed  PRD-42  2m ago│
+│ ● PR #18 opened              5m ago │
+│ ● Reviewer completed        12m ago │
+│ ─ Yesterday ─                       │
+│ ● Automation paused         3h ago  │
+│ ● QA failed: exit code 1    5h ago  │
+└────────────────────────────────────┘
+```
 
 **Implementation:**
 
-- [ ] Read `TopBar.tsx` first to confirm what the Settings icon currently does (likely just `navigate('/settings')`)
-- [ ] Remove the Settings icon button from TopBar (Settings is already the bottom nav item in sidebar — duplicate)
-- [ ] If the Bell (notifications) icon has no implementation behind it, remove it too (or keep as placeholder — confirm with codebase)
-- [ ] Keep: Project name + connection status (left) + search box (center)
-- [ ] The search box can remain as a placeholder (do not implement search — YAGNI)
+- [ ] `useStore.ts`: add `activityCenterOpen` + `setActivityCenterOpen`
+- [ ] `useActivityFeed.ts`: builds `IActivityEvent[]` by watching `status` changes in store (compare previous vs next — if a process transitions running→idle, it "completed") + fetching recent log entries on mount
+- [ ] `ActivityCenter.tsx`: fixed right-side panel, `translate-x-full` when closed, `translate-x-0` when open; grouped by day; each event is an icon + description + relative time
+- [ ] `TopBar.tsx`: Bell button calls `setActivityCenterOpen(true)`; red dot shows only when `activityEvents.length > 0` and panel is closed (i.e., unread events)
+- [ ] Clear unread count when panel is opened
 
 **Tests Required:**
 | Test File | Test Name | Assertion |
 |-----------|-----------|-----------|
-| `web/src/__tests__/TopBar.test.tsx` | `does not render Settings icon button` | No button with Settings icon |
+| `web/src/__tests__/ActivityCenter.test.tsx` | `slides in when open` | Panel has translate-x-0 class |
+| `web/src/__tests__/ActivityCenter.test.tsx` | `shows completed event when process transitions running→idle` | Completed event rendered |
+| `web/src/__tests__/ActivityCenter.test.tsx` | `bell dot hidden when panel open` | Red dot not visible with panel open |
 
 **User Verification:**
-- Action: Look at the TopBar on any page
-- Expected: Cleaner header. No redundant Settings icon. Project name + connection status clearly visible on the left.
 
-**Checkpoint:** Run `prd-work-reviewer` agent after this phase.
+- Action: Click the Bell icon
+- Expected: Right panel slides in showing recent agent completions and PR events. Bell dot disappears after opening.
+
+**Checkpoint:** Run `prd-work-reviewer` after this phase.
+
+---
+
+### Phase 7: Log Page UX — Filter Bar + Agent Tabs
+
+**Why:** Logs page currently shows a raw log dump with no way to filter by agent. When multiple agents run, logs interleave and become hard to read. Users must manually scan for the agent they care about.
+
+**Files (max 4):**
+
+- `web/pages/Logs.tsx` — add filter bar + per-agent view
+- `web/components/logs/LogFilterBar.tsx` — new component
+
+**Implementation:**
+
+- [ ] `LogFilterBar.tsx`: horizontal pill bar showing all 6 agents + "All" option
+  - Active pill: filled background (agent color); inactive: ghost
+  - When an agent is "running" (from store status), show a pulsing green dot on its pill
+  - Second row: search input (filter lines containing text) + "Errors only" toggle
+
+- [ ] `Logs.tsx` changes:
+  - Add `selectedAgent: string | null` state (null = "All")
+  - Add `searchTerm: string` state
+  - Add `errorsOnly: boolean` state
+  - Filter `logLines` before render: by agent prefix (log lines are prefixed with `[executor]`, `[reviewer]` etc.), by `searchTerm`, by error keywords if `errorsOnly`
+  - Render `<LogFilterBar>` above the log output
+  - Keep existing auto-scroll behavior
+
+- [ ] Log line parsing: each line starts with `[agent-name]` prefix — extract agent name from this prefix to drive per-agent filtering (no API change needed)
+
+**Result layout:**
+
+```
+[All] [Executor ●] [Reviewer] [QA] [Auditor] [Planner] [Analytics]
+🔍 Search logs...                              [Errors only ○]
+─────────────────────────────────────────────────────────
+2026-03-21 14:32:01 [executor] Starting PRD execution...
+2026-03-21 14:32:05 [executor] Reading board...
+```
+
+**Tests Required:**
+| Test File | Test Name | Assertion |
+|-----------|-----------|-----------|
+| `web/src/__tests__/LogFilterBar.test.tsx` | `renders all 6 agent pills plus All` | 7 pills visible |
+| `web/src/__tests__/LogFilterBar.test.tsx` | `shows running dot on active agent pill` | Pulse element present for running agent |
+| `web/src/__tests__/Logs.test.tsx` | `filters log lines by selected agent` | Only executor lines shown when executor pill active |
+| `web/src/__tests__/Logs.test.tsx` | `filters by search term` | Only matching lines shown |
+| `web/src/__tests__/Logs.test.tsx` | `errors only toggle filters non-error lines` | Only error lines shown |
+
+**User Verification:**
+
+- Action: Open `/logs`, click "Executor" pill
+- Expected: Only lines prefixed with `[executor]` shown. Other agents' lines hidden. Running agent has a pulsing dot on its pill.
+
+**Checkpoint:** Run `prd-work-reviewer` after this phase.
+
+---
+
+## 4. Integration Points
+
+```
+Entry points: existing routes (/, /scheduling, /logs, sidebar, TopBar bell)
+No new routes needed
+No new API surface needed (all data derived from existing status + logs APIs)
+User-facing: YES — all changes are visual
+```
 
 ---
 
 ## 5. Verification Strategy
 
-Each phase runs `yarn verify` and the phase-specific tests. The prd-work-reviewer agent is spawned after each phase.
+Each phase: `yarn verify` + phase-specific tests + `prd-work-reviewer` checkpoint.
 
-**Running tests:**
 ```bash
 cd /home/joao/projects/night-watch-cli
 yarn verify
@@ -365,11 +336,19 @@ yarn workspace night-watch-web test --run
 
 ## 6. Acceptance Criteria
 
-- [ ] Phase 0: Single SSE subscription in App; `status` in Zustand store; Dashboard + Logs read from store — process state is consistent across all pages
-- [ ] Phase 1: Dashboard no longer has "System Status" card or "Scheduling summary" card; Process Status is compact
-- [ ] Phase 2: `ScheduleConfig` component extracted; Scheduling page has no tabs; schedule editing is inline (no redirect to Settings)
-- [ ] Phase 3: Sidebar shows section group labels; "Scheduling" renamed to "Automation"
-- [ ] Phase 4: TopBar Settings icon removed
+### Original phases (all complete)
+
+- [x] Phase 0: Single SSE subscription; `status` in Zustand; Dashboard + Logs read from store
+- [x] Phase 1: Dashboard has no "System Status" or "Scheduling summary" card; AgentStatusBar is compact
+- [x] Phase 3: Sidebar shows section labels (OVERVIEW / WORK / AUTOMATION / CONFIG)
+- [x] Phase 4: TopBar Settings icon removed
+
+### Remaining
+
+- [ ] Phase 2: Scheduling page has no Tabs; flat scroll layout with collapsible advanced sections
+- [ ] Phase 5: `Cmd+K` opens command palette; can trigger agents + navigate without mouse
+- [ ] Phase 6: Bell icon opens Activity Center slide-out with recent agent completions
+- [ ] Phase 7: Logs page has agent filter pills + search bar + errors-only toggle
 - [ ] All `yarn verify` passes after each phase
 - [ ] All specified tests pass
-- [ ] No regressions: existing process start/stop/cancel, schedule edit, job toggle, SSE streaming all still work
+- [ ] No regressions: process start/stop/cancel, schedule edit, job toggle, SSE streaming all still work

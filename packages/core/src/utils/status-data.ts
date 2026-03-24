@@ -52,6 +52,7 @@ export interface IPrInfo {
   url: string;
   ciStatus: 'pass' | 'fail' | 'pending' | 'unknown';
   reviewScore: number | null;
+  labels: string[];
 }
 
 /**
@@ -151,6 +152,13 @@ export function plannerLockPath(projectDir: string): string {
  */
 export function analyticsLockPath(projectDir: string): string {
   return `${LOCK_FILE_PREFIX}analytics-${projectRuntimeKey(projectDir)}.lock`;
+}
+
+/**
+ * Compute the lock file path for the PR resolver of a given project directory.
+ */
+export function prResolverLockPath(projectDir: string): string {
+  return `${LOCK_FILE_PREFIX}pr-resolver-${projectRuntimeKey(projectDir)}.lock`;
 }
 
 /**
@@ -625,7 +633,7 @@ export async function collectPrInfo(
     }
 
     const { stdout: output } = await execAsync(
-      'gh pr list --state open --json headRefName,number,title,url,statusCheckRollup,reviewDecision',
+      'gh pr list --state open --json headRefName,number,title,url,statusCheckRollup,reviewDecision,labels',
       {
         cwd: projectDir,
         encoding: 'utf-8',
@@ -656,6 +664,7 @@ export async function collectPrInfo(
         contexts?: unknown[];
       }> | null;
       reviewDecision?: string | null;
+      labels?: Array<{ name: string }>;
     }
 
     const prs: IGhPr[] = JSON.parse(trimmed);
@@ -679,6 +688,7 @@ export async function collectPrInfo(
           url: pr.url,
           ciStatus: deriveCiStatus(pr.statusCheckRollup),
           reviewScore: deriveReviewScore(pr.reviewDecision),
+          labels: (pr.labels ?? []).map((l) => l.name),
         };
       });
   } catch {

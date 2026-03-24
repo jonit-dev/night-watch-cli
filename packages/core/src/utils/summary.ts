@@ -112,6 +112,14 @@ function buildActionItems(
     items.push(`PR #${pr.number} has failing CI — check ${pr.url}`);
   }
 
+  // PRs marked ready-to-merge
+  const readyToMergePrs = prs.filter((pr) => pr.labels.includes('ready-to-merge'));
+  if (readyToMergePrs.length > 0) {
+    items.push(
+      `${readyToMergePrs.length} PR${readyToMergePrs.length > 1 ? 's' : ''} marked ready-to-merge — review and merge`,
+    );
+  }
+
   // Pending queue items (informational)
   if (pendingItems.length > 0) {
     const jobTypes = [...new Set(pendingItems.map((item) => item.jobType))];

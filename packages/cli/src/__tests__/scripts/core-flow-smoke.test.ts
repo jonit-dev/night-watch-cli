@@ -12,6 +12,7 @@ const executorScript = path.join(repoRoot, 'scripts', 'night-watch-cron.sh');
 const reviewerScript = path.join(repoRoot, 'scripts', 'night-watch-pr-reviewer-cron.sh');
 const qaScript = path.join(repoRoot, 'scripts', 'night-watch-qa-cron.sh');
 const auditScript = path.join(repoRoot, 'scripts', 'night-watch-audit-cron.sh');
+const prResolverScript = path.join(repoRoot, 'scripts', 'night-watch-pr-resolver-cron.sh');
 
 const tempDirs: string[] = [];
 
@@ -2465,5 +2466,56 @@ describe('core flow smoke tests (bash scripts)', () => {
 
     expect(result.status).toBe(42);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure|provider_exit=42');
+  });
+
+  it('pr-resolver should emit skip_dry_run when NW_DRY_RUN=1', () => {
+    const projectDir = mkTempDir('nw-smoke-pr-resolver-dry-run-');
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-bin-pr-resolver-dry-run-');
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
+    const result = runScript(prResolverScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DRY_RUN: '1',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_dry_run');
+  });
+
+  it('pr-resolver should emit skip_no_open_prs when gh returns empty array', () => {
+    const projectDir = mkTempDir('nw-smoke-pr-resolver-no-prs-');
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-bin-pr-resolver-no-prs-');
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        "  echo '[]'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(prResolverScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_no_open_prs');
   });
 });

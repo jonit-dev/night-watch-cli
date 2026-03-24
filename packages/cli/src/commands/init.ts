@@ -376,6 +376,7 @@ export function buildInitConfig(params: {
     },
     audit: { ...defaults.audit },
     analytics: { ...defaults.analytics },
+    prResolver: { ...defaults.prResolver },
     jobProviders: { ...defaults.jobProviders },
     queue: {
       ...defaults.queue,
