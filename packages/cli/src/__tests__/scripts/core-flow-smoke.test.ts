@@ -1810,10 +1810,7 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_TARGET_PR: '', // No target PR (use global lock)
     });
 
-    // Note: Parallel mode calls `exit 0` at line 378 regardless of worker results
-    // The aggregation logic sets EXIT_CODE but emit_final_status doesn't propagate it
-    // The timeout is still emitted in stdout
-    expect(result.status).toBe(0);
+    expect(result.status).toBe(124);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:timeout');
   });
 
