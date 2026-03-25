@@ -257,19 +257,20 @@ describe('Scheduling page', () => {
     apiMocks.fetchQueueAnalytics.mockResolvedValue(makeQueueAnalytics());
   });
 
-  it('keeps cron controls available after dashboard refresh', async () => {
+  it('renders schedule config directly without tab navigation', async () => {
     renderScheduling();
 
-    // Navigate to the Schedules tab first
-    fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
+    // Global controls section is visible (Pause/Resume button)
+    expect(screen.getByRole('button', { name: /Resume|Pause/ })).toBeInTheDocument();
 
-    // Job Schedules heading is visible in template mode
+    // Agent schedule cards are visible
+    expect(screen.getAllByText('Executor')[0]).toBeInTheDocument();
+    expect(screen.getAllByText('Reviewer')[0]).toBeInTheDocument();
+
+    // Schedule configuration section is visible (no tabs needed)
     expect(screen.getByText('Job Schedules')).toBeInTheDocument();
 
-    // Switch to custom mode to reveal cron inputs
-    fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
-
-    // Cron controls are now visible
+    // Cron inputs are visible
     expect(screen.getByText('PRD Execution Schedule')).toBeInTheDocument();
     expect(screen.getByText('PR Review Schedule')).toBeInTheDocument();
 

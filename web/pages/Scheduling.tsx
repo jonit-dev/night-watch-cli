@@ -13,18 +13,19 @@ import {
   Plus,
   Trash2,
   Zap,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
-import Button from '../components/ui/Button';
-import Card from '../components/ui/Card';
-import Input from '../components/ui/Input';
-import Select from '../components/ui/Select';
-import Switch from '../components/ui/Switch';
-import Tabs from '../components/ui/Tabs';
+import Button from '../components/ui/Button.js';
+import Card from '../components/ui/Card.js';
+import Input from '../components/ui/Input.js';
+import Select from '../components/ui/Select.js';
+import Switch from '../components/ui/Switch.js';
 import ScheduleConfig from '../components/scheduling/ScheduleConfig.js';
 import type { IScheduleConfigForm } from '../components/scheduling/ScheduleConfig.js';
 import ScheduleTimeline from '../components/scheduling/ScheduleTimeline.js';
-import { useStore } from '../store/useStore';
-import type { INightWatchConfig, IQueueAnalytics, IQueueStatus, QueueMode } from '../api';
+import { useStore } from '../store/useStore.js';
+import type { INightWatchConfig, IQueueAnalytics, IQueueStatus, QueueMode } from '../api.js';
 import {
   fetchScheduleInfo,
   fetchConfig,
@@ -36,7 +37,7 @@ import {
   triggerUninstallCron,
   triggerJob,
   useApi,
-} from '../api';
+} from '../api.js';
 import {
   cronToHuman,
   isCronEquivalent,
@@ -44,9 +45,9 @@ import {
   formatRelativeTime,
   formatAbsoluteTime,
   isWithin30Minutes,
-} from '../utils/cron';
+} from '../utils/cron.js';
 import type { IScheduleTemplate } from '../utils/cron.js';
-import { getWebJobDef } from '../utils/jobs';
+import { getWebJobDef } from '../utils/jobs.js';
 
 interface IProviderBucketEntry {
   key: string;
@@ -80,11 +81,14 @@ interface IAgentInfo {
 
 const Scheduling: React.FC = () => {
   const { addToast, selectedProjectId, globalModeLoading } = useStore();
-  const [activeTab, setActiveTab] = useState('overview');
   const [toggling, setToggling] = useState(false);
   const [saving, setSaving] = useState(false);
   const [updatingJob, setUpdatingJob] = useState<string | null>(null);
   const [triggeringJob, setTriggeringJob] = useState<string | null>(null);
+
+  // Collapsible section states (default collapsed)
+  const [expandedCrontab, setExpandedCrontab] = useState(false);
+  const [expandedParallelism, setExpandedParallelism] = useState(false);
 
   const [allProjectConfigs, setAllProjectConfigs] = useState<Array<{ projectId: string; config: INightWatchConfig }>>([]);
   const [queueStatus, setQueueStatus] = useState<IQueueStatus | null>(null);
@@ -594,245 +598,296 @@ const Scheduling: React.FC = () => {
     return `${activeTemplate.label} - ${activeTemplate.hints[job]}`;
   };
 
-  const tabs = [
-    {
-      id: 'overview',
-      label: 'Overview',
-      content: (
-        <div className="space-y-6">
-          <Card className={`p-6 border-2 ${statusColor}`}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <Clock className="h-8 w-8" />
-                <div>
-                  <div className="text-sm text-slate-400">Automation Status</div>
-                  <div className="text-2xl font-bold">{statusText}</div>
-                  <div className="text-sm text-slate-500 mt-1">
-                    Automatic balancing spreads registered projects before queueing overlaps.
-                  </div>
-                </div>
-              </div>
-              <Button
-                variant={isPaused ? 'primary' : 'outline'}
-                size="lg"
-                onClick={handlePauseResume}
-                loading={toggling}
-              >
-                {isPaused ? (
-                  <>
-                    <Play className="h-5 w-5 mr-2" />
-                    Resume
-                  </>
-                ) : (
-                  <>
-                    <Pause className="h-5 w-5 mr-2" />
-                    Pause
-                  </>
-                )}
-              </Button>
+  // Handler for resetting schedule config
+  const handleResetScheduleConfig = () => {
+    if (config) {
+      const resetTemplate = resolveActiveTemplate(
+        config.scheduleBundleId,
+        config.cronSchedule,
+        config.reviewerSchedule,
+        config.qa?.schedule || '45 2,14 * * *',
+        config.audit?.schedule || '50 3 * * 1',
+        config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+      );
+      const resetBuckets = config.queue?.providerBuckets ?? {};
+      setEditState({
+        form: {
+          cronSchedule: config.cronSchedule || '5 */3 * * *',
+          reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
+          qa: config.qa || { schedule: '45 2,14 * * *', enabled: true },
+          audit: config.audit || { schedule: '50 3 * * 1', enabled: true },
+          analytics: config.analytics || { schedule: '0 6 * * 1', enabled: false },
+          roadmapScanner: {
+            enabled: config.roadmapScanner?.enabled ?? true,
+            slicerSchedule: config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+          },
+          scheduleBundleId: config.scheduleBundleId ?? null,
+          schedulingPriority: config.schedulingPriority ?? 3,
+          cronScheduleOffset: config.cronScheduleOffset ?? 0,
+          globalQueueEnabled: config.queue?.enabled ?? true,
+        },
+        scheduleMode: resetTemplate ? 'template' : 'custom',
+        selectedTemplateId: resetTemplate?.id ?? '',
+        isDirty: false,
+        queueMode: config.queue?.mode ?? 'auto',
+        providerBuckets: Object.entries(resetBuckets).map(([key, val]) => ({
+          key,
+          maxConcurrency: val.maxConcurrency,
+        })),
+      });
+      setShowAddBucket(false);
+      setNewBucketKey('');
+      setNewBucketConcurrency('1');
+    }
+  };
+
+  // Handler for resetting parallelism config
+  const handleResetParallelism = () => {
+    if (config) {
+      const resetBuckets = config.queue?.providerBuckets ?? {};
+      setEditState((prev) => ({
+        ...prev,
+        queueMode: config.queue?.mode ?? 'auto',
+        globalMaxConcurrency: config.queue?.maxConcurrency ?? 1,
+        providerBuckets: Object.entries(resetBuckets).map(([key, val]) => ({
+          key,
+          maxConcurrency: val.maxConcurrency,
+        })),
+        isDirty: false,
+      }));
+      setShowAddBucket(false);
+      setNewBucketKey('');
+      setNewBucketConcurrency('1');
+    }
+  };
+
+  return (
+    <div className="space-y-6 max-w-6xl mx-auto">
+      {/* Page Header */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold text-slate-100">Scheduling</h1>
+        {activeTemplate && (
+          <div className="text-right">
+            <div className="text-xs uppercase tracking-wide text-slate-500">Schedule Bundle</div>
+            <div className="text-sm font-medium text-indigo-300">{activeTemplate.label}</div>
+            <div className="text-xs text-slate-500">
+              Priority {scheduleInfo.schedulingPriority}/5 across registered projects
             </div>
-          </Card>
-
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold text-slate-200 mb-4">Agents</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {agents.map((agent) => (
-                <div
-                  key={agent.id}
-                  className={`p-4 rounded-lg border ${agent.enabled ? 'border-slate-800' : 'border-slate-800 opacity-50'}`}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      {agent.icon}
-                      <h4 className="text-base font-semibold text-slate-200">{agent.name}</h4>
-                    </div>
-                    <Switch
-                      checked={agent.enabled}
-                      disabled={updatingJob !== null}
-                      aria-label={`Toggle ${agent.name.toLowerCase()} automation`}
-                      onChange={(checked) => handleJobToggle(agent.id, checked)}
-                    />
-                  </div>
-
-                  {agent.enabled ? (
-                    <div className="space-y-3 mt-3">
-                      <div>
-                        <div className="text-sm text-slate-400">Schedule</div>
-                        <div className="text-sm text-slate-200 font-medium">
-                          {formatScheduleLabel(
-                            (agent.id === 'planner' ? 'slicer' : agent.id) as 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics',
-                            agent.id === 'qa'
-                              ? config?.qa?.schedule || ''
-                              : agent.id === 'audit'
-                              ? config?.audit?.schedule || ''
-                              : agent.id === 'planner'
-                              ? config?.roadmapScanner?.slicerSchedule || '35 */12 * * *'
-                              : agent.id === 'analytics'
-                              ? config?.analytics?.schedule || '0 6 * * 1'
-                              : agent.schedule,
-                            agent.id === 'qa'
-                              ? config?.qa?.schedule || ''
-                              : agent.id === 'audit'
-                              ? config?.audit?.schedule || ''
-                              : agent.id === 'planner'
-                              ? config?.roadmapScanner?.slicerSchedule || '35 */12 * * *'
-                              : agent.id === 'analytics'
-                              ? config?.analytics?.schedule || '0 6 * * 1'
-                              : agent.schedule,
-                          )}
-                        </div>
-                      </div>
-                      {renderDelayNote(agent.delayInfo)}
-                      <div>
-                        <div className="text-sm text-slate-400">Next Run</div>
-                        {renderNextRun(agent.nextRun)}
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className={`flex items-center space-x-2 text-sm ${agent.enabled ? 'text-green-400' : 'text-amber-400'}`}>
-                          <Check className="h-4 w-4" />
-                          <span>{agent.enabled ? 'Active' : 'Disabled'}</span>
-                        </div>
-                        <button
-                          disabled={triggeringJob !== null}
-                          onClick={() => handleTriggerJob(agent.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-green-400 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 hover:border-green-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                        >
-                          {triggeringJob === agent.id ? (
-                            <div className="h-3 w-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <Play className="h-3 w-3 fill-current" />
-                          )}
-                          Run now
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-slate-500 text-sm">{agent.name} is disabled.</div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-      ),
-    },
-    {
-      id: 'schedules',
-      label: 'Schedules',
-      content: (
-        <div className="space-y-6">
-          <ScheduleTimeline
-            configs={allProjectConfigs}
-            currentProjectId={selectedProjectId ?? undefined}
-            onEditJob={(_projectId, _jobType) => { /* timeline click in schedules tab */ }}
-            queueStatus={queueStatus}
-            queueAnalytics={queueAnalytics}
-          />
-          <ScheduleConfig
-            form={editState.form}
-            scheduleMode={editState.scheduleMode}
-            selectedTemplateId={editState.selectedTemplateId}
-            onFieldChange={handleFieldChange}
-            onSwitchToTemplate={switchToTemplateMode}
-            onSwitchToCustom={switchToCustomMode}
-            onApplyTemplate={applyTemplate}
-          />
-
-          <div className="flex justify-end pt-4">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                if (config) {
-                  const resetTemplate = resolveActiveTemplate(
-                    config.scheduleBundleId,
-                    config.cronSchedule,
-                    config.reviewerSchedule,
-                    config.qa?.schedule || '45 2,14 * * *',
-                    config.audit?.schedule || '50 3 * * 1',
-                    config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
-                  );
-                  const resetBuckets = config.queue?.providerBuckets ?? {};
-                  setEditState({
-                    form: {
-                      cronSchedule: config.cronSchedule || '5 */3 * * *',
-                      reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
-                      qa: config.qa || { schedule: '45 2,14 * * *', enabled: true },
-                      audit: config.audit || { schedule: '50 3 * * 1', enabled: true },
-                      analytics: config.analytics || { schedule: '0 6 * * 1', enabled: false },
-                      roadmapScanner: {
-                        enabled: config.roadmapScanner?.enabled ?? true,
-                        slicerSchedule: config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
-                      },
-                      scheduleBundleId: config.scheduleBundleId ?? null,
-                      schedulingPriority: config.schedulingPriority ?? 3,
-                      cronScheduleOffset: config.cronScheduleOffset ?? 0,
-                      globalQueueEnabled: config.queue?.enabled ?? true,
-                    },
-                    scheduleMode: resetTemplate ? 'template' : 'custom',
-                    selectedTemplateId: resetTemplate?.id ?? '',
-                    isDirty: false,
-                    queueMode: config.queue?.mode ?? 'auto',
-                    providerBuckets: Object.entries(resetBuckets).map(([key, val]) => ({
-                      key,
-                      maxConcurrency: val.maxConcurrency,
-                    })),
-                  });
-                  setShowAddBucket(false);
-                  setNewBucketKey('');
-                  setNewBucketConcurrency('1');
-                }
-              }}
-              disabled={!editState.isDirty}
-            >
-              Reset
-            </Button>
-            <Button onClick={handleSaveAndInstall} loading={saving} disabled={!editState.isDirty}>
-              <Check className="h-4 w-4 mr-2" />
-              Save & Install
-            </Button>
           </div>
+        )}
+      </div>
+
+      {/* Section A: Global Controls */}
+      <Card className={`p-6 border-2 ${statusColor}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Clock className="h-8 w-8" />
+            <div>
+              <div className="text-sm text-slate-400">Automation Status</div>
+              <div className="text-2xl font-bold">{statusText}</div>
+              <div className="text-sm text-slate-500 mt-1">
+                Automatic balancing spreads registered projects before queueing overlaps.
+              </div>
+            </div>
+          </div>
+          <Button
+            variant={isPaused ? 'primary' : 'outline'}
+            size="lg"
+            onClick={handlePauseResume}
+            loading={toggling}
+          >
+            {isPaused ? (
+              <>
+                <Play className="h-5 w-5 mr-2" />
+                Resume
+              </>
+            ) : (
+              <>
+                <Pause className="h-5 w-5 mr-2" />
+                Pause
+              </>
+            )}
+          </Button>
         </div>
-      ),
-    },
-    {
-      id: 'crontab',
-      label: 'Crontab',
-      content: (
-        <Card className="p-6">
-          <div className="flex items-center space-x-2 mb-4">
+      </Card>
+
+      {/* Section B: Agent Schedule Cards */}
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold text-slate-200 mb-4">Agents</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {agents.map((agent) => (
+            <div
+              key={agent.id}
+              className={`p-4 rounded-lg border ${agent.enabled ? 'border-slate-800' : 'border-slate-800 opacity-50'}`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  {agent.icon}
+                  <h4 className="text-base font-semibold text-slate-200">{agent.name}</h4>
+                </div>
+                <Switch
+                  checked={agent.enabled}
+                  disabled={updatingJob !== null}
+                  aria-label={`Toggle ${agent.name.toLowerCase()} automation`}
+                  onChange={(checked) => handleJobToggle(agent.id, checked)}
+                />
+              </div>
+
+              {agent.enabled ? (
+                <div className="space-y-3 mt-3">
+                  <div>
+                    <div className="text-sm text-slate-400">Schedule</div>
+                    <div className="text-sm text-slate-200 font-medium">
+                      {formatScheduleLabel(
+                        (agent.id === 'planner' ? 'slicer' : agent.id) as 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics',
+                        agent.id === 'qa'
+                          ? config?.qa?.schedule || ''
+                          : agent.id === 'audit'
+                          ? config?.audit?.schedule || ''
+                          : agent.id === 'planner'
+                          ? config?.roadmapScanner?.slicerSchedule || '35 */12 * * *'
+                          : agent.id === 'analytics'
+                          ? config?.analytics?.schedule || '0 6 * * 1'
+                          : agent.schedule,
+                        agent.id === 'qa'
+                          ? config?.qa?.schedule || ''
+                          : agent.id === 'audit'
+                          ? config?.audit?.schedule || ''
+                          : agent.id === 'planner'
+                          ? config?.roadmapScanner?.slicerSchedule || '35 */12 * * *'
+                          : agent.id === 'analytics'
+                          ? config?.analytics?.schedule || '0 6 * * 1'
+                          : agent.schedule,
+                      )}
+                    </div>
+                  </div>
+                  {renderDelayNote(agent.delayInfo)}
+                  <div>
+                    <div className="text-sm text-slate-400">Next Run</div>
+                    {renderNextRun(agent.nextRun)}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className={`flex items-center space-x-2 text-sm ${agent.enabled ? 'text-green-400' : 'text-amber-400'}`}>
+                      <Check className="h-4 w-4" />
+                      <span>{agent.enabled ? 'Active' : 'Disabled'}</span>
+                    </div>
+                    <button
+                      disabled={triggeringJob !== null}
+                      onClick={() => handleTriggerJob(agent.id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-green-400 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 hover:border-green-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {triggeringJob === agent.id ? (
+                        <div className="h-3 w-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Play className="h-3 w-3 fill-current" />
+                      )}
+                      Run now
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-slate-500 text-sm">{agent.name} is disabled.</div>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Section C: Configure Schedules */}
+      <div className="space-y-6">
+        <ScheduleTimeline
+          configs={allProjectConfigs}
+          currentProjectId={selectedProjectId ?? undefined}
+          onEditJob={(_projectId, _jobType) => { /* timeline click handler */ }}
+          queueStatus={queueStatus}
+          queueAnalytics={queueAnalytics}
+        />
+        <ScheduleConfig
+          form={editState.form}
+          scheduleMode={editState.scheduleMode}
+          selectedTemplateId={editState.selectedTemplateId}
+          onFieldChange={handleFieldChange}
+          onSwitchToTemplate={switchToTemplateMode}
+          onSwitchToCustom={switchToCustomMode}
+          onApplyTemplate={applyTemplate}
+        />
+
+        <div className="flex justify-end pt-4">
+          <Button
+            variant="ghost"
+            onClick={handleResetScheduleConfig}
+            disabled={!editState.isDirty}
+          >
+            Reset
+          </Button>
+          <Button onClick={handleSaveAndInstall} loading={saving} disabled={!editState.isDirty}>
+            <Check className="h-4 w-4 mr-2" />
+            Save & Install
+          </Button>
+        </div>
+      </div>
+
+      {/* Section D: Cron Entries (Collapsible) */}
+      <Card className="overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setExpandedCrontab(!expandedCrontab)}
+          className="w-full p-6 flex items-center justify-between hover:bg-slate-800/50 transition-colors"
+        >
+          <div className="flex items-center space-x-2">
             <Calendar className="h-5 w-5 text-slate-400" />
             <h3 className="text-lg font-semibold text-slate-200">Active Crontab Entries</h3>
+            <span className="text-sm text-slate-500 ml-2">
+              ({scheduleInfo.entries.length} {scheduleInfo.entries.length === 1 ? 'entry' : 'entries'})
+            </span>
           </div>
-          {scheduleInfo.entries.length === 0 ? (
-            <div className="text-slate-500 text-sm">No crontab entries found.</div>
+          {expandedCrontab ? (
+            <ChevronDown className="h-5 w-5 text-slate-400" />
           ) : (
-            <div className="space-y-2">
-              {scheduleInfo.entries.map((entry, idx) => (
-                <div key={idx} className="bg-slate-950/50 rounded-lg p-3 font-mono text-sm text-slate-300 border border-slate-800">
-                  {entry}
-                </div>
-              ))}
-            </div>
+            <ChevronRight className="h-5 w-5 text-slate-400" />
           )}
-        </Card>
-      ),
-    },
-    {
-      id: 'parallelism',
-      label: 'Parallelism',
-      content: (
-        <div className="space-y-6">
-          <Card className="p-6 space-y-6">
-            <div className="flex items-center gap-3">
-              <Zap className="h-5 w-5 text-indigo-400" />
-              <div>
-                <h3 className="text-lg font-medium text-slate-200">Provider Buckets</h3>
-                <p className="text-sm text-slate-400">
-                  Control how jobs from different AI providers are dispatched concurrently.
-                </p>
+        </button>
+        {expandedCrontab && (
+          <div className="px-6 pb-6 pt-2 border-t border-slate-800">
+            {scheduleInfo.entries.length === 0 ? (
+              <div className="text-slate-500 text-sm">No crontab entries found.</div>
+            ) : (
+              <div className="space-y-2">
+                {scheduleInfo.entries.map((entry, idx) => (
+                  <div key={idx} className="bg-slate-950/50 rounded-lg p-3 font-mono text-sm text-slate-300 border border-slate-800">
+                    {entry}
+                  </div>
+                ))}
               </div>
-            </div>
+            )}
+          </div>
+        )}
+      </Card>
 
+      {/* Section E: Parallelism & Queue (Collapsible) */}
+      <Card className="overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setExpandedParallelism(!expandedParallelism)}
+          className="w-full p-6 flex items-center justify-between hover:bg-slate-800/50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <Zap className="h-5 w-5 text-indigo-400" />
+            <div className="text-left">
+              <h3 className="text-lg font-medium text-slate-200">Parallelism & Queue</h3>
+              <p className="text-sm text-slate-400">
+                Control how jobs from different AI providers are dispatched concurrently.
+              </p>
+            </div>
+          </div>
+          {expandedParallelism ? (
+            <ChevronDown className="h-5 w-5 text-slate-400" />
+          ) : (
+            <ChevronRight className="h-5 w-5 text-slate-400" />
+          )}
+        </button>
+        {expandedParallelism && (
+          <div className="px-6 pb-6 pt-2 border-t border-slate-800 space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Select
                 label="Dispatch Mode"
@@ -988,59 +1043,23 @@ const Scheduling: React.FC = () => {
                 )}
               </div>
             )}
-          </Card>
 
-          <div className="flex justify-end pt-4">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                if (config) {
-                  const resetBuckets = config.queue?.providerBuckets ?? {};
-                  setEditState((prev) => ({
-                    ...prev,
-                    queueMode: config.queue?.mode ?? 'auto',
-                    globalMaxConcurrency: config.queue?.maxConcurrency ?? 1,
-                    providerBuckets: Object.entries(resetBuckets).map(([key, val]) => ({
-                      key,
-                      maxConcurrency: val.maxConcurrency,
-                    })),
-                    isDirty: false,
-                  }));
-                  setShowAddBucket(false);
-                  setNewBucketKey('');
-                  setNewBucketConcurrency('1');
-                }
-              }}
-              disabled={!editState.isDirty}
-            >
-              Reset
-            </Button>
-            <Button onClick={handleSaveAndInstall} loading={saving} disabled={!editState.isDirty}>
-              <Check className="h-4 w-4 mr-2" />
-              Save & Install
-            </Button>
-          </div>
-        </div>
-      ),
-    },
-  ];
-
-  return (
-    <div className="space-y-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-slate-100">Scheduling</h1>
-        {activeTemplate && (
-          <div className="text-right">
-            <div className="text-xs uppercase tracking-wide text-slate-500">Schedule Bundle</div>
-            <div className="text-sm font-medium text-indigo-300">{activeTemplate.label}</div>
-            <div className="text-xs text-slate-500">
-              Priority {scheduleInfo.schedulingPriority}/5 across registered projects
+            <div className="flex justify-end pt-4">
+              <Button
+                variant="ghost"
+                onClick={handleResetParallelism}
+                disabled={!editState.isDirty}
+              >
+                Reset
+              </Button>
+              <Button onClick={handleSaveAndInstall} loading={saving} disabled={!editState.isDirty}>
+                <Check className="h-4 w-4 mr-2" />
+                Save & Install
+              </Button>
             </div>
           </div>
         )}
-      </div>
-
-      <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+      </Card>
     </div>
   );
 };
