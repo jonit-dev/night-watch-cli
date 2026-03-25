@@ -55,6 +55,25 @@ export function shouldSendReviewNotification(scriptStatus?: string): boolean {
 }
 
 /**
+ * Review completion notifications are only valid for successful reviewer runs.
+ * Guard against both non-zero exits and mismatched legacy status markers.
+ */
+export function shouldSendReviewCompletionNotification(
+  exitCode: number,
+  scriptStatus?: string,
+): boolean {
+  if (exitCode !== 0) {
+    return false;
+  }
+
+  if (scriptStatus === 'failure' || scriptStatus === 'timeout') {
+    return false;
+  }
+
+  return shouldSendReviewNotification(scriptStatus);
+}
+
+/**
  * Parse comma-separated PR numbers like "#12,#34" into numeric IDs.
  */
 export function parseAutoMergedPrNumbers(raw?: string): number[] {
@@ -486,15 +505,18 @@ export function reviewCommand(program: Command): void {
 
         // Send notifications (fire-and-forget, failures do not affect exit code)
         if (!options.dryRun) {
-          const skipNotification = !shouldSendReviewNotification(scriptResult?.status);
+          const shouldNotifyCompletion = shouldSendReviewCompletionNotification(
+            exitCode,
+            scriptResult?.status,
+          );
 
-          if (skipNotification) {
-            info('Skipping review notification (no actionable review result)');
+          if (!shouldNotifyCompletion) {
+            info('Skipping review completion notification (review did not complete successfully)');
           }
 
           // Enrich with PR details (graceful — null if gh fails)
           let fallbackPrDetails: IPrDetails | null = null;
-          if (!skipNotification && exitCode === 0) {
+          if (shouldNotifyCompletion) {
             const reviewedPrNumbers = parseReviewedPrNumbers(scriptResult?.data.prs);
             const firstReviewedPrNumber = reviewedPrNumbers[0];
             if (firstReviewedPrNumber !== undefined) {
@@ -506,7 +528,7 @@ export function reviewCommand(program: Command): void {
             }
           }
 
-          if (!skipNotification) {
+          if (shouldNotifyCompletion) {
             // Extract retry attempts from script result
             const attempts = parseRetryAttempts(scriptResult?.data.attempts);
             const finalScore = parseFinalReviewScore(scriptResult?.data.final_score);
