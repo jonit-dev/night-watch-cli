@@ -292,16 +292,16 @@ const JobsTab: React.FC<IJobsTabProps> = ({ form, updateField, handleRoadmapTogg
               />
               <Select
                 label="Planner Issue Column"
-                value={form.roadmapScanner.issueColumn || 'Draft'}
+                value={form.roadmapScanner.issueColumn || 'Ready'}
                 onChange={(val) =>
                   updateField('roadmapScanner', {
                     ...form.roadmapScanner,
-                    issueColumn: val === 'Ready' ? 'Ready' : 'Draft',
+                    issueColumn: val === 'Draft' ? 'Draft' : 'Ready',
                   })
                 }
                 options={[
-                  { label: 'Draft (default)', value: 'Draft' },
-                  { label: 'Ready', value: 'Ready' },
+                  { label: 'Ready (default)', value: 'Ready' },
+                  { label: 'Draft', value: 'Draft' },
                 ]}
                 helperText="Column where planner-created issues are added after PRD generation."
               />

@@ -98,7 +98,7 @@ export const DEFAULT_ROADMAP_SCANNER: IRoadmapScannerConfig = {
   slicerSchedule: DEFAULT_SLICER_SCHEDULE,
   slicerMaxRuntime: DEFAULT_SLICER_MAX_RUNTIME,
   priorityMode: 'roadmap-first',
-  issueColumn: 'Draft',
+  issueColumn: 'Ready',
 };
 
 // Templates Configuration
