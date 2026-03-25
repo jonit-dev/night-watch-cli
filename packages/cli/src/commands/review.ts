@@ -158,6 +158,42 @@ export function parseFinalReviewScore(raw?: string): number | undefined {
 }
 
 /**
+ * Post a "ready for human review" comment and add a label to the PR.
+ * Silently ignores failures — gh CLI may not be available.
+ */
+export function postReadyForHumanReviewComment(
+  prNumber: number,
+  finalScore: number | undefined,
+  cwd: string,
+): void {
+  const scoreNote = finalScore !== undefined ? ` (score: ${finalScore}/100)` : '';
+  const body =
+    `## ✅ Ready for Human Review\n\n` +
+    `Night Watch has reviewed this PR${scoreNote} and found no issues requiring automated fixes.\n\n` +
+    `This PR is ready for human code review and merge.`;
+
+  try {
+    execFileSync('gh', ['pr', 'comment', String(prNumber), '--body', body], {
+      cwd,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch {
+    // gh CLI unavailable or not authenticated — ignore
+  }
+
+  try {
+    execFileSync('gh', ['pr', 'edit', String(prNumber), '--add-label', 'ready-for-review'], {
+      cwd,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch {
+    // Label may not exist yet — ignore
+  }
+}
+
+/**
  * Build environment variables map from config and CLI options for reviewer
  */
 export function buildEnvVars(
@@ -519,6 +555,10 @@ export function reviewCommand(program: Command): void {
                   fallbackPrDetails?.number === target.prNumber
                     ? fallbackPrDetails
                     : fetchPrDetailsByNumber(target.prNumber, projectDir);
+
+                if (target.noChangesNeeded && prDetails?.number) {
+                  postReadyForHumanReviewComment(prDetails.number, finalScore, projectDir);
+                }
 
                 const reviewEvent = target.noChangesNeeded
                   ? ('review_ready_for_human' as const)
