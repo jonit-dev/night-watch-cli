@@ -877,10 +877,10 @@ describe('config', () => {
       expect(config.roadmapScanner.slicerMaxRuntime).toBe(600);
     });
 
-    it('should default planner issueColumn to Draft', () => {
+    it('should default planner issueColumn to Ready', () => {
       const config = loadConfig(tempDir);
 
-      expect(config.roadmapScanner.issueColumn).toBe('Draft');
+      expect(config.roadmapScanner.issueColumn).toBe('Ready');
     });
 
     it('should default planner priorityMode to roadmap-first', () => {
@@ -1928,7 +1928,7 @@ describe('config', () => {
       expect(config.roadmapScanner.autoScanInterval).toBe(300);
       expect(config.roadmapScanner.roadmapPath).toBe('ROADMAP.md');
       expect(config.roadmapScanner.priorityMode).toBe('roadmap-first');
-      expect(config.roadmapScanner.issueColumn).toBe('Draft');
+      expect(config.roadmapScanner.issueColumn).toBe('Ready');
     });
 
     it('jobProviders from file replaces default (replace semantics)', () => {
