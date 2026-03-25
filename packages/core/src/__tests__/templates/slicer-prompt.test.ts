@@ -74,7 +74,7 @@ describe("slicer-prompt", () => {
 
       const result = renderSlicerPrompt(vars);
 
-      expect(result).toContain("COMPLEXITY SCORE");
+      expect(result).toContain("Complexity Scoring");
       expect(result).toContain("Touches 1-5 files");
       expect(result).toContain("LOW");
       expect(result).toContain("MEDIUM");
@@ -128,7 +128,7 @@ describe("slicer-prompt", () => {
     it("should load template from file", () => {
       const template = loadSlicerTemplate();
 
-      expect(template).toContain("PRD Creator Agent");
+      expect(template).toContain("Principal Software Architect");
       expect(template).toContain("{{TITLE}}");
       expect(template).toContain("{{SECTION}}");
       expect(template).toContain("{{DESCRIPTION}}");
