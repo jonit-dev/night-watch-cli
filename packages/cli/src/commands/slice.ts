@@ -89,7 +89,7 @@ function releasePlannerLock(lockFile: string): void {
 }
 
 function resolvePlannerIssueColumn(config: INightWatchConfig): BoardColumnName {
-  return config.roadmapScanner.issueColumn === 'Ready' ? 'Ready' : 'Draft';
+  return config.roadmapScanner.issueColumn === 'Draft' ? 'Draft' : 'Ready';
 }
 
 export function buildPlannerIssueBody(
