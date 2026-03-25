@@ -34,6 +34,7 @@ import {
   buildReviewNotificationTargets,
   isFailingCheck,
   shouldSendReviewNotification,
+  shouldSendReviewCompletionNotification,
 } from '@/cli/commands/review.js';
 import { INightWatchConfig } from '@night-watch/core/types.js';
 import { sendNotifications } from '@night-watch/core/utils/notify.js';
@@ -319,6 +320,28 @@ describe('review command', () => {
       expect(shouldSendReviewNotification('success_reviewed')).toBe(true);
       expect(shouldSendReviewNotification('failure')).toBe(true);
       expect(shouldSendReviewNotification('timeout')).toBe(true);
+    });
+  });
+
+  describe('shouldSendReviewCompletionNotification', () => {
+    it('should send completion notifications for successful review completions', () => {
+      expect(shouldSendReviewCompletionNotification(0, 'success_reviewed')).toBe(true);
+      expect(shouldSendReviewCompletionNotification(0, undefined)).toBe(true);
+    });
+
+    it('should suppress completion notifications for no-op outcomes', () => {
+      expect(shouldSendReviewCompletionNotification(0, 'skip_no_open_prs')).toBe(false);
+      expect(shouldSendReviewCompletionNotification(0, 'queued')).toBe(false);
+    });
+
+    it('should suppress completion notifications when reviewer fails or times out', () => {
+      expect(shouldSendReviewCompletionNotification(1, 'failure')).toBe(false);
+      expect(shouldSendReviewCompletionNotification(124, 'timeout')).toBe(false);
+    });
+
+    it('should defensively suppress failure markers even if the exit code is zero', () => {
+      expect(shouldSendReviewCompletionNotification(0, 'failure')).toBe(false);
+      expect(shouldSendReviewCompletionNotification(0, 'timeout')).toBe(false);
     });
   });
 

@@ -1037,9 +1037,7 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_TARGET_PR: '', // No target PR (use global lock)
     });
 
-    // Note: Reviewer script currently exits 0 on timeout (missing explicit exit code)
-    // The timeout is still emitted in stdout
-    expect(result.status).toBe(0);
+    expect(result.status).toBe(124);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:timeout');
   });
 
@@ -1534,7 +1532,7 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_SMOKE_LABEL_FILE: labelFile,
     });
 
-    expect(result.status).toBe(0);
+    expect(result.status).toBe(1);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure');
     expect(result.stdout).toContain('attempts=2');
     expect(fs.readFileSync(labelFile, 'utf-8')).toContain(
@@ -1742,9 +1740,7 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_TARGET_PR: '', // No target PR (use global lock)
     });
 
-    // Note: Reviewer script currently exits 0 on failure (missing explicit exit code propagation)
-    // The failure is still emitted in stdout via emit_final_status
-    expect(result.status).toBe(0);
+    expect(result.status).toBe(1);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure');
   });
 
@@ -1816,7 +1812,7 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_TARGET_PR: '', // No target PR (use global lock)
     });
 
-    expect(result.status).toBe(0);
+    expect(result.status).toBe(1);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure');
 
     const argv = fs.readFileSync(argsFile, 'utf-8').split('\0').filter(Boolean);
@@ -1875,14 +1871,18 @@ describe('core flow smoke tests (bash scripts)', () => {
         'fi\n' +
         'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
         '  if [[ "$args" == *"number,headRefName"* ]]; then\n' +
-        "    printf '31\\tnight-watch/parallel-timeout\\n32\\tnight-watch/parallel-success\\n'\n" +
+        "    printf '31\\tnight-watch/parallel-timeout\\t\\n32\\tnight-watch/parallel-success\\t\\n'\n" +
         '  else\n' +
         "    printf 'night-watch/parallel-timeout\\nnight-watch/parallel-success\\n'\n" +
         '  fi\n' +
         '  exit 0\n' +
         'fi\n' +
         'if [[ "$1" == "pr" && "$2" == "checks" ]]; then\n' +
-        "  echo 'fail 1/1 checks'\n" +
+        '  if [[ "$args" == *"--json"* ]]; then\n' +
+        "    echo '[{\"bucket\":\"fail\",\"state\":\"failure\",\"conclusion\":\"failure\",\"name\":\"test-check\"}]'\n" +
+        '  else\n' +
+        "    echo 'fail 1/1 checks'\n" +
+        '  fi\n' +
         '  exit 1\n' +
         'fi\n' +
         'exit 0\n',
