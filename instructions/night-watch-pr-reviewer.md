@@ -21,7 +21,8 @@ If current PR code or review feedback conflicts with the PRD context, call out t
 ## Important: Early Exit
 
 - If there are **no open PRs** on `night-watch/` or `feat/` branches, **stop immediately** and report "No PRs to review."
-- If all open PRs have **no merge conflicts**, **passing CI**, and **review score >= 80** (or no review score yet), **stop immediately** and report "All PRs are in good shape."
+- If all open PRs have **no merge conflicts**, **passing CI**, and **review score >= 80**, **stop immediately** and report "All PRs are in good shape."
+- If a PR has no review score yet, it needs a first review — do NOT skip it.
 - Do **NOT** loop or retry. Process each PR **once** per run. After processing all PRs, stop.
 - Do **NOT** re-check PRs after pushing fixes -- the CI will re-run automatically on the next push.
 
@@ -90,7 +91,48 @@ Parse the review score from the comment body. Look for patterns like:
 
 3. **Determine if PR needs work**:
    - If no merge conflicts **AND** score >= 80 **AND** all CI checks pass --> skip this PR.
-   - If merge conflicts present **OR** score < 80 **OR** any CI check failed --> fix the issues.
+   - If **no review score exists yet** --> this PR needs its first review (see Mode: Review below).
+   - If merge conflicts present **OR** score < 80 **OR** any CI check failed --> fix the issues (see Mode: Fix below).
+
+## Mode: Review (when no review score exists yet)
+
+When a PR has no review score, post an initial review instead of fixing issues:
+
+1. Fetch the PR diff: `gh pr diff <number>`
+2. Review the code using these criteria:
+   - **Correctness**: logic errors, edge cases, off-by-one errors
+   - **Code quality**: readability, naming, dead code, complexity
+   - **Tests**: missing tests, inadequate coverage
+   - **Performance**: obvious bottlenecks, unnecessary work
+   - **Security**: injection, XSS, secrets in code, unsafe patterns
+   - **Conventions**: follows project CLAUDE.md / coding standards
+3. Post a review comment in this exact format (so the score can be parsed):
+
+```
+gh pr comment <number> --body "## PR Review
+
+### Summary
+<1-2 sentence summary of what the PR does>
+
+### Issues Found
+
+| Category | Confidence | Issue |
+|----------|-----------|-------|
+| <category> | High/Medium/Low | <description> |
+
+### Strengths
+- <strength 1>
+
+**Overall Score:** <XX>/100
+
+> 🔍 Reviewed by <provider>"
+```
+
+4. **Do NOT fix anything** — just post the review and stop. The next reviewer run will address the issues.
+
+## Mode: Fix (when review score < threshold)
+
+When the cron script injects `- action: fix` in the ## Target Scope section, follow the fix steps in section 4 below. Read the injected review body from `## Latest Review Feedback` to know what to address.
 
 4. **Fix the PR**:
 

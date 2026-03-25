@@ -234,8 +234,10 @@ export function createQueueCommand(): Command {
     .command('dispatch')
     .description('Dispatch the next pending job (used by cron scripts)')
     .option('--log <file>', 'Log file to write dispatch output')
-    .action((_opts: { log?: string }) => {
-      const entry = dispatchNextJob(loadConfig(process.cwd()).queue);
+    .option('--project-dir <dir>', 'Project directory to load queue config from (defaults to cwd)')
+    .action((_opts: { log?: string; projectDir?: string }) => {
+      const configDir = _opts.projectDir ?? process.cwd();
+      const entry = dispatchNextJob(loadConfig(configDir).queue);
 
       if (!entry) {
         logger.info('No pending jobs to dispatch');
@@ -350,8 +352,10 @@ export function createQueueCommand(): Command {
   queue
     .command('can-start')
     .description('Return a zero exit status when the global queue has an available slot')
-    .action(() => {
-      const queueConfig = loadConfig(process.cwd()).queue;
+    .option('--project-dir <dir>', 'Project directory to load queue config from (defaults to cwd)')
+    .action((opts: { projectDir?: string }) => {
+      const configDir = opts.projectDir ?? process.cwd();
+      const queueConfig = loadConfig(configDir).queue;
       process.exit(canStartJob(queueConfig) ? 0 : 1);
     });
 
@@ -405,6 +409,8 @@ const QUEUE_MARKER_KEYS = new Set([
   'NW_PRD_DIR',
   'NW_AUTO_MERGE',
   'NW_AUTO_MERGE_METHOD',
+  'NW_MAX_RUNTIME',
+  'NW_QA_MAX_RUNTIME',
 ]);
 
 /**

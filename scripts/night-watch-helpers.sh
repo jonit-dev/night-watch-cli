@@ -1158,7 +1158,7 @@ dispatch_next_queued_job() {
   log "QUEUE: Checking for pending jobs to dispatch"
 
   # Call CLI to dispatch next job (this handles priority, expiration, and spawning)
-  "${cli_bin}" queue dispatch --log "${LOG_FILE:-/dev/null}" 2>/dev/null || true
+  "${cli_bin}" queue dispatch --project-dir "${PROJECT_DIR:-$(pwd)}" --log "${LOG_FILE:-/dev/null}" 2>/dev/null || true
 }
 
 complete_queued_job() {
