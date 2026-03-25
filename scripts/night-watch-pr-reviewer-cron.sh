@@ -1204,7 +1204,8 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
 	        fi
 	        continue
 	      fi
-	      log "RETRY: No review score found for PR #${TARGET_PR} after ${TOTAL_ATTEMPTS} attempts; failing run."
+	      log "RETRY: No review score found for PR #${TARGET_PR} after ${TOTAL_ATTEMPTS} attempts; labeling needs-human-review and failing run."
+	      gh pr edit "${TARGET_PR}" --add-label "needs-human-review" 2>/dev/null || true
       EXIT_CODE=1
       break
     fi
