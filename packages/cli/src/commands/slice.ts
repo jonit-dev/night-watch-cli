@@ -92,7 +92,7 @@ function resolvePlannerIssueColumn(config: INightWatchConfig): BoardColumnName {
   return config.roadmapScanner.issueColumn === 'Ready' ? 'Ready' : 'Draft';
 }
 
-function buildPlannerIssueBody(
+export function buildPlannerIssueBody(
   projectDir: string,
   config: INightWatchConfig,
   result: ISliceResult,
@@ -110,27 +110,25 @@ function buildPlannerIssueBody(
 
   const maxBodyChars = 60000;
   const truncated = prdContent.length > maxBodyChars;
-  const prdPreview = truncated
-    ? `${prdContent.slice(0, maxBodyChars)}\n\n...[truncated]`
-    : prdContent;
+  const prdBody = truncated ? `${prdContent.slice(0, maxBodyChars)}\n\n...[truncated]` : prdContent;
 
-  const sourceLines = sourceItem
-    ? [
-        `- Source section: ${sourceItem.section}`,
-        `- Source item: ${sourceItem.title}`,
-        sourceItem.description ? `- Source summary: ${sourceItem.description}` : '',
-      ].filter((line) => line.length > 0)
-    : [];
+  const metaLines: string[] = [`- PRD file: \`${relativePrdPath}\``];
+  if (sourceItem) {
+    metaLines.push(`- Source section: ${sourceItem.section}`);
+    if (sourceItem.description) {
+      metaLines.push(`- Source summary: ${sourceItem.description}`);
+    }
+  }
 
   return [
-    '## Planner Generated PRD',
+    prdBody,
     '',
-    `- PRD file: \`${relativePrdPath}\``,
-    ...sourceLines,
+    '<details>',
+    '<summary>Source metadata</summary>',
     '',
-    '---',
+    ...metaLines,
     '',
-    prdPreview,
+    '</details>',
   ].join('\n');
 }
 
@@ -153,9 +151,12 @@ export async function createPlannerIssue(
     return { created: false, skippedReason: 'board-not-configured' };
   }
 
+  const issueTitle = `PRD: ${result.item.title}`;
+  const normalizeTitle = (t: string) => t.replace(/^PRD:\s*/i, '').trim().toLowerCase();
+
   const existingIssues = await provider.getAllIssues();
   const existing = existingIssues.find(
-    (issue) => issue.title.trim().toLowerCase() === result.item!.title.trim().toLowerCase(),
+    (issue) => normalizeTitle(issue.title) === normalizeTitle(result.item!.title),
   );
   if (existing) {
     return {
@@ -167,7 +168,7 @@ export async function createPlannerIssue(
   }
 
   const issue = await provider.createIssue({
-    title: result.item.title,
+    title: issueTitle,
     body: buildPlannerIssueBody(projectDir, config, result),
     column: resolvePlannerIssueColumn(config),
   });

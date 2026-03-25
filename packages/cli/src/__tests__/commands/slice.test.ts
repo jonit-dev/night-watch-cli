@@ -26,6 +26,7 @@ const mockCwd = vi.spyOn(process, 'cwd');
 // Import after setting up mocks
 import {
   buildEnvVars,
+  buildPlannerIssueBody,
   applyCliOverrides,
   createPlannerIssue,
   ISliceOptions,
@@ -291,6 +292,80 @@ describe('slice command', () => {
 
       // Should not override when parsing fails
       expect(overridden.roadmapScanner.slicerMaxRuntime).toBe(600);
+    });
+  });
+
+  describe('buildPlannerIssueBody', () => {
+    const prdSubDir = 'prds';
+
+    function writePrd(filename: string, content: string): void {
+      const dir = path.join(tempDir, prdSubDir);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, filename), content);
+    }
+
+    it('should use PRD content directly as the issue body', () => {
+      writePrd('01-test-feature.md', '# PRD: Test Feature\n\n## Problem\n\nSomething is broken.\n');
+
+      const config = createTestConfig({ prdDir: prdSubDir });
+      const result = {
+        sliced: true,
+        file: '01-test-feature.md',
+        item: { hash: 'abc12345', title: 'Test Feature', description: 'A description', checked: false, section: 'Phase 1' },
+      };
+
+      const body = buildPlannerIssueBody(tempDir, config, result);
+
+      expect(body).toContain('# PRD: Test Feature');
+      expect(body).not.toContain('## Planner Generated PRD');
+    });
+
+    it('should include source metadata in a collapsible details section', () => {
+      writePrd('01-test-feature.md', '# PRD: Test Feature\n');
+
+      const config = createTestConfig({ prdDir: prdSubDir });
+      const result = {
+        sliced: true,
+        file: '01-test-feature.md',
+        item: { hash: 'abc12345', title: 'Test Feature', description: 'A description', checked: false, section: 'Phase 1' },
+      };
+
+      const body = buildPlannerIssueBody(tempDir, config, result);
+
+      expect(body).toContain('<details>');
+      expect(body).toContain('<summary>Source metadata</summary>');
+      expect(body).toContain('Source section: Phase 1');
+      expect(body).toContain('Source summary: A description');
+    });
+
+    it('should not include source summary when description is empty', () => {
+      writePrd('01-test-feature.md', '# PRD: Test Feature\n');
+
+      const config = createTestConfig({ prdDir: prdSubDir });
+      const result = {
+        sliced: true,
+        file: '01-test-feature.md',
+        item: { hash: 'abc12345', title: 'Test Feature', description: '', checked: false, section: 'Phase 1' },
+      };
+
+      const body = buildPlannerIssueBody(tempDir, config, result);
+
+      expect(body).not.toContain('Source summary:');
+    });
+
+    it('should truncate very large PRD content', () => {
+      writePrd('01-large.md', 'x'.repeat(65000));
+
+      const config = createTestConfig({ prdDir: prdSubDir });
+      const result = {
+        sliced: true,
+        file: '01-large.md',
+        item: { hash: 'abc12345', title: 'Large', description: '', checked: false, section: 'X' },
+      };
+
+      const body = buildPlannerIssueBody(tempDir, config, result);
+
+      expect(body).toContain('...[truncated]');
     });
   });
 
