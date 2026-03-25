@@ -52,6 +52,16 @@ export function isJobTypeEnabled(config: INightWatchConfig, jobType: JobType): b
   }
 }
 
+function getJobSchedule(config: INightWatchConfig, jobType: JobType): string {
+  switch (jobType) {
+    case 'reviewer':
+      return config.reviewerSchedule ?? '';
+    case 'executor':
+    default:
+      return config.cronSchedule ?? '';
+  }
+}
+
 function loadPeerConfig(projectPath: string): INightWatchConfig | null {
   if (!fs.existsSync(projectPath) || !fs.existsSync(path.join(projectPath, CONFIG_FILE_NAME))) {
     return null;
@@ -71,10 +81,15 @@ function collectSchedulingPeers(
 ): ISchedulingPeer[] {
   const peers = new Map<string, ISchedulingPeer>();
   const currentPath = path.resolve(currentProjectDir);
+  const currentSchedule = getJobSchedule(currentConfig, jobType);
 
   const addPeer = (projectPath: string, config: INightWatchConfig): void => {
     const resolvedPath = path.resolve(projectPath);
     if (!isJobTypeEnabled(config, jobType)) {
+      return;
+    }
+    // Only balance with peers that share the same cron schedule
+    if (getJobSchedule(config, jobType) !== currentSchedule) {
       return;
     }
 

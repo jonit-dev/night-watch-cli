@@ -666,7 +666,11 @@ while IFS=$'\t' read -r pr_number pr_branch pr_labels; do
     } | awk '!seen[$0]++'
   )
   LATEST_SCORE=$(extract_review_score_from_text "${ALL_COMMENTS}")
-  if [ -n "${LATEST_SCORE}" ] && [ "${LATEST_SCORE}" -lt "${MIN_REVIEW_SCORE}" ]; then
+  if [ -z "${LATEST_SCORE}" ]; then
+    log "INFO: PR #${pr_number} (${pr_branch}) has no review score yet — needs initial review"
+    NEEDS_WORK=1
+    PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
+  elif [ "${LATEST_SCORE}" -lt "${MIN_REVIEW_SCORE}" ]; then
     log "INFO: PR #${pr_number} (${pr_branch}) has review score ${LATEST_SCORE}/100 (threshold: ${MIN_REVIEW_SCORE})"
     NEEDS_WORK=1
     PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
@@ -677,7 +681,7 @@ done < <(
 )
 
 if [ "${NEEDS_WORK}" -eq 0 ]; then
-  log "SKIP: All ${OPEN_PRS} open PR(s) have passing CI and review score >= ${MIN_REVIEW_SCORE} (or no score yet)"
+  log "SKIP: All ${OPEN_PRS} open PR(s) have passing CI and review score >= ${MIN_REVIEW_SCORE}"
 
   # ── Auto-merge eligible PRs ───────────────────────────────
   if [ "${NW_AUTO_MERGE:-0}" = "1" ]; then
@@ -1018,8 +1022,16 @@ if [ -n "${TARGET_PR}" ]; then
   fi
   if [ -n "${TARGET_SCORE}" ]; then
     TARGET_SCOPE_PROMPT+=$'- latest review score: '"${TARGET_SCORE}"$'/100\n'
+    TARGET_SCOPE_PROMPT+=$'- action: fix\n'
+    # Inject the latest review comment body for the fix prompt
+    REVIEW_BODY=$(gh api "repos/$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null)/issues/${TARGET_PR}/comments" --jq '[.[] | select(.body | test("Overall Score|Score:.*[0-9]+/100"))] | last | .body // ""' 2>/dev/null || echo "")
+    if [ -n "${REVIEW_BODY}" ]; then
+      TRUNCATED_REVIEW=$(printf '%s' "${REVIEW_BODY}" | head -c 6000)
+      TARGET_SCOPE_PROMPT+=$'\n## Latest Review Feedback\n'"${TRUNCATED_REVIEW}"$'\n'
+    fi
   else
     TARGET_SCOPE_PROMPT+=$'- latest review score: not found\n'
+    TARGET_SCOPE_PROMPT+=$'- action: review\n'
   fi
 fi
 

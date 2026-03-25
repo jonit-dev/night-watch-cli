@@ -256,6 +256,22 @@ export function enqueueJob(
 ): number {
   const db = openDb();
   try {
+    // Deduplicate: skip if an active entry already exists for this project+job
+    const existing = db
+      .prepare(
+        `SELECT id FROM job_queue WHERE project_path = ? AND job_type = ? AND status IN ('pending', 'dispatched', 'running')`,
+      )
+      .get(projectPath, jobType) as { id: number } | undefined;
+
+    if (existing) {
+      logger.info('Skipping duplicate enqueue — active entry already exists', {
+        id: existing.id,
+        jobType,
+        project: projectName,
+      });
+      return existing.id;
+    }
+
     const priority = getJobPriority(jobType, config);
     const now = Math.floor(Date.now() / 1000);
     const envJson = JSON.stringify(envVars);

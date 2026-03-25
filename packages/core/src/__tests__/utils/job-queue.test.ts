@@ -99,6 +99,23 @@ describe('enqueueJob', () => {
     const entry = getQueueEntry(id);
     expect(entry?.envJson).toEqual({ FOO: 'bar', BAZ: '1' });
   });
+
+  it('deduplicates — returns existing id when a pending entry already exists for same project+jobType', () => {
+    const id1 = enqueueJob('/projects/foo', 'foo', 'executor', {});
+    const id2 = enqueueJob('/projects/foo', 'foo', 'executor', {});
+    expect(id2).toBe(id1); // returns existing, no new row
+
+    const status = getQueueStatus();
+    expect(status.pending.total).toBe(1); // only one row
+  });
+
+  it('allows separate entries for different job types on the same project', () => {
+    const id1 = enqueueJob('/projects/foo', 'foo', 'executor', {});
+    const id2 = enqueueJob('/projects/foo', 'foo', 'reviewer', {});
+    expect(id2).not.toBe(id1);
+    const status = getQueueStatus();
+    expect(status.pending.total).toBe(2);
+  });
 });
 
 describe('getNextPendingJob', () => {

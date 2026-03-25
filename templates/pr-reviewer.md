@@ -21,7 +21,8 @@ If current PR code or review feedback conflicts with the PRD context, call out t
 ## Important: Early Exit
 
 - If there are **no open PRs** on `night-watch/` or `feat/` branches, **stop immediately** and report "No PRs to review."
-- If all open PRs have **no merge conflicts**, **passing CI**, and **review score >= 80** (or no review score yet), **stop immediately** and report "All PRs are in good shape."
+- If all open PRs have **no merge conflicts**, **passing CI**, and **review score >= 80**, **stop immediately** and report "All PRs are in good shape."
+- If a PR has no review score yet, it needs a first review — do NOT skip it.
 - Do **NOT** loop or retry. Process each PR **once** per run. After processing all PRs, stop.
 - Do **NOT** re-check PRs after pushing fixes -- the CI will re-run automatically on the next push.
 
