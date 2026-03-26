@@ -174,6 +174,8 @@ export function useActivityFeed(): {
   }, [status]);
 
   useEffect(() => {
+    const abortController = new AbortController();
+
     const fetchInitialEvents = async () => {
       const initialEvents: IActivityEvent[] = [];
 
@@ -181,6 +183,7 @@ export function useActivityFeed(): {
         const logPromises = WEB_JOB_REGISTRY.slice(0, 5).map(async (job) => {
           try {
             const response = await fetchLogs(job.processName, LOG_LINES_TO_FETCH);
+            if (abortController.signal.aborted) return;
             const lines = response?.lines || [];
             const recentLines = lines.slice(-20);
             recentLines.forEach((line) => {
@@ -195,6 +198,8 @@ export function useActivityFeed(): {
         });
 
         await Promise.all(logPromises);
+
+        if (abortController.signal.aborted) return;
 
         const uniqueEvents = initialEvents
           .filter((event, index, self) =>
@@ -216,6 +221,10 @@ export function useActivityFeed(): {
     };
 
     fetchInitialEvents();
+
+    return () => {
+      abortController.abort();
+    };
   }, []);
 
   const groupedEvents = useMemo((): IDayGroup[] => {
