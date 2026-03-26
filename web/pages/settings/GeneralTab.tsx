@@ -1,10 +1,9 @@
 import { Activity } from 'lucide-react';
 import React from 'react';
-import { DoctorCheck, MergeMethod } from '../../api';
+import { DoctorCheck } from '../../api';
 import TagInput from '../../components/settings/TagInput.js';
 import Card from '../../components/ui/Card';
 import Input from '../../components/ui/Input';
-import Select from '../../components/ui/Select';
 import Switch from '../../components/ui/Switch';
 
 interface IConfigFormGeneral {
@@ -14,8 +13,6 @@ interface IConfigFormGeneral {
   branchPatterns: string[];
   executorEnabled: boolean;
   reviewerEnabled: boolean;
-  autoMerge: boolean;
-  autoMergeMethod: MergeMethod;
 }
 
 interface IGeneralTabProps {
@@ -64,25 +61,6 @@ const GeneralTab: React.FC<IGeneralTabProps> = ({ form, updateField, projectName
                 onChange={(checked) => updateField('reviewerEnabled', checked)}
               />
             </div>
-            <div className="md:col-span-2">
-              <Switch
-                label="Auto-merge approved PRs"
-                checked={form.autoMerge}
-                onChange={(checked) => updateField('autoMerge', checked)}
-              />
-            </div>
-            {form.autoMerge && (
-              <Select
-                label="Merge Method"
-                value={form.autoMergeMethod}
-                onChange={(val) => updateField('autoMergeMethod', val as MergeMethod)}
-                options={[
-                  { label: 'Squash', value: 'squash' },
-                  { label: 'Merge', value: 'merge' },
-                  { label: 'Rebase', value: 'rebase' },
-                ]}
-              />
-            )}
           </div>
           <div className="pt-4 mt-4 border-t border-slate-800">
             <TagInput

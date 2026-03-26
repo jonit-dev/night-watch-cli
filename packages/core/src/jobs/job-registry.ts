@@ -226,6 +226,45 @@ export const JOB_REGISTRY: IJobDefinition[] = [
       analysisPrompt: '',
     } as IBaseJobConfig & { lookbackDays: number; targetColumn: string; analysisPrompt: string },
   },
+  {
+    id: 'merger',
+    name: 'Merge Orchestrator',
+    description:
+      'Repo-wide PR merge coordinator — scans, rebases, and merges in FIFO order',
+    cliCommand: 'merge',
+    logName: 'merger',
+    lockSuffix: '-merger.lock',
+    queuePriority: 45,
+    envPrefix: 'NW_MERGER',
+    extraFields: [
+      {
+        name: 'mergeMethod',
+        type: 'enum',
+        enumValues: ['squash', 'merge', 'rebase'],
+        defaultValue: 'squash',
+      },
+      { name: 'minReviewScore', type: 'number', defaultValue: 80 },
+      { name: 'branchPatterns', type: 'string[]', defaultValue: [] },
+      { name: 'rebaseBeforeMerge', type: 'boolean', defaultValue: true },
+      { name: 'maxPrsPerRun', type: 'number', defaultValue: 0 },
+    ],
+    defaultConfig: {
+      enabled: false,
+      schedule: '55 */4 * * *',
+      maxRuntime: 1800,
+      mergeMethod: 'squash',
+      minReviewScore: 80,
+      branchPatterns: [],
+      rebaseBeforeMerge: true,
+      maxPrsPerRun: 0,
+    } as IBaseJobConfig & {
+      mergeMethod: string;
+      minReviewScore: number;
+      branchPatterns: string[];
+      rebaseBeforeMerge: boolean;
+      maxPrsPerRun: number;
+    },
+  },
 ];
 
 /**

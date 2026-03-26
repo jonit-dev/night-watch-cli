@@ -91,6 +91,7 @@ function buildScheduleInfoResponse(
   const auditPlan = getSchedulingPlan(projectDir, config, 'audit');
   const plannerPlan = getSchedulingPlan(projectDir, config, 'slicer');
   const analyticsPlan = getSchedulingPlan(projectDir, config, 'analytics');
+  const mergerPlan = getSchedulingPlan(projectDir, config, 'merger');
 
   const executorInstalled =
     installed && config.executorEnabled !== false && hasScheduledCommand(entries, 'run');
@@ -104,6 +105,8 @@ function buildScheduleInfoResponse(
     (hasScheduledCommand(entries, 'planner') || hasScheduledCommand(entries, 'slice'));
   const analyticsInstalled =
     installed && config.analytics.enabled && hasScheduledCommand(entries, 'analytics');
+  const mergerInstalled =
+    installed && (config.merger?.enabled ?? false) && hasScheduledCommand(entries, 'merge');
 
   return {
     executor: {
@@ -174,6 +177,19 @@ function buildScheduleInfoResponse(
       delayMinutes: analyticsPlan.totalDelayMinutes,
       manualDelayMinutes: analyticsPlan.manualDelayMinutes,
       balancedDelayMinutes: analyticsPlan.balancedDelayMinutes,
+    },
+    merger: {
+      schedule: config.merger?.schedule ?? '55 */4 * * *',
+      installed: mergerInstalled,
+      nextRun: mergerInstalled
+        ? addDelayToIsoString(
+            computeNextRun(config.merger?.schedule ?? '55 */4 * * *'),
+            mergerPlan.totalDelayMinutes,
+          )
+        : null,
+      delayMinutes: mergerPlan.totalDelayMinutes,
+      manualDelayMinutes: mergerPlan.manualDelayMinutes,
+      balancedDelayMinutes: mergerPlan.balancedDelayMinutes,
     },
     paused: !installed,
     schedulingPriority: config.schedulingPriority,

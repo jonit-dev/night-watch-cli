@@ -54,8 +54,6 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
     reviewerMaxPrsPerRun: 0,
     provider: 'claude',
     reviewerEnabled: true,
-    autoMerge: false,
-    autoMergeMethod: 'squash',
     jobProviders: {},
     ...overrides,
   };
@@ -195,40 +193,13 @@ describe('review command', () => {
       expect(env.NW_REVIEWER_MAX_BUDGET).toBeUndefined();
     });
 
-    it('should pass NW_AUTO_MERGE when enabled', () => {
-      const config = createTestConfig({ autoMerge: true });
-      const options: IReviewOptions = { dryRun: false };
-
-      const env = buildEnvVars(config, options);
-
-      expect(env.NW_AUTO_MERGE).toBe('1');
-    });
-
-    it('should not pass NW_AUTO_MERGE when disabled', () => {
-      const config = createTestConfig({ autoMerge: false });
-      const options: IReviewOptions = { dryRun: false };
-
-      const env = buildEnvVars(config, options);
-
-      expect(env.NW_AUTO_MERGE).toBeUndefined();
-    });
-
-    it('should pass NW_AUTO_MERGE_METHOD', () => {
-      const config = createTestConfig({ autoMergeMethod: 'rebase' });
-      const options: IReviewOptions = { dryRun: false };
-
-      const env = buildEnvVars(config, options);
-
-      expect(env.NW_AUTO_MERGE_METHOD).toBe('rebase');
-    });
-
-    it('should default NW_AUTO_MERGE_METHOD to squash', () => {
+    it('buildEnvVars should not set NW_AUTO_MERGE', () => {
       const config = createTestConfig();
       const options: IReviewOptions = { dryRun: false };
 
       const env = buildEnvVars(config, options);
 
-      expect(env.NW_AUTO_MERGE_METHOD).toBe('squash');
+      expect(env.NW_AUTO_MERGE).toBeUndefined();
     });
   });
 
@@ -268,32 +239,6 @@ describe('review command', () => {
       expect(overridden.jobProviders.reviewer).toBe('claude');
     });
 
-    it('should override autoMerge with --auto-merge flag', () => {
-      const config = createTestConfig({ autoMerge: false });
-      const options: IReviewOptions = { dryRun: false, autoMerge: true };
-
-      const overridden = applyCliOverrides(config, options);
-
-      expect(overridden.autoMerge).toBe(true);
-    });
-
-    it('should not override autoMerge when flag is undefined', () => {
-      const config = createTestConfig({ autoMerge: true });
-      const options: IReviewOptions = { dryRun: false };
-
-      const overridden = applyCliOverrides(config, options);
-
-      expect(overridden.autoMerge).toBe(true);
-    });
-
-    it('should allow --auto-merge flag to disable autoMerge', () => {
-      const config = createTestConfig({ autoMerge: true });
-      const options: IReviewOptions = { dryRun: false, autoMerge: false };
-
-      const overridden = applyCliOverrides(config, options);
-
-      expect(overridden.autoMerge).toBe(false);
-    });
   });
 
   describe('notification integration', () => {

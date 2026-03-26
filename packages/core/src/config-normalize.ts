@@ -257,9 +257,9 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
     normalized.autoMergeMethod = mergeMethod as MergeMethod;
   }
 
-  // Registry-driven normalization for nested job configs (qa, audit, analytics, prResolver)
+  // Registry-driven normalization for nested job configs (qa, audit, analytics, merger, prResolver)
   // Executor/reviewer use flat top-level fields; slicer lives in roadmapScanner block above
-  for (const jobId of ['qa', 'audit', 'analytics'] as const) {
+  for (const jobId of ['qa', 'audit', 'analytics', 'merger'] as const) {
     const jobDef = getJobDef(jobId);
     if (!jobDef) continue;
     const rawJob = readObject(rawConfig[jobId]);

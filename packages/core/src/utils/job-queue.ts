@@ -30,6 +30,7 @@ import {
   auditLockPath,
   checkLockFile,
   executorLockPath,
+  mergerLockPath,
   plannerLockPath,
   prResolverLockPath,
   qaLockPath,
@@ -100,6 +101,8 @@ function getLockPathForJob(projectPath: string, jobType: JobType): string {
       return analyticsLockPath(projectPath);
     case 'pr-resolver':
       return prResolverLockPath(projectPath);
+    case 'merger':
+      return mergerLockPath(projectPath);
   }
 }
 

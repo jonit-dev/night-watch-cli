@@ -10,6 +10,7 @@ import {
   IAuditConfig,
   IBoardProviderConfig,
   IJobProviders,
+  IMergerConfig,
   INightWatchConfig,
   INotificationConfig,
   IProviderPreset,
@@ -17,7 +18,6 @@ import {
   IQaConfig,
   IRoadmapScannerConfig,
   IWebhookConfig,
-  MergeMethod,
   removeProject,
   triggerInstallCron,
   toggleRoadmapScanner,
@@ -73,8 +73,6 @@ type ConfigForm = {
   templatesDir: string;
   boardProvider: IBoardProviderConfig;
   jobProviders: IJobProviders;
-  autoMerge: boolean;
-  autoMergeMethod: MergeMethod;
   fallbackOnRateLimit: boolean;
   primaryFallbackModel: ClaudeModel;
   secondaryFallbackModel: ClaudeModel;
@@ -85,6 +83,7 @@ type ConfigForm = {
   qa: IQaConfig;
   audit: IAuditConfig;
   analytics: IAnalyticsConfig;
+  merger: IMergerConfig;
   queue: INightWatchConfig['queue'];
 };
 
@@ -126,8 +125,6 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   templatesDir: config.templatesDir || '.night-watch/templates',
   boardProvider: config.boardProvider || { enabled: true, provider: 'github' },
   jobProviders: config.jobProviders || {},
-  autoMerge: config.autoMerge ?? false,
-  autoMergeMethod: config.autoMergeMethod ?? 'squash',
   fallbackOnRateLimit: config.fallbackOnRateLimit ?? true,
   primaryFallbackModel: config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet',
   secondaryFallbackModel:
@@ -158,6 +155,16 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
     targetColumn: 'Draft',
     analysisPrompt: '',
   },
+  merger: config.merger ?? {
+    enabled: false,
+    schedule: '55 */4 * * *',
+    maxRuntime: 1800,
+    mergeMethod: 'squash',
+    minReviewScore: 80,
+    branchPatterns: [],
+    rebaseBeforeMerge: true,
+    maxPrsPerRun: 0,
+  },
   queue: config.queue || {
     enabled: true,
     mode: 'conservative' as const,
@@ -187,6 +194,7 @@ const resolveScheduleUiState = (form: ConfigForm): ScheduleUiState => {
     form.qa.schedule,
     form.audit.schedule,
     form.roadmapScanner.slicerSchedule ?? '35 */12 * * *',
+    form.merger?.schedule ?? '55 */4 * * *',
   );
 
   if (detected) {
@@ -319,7 +327,7 @@ const Settings: React.FC = () => {
 
   const handleEditJob = (projectId: string, jobType: string) => {
     if (projectId === projectName || projectId === 'current') {
-      const jobsTabTypes = ['qa', 'audit', 'slicer', 'analytics'];
+      const jobsTabTypes = ['qa', 'audit', 'slicer', 'analytics', 'merger'];
       if (jobsTabTypes.includes(jobType)) {
         setActiveSettingsTab('jobs');
         setTimeout(() => {
@@ -389,6 +397,7 @@ const Settings: React.FC = () => {
         qa: { ...prev.qa, schedule: tpl.schedules.qa },
         audit: { ...prev.audit, schedule: tpl.schedules.audit },
         roadmapScanner: { ...prev.roadmapScanner, slicerSchedule: tpl.schedules.slicer },
+        merger: { ...prev.merger, schedule: tpl.schedules.merger },
         fallbackOnRateLimit: true,
       };
     });
@@ -413,6 +422,8 @@ const Settings: React.FC = () => {
       form.audit.schedule !== config?.audit.schedule ||
       form.analytics.enabled !== (config?.analytics?.enabled ?? false) ||
       form.analytics.schedule !== (config?.analytics?.schedule ?? '0 6 * * 1') ||
+      form.merger.enabled !== (config?.merger?.enabled ?? false) ||
+      form.merger.schedule !== (config?.merger?.schedule ?? '55 */4 * * *') ||
       form.roadmapScanner.enabled !== (config?.roadmapScanner?.enabled ?? true) ||
       (form.roadmapScanner.slicerSchedule || '35 */12 * * *') !==
         (config?.roadmapScanner?.slicerSchedule || '35 */12 * * *');
@@ -461,8 +472,6 @@ const Settings: React.FC = () => {
         templatesDir: form.templatesDir,
         boardProvider: form.boardProvider,
         jobProviders: cleanedJobProviders,
-        autoMerge: form.autoMerge,
-        autoMergeMethod: form.autoMergeMethod,
         fallbackOnRateLimit: form.fallbackOnRateLimit,
         primaryFallbackModel: form.primaryFallbackModel,
         secondaryFallbackModel: form.secondaryFallbackModel,
@@ -473,6 +482,7 @@ const Settings: React.FC = () => {
         qa: form.qa,
         audit: form.audit,
         analytics: form.analytics,
+        merger: form.merger,
         queue: form.queue,
       });
 

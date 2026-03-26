@@ -98,6 +98,7 @@ const Scheduling: React.FC = () => {
       audit: { schedule: '50 3 * * 1', enabled: true },
       analytics: { schedule: '0 6 * * 1', enabled: false },
       roadmapScanner: { slicerSchedule: '35 */12 * * *', enabled: true },
+      merger: { schedule: '55 */4 * * *', enabled: false },
       scheduleBundleId: null,
       schedulingPriority: 3,
       cronScheduleOffset: 0,
@@ -167,6 +168,7 @@ const Scheduling: React.FC = () => {
         config.qa?.schedule || '45 2,14 * * *',
         config.audit?.schedule || '50 3 * * 1',
         config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+        config.merger?.schedule ?? '55 */4 * * *',
       );
       const detectedTemplate = scheduleMode;
       const rawBuckets = config.queue?.providerBuckets ?? {};
@@ -180,6 +182,10 @@ const Scheduling: React.FC = () => {
           roadmapScanner: {
             enabled: config.roadmapScanner?.enabled ?? true,
             slicerSchedule: config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+          },
+          merger: {
+            enabled: config.merger?.enabled ?? false,
+            schedule: config.merger?.schedule || '55 */4 * * *',
           },
           scheduleBundleId: config.scheduleBundleId ?? null,
           schedulingPriority: config.schedulingPriority ?? 3,
@@ -322,6 +328,7 @@ const Scheduling: React.FC = () => {
       editState.form.qa.schedule,
       editState.form.audit.schedule,
       editState.form.roadmapScanner.slicerSchedule || '35 */12 * * *',
+      config?.merger?.schedule ?? '55 */4 * * *',
     );
     setEditState((prev) => ({
       ...prev,
@@ -362,6 +369,10 @@ const Scheduling: React.FC = () => {
           ...prev.form.roadmapScanner,
           slicerSchedule: tpl.schedules.slicer,
         },
+        merger: {
+          ...prev.form.merger,
+          schedule: tpl.schedules.merger,
+        },
       },
       isDirty: true,
     }));
@@ -391,6 +402,10 @@ const Scheduling: React.FC = () => {
         roadmapScanner: {
           ...config.roadmapScanner,
           slicerSchedule: editState.form.roadmapScanner.slicerSchedule || '35 */12 * * *',
+        },
+        merger: {
+          ...config.merger,
+          schedule: editState.form.merger?.schedule || config.merger?.schedule || '55 */4 * * *',
         },
         queue: {
           ...config.queue,
@@ -549,6 +564,16 @@ const Scheduling: React.FC = () => {
       nextRun: scheduleInfo.analytics?.nextRun,
       delayInfo: scheduleInfo.analytics,
     },
+    {
+      id: 'merger',
+      name: 'Merger',
+      description: 'Repo-wide PR merge orchestrator — merges eligible PRs in FIFO order',
+      icon: <Zap className="h-4 w-4" />,
+      enabled: config?.merger?.enabled ?? false,
+      schedule: scheduleInfo.merger?.schedule || config.merger?.schedule || '55 */4 * * *',
+      nextRun: scheduleInfo.merger?.nextRun,
+      delayInfo: scheduleInfo.merger,
+    },
   ]; }, [config, scheduleInfo]);
 
   if (scheduleLoading || configLoading) {
@@ -579,6 +604,7 @@ const Scheduling: React.FC = () => {
     config.qa?.schedule || '45 2,14 * * *',
     config.audit?.schedule || '50 3 * * 1',
     config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+    config.merger?.schedule ?? '55 */4 * * *',
   );
   const formatScheduleLabel = (
     job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics',
@@ -750,6 +776,7 @@ const Scheduling: React.FC = () => {
                     config.qa?.schedule || '45 2,14 * * *',
                     config.audit?.schedule || '50 3 * * 1',
                     config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+                    config.merger?.schedule ?? '55 */4 * * *',
                   );
                   const resetBuckets = config.queue?.providerBuckets ?? {};
                   setEditState({
@@ -763,6 +790,10 @@ const Scheduling: React.FC = () => {
                         enabled: config.roadmapScanner?.enabled ?? true,
                         slicerSchedule: config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
                       },
+                      merger: {
+                        enabled: config.merger?.enabled ?? false,
+                        schedule: config.merger?.schedule || '55 */4 * * *',
+                      },
                       scheduleBundleId: config.scheduleBundleId ?? null,
                       schedulingPriority: config.schedulingPriority ?? 3,
                       cronScheduleOffset: config.cronScheduleOffset ?? 0,
@@ -772,6 +803,7 @@ const Scheduling: React.FC = () => {
                     selectedTemplateId: resetTemplate?.id ?? '',
                     isDirty: false,
                     queueMode: config.queue?.mode ?? 'auto',
+                    globalMaxConcurrency: config.queue?.maxConcurrency ?? 1,
                     providerBuckets: Object.entries(resetBuckets).map(([key, val]) => ({
                       key,
                       maxConcurrency: val.maxConcurrency,

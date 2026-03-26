@@ -1,5 +1,5 @@
 import React from 'react';
-import { IAnalyticsConfig, IQaConfig, IAuditConfig, IRoadmapScannerConfig, QaArtifacts } from '../../api';
+import { IAnalyticsConfig, IQaConfig, IAuditConfig, IMergerConfig, IRoadmapScannerConfig, MergeMethod, QaArtifacts } from '../../api';
 import TagInput from '../../components/settings/TagInput.js';
 import Card from '../../components/ui/Card';
 import CronScheduleInput from '../../components/ui/CronScheduleInput';
@@ -11,6 +11,7 @@ interface IConfigFormJobs {
   qa: IQaConfig;
   audit: IAuditConfig;
   analytics: IAnalyticsConfig;
+  merger: IMergerConfig;
   roadmapScanner: IRoadmapScannerConfig;
   providerEnv: Record<string, string>;
 }
@@ -305,6 +306,88 @@ const JobsTab: React.FC<IJobsTabProps> = ({ form, updateField, handleRoadmapTogg
                 ]}
                 helperText="Column where planner-created issues are added after PRD generation."
               />
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Merge Orchestrator */}
+      <div id="job-section-merger">
+        <Card className="p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium text-slate-200">Merge Orchestrator</h3>
+              <p className="text-sm text-slate-400">Repo-wide PR merge coordinator — scans, rebases, and merges in FIFO order</p>
+            </div>
+            <Switch
+              checked={form.merger.enabled}
+              onChange={(checked) => updateField('merger', { ...form.merger, enabled: checked })}
+            />
+          </div>
+          {form.merger.enabled && (
+            <div className="space-y-6 pt-4 border-t border-slate-800">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <CronScheduleInput
+                  label="Merger Schedule"
+                  value={form.merger.schedule}
+                  onChange={(val) => updateField('merger', { ...form.merger, schedule: val })}
+                />
+                <Input
+                  label="Max Runtime"
+                  type="number"
+                  value={String(form.merger.maxRuntime)}
+                  onChange={(e) => updateField('merger', { ...form.merger, maxRuntime: Number(e.target.value || 0) })}
+                  rightIcon={<span className="text-xs">sec</span>}
+                  helperText="Maximum runtime (default: 1800 seconds)"
+                />
+                <Select
+                  label="Merge Method"
+                  value={form.merger.mergeMethod}
+                  onChange={(val) => updateField('merger', { ...form.merger, mergeMethod: val as MergeMethod })}
+                  options={[
+                    { label: 'Squash', value: 'squash' },
+                    { label: 'Merge', value: 'merge' },
+                    { label: 'Rebase', value: 'rebase' },
+                  ]}
+                  helperText="Git merge method for eligible PRs"
+                />
+                <Input
+                  label="Min Review Score"
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={String(form.merger.minReviewScore)}
+                  onChange={(e) => updateField('merger', { ...form.merger, minReviewScore: Math.max(0, Math.min(100, Number(e.target.value || 0))) })}
+                  helperText="Minimum review score required (0-100)"
+                />
+                <Input
+                  label="Max PRs Per Run"
+                  type="number"
+                  min="0"
+                  value={String(form.merger.maxPrsPerRun)}
+                  onChange={(e) => updateField('merger', { ...form.merger, maxPrsPerRun: Math.max(0, Number(e.target.value || 0)) })}
+                  helperText="Maximum PRs to merge per run (0 = unlimited)"
+                />
+              </div>
+              <TagInput
+                label="Branch Patterns"
+                value={form.merger.branchPatterns}
+                onChange={(patterns) => updateField('merger', { ...form.merger, branchPatterns: patterns })}
+                placeholder="e.g., feat/, night-watch/"
+                helpText="Branch patterns to filter eligible PRs (empty = use top-level patterns)"
+              />
+              <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
+                <div>
+                  <span className="text-sm font-medium text-slate-200">Rebase before merge</span>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Rebase each PR against its base branch before merging
+                  </p>
+                </div>
+                <Switch
+                  checked={form.merger.rebaseBeforeMerge}
+                  onChange={(checked) => updateField('merger', { ...form.merger, rebaseBeforeMerge: checked })}
+                />
+              </div>
             </div>
           )}
         </Card>

@@ -20,11 +20,11 @@ import {
 import { VALID_JOB_TYPES, DEFAULT_QUEUE_PRIORITY, LOG_FILE_NAMES } from '../../constants.js';
 
 describe('JOB_REGISTRY', () => {
-  it('should define all 7 job types', () => {
-    expect(JOB_REGISTRY).toHaveLength(7);
+  it('should define all 8 job types', () => {
+    expect(JOB_REGISTRY).toHaveLength(8);
   });
 
-  it('should include executor, reviewer, qa, audit, slicer, analytics, pr-resolver', () => {
+  it('should include executor, reviewer, qa, audit, slicer, analytics, pr-resolver, merger', () => {
     const ids = JOB_REGISTRY.map((j) => j.id);
     expect(ids).toContain('executor');
     expect(ids).toContain('reviewer');
@@ -33,10 +33,15 @@ describe('JOB_REGISTRY', () => {
     expect(ids).toContain('slicer');
     expect(ids).toContain('analytics');
     expect(ids).toContain('pr-resolver');
+    expect(ids).toContain('merger');
   });
 
   it('should include pr-resolver in job registry', () => {
     expect(getJobDef('pr-resolver')).toBeDefined();
+  });
+
+  it('should include merger in JOB_REGISTRY', () => {
+    expect(getJobDef('merger')).toBeDefined();
   });
 
   it('each job definition has required fields', () => {
@@ -129,9 +134,9 @@ describe('getJobDefByLogName', () => {
 });
 
 describe('getValidJobTypes', () => {
-  it('returns all 7 job types', () => {
+  it('returns all 8 job types', () => {
     const types = getValidJobTypes();
-    expect(types).toHaveLength(7);
+    expect(types).toHaveLength(8);
     expect(types).toContain('executor');
     expect(types).toContain('reviewer');
     expect(types).toContain('qa');
@@ -139,6 +144,7 @@ describe('getValidJobTypes', () => {
     expect(types).toContain('slicer');
     expect(types).toContain('analytics');
     expect(types).toContain('pr-resolver');
+    expect(types).toContain('merger');
   });
 });
 
@@ -152,6 +158,7 @@ describe('getDefaultQueuePriority', () => {
     expect(typeof priority.slicer).toBe('number');
     expect(typeof priority.analytics).toBe('number');
     expect(typeof priority['pr-resolver']).toBe('number');
+    expect(typeof priority.merger).toBe('number');
   });
 
   it('executor has highest priority', () => {
@@ -361,6 +368,48 @@ describe('normalizeJobConfig', () => {
     expect(result.aiConflictResolution).toBe(false);
     expect(result.aiReviewResolution).toBe(true);
     expect(result.readyLabel).toBe('merge-ready');
+  });
+
+  it('merger has correct defaults', () => {
+    const def = getJobDef('merger')!;
+    expect(def.defaultConfig.schedule).toBe('55 */4 * * *');
+    expect(def.defaultConfig.maxRuntime).toBe(1800);
+    expect(def.queuePriority).toBe(45);
+    expect(def.defaultConfig.enabled).toBe(false);
+  });
+
+  it('normalizeJobConfig handles merger extra fields with defaults', () => {
+    const def = getJobDef('merger')!;
+    const result = normalizeJobConfig({}, def);
+    expect(result.enabled).toBe(false);
+    expect(result.schedule).toBe('55 */4 * * *');
+    expect(result.maxRuntime).toBe(1800);
+    expect(result.mergeMethod).toBe('squash');
+    expect(result.minReviewScore).toBe(80);
+    expect(result.branchPatterns).toEqual([]);
+    expect(result.rebaseBeforeMerge).toBe(true);
+    expect(result.maxPrsPerRun).toBe(0);
+  });
+
+  it('normalizeJobConfig handles merger extra fields with custom values', () => {
+    const def = getJobDef('merger')!;
+    const result = normalizeJobConfig(
+      {
+        enabled: true,
+        mergeMethod: 'merge',
+        minReviewScore: 90,
+        branchPatterns: ['feat/', 'fix/'],
+        rebaseBeforeMerge: false,
+        maxPrsPerRun: 3,
+      },
+      def,
+    );
+    expect(result.enabled).toBe(true);
+    expect(result.mergeMethod).toBe('merge');
+    expect(result.minReviewScore).toBe(90);
+    expect(result.branchPatterns).toEqual(['feat/', 'fix/']);
+    expect(result.rebaseBeforeMerge).toBe(false);
+    expect(result.maxPrsPerRun).toBe(3);
   });
 });
 

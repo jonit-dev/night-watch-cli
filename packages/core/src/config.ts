@@ -8,6 +8,7 @@ import * as path from 'path';
 import { fileURLToPath } from 'url';
 import {
   DayOfWeek,
+  IMergerConfig,
   INightWatchConfig,
   IProviderPreset,
   IProviderScheduleOverride,
@@ -20,6 +21,7 @@ import {
   DEFAULT_ANALYTICS,
   DEFAULT_AUDIT,
   DEFAULT_AUTO_MERGE,
+  DEFAULT_MERGER,
   DEFAULT_AUTO_MERGE_METHOD,
   DEFAULT_BOARD_PROVIDER,
   DEFAULT_BRANCH_PATTERNS,
@@ -102,6 +104,7 @@ export function getDefaultConfig(): INightWatchConfig {
     audit: { ...DEFAULT_AUDIT },
     analytics: { ...DEFAULT_ANALYTICS },
     prResolver: { ...DEFAULT_PR_RESOLVER },
+    merger: { ...DEFAULT_MERGER },
     jobProviders: { ...DEFAULT_JOB_PROVIDERS },
     providerScheduleOverrides: [...DEFAULT_PROVIDER_SCHEDULE_OVERRIDES],
     queue: { ...DEFAULT_QUEUE },
@@ -181,7 +184,8 @@ function mergeConfigLayer(base: INightWatchConfig, layer: Partial<INightWatchCon
       _key === 'qa' ||
       _key === 'audit' ||
       _key === 'analytics' ||
-      _key === 'prResolver'
+      _key === 'prResolver' ||
+      _key === 'merger'
     ) {
       (base as unknown as Record<string, unknown>)[_key] = {
         ...(base[_key] as object),
@@ -209,6 +213,16 @@ function mergeConfigs(
   const merged: INightWatchConfig = { ...base };
   if (fileConfig) mergeConfigLayer(merged, fileConfig);
   mergeConfigLayer(merged, envConfig);
+
+  // Backward compat: migrate autoMerge: true → merger.enabled: true
+  // Only migrate when no explicit merger config was provided in the file (avoid overriding merger.enabled: false)
+  if ((merged as unknown as Record<string, unknown>).autoMerge === true && !fileConfig?.merger) {
+    merged.merger = {
+      ...merged.merger,
+      enabled: true,
+      mergeMethod: (merged as unknown as Record<string, unknown>).autoMergeMethod as IMergerConfig['mergeMethod'] ?? 'squash',
+    };
+  }
 
   merged.maxRetries = sanitizeMaxRetries(merged.maxRetries, DEFAULT_MAX_RETRIES);
   merged.reviewerMaxRetries = sanitizeReviewerMaxRetries(

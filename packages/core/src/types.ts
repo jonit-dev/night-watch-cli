@@ -52,7 +52,8 @@ export type JobType =
   | 'slicer'
   | 'analytics'
   | 'planner'
-  | 'pr-resolver';
+  | 'pr-resolver'
+  | 'merger';
 
 /**
  * Time-based provider schedule override.
@@ -105,6 +106,7 @@ export interface IJobProviders {
   analytics?: Provider;
   planner?: Provider;
   'pr-resolver'?: Provider;
+  merger?: Provider;
 }
 
 /**
@@ -291,6 +293,9 @@ export interface INightWatchConfig {
   /** PR conflict resolver configuration */
   prResolver: IPrResolverConfig;
 
+  /** Merge orchestrator configuration */
+  merger: IMergerConfig;
+
   /** Per-job provider configuration */
   jobProviders: IJobProviders;
 
@@ -379,6 +384,25 @@ export interface IPrResolverConfig {
   readyLabel: string;
 }
 
+export interface IMergerConfig {
+  /** Whether the merger job is enabled */
+  enabled: boolean;
+  /** Cron schedule for merger execution */
+  schedule: string;
+  /** Maximum runtime in seconds for the merger */
+  maxRuntime: number;
+  /** Git merge method */
+  mergeMethod: MergeMethod;
+  /** Minimum review score required before merging */
+  minReviewScore: number;
+  /** Branch patterns to filter which PRs to merge (empty = all) */
+  branchPatterns: string[];
+  /** Whether to rebase branch on top of base before merging */
+  rebaseBeforeMerge: boolean;
+  /** Maximum number of PRs to merge per run (0 = unlimited) */
+  maxPrsPerRun: number;
+}
+
 export type WebhookType = 'slack' | 'discord' | 'telegram';
 export type NotificationEvent =
   | 'run_started'
@@ -393,7 +417,9 @@ export type NotificationEvent =
   | 'qa_completed'
   | 'pr_resolver_completed'
   | 'pr_resolver_conflict_resolved'
-  | 'pr_resolver_failed';
+  | 'pr_resolver_failed'
+  | 'merge_completed'
+  | 'merge_failed';
 
 /**
  * Git merge methods for auto-merge

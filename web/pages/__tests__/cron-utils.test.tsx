@@ -19,6 +19,7 @@ describe('cron utilities', () => {
           template.schedules.qa,
           template.schedules.audit,
           template.schedules.slicer,
+          template.schedules.merger,
         );
 
         expect(detected?.id).toBe(template.id);
@@ -35,6 +36,7 @@ describe('cron utilities', () => {
         alwaysOn!.schedules.qa,
         '15 1 * * *',
         alwaysOn!.schedules.slicer,
+        alwaysOn!.schedules.merger,
       );
 
       expect(detected).toBeUndefined();
@@ -47,6 +49,7 @@ describe('cron utilities', () => {
         '45 2,10,18 *  * *',
         '50 3 * *   1',
         '35 */6 * * *',
+        '55 */4 * * *',
       );
 
       expect(detected?.id).toBe('always-on');
@@ -60,6 +63,7 @@ describe('cron utilities', () => {
           ` ${template.schedules.qa.replace(/\s+/g, '    ')} `,
           ` ${template.schedules.audit.replace(/\s+/g, '  ')} `,
           ` ${template.schedules.slicer.replace(/\s+/g, '   ')} `,
+          ` ${template.schedules.merger.replace(/\s+/g, '  ')} `,
         );
 
         expect(detected?.id).toBe(template.id);
@@ -90,6 +94,7 @@ describe('cron utilities', () => {
         '45 2,10,18 * * *',
         '50 3 * * 1',
         '35 */6 * * *',
+        '55 */4 * * *',
       );
 
       expect(resolved?.id).toBe('always-on');
@@ -103,6 +108,7 @@ describe('cron utilities', () => {
         '45 2,10,18 * * *',
         '50 3 * * 1',
         '35 */6 * * *',
+        '55 */4 * * *',
       );
 
       expect(resolved?.id).toBe('always-on');
@@ -116,6 +122,7 @@ describe('cron utilities', () => {
         '45 2,10,18 * * *',
         '50 3 * * 1',
         '35 */6 * * *',
+        '55 */4 * * *',
       );
 
       expect(resolved).toBeUndefined();

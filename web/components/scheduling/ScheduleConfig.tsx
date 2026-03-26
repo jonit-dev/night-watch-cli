@@ -15,6 +15,7 @@ export interface IScheduleConfigForm {
   audit: { schedule: string; enabled: boolean };
   analytics?: { schedule: string; enabled: boolean };
   roadmapScanner: { slicerSchedule: string; enabled: boolean };
+  merger?: { schedule: string; enabled: boolean };
   scheduleBundleId: string | null;
   schedulingPriority: number;
   cronScheduleOffset: number;
@@ -113,7 +114,6 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
                       ['Reviewer', tpl.hints.reviewer],
                       ['QA', tpl.hints.qa],
                       ['Audit', tpl.hints.audit],
-                      ['Slicer', tpl.hints.slicer],
                     ] as [string, string][]
                   ).map(([name, hint]) => (
                     <div key={name} className="flex items-center gap-2">
@@ -158,30 +158,6 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
               })
             }
           />
-          {form.analytics?.enabled && (
-            <CronScheduleInput
-              label="Analytics Schedule"
-              value={form.analytics.schedule}
-              onChange={(val) =>
-                onFieldChange('analytics', {
-                  ...form.analytics,
-                  schedule: val,
-                })
-              }
-            />
-          )}
-          {form.roadmapScanner.enabled && (
-            <CronScheduleInput
-              label="Planner Schedule"
-              value={form.roadmapScanner.slicerSchedule || '35 */12 * * *'}
-              onChange={(val) =>
-                onFieldChange('roadmapScanner', {
-                  ...form.roadmapScanner,
-                  slicerSchedule: val,
-                })
-              }
-            />
-          )}
         </div>
       )}
 

@@ -33,6 +33,8 @@ const eventOptions: { label: string; value: IWebhookConfig['events'][0] }[] = [
   { label: 'Run Timeout', value: 'run_timeout' },
   { label: 'Review Completed', value: 'review_completed' },
   { label: 'PR Auto-Merged', value: 'pr_auto_merged' },
+  { label: 'Merge Completed', value: 'merge_completed' },
+  { label: 'Merge Failed', value: 'merge_failed' },
   { label: 'Rate Limit Fallback', value: 'rate_limit_fallback' },
   { label: 'QA Completed', value: 'qa_completed' },
 ];

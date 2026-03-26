@@ -38,6 +38,8 @@ export interface IInstallOptions {
   analytics?: boolean;
   noPrResolver?: boolean;
   prResolver?: boolean;
+  noMerger?: boolean;
+  merger?: boolean;
   force?: boolean;
 }
 
@@ -151,6 +153,8 @@ export function performInstall(
     analytics?: boolean;
     noPrResolver?: boolean;
     prResolver?: boolean;
+    noMerger?: boolean;
+    merger?: boolean;
     force?: boolean;
   },
 ): IInstallResult {
@@ -259,6 +263,16 @@ export function performInstall(
       entries.push(prResolverEntry);
     }
 
+    // Merger entry (if enabled and noMerger not set)
+    const disableMerger = options?.noMerger === true || options?.merger === false;
+    const installMerger = disableMerger ? false : (config.merger?.enabled ?? false);
+    if (installMerger) {
+      const mergerSchedule = config.merger!.schedule;
+      const mergerLog = path.join(logDir, 'merger.log');
+      const mergerEntry = `${mergerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} merge >> ${shellQuote(mergerLog)} 2>&1  ${marker}`;
+      entries.push(mergerEntry);
+    }
+
     const existingEntries = new Set(
       Array.from(new Set([...getEntries(marker), ...getProjectEntries(projectDir)])),
     );
@@ -295,6 +309,7 @@ export function installCommand(program: Command): void {
     .option('--no-audit', 'Skip installing audit cron')
     .option('--no-analytics', 'Skip installing analytics cron')
     .option('--no-pr-resolver', 'Skip installing PR resolver cron')
+    .option('--no-merger', 'Skip installing merger cron')
     .option('-f, --force', 'Replace existing cron entries for this project')
     .action(async (options: IInstallOptions) => {
       try {
@@ -439,6 +454,21 @@ export function installCommand(program: Command): void {
           entries.push(prResolverEntry);
         }
 
+        // Determine if merger should be installed
+        const disableMerger =
+          options.noMerger === true ||
+          (options as Record<string, unknown>).merger === false;
+        const installMerger = disableMerger ? false : (config.merger?.enabled ?? false);
+
+        // Merger entry (if enabled)
+        let mergerLog: string | undefined;
+        if (installMerger) {
+          mergerLog = path.join(logDir, 'merger.log');
+          const mergerSchedule = config.merger!.schedule;
+          const mergerEntry = `${mergerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} merge >> ${shellQuote(mergerLog)} 2>&1  ${marker}`;
+          entries.push(mergerEntry);
+        }
+
         // Add all entries
         const existingEntrySet = new Set(existingEntries);
         const currentCrontab = readCrontab();
@@ -475,6 +505,9 @@ export function installCommand(program: Command): void {
         }
         if (installPrResolver && prResolverLog) {
           dim(`  PR Resolver: ${prResolverLog}`);
+        }
+        if (installMerger && mergerLog) {
+          dim(`  Merger: ${mergerLog}`);
         }
         console.log();
         dim('To uninstall, run: night-watch uninstall');

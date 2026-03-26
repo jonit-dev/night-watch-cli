@@ -1,4 +1,4 @@
-import type { IAnalyticsConfig, IAuditConfig, INightWatchConfig, IQaConfig, IRoadmapScannerConfig } from '@shared/types';
+import type { IAnalyticsConfig, IAuditConfig, IMergerConfig, INightWatchConfig, IQaConfig, IRoadmapScannerConfig } from '@shared/types';
 
 export interface IJobDefinition {
   /** Config/API key — matches IJobProviders keys and ScheduleTimeline IDs */
@@ -34,6 +34,7 @@ export const JOB_DEFINITIONS: IJobDefinition[] = [
   { id: 'audit',     label: 'Audit',     processName: 'audit',     color: { bg: 'bg-orange-500', border: 'border-orange-500/60' } },
   { id: 'slicer',    label: 'Planner',   processName: 'planner',   color: { bg: 'bg-yellow-500', border: 'border-yellow-500/60' } },
   { id: 'analytics', label: 'Analytics', processName: 'analytics', color: { bg: 'bg-pink-500',   border: 'border-pink-500/60'   } },
+  { id: 'merger',    label: 'Merger',    processName: 'merger',    color: { bg: 'bg-cyan-500',   border: 'border-cyan-500/60'   } },
 ];
 
 export const WEB_JOB_REGISTRY: IWebJobDefinition[] = [
@@ -108,6 +109,18 @@ export const WEB_JOB_REGISTRY: IWebJobDefinition[] = [
     getSchedule: (config) => config.analytics?.schedule ?? '0 6 * * 1',
     settingsSection: 'advanced',
     buildEnabledPatch: (enabled, config) => ({ analytics: { ...(config.analytics ?? {}), enabled } as IAnalyticsConfig }),
+  },
+  {
+    id: 'merger',
+    label: 'Merger',
+    processName: 'merger',
+    color: { bg: 'bg-cyan-500', border: 'border-cyan-500/60' },
+    triggerEndpoint: '/api/actions/merge',
+    scheduleTemplateKey: 'merger',
+    getEnabled: (config) => config.merger?.enabled ?? false,
+    getSchedule: (config) => config.merger?.schedule ?? '55 */4 * * *',
+    settingsSection: 'advanced',
+    buildEnabledPatch: (enabled, config) => ({ merger: { ...(config.merger ?? {}), enabled } as IMergerConfig }),
   },
 ];
 

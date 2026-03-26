@@ -95,6 +95,17 @@ describe('review command', () => {
       expect(envVars.NW_PROVIDER_CMD).toBe('claude');
     });
 
+    it('buildEnvVars should not set NW_AUTO_MERGE', () => {
+      const config: INightWatchConfig = {
+        ...getDefaultConfig(),
+        provider: 'claude',
+      };
+
+      const env = buildEnvVars(config, { dryRun: false });
+
+      expect(env.NW_AUTO_MERGE).toBeUndefined();
+    });
+
     it('should include retry env vars', () => {
       const config: INightWatchConfig = {
         ...getDefaultConfig(),

@@ -47,7 +47,7 @@ export type MergeMethod = 'squash' | 'merge' | 'rebase';
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 /** Job types that can have per-job provider configuration */
-export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics' | 'planner';
+export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics' | 'planner' | 'merger';
 
 /** Per-job provider configuration */
 export interface IJobProviders {
@@ -57,6 +57,7 @@ export interface IJobProviders {
   audit?: Provider;
   slicer?: Provider;
   analytics?: Provider;
+  merger?: Provider;
 }
 
 /**
@@ -97,7 +98,13 @@ export type NotificationEvent =
   | 'review_completed'
   | 'pr_auto_merged'
   | 'rate_limit_fallback'
-  | 'qa_completed';
+  | 'qa_completed'
+  | 'merge_completed'
+  | 'merge_failed'
+  | 'review_ready_for_human'
+  | 'pr_resolver_completed'
+  | 'pr_resolver_conflict_resolved'
+  | 'pr_resolver_failed';
 
 export interface IWebhookConfig {
   type: WebhookType;
@@ -153,6 +160,19 @@ export interface IAuditConfig {
   schedule: string;
   /** Maximum runtime in seconds for the audit */
   maxRuntime: number;
+}
+
+// ==================== Merger Config ====================
+
+export interface IMergerConfig {
+  enabled: boolean;
+  schedule: string;
+  maxRuntime: number;
+  mergeMethod: MergeMethod;
+  minReviewScore: number;
+  branchPatterns: string[];
+  rebaseBeforeMerge: boolean;
+  maxPrsPerRun: number;
 }
 
 // ==================== Analytics Config ====================
@@ -222,12 +242,13 @@ export interface INightWatchConfig {
   qa: IQaConfig;
   audit: IAuditConfig;
   analytics: IAnalyticsConfig;
+  merger?: IMergerConfig;
   queue: IQueueConfig;
   /** Time-based provider schedule overrides */
   providerScheduleOverrides?: IProviderScheduleOverride[];
 }
 
-export type QueueMode = 'conservative' | 'provider-aware';
+export type QueueMode = 'conservative' | 'provider-aware' | 'auto';
 
 export interface IProviderBucketConfig {
   maxConcurrency: number;

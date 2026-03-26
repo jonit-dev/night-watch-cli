@@ -33,6 +33,7 @@ import { queueCommand } from './commands/queue.js';
 import { notifyCommand } from './commands/notify.js';
 import { summaryCommand } from './commands/summary.js';
 import { resolveCommand } from './commands/resolve.js';
+import { mergeCommand } from './commands/merge.js';
 
 // Find the package root (works from both src/ in dev and dist/src/ in production)
 const __filename = fileURLToPath(import.meta.url);
@@ -132,5 +133,8 @@ summaryCommand(program);
 
 // Register resolve command (PR conflict resolver)
 resolveCommand(program);
+
+// Register merge command (merger orchestrator)
+mergeCommand(program);
 
 program.parse();

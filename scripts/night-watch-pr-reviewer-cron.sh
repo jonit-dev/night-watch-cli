@@ -10,8 +10,6 @@ set -euo pipefail
 #   NW_REVIEWER_MAX_RUNTIME=3600 - Maximum runtime in seconds (1 hour)
 #   NW_PROVIDER_CMD=claude       - AI provider CLI to use (claude, codex, etc.)
 #   NW_DRY_RUN=0                 - Set to 1 for dry-run mode (prints diagnostics only)
-#   NW_AUTO_MERGE=0              - Set to 1 to enable auto-merge
-#   NW_AUTO_MERGE_METHOD=squash  - Merge method: squash, merge, or rebase
 
 PROJECT_DIR="${1:?Usage: $0 /path/to/project}"
 PROJECT_NAME=$(basename "${PROJECT_DIR}")
@@ -23,8 +21,6 @@ PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 PROVIDER_LABEL="${NW_PROVIDER_LABEL:-}"
 MIN_REVIEW_SCORE="${NW_MIN_REVIEW_SCORE:-80}"
 BRANCH_PATTERNS_RAW="${NW_BRANCH_PATTERNS:-feat/,night-watch/}"
-AUTO_MERGE="${NW_AUTO_MERGE:-0}"
-AUTO_MERGE_METHOD="${NW_AUTO_MERGE_METHOD:-squash}"
 TARGET_PR="${NW_TARGET_PR:-}"
 PARALLEL_ENABLED="${NW_REVIEWER_PARALLEL:-1}"
 WORKER_MODE="${NW_REVIEWER_WORKER_MODE:-0}"
@@ -552,7 +548,7 @@ fi
 rotate_log
 log_separator
 log "RUN-START: reviewer invoked project=${PROJECT_DIR} provider=${PROVIDER_CMD} worker=${WORKER_MODE} target_pr=${TARGET_PR:-all} parallel=${PARALLEL_ENABLED}"
-log "CONFIG: max_runtime=${MAX_RUNTIME}s min_review_score=${MIN_REVIEW_SCORE} auto_merge=${AUTO_MERGE} branch_patterns=${BRANCH_PATTERNS_RAW}"
+log "CONFIG: max_runtime=${MAX_RUNTIME}s min_review_score=${MIN_REVIEW_SCORE} branch_patterns=${BRANCH_PATTERNS_RAW}"
 
 if ! acquire_lock "${LOCK_FILE}"; then
   emit_result "skip_locked"
@@ -683,61 +679,6 @@ done < <(
 if [ "${NEEDS_WORK}" -eq 0 ]; then
   log "SKIP: All ${OPEN_PRS} open PR(s) have passing CI and review score >= ${MIN_REVIEW_SCORE}"
 
-  # ── Auto-merge eligible PRs ───────────────────────────────
-  if [ "${NW_AUTO_MERGE:-0}" = "1" ]; then
-    AUTO_MERGE_METHOD="${NW_AUTO_MERGE_METHOD:-squash}"
-    AUTO_MERGED_COUNT=0
-
-    log "AUTO-MERGE: Checking for merge-ready PRs (method: ${AUTO_MERGE_METHOD})"
-
-    while IFS=$'\t' read -r pr_number pr_branch; do
-      [ -z "${pr_number}" ] || [ -z "${pr_branch}" ] && continue
-      printf '%s\n' "${pr_branch}" | grep -Eq "${BRANCH_REGEX}" || continue
-
-      # Check CI status - must have ALL checks passing (not just "no failures")
-      # gh pr checks exits 0 if all pass, 8 if pending, non-zero otherwise
-      if ! gh pr checks "${pr_number}" --required >/dev/null 2>&1; then
-        log "AUTO-MERGE: PR #${pr_number} has pending or failed CI checks"
-        continue
-      fi
-
-      # Check review score
-      PR_COMMENTS=$(
-        {
-          gh pr view "${pr_number}" --json comments --jq '.comments[].body' 2>/dev/null || true
-          if [ -n "${REPO}" ]; then
-            gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
-          fi
-        } | awk '!seen[$0]++'
-      )
-      PR_SCORE=$(extract_review_score_from_text "${PR_COMMENTS}")
-
-      # Skip PRs without a score or with score below threshold
-      [ -z "${PR_SCORE}" ] && continue
-      [ "${PR_SCORE}" -lt "${MIN_REVIEW_SCORE}" ] && continue
-
-      # PR is merge-ready
-      log "AUTO-MERGE: PR #${pr_number} (${pr_branch}) — score ${PR_SCORE}/100, CI passing"
-
-      # Dry-run mode: show what would be merged
-      if [ "${NW_DRY_RUN:-0}" = "1" ]; then
-        log "AUTO-MERGE (dry-run): Would queue merge for PR #${pr_number} using ${AUTO_MERGE_METHOD}"
-        continue
-      fi
-
-      if gh pr merge "${pr_number}" --"${AUTO_MERGE_METHOD}" --auto --delete-branch 2>>"${LOG_FILE}"; then
-        log "AUTO-MERGE: Successfully queued merge for PR #${pr_number}"
-        AUTO_MERGED_COUNT=$((AUTO_MERGED_COUNT + 1))
-      else
-        log "WARN: Auto-merge failed for PR #${pr_number}"
-      fi
-    done < <(gh pr list --state open --json number,headRefName --jq '.[] | [.number, .headRefName] | @tsv' 2>/dev/null || true)
-
-    if [ "${AUTO_MERGED_COUNT}" -gt 0 ]; then
-      log "AUTO-MERGE: Queued ${AUTO_MERGED_COUNT} PR(s) for merge"
-    fi
-  fi
-
   if [ "${WORKER_MODE}" != "1" ]; then
     send_telegram_status_message "🔍 Night Watch Reviewer: nothing to do" "Project: ${PROJECT_NAME}
 Provider (model): ${PROVIDER_MODEL_DISPLAY}
@@ -786,10 +727,6 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
     echo "Provider (model): ${PROVIDER_MODEL_DISPLAY}"
     echo "Branch Patterns: ${BRANCH_PATTERNS_RAW}"
     echo "Min Review Score: ${MIN_REVIEW_SCORE}"
-    echo "Auto-merge: ${AUTO_MERGE}"
-    if [ "${AUTO_MERGE}" = "1" ]; then
-      echo "Auto-merge Method: ${AUTO_MERGE_METHOD}"
-    fi
     echo "Max PRs Per Run: ${REVIEWER_MAX_PRS_PER_RUN}"
     echo "Open PRs needing work:${PRS_NEEDING_WORK}"
     echo "Default Branch: ${DEFAULT_BRANCH}"
@@ -947,10 +884,6 @@ if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   echo "Provider (model): ${PROVIDER_MODEL_DISPLAY}"
   echo "Branch Patterns: ${BRANCH_PATTERNS_RAW}"
   echo "Min Review Score: ${MIN_REVIEW_SCORE}"
-  echo "Auto-merge: ${AUTO_MERGE}"
-  if [ "${AUTO_MERGE}" = "1" ]; then
-    echo "Auto-merge Method: ${AUTO_MERGE_METHOD}"
-  fi
   echo "Max Retries: ${REVIEWER_MAX_RETRIES}"
   echo "Retry Delay: ${REVIEWER_RETRY_DELAY}s"
   echo "Max PRs Per Run: ${REVIEWER_MAX_PRS_PER_RUN}"
@@ -1257,77 +1190,8 @@ if [ "${EXIT_CODE}" -eq 0 ] && [ -n "${TARGET_PR}" ] && [ -n "${PR_BRANCH_HEAD_B
   fi
 fi
 
-# ── Auto-merge eligible PRs ─────────────────────────────────────────────────────
-# After the reviewer completes, check for PRs that are merge-ready and queue them
-# for auto-merge if enabled. Uses gh pr merge --auto to respect GitHub branch protection.
 AUTO_MERGED_PRS=""
 AUTO_MERGE_FAILED_PRS=""
-
-if [ "${AUTO_MERGE}" = "1" ] && [ ${EXIT_CODE} -eq 0 ]; then
-  log "AUTO-MERGE: Checking for merge-ready PRs..."
-
-  while IFS=$'\t' read -r pr_number pr_branch; do
-    if [ -z "${pr_number}" ] || [ -z "${pr_branch}" ]; then
-      continue
-    fi
-
-    if [ -n "${TARGET_PR}" ] && [ "${pr_number}" != "${TARGET_PR}" ]; then
-      continue
-    fi
-
-    # Only process PRs matching branch patterns
-    if [ -z "${TARGET_PR}" ] && ! printf '%s\n' "${pr_branch}" | grep -Eq "${BRANCH_REGEX}"; then
-      continue
-    fi
-
-    # Check CI status - must have ALL checks passing (not just "no failures")
-    # gh pr checks exits 0 if all pass, 8 if pending, non-zero otherwise
-    if ! gh pr checks "${pr_number}" --required >/dev/null 2>&1; then
-      log "AUTO-MERGE: PR #${pr_number} has pending or failed CI checks"
-      continue
-    fi
-
-    # Check review score - must have score >= threshold
-    ALL_COMMENTS=$(
-      {
-        gh pr view "${pr_number}" --json comments --jq '.comments[].body' 2>/dev/null || true
-        if [ -n "${REPO}" ]; then
-          gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
-        fi
-      } | awk '!seen[$0]++'
-    )
-    LATEST_SCORE=$(extract_review_score_from_text "${ALL_COMMENTS}")
-
-    # Skip PRs without a score
-    if [ -z "${LATEST_SCORE}" ]; then
-      continue
-    fi
-
-    # Skip PRs with score below threshold
-    if [ "${LATEST_SCORE}" -lt "${MIN_REVIEW_SCORE}" ]; then
-      continue
-    fi
-
-    # PR is merge-ready - queue for auto-merge
-    log "AUTO-MERGE: PR #${pr_number} (${pr_branch}) — score ${LATEST_SCORE}/100, CI passing"
-
-    if gh pr merge "${pr_number}" --"${AUTO_MERGE_METHOD}" --auto --delete-branch 2>>"${LOG_FILE}"; then
-      log "AUTO-MERGE: Successfully queued merge for PR #${pr_number}"
-      if [ -z "${AUTO_MERGED_PRS}" ]; then
-        AUTO_MERGED_PRS="#${pr_number}"
-      else
-        AUTO_MERGED_PRS="${AUTO_MERGED_PRS},#${pr_number}"
-      fi
-    else
-      log "WARN: Auto-merge failed for PR #${pr_number}"
-      if [ -z "${AUTO_MERGE_FAILED_PRS}" ]; then
-        AUTO_MERGE_FAILED_PRS="#${pr_number}"
-      else
-        AUTO_MERGE_FAILED_PRS="${AUTO_MERGE_FAILED_PRS},#${pr_number}"
-      fi
-    fi
-  done < <(gh pr list --state open --json number,headRefName --jq '.[] | [.number, .headRefName] | @tsv' 2>/dev/null || true)
-fi
 
 REVIEWER_TOTAL_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
 log "OUTCOME: exit_code=${EXIT_CODE} total_elapsed=${REVIEWER_TOTAL_ELAPSED}s prs=${PRS_NEEDING_WORK_CSV:-none} attempts=${ATTEMPTS_MADE}"

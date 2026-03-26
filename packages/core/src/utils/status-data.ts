@@ -162,6 +162,13 @@ export function prResolverLockPath(projectDir: string): string {
 }
 
 /**
+ * Compute the lock file path for the merger job of a given project directory.
+ */
+export function mergerLockPath(projectDir: string): string {
+  return `${LOCK_FILE_PREFIX}merger-${projectRuntimeKey(projectDir)}.lock`;
+}
+
+/**
  * Check if a process with the given PID is running
  */
 export function isProcessRunning(pid: number): boolean {

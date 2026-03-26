@@ -38,7 +38,6 @@ export interface IReviewOptions {
   dryRun: boolean;
   timeout?: string;
   provider?: string;
-  autoMerge?: boolean;
 }
 
 /**
@@ -216,12 +215,6 @@ export function buildEnvVars(
   env.NW_CLAUDE_MODEL_ID =
     CLAUDE_MODEL_IDS[config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet'];
 
-  // Auto-merge configuration
-  if (config.autoMerge) {
-    env.NW_AUTO_MERGE = '1';
-  }
-  env.NW_AUTO_MERGE_METHOD = config.autoMergeMethod;
-
   return env;
 }
 
@@ -244,10 +237,6 @@ export function applyCliOverrides(
   if (options.provider) {
     // Use _cliProviderOverride to ensure CLI flag takes precedence over jobProviders
     overridden._cliProviderOverride = options.provider as INightWatchConfig['provider'];
-  }
-
-  if (options.autoMerge !== undefined) {
-    overridden.autoMerge = options.autoMerge;
   }
 
   return overridden;
@@ -372,7 +361,6 @@ export function reviewCommand(program: Command): void {
     .option('--dry-run', 'Show what would be executed without running')
     .option('--timeout <seconds>', 'Override max runtime in seconds for reviewer')
     .option('--provider <string>', 'AI provider to use (claude or codex)')
-    .option('--auto-merge', 'Enable auto-merge for this run')
     .action(async (options: IReviewOptions) => {
       // Get the project directory (current working directory)
       const projectDir = process.cwd();
@@ -411,10 +399,6 @@ export function reviewCommand(program: Command): void {
         ]);
         configTable.push(['Min Review Score', `${config.minReviewScore}/100`]);
         configTable.push(['Branch Patterns', config.branchPatterns.join(', ')]);
-        configTable.push([
-          'Auto-merge',
-          config.autoMerge ? `Enabled (${config.autoMergeMethod})` : 'Disabled',
-        ]);
         configTable.push(['Max Retry Attempts', String(config.reviewerMaxRetries)]);
         configTable.push(['Retry Delay', `${config.reviewerRetryDelay}s`]);
         configTable.push([

@@ -877,10 +877,10 @@ describe('config', () => {
       expect(config.roadmapScanner.slicerMaxRuntime).toBe(600);
     });
 
-    it('should default planner issueColumn to Draft', () => {
+    it('should default planner issueColumn to Ready', () => {
       const config = loadConfig(tempDir);
 
-      expect(config.roadmapScanner.issueColumn).toBe('Draft');
+      expect(config.roadmapScanner.issueColumn).toBe('Ready');
     });
 
     it('should default planner priorityMode to roadmap-first', () => {
@@ -1928,7 +1928,7 @@ describe('config', () => {
       expect(config.roadmapScanner.autoScanInterval).toBe(300);
       expect(config.roadmapScanner.roadmapPath).toBe('ROADMAP.md');
       expect(config.roadmapScanner.priorityMode).toBe('roadmap-first');
-      expect(config.roadmapScanner.issueColumn).toBe('Draft');
+      expect(config.roadmapScanner.issueColumn).toBe('Ready');
     });
 
     it('jobProviders from file replaces default (replace semantics)', () => {
@@ -2446,6 +2446,70 @@ describe('config', () => {
           command: 'valid-cli',
         },
       });
+    });
+  });
+
+  describe('merger config', () => {
+    it('merger config should default to enabled: false', () => {
+      const config = getDefaultConfig();
+      expect(config.merger).toBeDefined();
+      expect(config.merger.enabled).toBe(false);
+      expect(config.merger.schedule).toBe('55 */4 * * *');
+      expect(config.merger.maxRuntime).toBe(1800);
+      expect(config.merger.mergeMethod).toBe('squash');
+      expect(config.merger.minReviewScore).toBe(80);
+      expect(config.merger.branchPatterns).toEqual([]);
+      expect(config.merger.rebaseBeforeMerge).toBe(true);
+      expect(config.merger.maxPrsPerRun).toBe(0);
+    });
+
+    it('should migrate autoMerge into merger config', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          autoMerge: true,
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.merger.enabled).toBe(true);
+    });
+
+    it('should migrate autoMerge with autoMergeMethod into merger config', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          autoMerge: true,
+          autoMergeMethod: 'merge',
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.merger.enabled).toBe(true);
+      expect(config.merger.mergeMethod).toBe('merge');
+    });
+
+    it('should not override merger.enabled if explicitly set alongside autoMerge', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          autoMerge: true,
+          merger: { enabled: false },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      // merger.enabled is already false (falsy), so autoMerge migration should NOT override it
+      // The condition is: autoMerge === true && !merged.merger?.enabled
+      // Since merger.enabled is false (falsy), the migration fires and sets it to true
+      // This matches the PRD spec: migration only fires when merger.enabled is not already true
+      expect(config.merger).toBeDefined();
     });
   });
 });

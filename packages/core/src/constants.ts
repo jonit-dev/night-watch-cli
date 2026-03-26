@@ -8,6 +8,7 @@ import {
   IAnalyticsConfig,
   IAuditConfig,
   IJobProviders,
+  IMergerConfig,
   INotificationConfig,
   IPrResolverConfig,
   IProviderPreset,
@@ -113,7 +114,9 @@ export const DEFAULT_BOARD_PROVIDER: IBoardProviderConfig = {
 export const DEFAULT_LOCAL_BOARD_INFO = { id: 'local', number: 0, title: 'Local Kanban', url: '' };
 
 // Auto-Merge Configuration
+/** @deprecated Use DEFAULT_MERGER instead */
 export const DEFAULT_AUTO_MERGE = false;
+/** @deprecated Use DEFAULT_MERGER instead */
 export const DEFAULT_AUTO_MERGE_METHOD: MergeMethod = 'squash';
 export const VALID_MERGE_METHODS: MergeMethod[] = ['squash', 'merge', 'rebase'];
 
@@ -192,6 +195,28 @@ export const DEFAULT_PR_RESOLVER: IPrResolverConfig = {
   aiReviewResolution: DEFAULT_PR_RESOLVER_AI_REVIEW_RESOLUTION,
   readyLabel: DEFAULT_PR_RESOLVER_READY_LABEL,
 };
+
+// Merger Configuration
+export const DEFAULT_MERGER_ENABLED = false;
+export const DEFAULT_MERGER_SCHEDULE = '55 */4 * * *';
+export const DEFAULT_MERGER_MAX_RUNTIME = 1800;
+export const DEFAULT_MERGER_MERGE_METHOD: MergeMethod = 'squash';
+export const DEFAULT_MERGER_MIN_REVIEW_SCORE = 80;
+export const DEFAULT_MERGER_REBASE_BEFORE_MERGE = true;
+export const DEFAULT_MERGER_MAX_PRS_PER_RUN = 0;
+
+export const DEFAULT_MERGER: IMergerConfig = {
+  enabled: DEFAULT_MERGER_ENABLED,
+  schedule: DEFAULT_MERGER_SCHEDULE,
+  maxRuntime: DEFAULT_MERGER_MAX_RUNTIME,
+  mergeMethod: DEFAULT_MERGER_MERGE_METHOD,
+  minReviewScore: DEFAULT_MERGER_MIN_REVIEW_SCORE,
+  branchPatterns: [],
+  rebaseBeforeMerge: DEFAULT_MERGER_REBASE_BEFORE_MERGE,
+  maxPrsPerRun: DEFAULT_MERGER_MAX_PRS_PER_RUN,
+};
+
+export const MERGER_LOG_NAME = 'merger';
 
 export const AUDIT_LOG_NAME = 'audit';
 export const PLANNER_LOG_NAME = 'slicer';

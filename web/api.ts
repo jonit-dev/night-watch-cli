@@ -12,6 +12,7 @@ import type {
     IBoardProviderConfig,
     IJobProviders,
     ILogInfo,
+    IMergerConfig,
     INightWatchConfig,
     INotificationConfig,
     IPrdInfo,
@@ -37,7 +38,7 @@ import { getWebJobDef } from './utils/jobs';
 
 // Re-export shared types so consumers can import from either place
 export type {
-    ClaudeModel, DayOfWeek, IAnalyticsConfig, IAuditConfig, IBoardProviderConfig, IJobProviders, ILogInfo, INightWatchConfig,
+    ClaudeModel, DayOfWeek, IAnalyticsConfig, IAuditConfig, IBoardProviderConfig, IJobProviders, ILogInfo, IMergerConfig, INightWatchConfig,
     INotificationConfig, IPrdInfo, IProviderBucketConfig, IProviderPreset, IProviderScheduleOverride, IPrInfo, IProcessInfo, IQaConfig,
     IQueueConfig, IRoadmapItem, IRoadmapScannerConfig, IRoadmapStatus, IStatusSnapshot, IWebhookConfig,
     JobType, MergeMethod, QaArtifacts, QueueMode
@@ -217,6 +218,14 @@ export interface IScheduleInfo {
     balancedDelayMinutes: number;
   };
   analytics?: {
+    schedule: string;
+    installed: boolean;
+    nextRun: string | null;
+    delayMinutes: number;
+    manualDelayMinutes: number;
+    balancedDelayMinutes: number;
+  };
+  merger?: {
     schedule: string;
     installed: boolean;
     nextRun: string | null;

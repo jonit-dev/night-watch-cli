@@ -24,6 +24,7 @@ const JOB_TYPE_LABELS: Record<JobType, string> = {
   slicer: 'Planner',
   analytics: 'Analytics',
   planner: 'Planner',
+  merger: 'Merger',
 };
 
 const emptyOverride: IProviderScheduleOverride = {
@@ -118,7 +119,6 @@ const OverrideForm: React.FC<IOverrideFormProps> = ({
           value={override.presetId}
           onChange={(val) => onChange({ ...override, presetId: val })}
           options={presetOptions}
-          placeholder="Select a provider preset"
         />
       </div>
 

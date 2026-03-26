@@ -70,6 +70,10 @@ export function getEventEmoji(event: NotificationEvent): string {
       return '\u2705';
     case 'pr_resolver_failed':
       return '\u274C';
+    case 'merge_completed':
+      return '\uD83D\uDD00';
+    case 'merge_failed':
+      return '\u274C';
   }
 }
 
@@ -104,6 +108,10 @@ export function getEventTitle(event: NotificationEvent): string {
       return 'PR Conflict Resolved';
     case 'pr_resolver_failed':
       return 'PR Resolver Failed';
+    case 'merge_completed':
+      return 'PR Merged';
+    case 'merge_failed':
+      return 'Merge Failed';
   }
 }
 
@@ -137,6 +145,10 @@ export function getEventColor(event: NotificationEvent): number {
     case 'pr_resolver_conflict_resolved':
       return 0x00ff00;
     case 'pr_resolver_failed':
+      return 0xff0000;
+    case 'merge_completed':
+      return 0x9b59b6;
+    case 'merge_failed':
       return 0xff0000;
   }
 }

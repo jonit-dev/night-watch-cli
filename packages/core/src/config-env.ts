@@ -226,6 +226,23 @@ export function buildEnvOverrideConfig(
     }
   }
 
+  // merger uses camelCase key 'merger' in config; handled via registry
+  const mergerDef = getJobDef('merger');
+  if (mergerDef) {
+    const currentBase =
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (env as any).merger ?? (fileConfig as any)?.merger ?? mergerDef.defaultConfig;
+    const overrides = buildJobEnvOverrides(
+      mergerDef.envPrefix,
+      currentBase as Record<string, unknown>,
+      mergerDef.extraFields,
+    );
+    if (overrides) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (env as any).merger = overrides;
+    }
+  }
+
   // Per-job provider overrides (NW_JOB_PROVIDER_<JOBTYPE>)
   const jobProvidersEnv: IJobProviders = {};
   for (const jobType of VALID_JOB_TYPES) {
