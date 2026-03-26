@@ -118,7 +118,6 @@ const OverrideForm: React.FC<IOverrideFormProps> = ({
           value={override.presetId}
           onChange={(val) => onChange({ ...override, presetId: val })}
           options={presetOptions}
-          placeholder="Select a provider preset"
         />
       </div>
 

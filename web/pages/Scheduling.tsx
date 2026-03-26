@@ -630,6 +630,7 @@ const Scheduling: React.FC = () => {
         selectedTemplateId: resetTemplate?.id ?? '',
         isDirty: false,
         queueMode: config.queue?.mode ?? 'auto',
+        globalMaxConcurrency: config.queue?.maxConcurrency ?? 1,
         providerBuckets: Object.entries(resetBuckets).map(([key, val]) => ({
           key,
           maxConcurrency: val.maxConcurrency,

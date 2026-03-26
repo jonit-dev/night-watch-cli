@@ -227,7 +227,7 @@ export interface INightWatchConfig {
   providerScheduleOverrides?: IProviderScheduleOverride[];
 }
 
-export type QueueMode = 'conservative' | 'provider-aware';
+export type QueueMode = 'conservative' | 'provider-aware' | 'auto';
 
 export interface IProviderBucketConfig {
   maxConcurrency: number;
