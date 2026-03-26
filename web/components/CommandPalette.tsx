@@ -130,7 +130,7 @@ const CommandPalette: React.FC = () => {
     });
 
     return result;
-  }, [status?.processes, scheduleInfo?.paused, addToast, navigate, agentStatus]);
+  }, [scheduleInfo?.paused, addToast, navigate, agentStatus]);
 
   // Filter commands by search term
   const filteredCommands = useMemo(() => {

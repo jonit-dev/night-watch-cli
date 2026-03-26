@@ -58,7 +58,7 @@ function getEventDescription(event: IActivityEvent): string {
 
 const ActivityCenter: React.FC = () => {
   const { activityCenterOpen, setActivityCenterOpen } = useStore();
-  const { groupedEvents, hasUnread, markAsRead } = useActivityFeed();
+  const { groupedEvents, markAsRead } = useActivityFeed();
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
