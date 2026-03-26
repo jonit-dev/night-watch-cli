@@ -2,10 +2,10 @@ import React from 'react';
 import { IAnalyticsConfig, IQaConfig, IAuditConfig, IMergerConfig, IRoadmapScannerConfig, MergeMethod, QaArtifacts } from '../../api';
 import TagInput from '../../components/settings/TagInput.js';
 import Card from '../../components/ui/Card';
-import CronScheduleInput from '../../components/ui/CronScheduleInput';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import Switch from '../../components/ui/Switch';
+import { cronToHuman } from '../../utils/cron.js';
 
 interface IConfigFormJobs {
   qa: IQaConfig;
@@ -20,9 +20,35 @@ interface IJobsTabProps {
   form: IConfigFormJobs;
   updateField: <K extends keyof IConfigFormJobs>(key: K, value: IConfigFormJobs[K]) => void;
   handleRoadmapToggle: (enabled: boolean) => Promise<void>;
+  onManageSchedule: (jobType: 'qa' | 'audit' | 'analytics' | 'slicer' | 'merger') => void;
 }
 
-const JobsTab: React.FC<IJobsTabProps> = ({ form, updateField, handleRoadmapToggle }) => {
+const ScheduleOwnerNotice: React.FC<{
+  schedule: string;
+  onManage: () => void;
+}> = ({ schedule, onManage }) => (
+  <div className="flex items-start justify-between gap-4 p-4 rounded-xl border border-slate-800 bg-slate-950/50">
+    <div>
+      <div className="text-xs uppercase tracking-wide text-slate-500">Managed in Schedules</div>
+      <div className="text-sm font-medium text-slate-200 mt-1">{cronToHuman(schedule)}</div>
+      <div className="text-xs font-mono text-slate-500 mt-1">{schedule}</div>
+    </div>
+    <button
+      type="button"
+      onClick={onManage}
+      className="shrink-0 rounded-md border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-medium text-indigo-300 transition-colors hover:border-indigo-400/50 hover:bg-indigo-500/15"
+    >
+      Manage schedule
+    </button>
+  </div>
+);
+
+const JobsTab: React.FC<IJobsTabProps> = ({
+  form,
+  updateField,
+  handleRoadmapToggle,
+  onManageSchedule,
+}) => {
   return (
     <div className="space-y-6">
       {/* QA */}
@@ -40,12 +66,11 @@ const JobsTab: React.FC<IJobsTabProps> = ({ form, updateField, handleRoadmapTogg
           </div>
           {form.qa.enabled && (
             <div className="space-y-6 pt-4 border-t border-slate-800">
+              <ScheduleOwnerNotice
+                schedule={form.qa.schedule}
+                onManage={() => onManageSchedule('qa')}
+              />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <CronScheduleInput
-                  label="QA Schedule"
-                  value={form.qa.schedule}
-                  onChange={(val) => updateField('qa', { ...form.qa, schedule: val })}
-                />
                 <Input
                   label="Max Runtime"
                   type="number"
@@ -110,20 +135,23 @@ const JobsTab: React.FC<IJobsTabProps> = ({ form, updateField, handleRoadmapTogg
             />
           </div>
           {form.audit.enabled && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
-              <CronScheduleInput
-                label="Audit Schedule"
-                value={form.audit.schedule}
-                onChange={(val) => updateField('audit', { ...form.audit, schedule: val })}
+            <div className="space-y-6 pt-4 border-t border-slate-800">
+              <ScheduleOwnerNotice
+                schedule={form.audit.schedule}
+                onManage={() => onManageSchedule('audit')}
               />
-              <Input
-                label="Max Runtime"
-                type="number"
-                value={String(form.audit.maxRuntime)}
-                onChange={(e) => updateField('audit', { ...form.audit, maxRuntime: Number(e.target.value || 0) })}
-                rightIcon={<span className="text-xs">sec</span>}
-                helperText="Maximum runtime for audit tasks (default: 1800 seconds)"
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Input
+                  label="Max Runtime"
+                  type="number"
+                  value={String(form.audit.maxRuntime)}
+                  onChange={(e) =>
+                    updateField('audit', { ...form.audit, maxRuntime: Number(e.target.value || 0) })
+                  }
+                  rightIcon={<span className="text-xs">sec</span>}
+                  helperText="Maximum runtime for audit tasks (default: 1800 seconds)"
+                />
+              </div>
             </div>
           )}
         </Card>
@@ -143,87 +171,102 @@ const JobsTab: React.FC<IJobsTabProps> = ({ form, updateField, handleRoadmapTogg
             />
           </div>
           {form.analytics.enabled && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
-              <Input
-                label="Amplitude API Key"
-                value={form.providerEnv?.AMPLITUDE_API_KEY ?? ''}
-                onChange={(e) =>
-                  updateField('providerEnv', { ...form.providerEnv, AMPLITUDE_API_KEY: e.target.value })
-                }
-                placeholder="Required"
-                helperText="Your Amplitude project API key"
+            <div className="space-y-6 pt-4 border-t border-slate-800">
+              <ScheduleOwnerNotice
+                schedule={form.analytics.schedule}
+                onManage={() => onManageSchedule('analytics')}
               />
-              <Input
-                label="Amplitude Secret Key"
-                type="password"
-                value={form.providerEnv?.AMPLITUDE_SECRET_KEY ?? ''}
-                onChange={(e) =>
-                  updateField('providerEnv', { ...form.providerEnv, AMPLITUDE_SECRET_KEY: e.target.value })
-                }
-                placeholder="Required"
-                helperText="Your Amplitude secret key"
-              />
-              <CronScheduleInput
-                label="Analytics Schedule"
-                value={form.analytics.schedule}
-                onChange={(val) => updateField('analytics', { ...form.analytics, schedule: val })}
-              />
-              <Input
-                label="Max Runtime"
-                type="number"
-                value={String(form.analytics.maxRuntime)}
-                onChange={(e) =>
-                  updateField('analytics', { ...form.analytics, maxRuntime: Number(e.target.value || 0) })
-                }
-                rightIcon={<span className="text-xs">sec</span>}
-                helperText="Maximum runtime for analytics job (default: 900 seconds)"
-              />
-              <Input
-                label="Lookback Days"
-                type="number"
-                min="1"
-                max="90"
-                value={String(form.analytics.lookbackDays)}
-                onChange={(e) =>
-                  updateField('analytics', {
-                    ...form.analytics,
-                    lookbackDays: Math.max(1, Math.min(90, Number(e.target.value || 7))),
-                  })
-                }
-                helperText="Number of days to look back in Amplitude (1-90)"
-              />
-              <Select
-                label="Target Column"
-                value={form.analytics.targetColumn}
-                onChange={(value) =>
-                  updateField('analytics', {
-                    ...form.analytics,
-                    targetColumn: value as IAnalyticsConfig['targetColumn'],
-                  })
-                }
-                options={[
-                  { value: 'Draft', label: 'Draft' },
-                  { value: 'Ready', label: 'Ready' },
-                  { value: 'In Progress', label: 'In Progress' },
-                  { value: 'Review', label: 'Review' },
-                  { value: 'Done', label: 'Done' },
-                ]}
-                helperText="Board column for created issues"
-              />
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-400 mb-1.5">
-                  Analysis Prompt (optional)
-                </label>
-                <textarea
-                  rows={4}
-                  value={form.analytics.analysisPrompt ?? ''}
-                  onChange={(e) => updateField('analytics', { ...form.analytics, analysisPrompt: e.target.value })}
-                  placeholder="Custom prompt for AI analysis. Leave empty to use default."
-                  className="w-full bg-slate-950/50 border border-white/10 text-slate-200 rounded-lg px-3 py-2.5 text-sm placeholder-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 resize-y"
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Input
+                  label="Amplitude API Key"
+                  value={form.providerEnv?.AMPLITUDE_API_KEY ?? ''}
+                  onChange={(e) =>
+                    updateField('providerEnv', {
+                      ...form.providerEnv,
+                      AMPLITUDE_API_KEY: e.target.value,
+                    })
+                  }
+                  placeholder="Required"
+                  helperText="Your Amplitude project API key"
                 />
-                <p className="mt-1.5 text-xs text-slate-500">
-                  Custom prompt for AI analysis. Leave empty to use default.
-                </p>
+                <Input
+                  label="Amplitude Secret Key"
+                  type="password"
+                  value={form.providerEnv?.AMPLITUDE_SECRET_KEY ?? ''}
+                  onChange={(e) =>
+                    updateField('providerEnv', {
+                      ...form.providerEnv,
+                      AMPLITUDE_SECRET_KEY: e.target.value,
+                    })
+                  }
+                  placeholder="Required"
+                  helperText="Your Amplitude secret key"
+                />
+                <Input
+                  label="Max Runtime"
+                  type="number"
+                  value={String(form.analytics.maxRuntime)}
+                  onChange={(e) =>
+                    updateField('analytics', {
+                      ...form.analytics,
+                      maxRuntime: Number(e.target.value || 0),
+                    })
+                  }
+                  rightIcon={<span className="text-xs">sec</span>}
+                  helperText="Maximum runtime for analytics job (default: 900 seconds)"
+                />
+                <Input
+                  label="Lookback Days"
+                  type="number"
+                  min="1"
+                  max="90"
+                  value={String(form.analytics.lookbackDays)}
+                  onChange={(e) =>
+                    updateField('analytics', {
+                      ...form.analytics,
+                      lookbackDays: Math.max(1, Math.min(90, Number(e.target.value || 7))),
+                    })
+                  }
+                  helperText="Number of days to look back in Amplitude (1-90)"
+                />
+                <Select
+                  label="Target Column"
+                  value={form.analytics.targetColumn}
+                  onChange={(value) =>
+                    updateField('analytics', {
+                      ...form.analytics,
+                      targetColumn: value as IAnalyticsConfig['targetColumn'],
+                    })
+                  }
+                  options={[
+                    { value: 'Draft', label: 'Draft' },
+                    { value: 'Ready', label: 'Ready' },
+                    { value: 'In Progress', label: 'In Progress' },
+                    { value: 'Review', label: 'Review' },
+                    { value: 'Done', label: 'Done' },
+                  ]}
+                  helperText="Board column for created issues"
+                />
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate-400 mb-1.5">
+                    Analysis Prompt (optional)
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={form.analytics.analysisPrompt ?? ''}
+                    onChange={(e) =>
+                      updateField('analytics', {
+                        ...form.analytics,
+                        analysisPrompt: e.target.value,
+                      })
+                    }
+                    placeholder="Custom prompt for AI analysis. Leave empty to use default."
+                    className="w-full bg-slate-950/50 border border-white/10 text-slate-200 rounded-lg px-3 py-2.5 text-sm placeholder-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 resize-y"
+                  />
+                  <p className="mt-1.5 text-xs text-slate-500">
+                    Custom prompt for AI analysis. Leave empty to use default.
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -247,65 +290,67 @@ const JobsTab: React.FC<IJobsTabProps> = ({ form, updateField, handleRoadmapTogg
             />
           </div>
           {form.roadmapScanner.enabled && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-slate-800">
-              <Input
-                label="Roadmap File Path"
-                value={form.roadmapScanner.roadmapPath}
-                onChange={(e) =>
-                  updateField('roadmapScanner', { ...form.roadmapScanner, roadmapPath: e.target.value })
-                }
-                helperText="Primary planning source (relative to project root)."
+            <div className="space-y-6 pt-4 border-t border-slate-800">
+              <ScheduleOwnerNotice
+                schedule={form.roadmapScanner.slicerSchedule}
+                onManage={() => onManageSchedule('slicer')}
               />
-              <CronScheduleInput
-                label="Planner Schedule"
-                value={form.roadmapScanner.slicerSchedule || '35 */12 * * *'}
-                onChange={(val) =>
-                  updateField('roadmapScanner', { ...form.roadmapScanner, slicerSchedule: val })
-                }
-              />
-              <Input
-                label="Planner Max Runtime"
-                type="number"
-                value={String(form.roadmapScanner.slicerMaxRuntime || '')}
-                onChange={(e) =>
-                  updateField('roadmapScanner', {
-                    ...form.roadmapScanner,
-                    slicerMaxRuntime: Number(e.target.value || 0),
-                  })
-                }
-                rightIcon={<span className="text-xs">sec</span>}
-                helperText="Maximum runtime for planner tasks"
-              />
-              <Select
-                label="Planner Priority Mode"
-                value={form.roadmapScanner.priorityMode || 'roadmap-first'}
-                onChange={(val) =>
-                  updateField('roadmapScanner', {
-                    ...form.roadmapScanner,
-                    priorityMode: val === 'audit-first' ? 'audit-first' : 'roadmap-first',
-                  })
-                }
-                options={[
-                  { label: 'Roadmap first (recommended)', value: 'roadmap-first' },
-                  { label: 'Audit first', value: 'audit-first' },
-                ]}
-                helperText="Choose whether planner consumes roadmap items or audit findings first."
-              />
-              <Select
-                label="Planner Issue Column"
-                value={form.roadmapScanner.issueColumn || 'Ready'}
-                onChange={(val) =>
-                  updateField('roadmapScanner', {
-                    ...form.roadmapScanner,
-                    issueColumn: val === 'Draft' ? 'Draft' : 'Ready',
-                  })
-                }
-                options={[
-                  { label: 'Ready (default)', value: 'Ready' },
-                  { label: 'Draft', value: 'Draft' },
-                ]}
-                helperText="Column where planner-created issues are added after PRD generation."
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Input
+                  label="Roadmap File Path"
+                  value={form.roadmapScanner.roadmapPath}
+                  onChange={(e) =>
+                    updateField('roadmapScanner', {
+                      ...form.roadmapScanner,
+                      roadmapPath: e.target.value,
+                    })
+                  }
+                  helperText="Primary planning source (relative to project root)."
+                />
+                <Input
+                  label="Planner Max Runtime"
+                  type="number"
+                  value={String(form.roadmapScanner.slicerMaxRuntime || '')}
+                  onChange={(e) =>
+                    updateField('roadmapScanner', {
+                      ...form.roadmapScanner,
+                      slicerMaxRuntime: Number(e.target.value || 0),
+                    })
+                  }
+                  rightIcon={<span className="text-xs">sec</span>}
+                  helperText="Maximum runtime for planner tasks"
+                />
+                <Select
+                  label="Planner Priority Mode"
+                  value={form.roadmapScanner.priorityMode || 'roadmap-first'}
+                  onChange={(val) =>
+                    updateField('roadmapScanner', {
+                      ...form.roadmapScanner,
+                      priorityMode: val === 'audit-first' ? 'audit-first' : 'roadmap-first',
+                    })
+                  }
+                  options={[
+                    { label: 'Roadmap first (recommended)', value: 'roadmap-first' },
+                    { label: 'Audit first', value: 'audit-first' },
+                  ]}
+                  helperText="Choose whether planner consumes roadmap items or audit findings first."
+                />
+                <Select
+                  label="Planner Issue Column"
+                  value={form.roadmapScanner.issueColumn || 'Ready'}
+                  onChange={(val) =>
+                    updateField('roadmapScanner', {
+                      ...form.roadmapScanner,
+                      issueColumn: val === 'Draft' ? 'Draft' : 'Ready',
+                    })
+                  }
+                  options={[
+                    { label: 'Ready (default)', value: 'Ready' },
+                    { label: 'Draft', value: 'Draft' },
+                  ]}
+                  helperText="Column where planner-created issues are added after PRD generation."
+                />
+              </div>
             </div>
           )}
         </Card>
@@ -326,12 +371,11 @@ const JobsTab: React.FC<IJobsTabProps> = ({ form, updateField, handleRoadmapTogg
           </div>
           {form.merger.enabled && (
             <div className="space-y-6 pt-4 border-t border-slate-800">
+              <ScheduleOwnerNotice
+                schedule={form.merger.schedule}
+                onManage={() => onManageSchedule('merger')}
+              />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <CronScheduleInput
-                  label="Merger Schedule"
-                  value={form.merger.schedule}
-                  onChange={(val) => updateField('merger', { ...form.merger, schedule: val })}
-                />
                 <Input
                   label="Max Runtime"
                   type="number"

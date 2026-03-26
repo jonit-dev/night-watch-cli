@@ -57,10 +57,10 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
       enabled: true,
       roadmapPath: 'ROADMAP.md',
       autoScanInterval: 300,
-      slicerSchedule: '35 */12 * * *',
+      slicerSchedule: '35 */6 * * *',
       slicerMaxRuntime: 600,
       priorityMode: 'roadmap-first',
-      issueColumn: 'Draft',
+      issueColumn: 'Ready',
     },
     templatesDir: '.night-watch/templates',
     boardProvider: { enabled: true, provider: 'github' },
@@ -71,7 +71,7 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     claudeModel: 'sonnet',
     qa: {
       enabled: true,
-      schedule: '45 2,14 * * *',
+      schedule: '45 2,10,18 * * *',
       maxRuntime: 3600,
       branchPatterns: [],
       artifacts: 'both',
@@ -104,6 +104,16 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
       lookbackDays: 30,
       targetColumn: 'Draft',
       analysisPrompt: '',
+    },
+    merger: {
+      enabled: true,
+      schedule: '55 */4 * * *',
+      maxRuntime: 1800,
+      mergeMethod: 'squash',
+      minReviewScore: 80,
+      branchPatterns: [],
+      rebaseBeforeMerge: true,
+      maxPrsPerRun: 0,
     },
   };
 
@@ -148,7 +158,7 @@ function makeScheduleInfo(overrides: Partial<IScheduleInfo> = {}): IScheduleInfo
       balancedDelayMinutes: 0,
     },
     qa: {
-      schedule: '45 2,14 * * *',
+      schedule: '45 2,10,18 * * *',
       installed: true,
       nextRun: '2026-03-06T02:45:00.000Z',
       delayMinutes: 0,
@@ -164,9 +174,25 @@ function makeScheduleInfo(overrides: Partial<IScheduleInfo> = {}): IScheduleInfo
       balancedDelayMinutes: 0,
     },
     planner: {
-      schedule: '35 */12 * * *',
+      schedule: '35 */6 * * *',
       installed: true,
       nextRun: '2026-03-06T00:35:00.000Z',
+      delayMinutes: 0,
+      manualDelayMinutes: 0,
+      balancedDelayMinutes: 0,
+    },
+    analytics: {
+      schedule: '15 3 * * *',
+      installed: true,
+      nextRun: '2026-03-06T03:15:00.000Z',
+      delayMinutes: 0,
+      manualDelayMinutes: 0,
+      balancedDelayMinutes: 0,
+    },
+    merger: {
+      schedule: '55 */4 * * *',
+      installed: true,
+      nextRun: '2026-03-06T00:55:00.000Z',
       delayMinutes: 0,
       manualDelayMinutes: 0,
       balancedDelayMinutes: 0,
@@ -257,29 +283,17 @@ describe('Scheduling page', () => {
     apiMocks.fetchQueueAnalytics.mockResolvedValue(makeQueueAnalytics());
   });
 
-  it('keeps cron controls available after dashboard refresh', async () => {
+  it('routes cadence management to Settings instead of duplicating cron controls', async () => {
     renderScheduling();
 
-    // Navigate to the Schedules tab first
-    fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cadence' }));
 
-    // Job Schedules heading is visible in template mode
-    expect(screen.getByText('Job Schedules')).toBeInTheDocument();
-
-    // Switch to custom mode to reveal cron inputs
-    fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
-
-    // Cron controls are now visible
-    expect(screen.getByText('PRD Execution Schedule')).toBeInTheDocument();
-    expect(screen.getByText('PR Review Schedule')).toBeInTheDocument();
-
-    // Wait a bit for any async operations
     await waitFor(() => {
-      expect(screen.getByText('PRD Execution Schedule')).toBeInTheDocument();
+      expect(screen.getByText('Cadence is configured in Settings')).toBeInTheDocument();
     });
 
-    // Cron controls still present after async ops
-    expect(screen.getByText('PRD Execution Schedule')).toBeInTheDocument();
-    expect(screen.getByText('Job Schedules')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Schedules' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Jobs' })).toBeInTheDocument();
+    expect(screen.queryByText('PRD Execution Schedule')).not.toBeInTheDocument();
   });
 });

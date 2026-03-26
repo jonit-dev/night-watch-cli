@@ -63,6 +63,9 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
           <p className="text-sm text-slate-400">
             Configure when automated jobs run using a preset template or custom cron expressions
           </p>
+          <p className="text-xs text-slate-500 mt-2">
+            Cadence is managed here. Enablement and runtime settings live in the Jobs tab.
+          </p>
         </div>
         <div className="flex rounded-lg border border-slate-700 overflow-hidden shrink-0">
           <button
@@ -114,6 +117,8 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
                       ['Reviewer', tpl.hints.reviewer],
                       ['QA', tpl.hints.qa],
                       ['Audit', tpl.hints.audit],
+                      ['Planner', tpl.hints.slicer],
+                      ['Merger', tpl.hints.merger],
                     ] as [string, string][]
                   ).map(([name, hint]) => (
                     <div key={name} className="flex items-center gap-2">
@@ -128,36 +133,84 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <CronScheduleInput
-            label="PRD Execution Schedule"
-            value={form.cronSchedule}
-            onChange={(val) => onFieldChange('cronSchedule', val)}
-          />
-          <CronScheduleInput
-            label="PR Review Schedule"
-            value={form.reviewerSchedule}
-            onChange={(val) => onFieldChange('reviewerSchedule', val)}
-          />
-          <CronScheduleInput
-            label="QA Schedule"
-            value={form.qa.schedule}
-            onChange={(val) =>
-              onFieldChange('qa', {
-                ...form.qa,
-                schedule: val,
-              })
-            }
-          />
-          <CronScheduleInput
-            label="Audit Schedule"
-            value={form.audit.schedule}
-            onChange={(val) =>
-              onFieldChange('audit', {
-                ...form.audit,
-                schedule: val,
-              })
-            }
-          />
+          <div id="job-schedule-executor">
+            <CronScheduleInput
+              label="PRD Execution Schedule"
+              value={form.cronSchedule}
+              onChange={(val) => onFieldChange('cronSchedule', val)}
+            />
+          </div>
+          <div id="job-schedule-reviewer">
+            <CronScheduleInput
+              label="PR Review Schedule"
+              value={form.reviewerSchedule}
+              onChange={(val) => onFieldChange('reviewerSchedule', val)}
+            />
+          </div>
+          <div id="job-schedule-qa">
+            <CronScheduleInput
+              label="QA Schedule"
+              value={form.qa.schedule}
+              onChange={(val) =>
+                onFieldChange('qa', {
+                  ...form.qa,
+                  schedule: val,
+                })
+              }
+            />
+          </div>
+          <div id="job-schedule-audit">
+            <CronScheduleInput
+              label="Audit Schedule"
+              value={form.audit.schedule}
+              onChange={(val) =>
+                onFieldChange('audit', {
+                  ...form.audit,
+                  schedule: val,
+                })
+              }
+            />
+          </div>
+          <div id="job-schedule-slicer">
+            <CronScheduleInput
+              label="Planner Schedule"
+              value={form.roadmapScanner.slicerSchedule}
+              onChange={(val) =>
+                onFieldChange('roadmapScanner', {
+                  ...form.roadmapScanner,
+                  slicerSchedule: val,
+                })
+              }
+            />
+          </div>
+          {form.analytics && (
+            <div id="job-schedule-analytics">
+              <CronScheduleInput
+                label="Analytics Schedule"
+                value={form.analytics.schedule}
+                onChange={(val) =>
+                  onFieldChange('analytics', {
+                    ...form.analytics,
+                    schedule: val,
+                  })
+                }
+              />
+            </div>
+          )}
+          {form.merger && (
+            <div id="job-schedule-merger">
+              <CronScheduleInput
+                label="Merge Orchestrator Schedule"
+                value={form.merger.schedule}
+                onChange={(val) =>
+                  onFieldChange('merger', {
+                    ...form.merger,
+                    schedule: val,
+                  })
+                }
+              />
+            </div>
+          )}
         </div>
       )}
 

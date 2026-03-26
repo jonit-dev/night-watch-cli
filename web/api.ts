@@ -343,6 +343,12 @@ export function triggerPlanner(): Promise<ActionResult> {
   });
 }
 
+export function triggerMerger(): Promise<ActionResult> {
+  return apiFetch<ActionResult>(apiPath('/api/actions/merge'), {
+    method: 'POST',
+  });
+}
+
 /**
  * Generic job trigger using the web job registry.
  * Prefer this over per-job triggerRun/triggerReview/etc. for new code.

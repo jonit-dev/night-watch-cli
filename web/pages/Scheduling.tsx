@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Pause,
   Play,
@@ -20,8 +21,6 @@ import Input from '../components/ui/Input';
 import Select from '../components/ui/Select';
 import Switch from '../components/ui/Switch';
 import Tabs from '../components/ui/Tabs';
-import ScheduleConfig from '../components/scheduling/ScheduleConfig.js';
-import type { IScheduleConfigForm } from '../components/scheduling/ScheduleConfig.js';
 import ScheduleTimeline from '../components/scheduling/ScheduleTimeline.js';
 import { useStore } from '../store/useStore';
 import type { INightWatchConfig, IQueueAnalytics, IQueueStatus, QueueMode } from '../api';
@@ -45,19 +44,24 @@ import {
   formatAbsoluteTime,
   isWithin30Minutes,
 } from '../utils/cron';
-import type { IScheduleTemplate } from '../utils/cron.js';
-import { getWebJobDef } from '../utils/jobs';
+import {
+  DEFAULT_EXECUTOR_SCHEDULE,
+  DEFAULT_REVIEWER_SCHEDULE,
+  getDefaultAnalyticsConfig,
+  getDefaultAuditConfig,
+  getDefaultMergerConfig,
+  getDefaultQaConfig,
+  getDefaultRoadmapScannerConfig,
+} from '../utils/scheduling-defaults.js';
 
 interface IProviderBucketEntry {
   key: string;
   maxConcurrency: number;
 }
 
-interface IScheduleEditState {
-  form: IScheduleConfigForm;
-  scheduleMode: 'template' | 'custom';
-  selectedTemplateId: string;
+interface IQueueEditState {
   isDirty: boolean;
+  enabled: boolean;
   queueMode: QueueMode;
   globalMaxConcurrency: number;
   providerBuckets: IProviderBucketEntry[];
@@ -79,34 +83,20 @@ interface IAgentInfo {
 }
 
 const Scheduling: React.FC = () => {
+  const navigate = useNavigate();
   const { addToast, selectedProjectId, globalModeLoading } = useStore();
   const [activeTab, setActiveTab] = useState('overview');
   const [toggling, setToggling] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [updatingJob, setUpdatingJob] = useState<string | null>(null);
   const [triggeringJob, setTriggeringJob] = useState<string | null>(null);
 
   const [allProjectConfigs, setAllProjectConfigs] = useState<Array<{ projectId: string; config: INightWatchConfig }>>([]);
   const [queueStatus, setQueueStatus] = useState<IQueueStatus | null>(null);
   const [queueAnalytics, setQueueAnalytics] = useState<IQueueAnalytics | null>(null);
 
-  const [editState, setEditState] = useState<IScheduleEditState>({
-    form: {
-      cronSchedule: '5 */3 * * *',
-      reviewerSchedule: '25 */6 * * *',
-      qa: { schedule: '45 2,14 * * *', enabled: true },
-      audit: { schedule: '50 3 * * 1', enabled: true },
-      analytics: { schedule: '0 6 * * 1', enabled: false },
-      roadmapScanner: { slicerSchedule: '35 */12 * * *', enabled: true },
-      merger: { schedule: '55 */4 * * *', enabled: false },
-      scheduleBundleId: null,
-      schedulingPriority: 3,
-      cronScheduleOffset: 0,
-      globalQueueEnabled: true,
-    },
-    scheduleMode: 'template',
-    selectedTemplateId: 'always-on',
+  const [editState, setEditState] = useState<IQueueEditState>({
     isDirty: false,
+    enabled: true,
     queueMode: 'auto',
     globalMaxConcurrency: 1,
     providerBuckets: [],
@@ -161,40 +151,10 @@ const Scheduling: React.FC = () => {
   // Initialize edit state when config loads
   useEffect(() => {
     if (config && !editState.isDirty) {
-      const scheduleMode = resolveActiveTemplate(
-        config.scheduleBundleId,
-        config.cronSchedule,
-        config.reviewerSchedule,
-        config.qa?.schedule || '45 2,14 * * *',
-        config.audit?.schedule || '50 3 * * 1',
-        config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
-        config.merger?.schedule ?? '55 */4 * * *',
-      );
-      const detectedTemplate = scheduleMode;
       const rawBuckets = config.queue?.providerBuckets ?? {};
       setEditState({
-        form: {
-          cronSchedule: config.cronSchedule || '5 */3 * * *',
-          reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
-          qa: config.qa || { schedule: '45 2,14 * * *', enabled: true },
-          audit: config.audit || { schedule: '50 3 * * 1', enabled: true },
-          analytics: config.analytics || { schedule: '0 6 * * 1', enabled: false },
-          roadmapScanner: {
-            enabled: config.roadmapScanner?.enabled ?? true,
-            slicerSchedule: config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
-          },
-          merger: {
-            enabled: config.merger?.enabled ?? false,
-            schedule: config.merger?.schedule || '55 */4 * * *',
-          },
-          scheduleBundleId: config.scheduleBundleId ?? null,
-          schedulingPriority: config.schedulingPriority ?? 3,
-          cronScheduleOffset: config.cronScheduleOffset ?? 0,
-          globalQueueEnabled: config.queue?.enabled ?? true,
-        },
-        scheduleMode: detectedTemplate ? 'template' : 'custom',
-        selectedTemplateId: detectedTemplate?.id ?? '',
         isDirty: false,
+        enabled: config.queue?.enabled ?? true,
         queueMode: config.queue?.mode ?? 'auto',
         globalMaxConcurrency: config.queue?.maxConcurrency ?? 1,
         providerBuckets: Object.entries(rawBuckets).map(([key, val]) => ({
@@ -242,51 +202,18 @@ const Scheduling: React.FC = () => {
       setToggling(false);
     }
   };
-  const handleJobToggle = async (
-    jobId: string,
-    enabled: boolean,
-  ) => {
-    if (!config) return;
-    // Map legacy 'planner' ID to registry 'slicer' ID
-    const registryId = jobId === 'planner' ? 'slicer' : jobId;
-    const jobDef = getWebJobDef(registryId);
-    if (!jobDef) return;
-    setUpdatingJob(jobId);
-    try {
-      await updateConfig(jobDef.buildEnabledPatch(enabled, config));
-      let cronInstallFailedMessage = '';
-      try {
-        await triggerInstallCron();
-      } catch (cronError) {
-        cronInstallFailedMessage = formatErrorMessage(
-          cronError,
-          'Failed to reinstall cron schedules',
-        );
-      }
-      syncScheduleState();
-      addToast(
-        cronInstallFailedMessage
-          ? {
-              title: 'Job Saved (Cron Reinstall Failed)',
-              message: cronInstallFailedMessage,
-              type: 'warning',
-            }
-          : {
-              title: 'Job Updated',
-              message: `${jobId[0].toUpperCase() + jobId.slice(1)} ${enabled ? 'enabled' : 'disabled'}.`,
-              type: 'success',
-            },
-      );
-    } catch (error) {
-      addToast({
-        title: 'Update Failed',
-        message: formatErrorMessage(error, 'Failed to update job configuration'),
-        type: 'error',
-      });
-    } finally {
-      setUpdatingJob(null);
+
+  const openSettingsTab = (tab: 'jobs' | 'schedules', jobId?: string) => {
+    const params = new URLSearchParams({ tab });
+    if (tab === 'schedules') {
+      params.set('mode', 'custom');
     }
+    if (jobId) {
+      params.set('jobType', jobId === 'planner' ? 'slicer' : jobId);
+    }
+    navigate(`/settings?${params.toString()}`);
   };
+
   const handleTriggerJob = async (jobId: string) => {
     // Map legacy 'planner' ID to registry 'slicer' ID
     const registryId = jobId === 'planner' ? 'slicer' : jobId;
@@ -309,144 +236,33 @@ const Scheduling: React.FC = () => {
       setTriggeringJob(null);
     }
   };
-  const handleFieldChange = (field: string, value: unknown) => {
-    setEditState((prev) => ({
-      ...prev,
-      form: {
-        ...prev.form,
-        [field]: value,
-      },
-      isDirty: true,
-    }));
-  };
-  const switchToTemplateMode = () => {
-    if (!editState.form) return;
-    const detected = resolveActiveTemplate(
-      editState.form.scheduleBundleId,
-      editState.form.cronSchedule,
-      editState.form.reviewerSchedule,
-      editState.form.qa.schedule,
-      editState.form.audit.schedule,
-      editState.form.roadmapScanner.slicerSchedule || '35 */12 * * *',
-      config?.merger?.schedule ?? '55 */4 * * *',
-    );
-    setEditState((prev) => ({
-      ...prev,
-      scheduleMode: 'template',
-      selectedTemplateId: detected?.id ?? 'always-on',
-      form: {
-        ...prev.form,
-        scheduleBundleId: detected?.id ?? null,
-      },
-      isDirty: true,
-    }));
-  };
-  const switchToCustomMode = () => {
-    setEditState((prev) => ({
-      ...prev,
-      scheduleMode: 'custom',
-      selectedTemplateId: '',
-      form: {
-        ...prev.form,
-        scheduleBundleId: null,
-      },
-      isDirty: true,
-    }));
-  };
-  const applyTemplate = (tpl: IScheduleTemplate) => {
-    setEditState((prev) => ({
-      ...prev,
-      selectedTemplateId: tpl.id,
-      scheduleMode: 'template',
-      form: {
-        ...prev.form,
-        cronSchedule: tpl.schedules.executor,
-        reviewerSchedule: tpl.schedules.reviewer,
-        scheduleBundleId: tpl.id,
-        qa: { ...prev.form.qa, schedule: tpl.schedules.qa },
-        audit: { ...prev.form.audit, schedule: tpl.schedules.audit },
-        roadmapScanner: {
-          ...prev.form.roadmapScanner,
-          slicerSchedule: tpl.schedules.slicer,
-        },
-        merger: {
-          ...prev.form.merger,
-          schedule: tpl.schedules.merger,
-        },
-      },
-      isDirty: true,
-    }));
-  };
-  const handleSaveAndInstall = async () => {
+
+  const handleSaveQueueSettings = async () => {
     if (!config) return;
     setSaving(true);
     try {
       await updateConfig({
-        cronSchedule: editState.form.cronSchedule,
-        reviewerSchedule: editState.form.reviewerSchedule,
-        scheduleBundleId: editState.scheduleMode === 'template' ? editState.form.scheduleBundleId : null,
-        cronScheduleOffset: editState.form.cronScheduleOffset,
-        schedulingPriority: editState.form.schedulingPriority,
-        qa: {
-          ...config.qa,
-          schedule: editState.form.qa.schedule,
-        },
-        audit: {
-          ...config.audit,
-          schedule: editState.form.audit.schedule,
-        },
-        analytics: {
-          ...config.analytics,
-          schedule: editState.form.analytics?.schedule || config.analytics?.schedule || '0 6 * * 1',
-        },
-        roadmapScanner: {
-          ...config.roadmapScanner,
-          slicerSchedule: editState.form.roadmapScanner.slicerSchedule || '35 */12 * * *',
-        },
-        merger: {
-          ...config.merger,
-          schedule: editState.form.merger?.schedule || config.merger?.schedule || '55 */4 * * *',
-        },
         queue: {
           ...config.queue,
-          enabled: editState.form.globalQueueEnabled ?? true,
+          enabled: editState.enabled,
           mode: editState.queueMode,
           maxConcurrency: editState.globalMaxConcurrency,
           providerBuckets: Object.fromEntries(
             editState.providerBuckets.map((b) => [b.key, { maxConcurrency: b.maxConcurrency }]),
           ),
         },
-        executorEnabled: config.executorEnabled,
-        reviewerEnabled: config.reviewerEnabled,
       });
-      let cronInstallFailedMessage = '';
-      try {
-        await triggerInstallCron();
-      } catch (cronError) {
-        cronInstallFailedMessage = formatErrorMessage(
-          cronError,
-          'Failed to reinstall cron schedules',
-        );
-      }
       setEditState((prev) => ({ ...prev, isDirty: false }));
       syncScheduleState();
-      addToast(
-        cronInstallFailedMessage
-          ? {
-              title: 'Schedules Saved (Cron Reinstall Failed)',
-              message: cronInstallFailedMessage,
-              type: 'warning',
-            }
-          : {
-              title: 'Schedule Updated',
-              message: 'Cron schedules have been saved and installed.',
-              type: 'success',
-            },
-      );
+      addToast({
+        title: 'Parallelism Updated',
+        message: 'Queue coordination settings were saved.',
+        type: 'success',
+      });
     } catch (error) {
       addToast({
         title: 'Save Failed',
-        message: formatErrorMessage(error, 'Failed to save schedules'),
+        message: formatErrorMessage(error, 'Failed to save queue settings'),
         type: 'error',
       });
     } finally {
@@ -550,7 +366,10 @@ const Scheduling: React.FC = () => {
       description: 'Creates PRDs from audit findings and pending roadmap items',
       icon: <ClipboardList className="h-4 w-4" />,
       enabled: config?.roadmapScanner?.enabled ?? false,
-      schedule: scheduleInfo.planner?.schedule || config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
+      schedule:
+        scheduleInfo.planner?.schedule ||
+        config.roadmapScanner?.slicerSchedule ||
+        getDefaultRoadmapScannerConfig().slicerSchedule,
       nextRun: scheduleInfo.planner?.nextRun,
       delayInfo: scheduleInfo.planner,
     },
@@ -560,7 +379,10 @@ const Scheduling: React.FC = () => {
       description: 'Fetches Amplitude data, analyzes with AI, and creates board issues',
       icon: <BarChart2 className="h-4 w-4" />,
       enabled: config?.analytics?.enabled ?? false,
-      schedule: scheduleInfo.analytics?.schedule || config.analytics?.schedule || '0 6 * * 1',
+      schedule:
+        scheduleInfo.analytics?.schedule ||
+        config.analytics?.schedule ||
+        getDefaultAnalyticsConfig().schedule,
       nextRun: scheduleInfo.analytics?.nextRun,
       delayInfo: scheduleInfo.analytics,
     },
@@ -570,7 +392,10 @@ const Scheduling: React.FC = () => {
       description: 'Repo-wide PR merge orchestrator — merges eligible PRs in FIFO order',
       icon: <Zap className="h-4 w-4" />,
       enabled: config?.merger?.enabled ?? false,
-      schedule: scheduleInfo.merger?.schedule || config.merger?.schedule || '55 */4 * * *',
+      schedule:
+        scheduleInfo.merger?.schedule ||
+        config.merger?.schedule ||
+        getDefaultMergerConfig().schedule,
       nextRun: scheduleInfo.merger?.nextRun,
       delayInfo: scheduleInfo.merger,
     },
@@ -601,13 +426,13 @@ const Scheduling: React.FC = () => {
     config.scheduleBundleId,
     config.cronSchedule,
     config.reviewerSchedule,
-    config.qa?.schedule || '45 2,14 * * *',
-    config.audit?.schedule || '50 3 * * 1',
-    config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
-    config.merger?.schedule ?? '55 */4 * * *',
+    config.qa?.schedule || getDefaultQaConfig().schedule,
+    config.audit?.schedule || getDefaultAuditConfig().schedule,
+    config.roadmapScanner?.slicerSchedule || getDefaultRoadmapScannerConfig().slicerSchedule,
+    config.merger?.schedule ?? getDefaultMergerConfig().schedule,
   );
   const formatScheduleLabel = (
-    job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics',
+    job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics' | 'merger',
     configuredCronExpr: string,
     displayedCronExpr: string,
   ): string => {
@@ -670,71 +495,85 @@ const Scheduling: React.FC = () => {
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
                       {agent.icon}
-                      <h4 className="text-base font-semibold text-slate-200">{agent.name}</h4>
+                      <div>
+                        <h4 className="text-base font-semibold text-slate-200">{agent.name}</h4>
+                        <p className="text-xs text-slate-500 mt-1">{agent.description}</p>
+                      </div>
                     </div>
-                    <Switch
-                      checked={agent.enabled}
-                      disabled={updatingJob !== null}
-                      aria-label={`Toggle ${agent.name.toLowerCase()} automation`}
-                      onChange={(checked) => handleJobToggle(agent.id, checked)}
-                    />
+                    <span
+                      className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
+                        agent.enabled
+                          ? 'border-green-500/30 bg-green-500/10 text-green-300'
+                          : 'border-slate-700 bg-slate-900 text-slate-400'
+                      }`}
+                    >
+                      {agent.enabled ? 'Enabled' : 'Disabled'}
+                    </span>
                   </div>
 
-                  {agent.enabled ? (
-                    <div className="space-y-3 mt-3">
-                      <div>
-                        <div className="text-sm text-slate-400">Schedule</div>
-                        <div className="text-sm text-slate-200 font-medium">
-                          {formatScheduleLabel(
-                            (agent.id === 'planner' ? 'slicer' : agent.id) as 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics',
-                            agent.id === 'qa'
-                              ? config?.qa?.schedule || ''
-                              : agent.id === 'audit'
-                              ? config?.audit?.schedule || ''
-                              : agent.id === 'planner'
-                              ? config?.roadmapScanner?.slicerSchedule || '35 */12 * * *'
-                              : agent.id === 'analytics'
-                              ? config?.analytics?.schedule || '0 6 * * 1'
-                              : agent.schedule,
-                            agent.id === 'qa'
-                              ? config?.qa?.schedule || ''
-                              : agent.id === 'audit'
-                              ? config?.audit?.schedule || ''
-                              : agent.id === 'planner'
-                              ? config?.roadmapScanner?.slicerSchedule || '35 */12 * * *'
-                              : agent.id === 'analytics'
-                              ? config?.analytics?.schedule || '0 6 * * 1'
-                              : agent.schedule,
-                          )}
-                        </div>
-                      </div>
-                      {renderDelayNote(agent.delayInfo)}
-                      <div>
-                        <div className="text-sm text-slate-400">Next Run</div>
-                        {renderNextRun(agent.nextRun)}
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className={`flex items-center space-x-2 text-sm ${agent.enabled ? 'text-green-400' : 'text-amber-400'}`}>
-                          <Check className="h-4 w-4" />
-                          <span>{agent.enabled ? 'Active' : 'Disabled'}</span>
-                        </div>
-                        <button
-                          disabled={triggeringJob !== null}
-                          onClick={() => handleTriggerJob(agent.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-green-400 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 hover:border-green-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                        >
-                          {triggeringJob === agent.id ? (
-                            <div className="h-3 w-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <Play className="h-3 w-3 fill-current" />
-                          )}
-                          Run now
-                        </button>
+                  <div className="space-y-3 mt-3">
+                    <div>
+                      <div className="text-sm text-slate-400">Schedule</div>
+                      <div className="text-sm text-slate-200 font-medium">
+                        {formatScheduleLabel(
+                          (agent.id === 'planner' ? 'slicer' : agent.id) as 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics' | 'merger',
+                          agent.id === 'qa'
+                            ? config.qa?.schedule || getDefaultQaConfig().schedule
+                            : agent.id === 'audit'
+                            ? config.audit?.schedule || getDefaultAuditConfig().schedule
+                            : agent.id === 'planner'
+                            ? config.roadmapScanner?.slicerSchedule || getDefaultRoadmapScannerConfig().slicerSchedule
+                            : agent.id === 'analytics'
+                            ? config.analytics?.schedule || getDefaultAnalyticsConfig().schedule
+                            : agent.id === 'merger'
+                            ? config.merger?.schedule || getDefaultMergerConfig().schedule
+                            : agent.id === 'reviewer'
+                            ? config.reviewerSchedule || DEFAULT_REVIEWER_SCHEDULE
+                            : config.cronSchedule || DEFAULT_EXECUTOR_SCHEDULE,
+                          agent.schedule,
+                        )}
                       </div>
                     </div>
-                  ) : (
-                    <div className="text-slate-500 text-sm">{agent.name} is disabled.</div>
-                  )}
+                    {renderDelayNote(agent.delayInfo)}
+                    <div>
+                      <div className="text-sm text-slate-400">Next Run</div>
+                      {renderNextRun(agent.nextRun)}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className={`flex items-center space-x-2 text-sm ${agent.enabled ? 'text-green-400' : 'text-amber-400'}`}>
+                        <Check className="h-4 w-4" />
+                        <span>{agent.enabled ? 'Configured in Settings > Jobs' : 'Disabled in Settings > Jobs'}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openSettingsTab('schedules', agent.id)}
+                        className="rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-900"
+                      >
+                        Edit cadence
+                      </button>
+                      {['qa', 'audit', 'planner', 'analytics', 'merger'].includes(agent.id) && (
+                        <button
+                          type="button"
+                          onClick={() => openSettingsTab('jobs', agent.id)}
+                          className="rounded-md border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-medium text-indigo-300 transition-colors hover:border-indigo-400/50 hover:bg-indigo-500/15"
+                        >
+                          Job settings
+                        </button>
+                      )}
+                      <button
+                        disabled={triggeringJob !== null}
+                        onClick={() => handleTriggerJob(agent.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-green-400 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 hover:border-green-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {triggeringJob === agent.id ? (
+                          <div className="h-3 w-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Play className="h-3 w-3 fill-current" />
+                        )}
+                        Run now
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -743,85 +582,68 @@ const Scheduling: React.FC = () => {
       ),
     },
     {
-      id: 'schedules',
-      label: 'Schedules',
+      id: 'cadence',
+      label: 'Cadence',
       content: (
         <div className="space-y-6">
           <ScheduleTimeline
             configs={allProjectConfigs}
             currentProjectId={selectedProjectId ?? undefined}
-            onEditJob={(_projectId, _jobType) => { /* timeline click in schedules tab */ }}
+            onEditJob={(_projectId, jobType) => openSettingsTab('schedules', jobType)}
             queueStatus={queueStatus}
             queueAnalytics={queueAnalytics}
           />
-          <ScheduleConfig
-            form={editState.form}
-            scheduleMode={editState.scheduleMode}
-            selectedTemplateId={editState.selectedTemplateId}
-            onFieldChange={handleFieldChange}
-            onSwitchToTemplate={switchToTemplateMode}
-            onSwitchToCustom={switchToCustomMode}
-            onApplyTemplate={applyTemplate}
-          />
+          <Card className="p-6 border border-slate-800 bg-slate-950/50">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-200">Cadence is configured in Settings</h3>
+                <p className="text-sm text-slate-400 mt-1">
+                  Use Settings &gt; Schedules for cron cadence and templates. Use Settings &gt; Jobs for enablement, runtime, and merger behavior.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="outline" onClick={() => openSettingsTab('schedules')}>
+                  Open Schedules
+                </Button>
+                <Button onClick={() => openSettingsTab('jobs')}>Open Jobs</Button>
+              </div>
+            </div>
+          </Card>
 
-          <div className="flex justify-end pt-4">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                if (config) {
-                  const resetTemplate = resolveActiveTemplate(
-                    config.scheduleBundleId,
-                    config.cronSchedule,
-                    config.reviewerSchedule,
-                    config.qa?.schedule || '45 2,14 * * *',
-                    config.audit?.schedule || '50 3 * * 1',
-                    config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
-                    config.merger?.schedule ?? '55 */4 * * *',
-                  );
-                  const resetBuckets = config.queue?.providerBuckets ?? {};
-                  setEditState({
-                    form: {
-                      cronSchedule: config.cronSchedule || '5 */3 * * *',
-                      reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
-                      qa: config.qa || { schedule: '45 2,14 * * *', enabled: true },
-                      audit: config.audit || { schedule: '50 3 * * 1', enabled: true },
-                      analytics: config.analytics || { schedule: '0 6 * * 1', enabled: false },
-                      roadmapScanner: {
-                        enabled: config.roadmapScanner?.enabled ?? true,
-                        slicerSchedule: config.roadmapScanner?.slicerSchedule || '35 */12 * * *',
-                      },
-                      merger: {
-                        enabled: config.merger?.enabled ?? false,
-                        schedule: config.merger?.schedule || '55 */4 * * *',
-                      },
-                      scheduleBundleId: config.scheduleBundleId ?? null,
-                      schedulingPriority: config.schedulingPriority ?? 3,
-                      cronScheduleOffset: config.cronScheduleOffset ?? 0,
-                      globalQueueEnabled: config.queue?.enabled ?? true,
-                    },
-                    scheduleMode: resetTemplate ? 'template' : 'custom',
-                    selectedTemplateId: resetTemplate?.id ?? '',
-                    isDirty: false,
-                    queueMode: config.queue?.mode ?? 'auto',
-                    globalMaxConcurrency: config.queue?.maxConcurrency ?? 1,
-                    providerBuckets: Object.entries(resetBuckets).map(([key, val]) => ({
-                      key,
-                      maxConcurrency: val.maxConcurrency,
-                    })),
-                  });
-                  setShowAddBucket(false);
-                  setNewBucketKey('');
-                  setNewBucketConcurrency('1');
-                }
-              }}
-              disabled={!editState.isDirty}
-            >
-              Reset
-            </Button>
-            <Button onClick={handleSaveAndInstall} loading={saving} disabled={!editState.isDirty}>
-              <Check className="h-4 w-4 mr-2" />
-              Save & Install
-            </Button>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {agents.map((agent) => (
+              <Card key={`cadence-${agent.id}`} className="p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    {agent.icon}
+                    <div>
+                      <div className="text-sm font-semibold text-slate-200">{agent.name}</div>
+                      <div className="text-xs text-slate-500">{agent.description}</div>
+                    </div>
+                  </div>
+                  <span className="text-xs font-mono text-slate-500">{agent.schedule}</span>
+                </div>
+                <div className="text-sm text-slate-300">{cronToHuman(agent.schedule)}</div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openSettingsTab('schedules', agent.id)}
+                    className="rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-900"
+                  >
+                    Edit cadence
+                  </button>
+                  {['qa', 'audit', 'planner', 'analytics', 'merger'].includes(agent.id) && (
+                    <button
+                      type="button"
+                      onClick={() => openSettingsTab('jobs', agent.id)}
+                      className="rounded-md border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-medium text-indigo-300 transition-colors hover:border-indigo-400/50 hover:bg-indigo-500/15"
+                    >
+                      Job settings
+                    </button>
+                  )}
+                </div>
+              </Card>
+            ))}
           </div>
         </div>
       ),
@@ -865,7 +687,21 @@ const Scheduling: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-medium text-slate-200">Queue Enabled</div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Coordinate overlapping jobs globally instead of dispatching each project independently.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={editState.enabled}
+                    onChange={(enabled) => setEditState((prev) => ({ ...prev, enabled, isDirty: true }))}
+                  />
+                </div>
+              </div>
               <Select
                 label="Dispatch Mode"
                 value={editState.queueMode}
@@ -1030,6 +866,7 @@ const Scheduling: React.FC = () => {
                   const resetBuckets = config.queue?.providerBuckets ?? {};
                   setEditState((prev) => ({
                     ...prev,
+                    enabled: config.queue?.enabled ?? true,
                     queueMode: config.queue?.mode ?? 'auto',
                     globalMaxConcurrency: config.queue?.maxConcurrency ?? 1,
                     providerBuckets: Object.entries(resetBuckets).map(([key, val]) => ({
@@ -1047,9 +884,9 @@ const Scheduling: React.FC = () => {
             >
               Reset
             </Button>
-            <Button onClick={handleSaveAndInstall} loading={saving} disabled={!editState.isDirty}>
+            <Button onClick={handleSaveQueueSettings} loading={saving} disabled={!editState.isDirty}>
               <Check className="h-4 w-4 mr-2" />
-              Save & Install
+              Save Queue Settings
             </Button>
           </div>
         </div>
@@ -1060,16 +897,26 @@ const Scheduling: React.FC = () => {
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-slate-100">Scheduling</h1>
-        {activeTemplate && (
-          <div className="text-right">
-            <div className="text-xs uppercase tracking-wide text-slate-500">Schedule Bundle</div>
-            <div className="text-sm font-medium text-indigo-300">{activeTemplate.label}</div>
-            <div className="text-xs text-slate-500">
-              Priority {scheduleInfo.schedulingPriority}/5 across registered projects
+        <div>
+          <h1 className="text-3xl font-bold text-slate-100">Scheduling</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Monitor automation here. Edit cadence and job behavior in Settings.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {activeTemplate && (
+            <div className="text-right">
+              <div className="text-xs uppercase tracking-wide text-slate-500">Schedule Bundle</div>
+              <div className="text-sm font-medium text-indigo-300">{activeTemplate.label}</div>
+              <div className="text-xs text-slate-500">
+                Priority {scheduleInfo.schedulingPriority}/5 across registered projects
+              </div>
             </div>
-          </div>
-        )}
+          )}
+          <Button variant="outline" onClick={() => openSettingsTab('schedules')}>
+            Open Settings
+          </Button>
+        </div>
       </div>
 
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />

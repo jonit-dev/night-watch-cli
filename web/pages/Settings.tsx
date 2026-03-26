@@ -40,6 +40,15 @@ import IntegrationsTab from './settings/IntegrationsTab.js';
 import AdvancedTab from './settings/AdvancedTab.js';
 import { usePresetManagement } from '../hooks/usePresetManagement.js';
 import { BUILT_IN_PRESET_IDS } from '../constants/presets.js';
+import {
+  DEFAULT_EXECUTOR_SCHEDULE,
+  DEFAULT_REVIEWER_SCHEDULE,
+  getDefaultAnalyticsConfig,
+  getDefaultAuditConfig,
+  getDefaultMergerConfig,
+  getDefaultQaConfig,
+  getDefaultRoadmapScannerConfig,
+} from '../utils/scheduling-defaults.js';
 
 const JOB_PROVIDER_KEYS: Array<keyof IJobProviders> = ['executor', 'reviewer', 'qa', 'audit', 'slicer', 'analytics'];
 
@@ -101,8 +110,8 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   maxRuntime: config.maxRuntime,
   reviewerMaxRuntime: config.reviewerMaxRuntime,
   maxLogSize: config.maxLogSize,
-  cronSchedule: config.cronSchedule || '5 */3 * * *',
-  reviewerSchedule: config.reviewerSchedule || '25 */6 * * *',
+  cronSchedule: config.cronSchedule || DEFAULT_EXECUTOR_SCHEDULE,
+  reviewerSchedule: config.reviewerSchedule || DEFAULT_REVIEWER_SCHEDULE,
   scheduleBundleId: config.scheduleBundleId ?? null,
   cronScheduleOffset: config.cronScheduleOffset ?? 0,
   schedulingPriority: config.schedulingPriority ?? 3,
@@ -113,15 +122,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   providerEnv: config.providerEnv || {},
   notifications: config.notifications || { webhooks: [] },
   prdPriority: config.prdPriority || [],
-  roadmapScanner: {
-    enabled: config.roadmapScanner?.enabled ?? true,
-    roadmapPath: config.roadmapScanner?.roadmapPath ?? 'ROADMAP.md',
-    autoScanInterval: config.roadmapScanner?.autoScanInterval ?? 300,
-    slicerSchedule: config.roadmapScanner?.slicerSchedule ?? '35 */12 * * *',
-    slicerMaxRuntime: config.roadmapScanner?.slicerMaxRuntime ?? 600,
-    priorityMode: config.roadmapScanner?.priorityMode ?? 'roadmap-first',
-    issueColumn: config.roadmapScanner?.issueColumn ?? 'Draft',
-  },
+  roadmapScanner: config.roadmapScanner || getDefaultRoadmapScannerConfig(),
   templatesDir: config.templatesDir || '.night-watch/templates',
   boardProvider: config.boardProvider || { enabled: true, provider: 'github' },
   jobProviders: config.jobProviders || {},
@@ -133,38 +134,10 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   secondaryFallbackPreset: config.secondaryFallbackPreset ?? '',
   claudeModel: config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet',
   providerScheduleOverrides: config.providerScheduleOverrides ?? [],
-  qa: config.qa || {
-    enabled: true,
-    schedule: '45 2,14 * * *',
-    maxRuntime: 3600,
-    branchPatterns: [],
-    artifacts: 'both',
-    skipLabel: 'skip-qa',
-    autoInstallPlaywright: true,
-  },
-  audit: config.audit || {
-    enabled: true,
-    schedule: '50 3 * * 1',
-    maxRuntime: 1800,
-  },
-  analytics: config.analytics || {
-    enabled: false,
-    schedule: '0 6 * * 1',
-    maxRuntime: 900,
-    lookbackDays: 7,
-    targetColumn: 'Draft',
-    analysisPrompt: '',
-  },
-  merger: config.merger ?? {
-    enabled: false,
-    schedule: '55 */4 * * *',
-    maxRuntime: 1800,
-    mergeMethod: 'squash',
-    minReviewScore: 80,
-    branchPatterns: [],
-    rebaseBeforeMerge: true,
-    maxPrsPerRun: 0,
-  },
+  qa: config.qa || getDefaultQaConfig(),
+  audit: config.audit || getDefaultAuditConfig(),
+  analytics: config.analytics || getDefaultAnalyticsConfig(),
+  merger: config.merger ?? getDefaultMergerConfig(),
   queue: config.queue || {
     enabled: true,
     mode: 'conservative' as const,
@@ -193,8 +166,8 @@ const resolveScheduleUiState = (form: ConfigForm): ScheduleUiState => {
     form.reviewerSchedule,
     form.qa.schedule,
     form.audit.schedule,
-    form.roadmapScanner.slicerSchedule ?? '35 */12 * * *',
-    form.merger?.schedule ?? '55 */4 * * *',
+    form.roadmapScanner.slicerSchedule ?? getDefaultRoadmapScannerConfig().slicerSchedule,
+    form.merger?.schedule ?? getDefaultMergerConfig().schedule,
   );
 
   if (detected) {
@@ -286,7 +259,11 @@ const Settings: React.FC = () => {
     if (jobTypeParam) {
       // Small delay to ensure the tab and mode have settled
       setTimeout(() => {
-        handleEditJob('current', jobTypeParam);
+        handleEditJob(
+          'current',
+          jobTypeParam,
+          tab === 'schedules' ? 'schedule' : tab === 'jobs' ? 'job' : undefined,
+        );
       }, 300);
     }
   }, [location.search, config]); // config dependency ensures we wait for data before trying to scroll
@@ -325,47 +302,6 @@ const Settings: React.FC = () => {
     }
   }, [highlightedSection]);
 
-  const handleEditJob = (projectId: string, jobType: string) => {
-    if (projectId === projectName || projectId === 'current') {
-      const jobsTabTypes = ['qa', 'audit', 'slicer', 'analytics', 'merger'];
-      if (jobsTabTypes.includes(jobType)) {
-        setActiveSettingsTab('jobs');
-        setTimeout(() => {
-          const el = document.getElementById(`job-section-${jobType}`);
-          if (el) {
-            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            setHighlightedSection(`job-section-${jobType}`);
-          }
-        }, 50);
-        return;
-      }
-
-      // executor / reviewer → schedules tab
-      if (scheduleMode !== 'custom') {
-        switchToCustomMode();
-      }
-      setActiveSettingsTab('schedules');
-      setTimeout(() => {
-        const idMap: Record<string, string> = {
-          executor: 'job-schedule-executor',
-          reviewer: 'job-schedule-reviewer',
-        };
-        const sectionId = idMap[jobType] || '';
-        const el = document.getElementById(sectionId);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          setHighlightedSection(sectionId);
-        }
-      }, 50);
-    } else {
-      addToast({
-        title: 'Project Switch Required',
-        message: `To edit ${projectId}, please switch to that project in the sidebar.`,
-        type: 'info',
-      });
-    }
-  };
-
   const switchToTemplateMode = () => {
     setScheduleMode('template');
     if (!form) {
@@ -383,6 +319,66 @@ const Settings: React.FC = () => {
     setScheduleMode('custom');
     updateField('scheduleBundleId', null);
     setSelectedTemplateId('');
+  };
+
+  const scrollToSection = (sectionId: string) => {
+    setTimeout(() => {
+      const el = document.getElementById(sectionId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setHighlightedSection(sectionId);
+      }
+    }, 50);
+  };
+
+  const openJobSettings = (jobType: string) => {
+    const registryId = jobType === 'planner' ? 'slicer' : jobType;
+    setActiveSettingsTab('jobs');
+    scrollToSection(`job-section-${registryId}`);
+  };
+
+  const openScheduleEditor = (jobType: string) => {
+    const registryId = jobType === 'planner' ? 'slicer' : jobType;
+    if (scheduleMode !== 'custom') {
+      switchToCustomMode();
+    }
+    setActiveSettingsTab('schedules');
+    scrollToSection(`job-schedule-${registryId}`);
+  };
+
+  const handleEditJob = (
+    projectId: string,
+    jobType: string,
+    destination?: 'job' | 'schedule',
+  ) => {
+    if (projectId !== projectName && projectId !== 'current') {
+      addToast({
+        title: 'Project Switch Required',
+        message: `To edit ${projectId}, please switch to that project in the sidebar.`,
+        type: 'info',
+      });
+      return;
+    }
+
+    const registryId = jobType === 'planner' ? 'slicer' : jobType;
+    const jobsTabTypes = new Set(['qa', 'audit', 'slicer', 'analytics', 'merger']);
+
+    if (destination === 'job') {
+      openJobSettings(registryId);
+      return;
+    }
+
+    if (destination === 'schedule') {
+      openScheduleEditor(registryId);
+      return;
+    }
+
+    if (jobsTabTypes.has(registryId)) {
+      openJobSettings(registryId);
+      return;
+    }
+
+    openScheduleEditor(registryId);
   };
 
   const applyTemplate = (tpl: IScheduleTemplate) => {
@@ -421,12 +417,12 @@ const Settings: React.FC = () => {
       form.audit.enabled !== (config?.audit.enabled ?? true) ||
       form.audit.schedule !== config?.audit.schedule ||
       form.analytics.enabled !== (config?.analytics?.enabled ?? false) ||
-      form.analytics.schedule !== (config?.analytics?.schedule ?? '0 6 * * 1') ||
+      form.analytics.schedule !== (config?.analytics?.schedule ?? getDefaultAnalyticsConfig().schedule) ||
       form.merger.enabled !== (config?.merger?.enabled ?? false) ||
-      form.merger.schedule !== (config?.merger?.schedule ?? '55 */4 * * *') ||
+      form.merger.schedule !== (config?.merger?.schedule ?? getDefaultMergerConfig().schedule) ||
       form.roadmapScanner.enabled !== (config?.roadmapScanner?.enabled ?? true) ||
-      (form.roadmapScanner.slicerSchedule || '35 */12 * * *') !==
-        (config?.roadmapScanner?.slicerSchedule || '35 */12 * * *');
+      (form.roadmapScanner.slicerSchedule || getDefaultRoadmapScannerConfig().slicerSchedule) !==
+        (config?.roadmapScanner?.slicerSchedule || getDefaultRoadmapScannerConfig().slicerSchedule);
 
     // Send explicit nulls for cleared overrides so the backend can reliably remove
     // stale assignments even if it applies partial-merge semantics.
@@ -692,6 +688,7 @@ const Settings: React.FC = () => {
           form={form}
           updateField={updateField as <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => void}
           handleRoadmapToggle={handleRoadmapToggle}
+          onManageSchedule={openScheduleEditor as (jobType: 'qa' | 'audit' | 'analytics' | 'slicer' | 'merger') => void}
         />
       ),
     },
@@ -708,8 +705,10 @@ const Settings: React.FC = () => {
             analytics: form.analytics,
             roadmapScanner: {
               enabled: form.roadmapScanner.enabled,
-              slicerSchedule: form.roadmapScanner.slicerSchedule || '35 */12 * * *',
+              slicerSchedule:
+                form.roadmapScanner.slicerSchedule || getDefaultRoadmapScannerConfig().slicerSchedule,
             },
+            merger: form.merger,
             scheduleBundleId: form.scheduleBundleId,
             schedulingPriority: form.schedulingPriority,
             cronScheduleOffset: form.cronScheduleOffset,

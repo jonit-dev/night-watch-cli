@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { useApi, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, triggerRun, triggerReview, triggerQa, triggerAudit, triggerAnalytics, triggerPlanner, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
+import { useApi, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, triggerRun, triggerReview, triggerQa, triggerAudit, triggerAnalytics, triggerPlanner, triggerMerger, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
 import { useStore } from '../store/useStore';
 import AgentStatusBar from '../components/dashboard/AgentStatusBar';
 
@@ -118,10 +118,10 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleTriggerJob = async (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics') => {
+  const handleTriggerJob = async (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics' | 'merger') => {
     setTriggeringJob(job);
     try {
-      const triggerMap = { executor: triggerRun, reviewer: triggerReview, qa: triggerQa, audit: triggerAudit, planner: triggerPlanner, analytics: triggerAnalytics };
+      const triggerMap = { executor: triggerRun, reviewer: triggerReview, qa: triggerQa, audit: triggerAudit, planner: triggerPlanner, analytics: triggerAnalytics, merger: triggerMerger };
       await triggerMap[job]();
       addToast({ title: 'Job Triggered', message: `${job[0].toUpperCase() + job.slice(1)} job has been queued.`, type: 'success' });
     } catch (err) {

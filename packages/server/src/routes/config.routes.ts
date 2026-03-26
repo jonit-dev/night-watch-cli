@@ -641,16 +641,8 @@ function validateConfigChanges(
         return 'queue.priority must be an object';
       }
 
-      const validQueueJobs: JobType[] = [
-        'executor',
-        'reviewer',
-        'qa',
-        'audit',
-        'slicer',
-        'analytics',
-      ];
       for (const [jobType, value] of Object.entries(queue.priority)) {
-        if (!validQueueJobs.includes(jobType as JobType)) {
+        if (!VALID_JOB_TYPES.includes(jobType as JobType)) {
           return `queue.priority contains invalid job type: ${jobType}`;
         }
         if (typeof value !== 'number' || Number.isNaN(value)) {

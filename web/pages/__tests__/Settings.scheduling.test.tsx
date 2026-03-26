@@ -60,7 +60,7 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
       slicerSchedule: '35 */6 * * *',
       slicerMaxRuntime: 600,
       priorityMode: 'roadmap-first',
-      issueColumn: 'Draft',
+      issueColumn: 'Ready',
     },
     templatesDir: '.night-watch/templates',
     boardProvider: { enabled: true, provider: 'github' },
@@ -104,6 +104,16 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
       lookbackDays: 30,
       targetColumn: 'Draft',
       analysisPrompt: '',
+    },
+    merger: {
+      enabled: true,
+      schedule: '55 */4 * * *',
+      maxRuntime: 1800,
+      mergeMethod: 'squash',
+      minReviewScore: 80,
+      branchPatterns: [],
+      rebaseBeforeMerge: true,
+      maxPrsPerRun: 0,
     },
   };
 
@@ -277,6 +287,21 @@ describe('Settings schedules mode sync', () => {
           scheduleBundleId: 'always-on',
         }),
       );
+    });
+  });
+
+  it('shows merger cadence in Schedules and removes the duplicate cron editor from Jobs', async () => {
+    renderSettings();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Jobs' }));
+    expect(screen.queryByText('Merger Schedule')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Manage schedule' }).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Merge Orchestrator Schedule')).toBeInTheDocument();
     });
   });
 
