@@ -282,4 +282,80 @@ describe('Scheduling page', () => {
     expect(screen.getByText('PRD Execution Schedule')).toBeInTheDocument();
     expect(screen.getByText('Job Schedules')).toBeInTheDocument();
   });
+
+  it('renders Queue tab with provider lanes and execution analytics', async () => {
+    renderScheduling();
+
+    // Click on the Queue tab
+    fireEvent.click(screen.getByRole('button', { name: 'Queue' }));
+
+    // Queue Overview section should be visible
+    expect(screen.getByText('Queue Overview')).toBeInTheDocument();
+
+    // Check for stat labels
+    expect(screen.getByText('Running')).toBeInTheDocument();
+    expect(screen.getByText('Pending')).toBeInTheDocument();
+    expect(screen.getByText('Avg Wait')).toBeInTheDocument();
+    expect(screen.getByText('Oldest Pending')).toBeInTheDocument();
+
+    // Provider Lanes section should be visible
+    expect(screen.getByText('Provider Lanes')).toBeInTheDocument();
+    expect(screen.getByText('Running and pending jobs grouped by provider bucket')).toBeInTheDocument();
+
+    // Provider Buckets section should be visible
+    expect(screen.getByText('Provider Buckets')).toBeInTheDocument();
+    expect(screen.getByText('Running and pending counts per provider bucket')).toBeInTheDocument();
+
+    // Recent Runs section should be visible
+    expect(screen.getByText('Recent Runs')).toBeInTheDocument();
+    expect(screen.getByText('Last 24 hours of job executions')).toBeInTheDocument();
+
+    // Wait for async operations
+    await waitFor(() => {
+      expect(screen.getByText('Queue Overview')).toBeInTheDocument();
+    });
+  });
+
+  it('shows loading state in Queue tab when data is being fetched', async () => {
+    // Make fetchQueueStatus return a pending promise
+    apiMocks.fetchQueueStatus.mockImplementation(() => new Promise(() => {}));
+
+    renderScheduling();
+
+    // Click on the Queue tab
+    fireEvent.click(screen.getByRole('button', { name: 'Queue' }));
+
+    // Loading message should be visible
+    expect(screen.getByText('Loading queue status...')).toBeInTheDocument();
+  });
+
+  it('displays queue stats when queue has running job', async () => {
+    const queueStatusWithRunning = makeQueueStatus({
+      running: {
+        id: 1,
+        jobType: 'executor',
+        projectName: 'test-project',
+        status: 'running',
+        providerKey: 'claude-sonnet',
+      },
+      pending: { total: 5, byType: { executor: 3, reviewer: 2 }, byProviderBucket: {} },
+      averageWaitSeconds: 300,
+      oldestPendingAge: 600,
+    });
+
+    apiMocks.fetchQueueStatus.mockResolvedValue(queueStatusWithRunning);
+
+    renderScheduling();
+
+    // Click on the Queue tab
+    fireEvent.click(screen.getByRole('button', { name: 'Queue' }));
+
+    // Wait for data to load
+    await waitFor(() => {
+      expect(screen.getByText('Queue Overview')).toBeInTheDocument();
+    });
+
+    // Check stats are displayed
+    expect(screen.getByText('5')).toBeInTheDocument(); // Pending count
+  });
 });
