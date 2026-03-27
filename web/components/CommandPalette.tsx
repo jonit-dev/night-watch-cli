@@ -38,16 +38,27 @@ const CommandPalette: React.FC = () => {
   // Fetch schedule info for scheduling commands
   const { data: scheduleInfo } = useApi(fetchScheduleInfo, [], { enabled: commandPaletteOpen });
 
+  // Create a stable key that only changes when running states actually change
+  // This prevents unnecessary command regeneration when status object is replaced
+  const runningStatesKey = useMemo(() => {
+    if (!status?.processes) return '';
+    return status.processes
+      .map((p) => `${p.name}:${p.running ? 1 : 0}`)
+      .sort()
+      .join('|');
+  }, [status?.processes]);
+
   // Get agent running status from status
   const agentStatus: Record<string, AgentStatus> = useMemo(() => {
     const result: Record<string, AgentStatus> = {};
-    if (!status?.processes) return result;
 
-    status.processes.forEach((p) => {
-      result[p.name] = p.running ? 'running' : 'idle';
-    });
+    if (status?.processes) {
+      status.processes.forEach((p) => {
+        result[p.name] = p.running ? 'running' : 'idle';
+      });
+    }
 
-    // Mark any agent not in processes as idle (they might be stopped but we)
+    // Mark any agent not in processes as idle
     WEB_JOB_REGISTRY.forEach((job) => {
       const processName = job.processName;
       if (!result[processName]) {
@@ -56,7 +67,7 @@ const CommandPalette: React.FC = () => {
     });
 
     return result;
-  }, [status?.processes]);
+  }, [runningStatesKey, status?.processes]);
 
   // Build commands
   const commands = useMemo((): ICommand[] => {
