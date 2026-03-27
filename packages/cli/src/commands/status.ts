@@ -47,6 +47,14 @@ interface IStatusInfo {
     running: boolean;
     pid: number | null;
   };
+  analytics: {
+    running: boolean;
+    pid: number | null;
+  };
+  merger: {
+    running: boolean;
+    pid: number | null;
+  };
   prds: {
     pending: number;
     claimed: number;
@@ -90,6 +98,18 @@ interface IStatusInfo {
       exists: boolean;
       size: number;
     };
+    analytics?: {
+      path: string;
+      lastLines: string[];
+      exists: boolean;
+      size: number;
+    };
+    merger?: {
+      path: string;
+      lastLines: string[];
+      exists: boolean;
+      size: number;
+    };
   };
 }
 
@@ -125,11 +145,15 @@ export function statusCommand(program: Command): void {
         const qaProc = snapshot.processes.find((p) => p.name === 'qa');
         const auditProc = snapshot.processes.find((p) => p.name === 'audit');
         const plannerProc = snapshot.processes.find((p) => p.name === 'planner');
+        const analyticsProc = snapshot.processes.find((p) => p.name === 'analytics');
+        const mergerProc = snapshot.processes.find((p) => p.name === 'merger');
         const executorLog = snapshot.logs.find((l) => l.name === 'executor');
         const reviewerLog = snapshot.logs.find((l) => l.name === 'reviewer');
         const qaLog = snapshot.logs.find((l) => l.name === 'qa');
         const auditLog = snapshot.logs.find((l) => l.name === 'audit');
         const plannerLog = snapshot.logs.find((l) => l.name === 'planner');
+        const analyticsLog = snapshot.logs.find((l) => l.name === 'analytics');
+        const mergerLog = snapshot.logs.find((l) => l.name === 'merger');
 
         const pendingPrds = snapshot.prds.filter(
           (p) => p.status === 'ready' || p.status === 'blocked',
@@ -149,6 +173,8 @@ export function statusCommand(program: Command): void {
           qa: { running: qaProc?.running ?? false, pid: qaProc?.pid ?? null },
           audit: { running: auditProc?.running ?? false, pid: auditProc?.pid ?? null },
           planner: { running: plannerProc?.running ?? false, pid: plannerProc?.pid ?? null },
+          analytics: { running: analyticsProc?.running ?? false, pid: analyticsProc?.pid ?? null },
+          merger: { running: mergerProc?.running ?? false, pid: mergerProc?.pid ?? null },
           prds: { pending: pendingPrds, claimed: claimedPrds, done: donePrds },
           prs: { open: snapshot.prs.length },
           crontab: snapshot.crontab,
@@ -191,6 +217,22 @@ export function statusCommand(program: Command): void {
                   lastLines: plannerLog.lastLines,
                   exists: plannerLog.exists,
                   size: plannerLog.size,
+                }
+              : undefined,
+            analytics: analyticsLog
+              ? {
+                  path: analyticsLog.path,
+                  lastLines: analyticsLog.lastLines,
+                  exists: analyticsLog.exists,
+                  size: analyticsLog.size,
+                }
+              : undefined,
+            merger: mergerLog
+              ? {
+                  path: mergerLog.path,
+                  lastLines: mergerLog.lastLines,
+                  exists: mergerLog.exists,
+                  size: mergerLog.size,
                 }
               : undefined,
           },
@@ -236,6 +278,14 @@ export function statusCommand(program: Command): void {
         processTable.push([
           'Planner',
           formatRunningStatus(status.planner.running, status.planner.pid),
+        ]);
+        processTable.push([
+          'Analytics',
+          formatRunningStatus(status.analytics.running, status.analytics.pid),
+        ]);
+        processTable.push([
+          'Merger',
+          formatRunningStatus(status.merger.running, status.merger.pid),
         ]);
         console.log(processTable.toString());
 
@@ -301,6 +351,20 @@ export function statusCommand(program: Command): void {
             status.logs.planner.exists ? 'Exists' : 'Not found',
           ]);
         }
+        if (status.logs.analytics) {
+          logTable.push([
+            'Analytics',
+            status.logs.analytics.exists ? formatBytes(status.logs.analytics.size) : '-',
+            status.logs.analytics.exists ? 'Exists' : 'Not found',
+          ]);
+        }
+        if (status.logs.merger) {
+          logTable.push([
+            'Merger',
+            status.logs.merger.exists ? formatBytes(status.logs.merger.size) : '-',
+            status.logs.merger.exists ? 'Exists' : 'Not found',
+          ]);
+        }
         console.log(logTable.toString());
 
         // Show last lines in verbose mode
@@ -325,6 +389,14 @@ export function statusCommand(program: Command): void {
             dim('  Planner last 5 lines:');
             status.logs.planner.lastLines.forEach((line) => dim(`    ${line}`));
           }
+          if (status.logs.analytics?.exists && status.logs.analytics.lastLines.length > 0) {
+            dim('  Analytics last 5 lines:');
+            status.logs.analytics.lastLines.forEach((line) => dim(`    ${line}`));
+          }
+          if (status.logs.merger?.exists && status.logs.merger.lastLines.length > 0) {
+            dim('  Merger last 5 lines:');
+            status.logs.merger.lastLines.forEach((line) => dim(`    ${line}`));
+          }
         }
 
         // Tips section with dim styling
@@ -336,6 +408,8 @@ export function statusCommand(program: Command): void {
         dim('  night-watch qa       - Run QA now');
         dim('  night-watch audit    - Run audit now');
         dim('  night-watch planner  - Run planner now');
+        dim('  night-watch analytics - Run analytics now');
+        dim('  night-watch merge     - Run merger now');
         console.log();
       } catch (error) {
         console.error(

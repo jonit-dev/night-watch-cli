@@ -149,6 +149,10 @@ describe('status command', () => {
       expect(jsonOutput.audit.pid).toBeNull();
       expect(jsonOutput.planner.running).toBe(false);
       expect(jsonOutput.planner.pid).toBeNull();
+      expect(jsonOutput.analytics.running).toBe(false);
+      expect(jsonOutput.analytics.pid).toBeNull();
+      expect(jsonOutput.merger.running).toBe(false);
+      expect(jsonOutput.merger.pid).toBeNull();
 
       consoleSpy.mockRestore();
     });

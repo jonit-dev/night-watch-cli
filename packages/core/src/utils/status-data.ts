@@ -16,6 +16,7 @@ import {
   CLAIM_FILE_EXTENSION,
   LOCK_FILE_PREFIX,
   LOG_DIR,
+  MERGER_LOG_NAME,
   PLANNER_LOG_NAME,
   QA_LOG_NAME,
 } from '../constants.js';
@@ -747,6 +748,7 @@ export function collectLogInfo(projectDir: string): ILogInfo[] {
     { name: 'audit', fileName: `${AUDIT_LOG_NAME}.log` },
     { name: 'planner', fileName: `${PLANNER_LOG_NAME}.log` },
     { name: 'analytics', fileName: `${ANALYTICS_LOG_NAME}.log` },
+    { name: 'merger', fileName: `${MERGER_LOG_NAME}.log` },
   ];
   return logEntries.map(({ name, fileName }) => {
     const logPath = path.join(projectDir, LOG_DIR, fileName);
@@ -793,6 +795,7 @@ export async function fetchStatusSnapshot(
   const auditLock = checkLockFile(auditLockPath(projectDir));
   const plannerLock = checkLockFile(plannerLockPath(projectDir));
   const analyticsLock = checkLockFile(analyticsLockPath(projectDir));
+  const mergerLock = checkLockFile(mergerLockPath(projectDir));
 
   const processes: IProcessInfo[] = [
     { name: 'executor', running: executorLock.running, pid: executorLock.pid },
@@ -801,6 +804,7 @@ export async function fetchStatusSnapshot(
     { name: 'audit', running: auditLock.running, pid: auditLock.pid },
     { name: 'planner', running: plannerLock.running, pid: plannerLock.pid },
     { name: 'analytics', running: analyticsLock.running, pid: analyticsLock.pid },
+    { name: 'merger', running: mergerLock.running, pid: mergerLock.pid },
   ];
 
   const prds = collectPrdInfo(projectDir, config.prdDir, config.maxRuntime);
