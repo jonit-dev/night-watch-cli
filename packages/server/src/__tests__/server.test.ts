@@ -130,6 +130,10 @@ describe('server API', () => {
       path.join(logDir, 'reviewer.log'),
       'Reviewer log line 1\nReviewer log line 2\nReviewer log line 3',
     );
+    fs.writeFileSync(
+      path.join(logDir, 'merger.log'),
+      'Merger log line 1\nMerger log line 2\nMerger log line 3',
+    );
 
     // Mock getEntries
     vi.mocked(getEntries).mockReturnValue([]);
@@ -434,6 +438,14 @@ describe('server API', () => {
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('name', 'reviewer');
       expect(response.body.lines).toContain('Reviewer log line 1');
+    });
+
+    it('should return merger log lines', async () => {
+      const response = await request(app).get('/api/logs/merger');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('name', 'merger');
+      expect(response.body.lines).toContain('Merger log line 1');
     });
 
     it('should respect lines query parameter', async () => {
