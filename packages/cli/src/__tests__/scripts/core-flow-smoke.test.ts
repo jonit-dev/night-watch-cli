@@ -521,7 +521,7 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure');
   });
 
-  it('qa should emit warning_qa when a QA comment exists without qa-artifacts or tests/*/qa files', () => {
+  it('qa should accept generated tests in standard project test locations as QA evidence', () => {
     const projectDir = mkTempDir('nw-smoke-qa-warning-');
     initGitRepo(projectDir);
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
@@ -559,6 +559,74 @@ describe('core flow smoke tests (bash scripts)', () => {
         '  fi\n' +
         '  if [[ "$args" == *"--json files"* ]]; then\n' +
         "    echo 'tests/e2e/seo/example.e2e.spec.ts'\n" +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "api" ]]; then\n' +
+        '  printf "%s" "${qa_comment}" | base64 | tr -d "\\n"\n' +
+        '  printf "\\n"\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "checkout" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(qaScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BRANCH_PATTERNS: 'feat/',
+      NW_SMOKE_QA_COMMENT: qaComment,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success_qa');
+    expect(result.stdout).toContain('passing=#1');
+    expect(result.stdout).toContain('validated=#1');
+  });
+
+  it('qa should emit warning_qa when a QA comment exists without qa-artifacts or generated test files', () => {
+    const projectDir = mkTempDir('nw-smoke-qa-warning-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-qa-warning-bin-');
+    const qaComment =
+      '<!-- night-watch-qa-marker -->\n' +
+      '## Night Watch QA Report\n' +
+      '### Summary\n' +
+      '- **Status**: ✅ All passing\n';
+
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'args="$*"\n' +
+        'qa_comment="$(printf %s "$NW_SMOKE_QA_COMMENT")"\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  echo \'[{"number":1,"headRefName":"feat/qa-warning","title":"QA warning","labels":[]}]\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "repo" && "$2" == "view" ]]; then\n' +
+        "  echo 'owner/repo'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ "$args" == *"--json comments"* ]]; then\n' +
+        '    printf "%s" "${qa_comment}" | base64 | tr -d "\\n"\n' +
+        '    printf "\\n"\n' +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$args" == *"--json files"* ]]; then\n' +
+        "    echo 'src/features/seo-audit/page.tsx'\n" +
         '    exit 0\n' +
         '  fi\n' +
         '  exit 0\n' +

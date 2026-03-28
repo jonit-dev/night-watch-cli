@@ -313,7 +313,7 @@ classify_qa_comment_outcome() {
 pr_has_qa_generated_files() {
   local pr_number="${1:?PR number required}"
   gh pr view "${pr_number}" --json files --jq '.files[]?.path' 2>/dev/null \
-    | grep -Eq '^(qa-artifacts/|tests/.*/qa/)'
+    | grep -Eq '^(qa-artifacts/|tests/.*/qa/|(.*/)?(__tests__|tests?|spec|specs|e2e|playwright)/.*\.(test|spec)\.[[:alnum:]]+$|(.*/)?[^/]+\.(test|spec)\.[[:alnum:]]+$)'
 }
 
 provider_output_looks_invalid() {
@@ -341,7 +341,7 @@ validate_qa_evidence() {
   fi
 
   if ! pr_has_qa_generated_files "${pr_number}"; then
-    log "WARN-QA-EVIDENCE: PR #${pr_number} has QA marker comment but no qa-artifacts/ or tests/*/qa/ files"
+    log "WARN-QA-EVIDENCE: PR #${pr_number} has QA marker comment but no qa-artifacts/ or generated test files in standard locations"
     return 2
   fi
 
@@ -617,7 +617,7 @@ for pr_ref in ${PRS_NEEDING_QA}; do
       fi
       if [ ${QA_EVIDENCE_STATUS} -eq 2 ]; then
         WARNING_PRS_CSV=$(append_csv "${WARNING_PRS_CSV}" "#${pr_num}")
-        QA_WARNING_SUMMARY="${QA_WARNING_SUMMARY}${QA_WARNING_SUMMARY:+$'\n'}#${pr_num}: no qa-artifacts/ or tests/*/qa/ files"
+        QA_WARNING_SUMMARY="${QA_WARNING_SUMMARY}${QA_WARNING_SUMMARY:+$'\n'}#${pr_num}: no qa-artifacts/ or generated test files in standard locations"
         log "QA: PR #${pr_num} — provider completed with warning-only QA evidence"
       elif [ ${QA_EVIDENCE_STATUS} -ne 0 ]; then
         FAILED_AUTOMATION_PRS_CSV=$(append_csv "${FAILED_AUTOMATION_PRS_CSV}" "#${pr_num}")
