@@ -79,9 +79,7 @@ describe('getJobDef', () => {
   it('qa job has validatedLabel extra field', () => {
     const def = getJobDef('qa');
     expect(def).toBeDefined();
-    expect(def!.extraFields).toContainEqual(
-      expect.objectContaining({ name: 'validatedLabel' }),
-    );
+    expect(def!.extraFields).toContainEqual(expect.objectContaining({ name: 'validatedLabel' }));
   });
 
   it('qa job validatedLabel extra field has correct defaults', () => {
@@ -298,15 +296,16 @@ describe('normalizeJobConfig', () => {
     expect(result.artifacts).toBe('both');
   });
 
-  it('normalizes audit config with no extra fields', () => {
+  it('normalizes audit config including targetColumn', () => {
     const auditDef = getJobDef('audit')!;
     const result = normalizeJobConfig(
-      { enabled: false, schedule: '0 4 * * 0', maxRuntime: 900 },
+      { enabled: false, schedule: '0 4 * * 0', maxRuntime: 900, targetColumn: 'Ready' },
       auditDef,
     );
     expect(result.enabled).toBe(false);
     expect(result.schedule).toBe('0 4 * * 0');
     expect(result.maxRuntime).toBe(900);
+    expect(result.targetColumn).toBe('Ready');
   });
 
   it('normalizes analytics extra fields', () => {

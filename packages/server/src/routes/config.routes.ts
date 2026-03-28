@@ -6,6 +6,7 @@ import { Request, Response, Router } from 'express';
 import { CronExpressionParser } from 'cron-parser';
 
 import {
+  BOARD_COLUMNS,
   DayOfWeek,
   IGlobalNotificationsConfig,
   INightWatchConfig,
@@ -565,6 +566,10 @@ function validateConfigChanges(
     ) {
       return 'audit.maxRuntime must be a number >= 60';
     }
+
+    if (audit.targetColumn !== undefined && !BOARD_COLUMNS.includes(audit.targetColumn)) {
+      return `audit.targetColumn must be one of: ${BOARD_COLUMNS.join(', ')}`;
+    }
   }
 
   // Analytics configuration validation
@@ -601,9 +606,8 @@ function validateConfigChanges(
     }
 
     if (analytics.targetColumn !== undefined) {
-      const validColumns = ['Draft', 'Ready', 'In Progress', 'Review', 'Done'];
-      if (!validColumns.includes(analytics.targetColumn)) {
-        return `analytics.targetColumn must be one of: ${validColumns.join(', ')}`;
+      if (!BOARD_COLUMNS.includes(analytics.targetColumn)) {
+        return `analytics.targetColumn must be one of: ${BOARD_COLUMNS.join(', ')}`;
       }
     }
 

@@ -80,6 +80,7 @@ describe('scheduling', () => {
         enabled: true,
         schedule: '50 3 * * 1',
         maxRuntime: 1800,
+        targetColumn: 'Draft',
       },
       analytics: {
         enabled: false,
@@ -153,7 +154,10 @@ describe('scheduling', () => {
     });
 
     it('should report slicer as enabled when config.roadmapScanner.enabled is true', () => {
-      const config = { ...baseConfig, roadmapScanner: { ...baseConfig.roadmapScanner, enabled: true } };
+      const config = {
+        ...baseConfig,
+        roadmapScanner: { ...baseConfig.roadmapScanner, enabled: true },
+      };
       expect(isJobTypeEnabled(config, 'slicer')).toBe(true);
     });
 
@@ -218,6 +222,7 @@ describe('scheduling', () => {
         enabled: false,
         schedule: '50 3 * * 1',
         maxRuntime: 1800,
+        targetColumn: 'Draft',
       },
       analytics: {
         enabled: false,

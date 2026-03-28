@@ -17,6 +17,7 @@ import {
   loadConfig,
   parseScriptResult,
   resolveJobProvider,
+  syncAuditFindingsToBoard,
 } from '@night-watch/core';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -106,6 +107,7 @@ export function auditCommand(program: Command): void {
         configTable.push(['Provider', auditProvider]);
         configTable.push(['Provider CLI', PROVIDER_COMMANDS[auditProvider]]);
         configTable.push(['Max Runtime', `${config.audit.maxRuntime}s`]);
+        configTable.push(['Target Column', config.audit.targetColumn]);
         configTable.push(['Report File', path.join(projectDir, 'logs', 'audit-report.md')]);
         console.log(configTable.toString());
 
@@ -151,7 +153,15 @@ export function auditCommand(program: Command): void {
               spinner.fail('Code audit finished without a report file');
               process.exit(1);
             }
-            spinner.succeed(`Code audit complete — report written to ${reportPath}`);
+
+            const syncResult = await syncAuditFindingsToBoard(config, projectDir);
+            const message = `Code audit complete — report written to ${reportPath}; ${syncResult.summary}`;
+
+            if (syncResult.status === 'failed' || syncResult.status === 'partial') {
+              spinner.warn(message);
+            } else {
+              spinner.succeed(message);
+            }
           }
         } else {
           const statusSuffix = scriptResult?.status ? ` (${scriptResult.status})` : '';

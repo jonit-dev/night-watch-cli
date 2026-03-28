@@ -1237,6 +1237,7 @@ describe('config', () => {
       expect(config.audit.enabled).toBe(true);
       expect(config.audit.schedule).toBe('50 3 * * 1');
       expect(config.audit.maxRuntime).toBe(1800);
+      expect(config.audit.targetColumn).toBe('Draft');
     });
 
     it('should load audit config from file', () => {
@@ -1248,6 +1249,7 @@ describe('config', () => {
             enabled: false,
             schedule: '0 2 * * *',
             maxRuntime: 900,
+            targetColumn: 'Ready',
           },
         }),
       );
@@ -1257,6 +1259,7 @@ describe('config', () => {
       expect(config.audit.enabled).toBe(false);
       expect(config.audit.schedule).toBe('0 2 * * *');
       expect(config.audit.maxRuntime).toBe(900);
+      expect(config.audit.targetColumn).toBe('Ready');
     });
 
     it('should override audit enabled from env var', () => {
@@ -1283,6 +1286,14 @@ describe('config', () => {
       expect(config.audit.maxRuntime).toBe(3600);
     });
 
+    it('should override audit target column from env var', () => {
+      process.env.NW_AUDIT_TARGET_COLUMN = 'Ready';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.audit.targetColumn).toBe('Ready');
+    });
+
     it('should let env vars override audit config from file', () => {
       const configPath = path.join(tempDir, 'night-watch.config.json');
       fs.writeFileSync(
@@ -1292,6 +1303,7 @@ describe('config', () => {
             enabled: true,
             schedule: '0 2 * * *',
             maxRuntime: 900,
+            targetColumn: 'Review',
           },
         }),
       );
@@ -1303,6 +1315,7 @@ describe('config', () => {
       expect(config.audit.enabled).toBe(false);
       expect(config.audit.schedule).toBe('0 2 * * *');
       expect(config.audit.maxRuntime).toBe(900);
+      expect(config.audit.targetColumn).toBe('Review');
     });
 
     it('should preserve file audit fields when only one audit env var is provided', () => {
@@ -1314,6 +1327,7 @@ describe('config', () => {
             enabled: false,
             schedule: '5 * * * *',
             maxRuntime: 900,
+            targetColumn: 'In Progress',
           },
         }),
       );
@@ -1325,6 +1339,7 @@ describe('config', () => {
       expect(config.audit.enabled).toBe(false);
       expect(config.audit.schedule).toBe('0 */6 * * *');
       expect(config.audit.maxRuntime).toBe(900);
+      expect(config.audit.targetColumn).toBe('In Progress');
     });
   });
 
@@ -2109,10 +2124,12 @@ describe('config', () => {
         enabled: true,
         schedule: '0 * * * *',
         maxRuntime: 1800,
+        targetColumn: 'Draft',
       };
       expect(auditConfig.enabled).toBeDefined();
       expect(auditConfig.schedule).toBeDefined();
       expect(auditConfig.maxRuntime).toBeDefined();
+      expect(auditConfig.targetColumn).toBeDefined();
     });
 
     it('should have all INightWatchConfig fields documented in configuration.md', () => {

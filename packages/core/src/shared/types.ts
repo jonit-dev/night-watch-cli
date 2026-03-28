@@ -47,7 +47,15 @@ export type MergeMethod = 'squash' | 'merge' | 'rebase';
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 /** Job types that can have per-job provider configuration */
-export type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics' | 'planner' | 'merger';
+export type JobType =
+  | 'executor'
+  | 'reviewer'
+  | 'qa'
+  | 'audit'
+  | 'slicer'
+  | 'analytics'
+  | 'planner'
+  | 'merger';
 
 /** Per-job provider configuration */
 export interface IJobProviders {
@@ -160,6 +168,8 @@ export interface IAuditConfig {
   schedule: string;
   /** Maximum runtime in seconds for the audit */
   maxRuntime: number;
+  /** Board column to place created issues in */
+  targetColumn: BoardColumnName;
 }
 
 // ==================== Merger Config ====================

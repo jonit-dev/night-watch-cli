@@ -55,6 +55,7 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
       enabled: true,
       schedule: '0 3 * * *',
       maxRuntime: 1800,
+      targetColumn: 'Draft',
     },
     queue: {
       enabled: false,

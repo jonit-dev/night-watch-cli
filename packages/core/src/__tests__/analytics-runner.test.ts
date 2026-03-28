@@ -102,6 +102,7 @@ describe('analytics-runner', () => {
         enabled: false,
         schedule: '50 3 * * 1',
         maxRuntime: 1800,
+        targetColumn: 'Draft',
       },
       analytics: {
         enabled: true,

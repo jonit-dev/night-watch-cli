@@ -213,11 +213,12 @@ describe('normalizeConfig - registry-driven job configs', () => {
 
   it('normalizes audit config via registry', () => {
     const normalized = normalizeConfig({
-      audit: { enabled: false, schedule: '0 4 * * 0', maxRuntime: 900 },
+      audit: { enabled: false, schedule: '0 4 * * 0', maxRuntime: 900, targetColumn: 'Ready' },
     });
     expect(normalized.audit?.enabled).toBe(false);
     expect(normalized.audit?.schedule).toBe('0 4 * * 0');
     expect(normalized.audit?.maxRuntime).toBe(900);
+    expect((normalized.audit as Record<string, unknown>)?.targetColumn).toBe('Ready');
   });
 
   it('normalizes analytics config via registry', () => {

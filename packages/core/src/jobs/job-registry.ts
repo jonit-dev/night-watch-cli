@@ -4,6 +4,7 @@
  */
 
 import { JobType } from '../types.js';
+import { BOARD_COLUMNS } from '../board/types.js';
 
 /**
  * Base configuration interface that all job configs extend.
@@ -192,11 +193,20 @@ export const JOB_REGISTRY: IJobDefinition[] = [
     lockSuffix: '-audit.lock',
     queuePriority: 10,
     envPrefix: 'NW_AUDIT',
+    extraFields: [
+      {
+        name: 'targetColumn',
+        type: 'enum',
+        enumValues: [...BOARD_COLUMNS],
+        defaultValue: 'Draft',
+      },
+    ],
     defaultConfig: {
       enabled: true,
       schedule: '50 3 * * 1',
       maxRuntime: 1800,
-    },
+      targetColumn: 'Draft',
+    } as IBaseJobConfig & { targetColumn: string },
   },
   {
     id: 'analytics',
@@ -212,7 +222,7 @@ export const JOB_REGISTRY: IJobDefinition[] = [
       {
         name: 'targetColumn',
         type: 'enum',
-        enumValues: ['Draft', 'Ready', 'In Progress', 'Done', 'Closed'],
+        enumValues: [...BOARD_COLUMNS],
         defaultValue: 'Draft',
       },
       { name: 'analysisPrompt', type: 'string', defaultValue: '' },
@@ -229,8 +239,7 @@ export const JOB_REGISTRY: IJobDefinition[] = [
   {
     id: 'merger',
     name: 'Merge Orchestrator',
-    description:
-      'Repo-wide PR merge coordinator — scans, rebases, and merges in FIFO order',
+    description: 'Repo-wide PR merge coordinator — scans, rebases, and merges in FIFO order',
     cliCommand: 'merge',
     logName: 'merger',
     lockSuffix: '-merger.lock',

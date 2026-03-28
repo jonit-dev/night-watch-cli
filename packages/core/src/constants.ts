@@ -146,11 +146,13 @@ export const QA_LOG_NAME = 'night-watch-qa';
 export const DEFAULT_AUDIT_ENABLED = true;
 export const DEFAULT_AUDIT_SCHEDULE = '50 3 * * 1'; // weekly Monday 03:50
 export const DEFAULT_AUDIT_MAX_RUNTIME = 1800; // 30 minutes
+export const DEFAULT_AUDIT_TARGET_COLUMN = 'Draft' as const;
 
 export const DEFAULT_AUDIT: IAuditConfig = {
   enabled: DEFAULT_AUDIT_ENABLED,
   schedule: DEFAULT_AUDIT_SCHEDULE,
   maxRuntime: DEFAULT_AUDIT_MAX_RUNTIME,
+  targetColumn: DEFAULT_AUDIT_TARGET_COLUMN,
 };
 
 // Analytics Configuration (Amplitude integration)

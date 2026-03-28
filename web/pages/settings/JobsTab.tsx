@@ -151,6 +151,24 @@ const JobsTab: React.FC<IJobsTabProps> = ({
                   rightIcon={<span className="text-xs">sec</span>}
                   helperText="Maximum runtime for audit tasks (default: 1800 seconds)"
                 />
+                <Select
+                  label="Target Column"
+                  value={form.audit.targetColumn}
+                  onChange={(value) =>
+                    updateField('audit', {
+                      ...form.audit,
+                      targetColumn: value as IAuditConfig['targetColumn'],
+                    })
+                  }
+                  options={[
+                    { value: 'Draft', label: 'Draft' },
+                    { value: 'Ready', label: 'Ready' },
+                    { value: 'In Progress', label: 'In Progress' },
+                    { value: 'Review', label: 'Review' },
+                    { value: 'Done', label: 'Done' },
+                  ]}
+                  helperText="Board column for created audit issues"
+                />
               </div>
             </div>
           )}

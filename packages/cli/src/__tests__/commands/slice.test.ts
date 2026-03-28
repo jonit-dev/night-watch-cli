@@ -85,6 +85,7 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
       enabled: true,
       schedule: '0 3 * * *',
       maxRuntime: 1800,
+      targetColumn: 'Draft',
     },
     roadmapScanner: defaultRoadmapScanner,
     defaultBranch: '',
@@ -311,7 +312,13 @@ describe('slice command', () => {
       const result = {
         sliced: true,
         file: '01-test-feature.md',
-        item: { hash: 'abc12345', title: 'Test Feature', description: 'A description', checked: false, section: 'Phase 1' },
+        item: {
+          hash: 'abc12345',
+          title: 'Test Feature',
+          description: 'A description',
+          checked: false,
+          section: 'Phase 1',
+        },
       };
 
       const body = buildPlannerIssueBody(tempDir, config, result);
@@ -327,7 +334,13 @@ describe('slice command', () => {
       const result = {
         sliced: true,
         file: '01-test-feature.md',
-        item: { hash: 'abc12345', title: 'Test Feature', description: 'A description', checked: false, section: 'Phase 1' },
+        item: {
+          hash: 'abc12345',
+          title: 'Test Feature',
+          description: 'A description',
+          checked: false,
+          section: 'Phase 1',
+        },
       };
 
       const body = buildPlannerIssueBody(tempDir, config, result);
@@ -345,7 +358,13 @@ describe('slice command', () => {
       const result = {
         sliced: true,
         file: '01-test-feature.md',
-        item: { hash: 'abc12345', title: 'Test Feature', description: '', checked: false, section: 'Phase 1' },
+        item: {
+          hash: 'abc12345',
+          title: 'Test Feature',
+          description: '',
+          checked: false,
+          section: 'Phase 1',
+        },
       };
 
       const body = buildPlannerIssueBody(tempDir, config, result);

@@ -110,6 +110,7 @@ night-watch audit --timeout 3600  # Override max runtime (1 hour)
 
 - Runs the configured AI provider to scan codebase for quality issues
 - Generates a report at `logs/audit-report.md`
+- Creates board issues for actionable findings in `audit.targetColumn` when the board provider is enabled
 - Logs output to `logs/audit.log`
 
 **Behavior:**

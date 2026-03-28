@@ -33,6 +33,7 @@ export const DEFAULT_AUDIT_CONFIG: IAuditConfig = {
   enabled: true,
   schedule: '50 3 * * 1',
   maxRuntime: 1800,
+  targetColumn: 'Draft',
 };
 
 export const DEFAULT_ANALYTICS_CONFIG: IAnalyticsConfig = {

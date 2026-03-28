@@ -1426,6 +1426,15 @@ describe('server API', () => {
       expect(response.body.error).toContain('audit.maxRuntime');
     });
 
+    it('should validate audit.targetColumn is a valid board column', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ audit: { targetColumn: 'Bogus' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('audit.targetColumn');
+    });
+
     it('should accept valid audit config', async () => {
       const response = await request(app)
         .put('/api/config')
@@ -1434,12 +1443,14 @@ describe('server API', () => {
             enabled: false,
             schedule: '0 2 * * *',
             maxRuntime: 900,
+            targetColumn: 'Ready',
           },
         });
 
       expect(response.status).toBe(200);
       expect(response.body.audit.enabled).toBe(false);
       expect(response.body.audit.maxRuntime).toBe(900);
+      expect(response.body.audit.targetColumn).toBe('Ready');
     });
 
     it('should validate roadmapScanner.slicerSchedule is non-empty string', async () => {

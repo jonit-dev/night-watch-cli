@@ -82,6 +82,7 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
       enabled: true,
       schedule: '50 3 * * 1',
       maxRuntime: 1800,
+      targetColumn: 'Draft',
     },
     queue: {
       enabled: true,

@@ -85,6 +85,7 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
       enabled: false,
       schedule: '0 2 * * *',
       maxRuntime: 3600,
+      targetColumn: 'Draft' as const,
     },
     analytics: {
       enabled: false,

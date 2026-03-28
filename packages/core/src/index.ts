@@ -45,6 +45,7 @@ export * from './utils/worktree-manager.js';
 export * from './utils/job-queue.js';
 export * from './utils/summary.js';
 export * from './analytics/index.js';
+export * from './audit/index.js';
 export * from './templates/prd-template.js';
 export * from './templates/slicer-prompt.js';
 // Note: shared/types are re-exported selectively through types.ts to avoid duplicates.

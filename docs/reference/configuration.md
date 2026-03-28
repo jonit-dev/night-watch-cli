@@ -353,11 +353,12 @@ PRDs whose filename (without `.md` extension) matches an entry execute first.
 
 ### Code Audit (audit)
 
-| Field              | Type    | Default        | Description                                       |
-| ------------------ | ------- | -------------- | ------------------------------------------------- |
-| `audit.enabled`    | boolean | `true`         | Enable the audit process                          |
-| `audit.schedule`   | string  | `"50 3 * * 1"` | Cron schedule for audit execution (weekly Monday) |
-| `audit.maxRuntime` | number  | `1800`         | Maximum runtime in seconds for the audit          |
+| Field                | Type    | Default        | Description                                       |
+| -------------------- | ------- | -------------- | ------------------------------------------------- |
+| `audit.enabled`      | boolean | `true`         | Enable the audit process                          |
+| `audit.schedule`     | string  | `"50 3 * * 1"` | Cron schedule for audit execution (weekly Monday) |
+| `audit.maxRuntime`   | number  | `1800`         | Maximum runtime in seconds for the audit          |
+| `audit.targetColumn` | string  | `"Draft"`      | Board column for created audit issues             |
 
 ### Analytics Job (analytics)
 

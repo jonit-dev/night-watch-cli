@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
 import { createHash } from 'crypto';
+import { AuditSeverity, IAuditFinding, loadAuditFindings } from '../audit/report.js';
 import { INightWatchConfig, Provider } from '../types.js';
 import { resolveJobProvider } from '../config.js';
 import { getNextPrdNumber, slugify } from './prd-utils.js';
@@ -68,83 +69,6 @@ export interface ISliceResult {
   item?: IRoadmapItem;
 }
 
-type AuditSeverity = 'critical' | 'high' | 'medium' | 'low';
-
-interface IAuditFinding {
-  number: number;
-  severity: AuditSeverity;
-  category: string;
-  location: string;
-  description: string;
-  suggestedFix: string;
-}
-
-function normalizeAuditSeverity(raw: string): AuditSeverity {
-  const normalized = raw.trim().toLowerCase();
-  if (normalized === 'critical') return 'critical';
-  if (normalized === 'high') return 'high';
-  if (normalized === 'low') return 'low';
-  return 'medium';
-}
-
-function extractAuditField(block: string, field: string): string {
-  const pattern = new RegExp(
-    `- \\*\\*${field}\\*\\*:\\s*([\\s\\S]*?)(?=\\n- \\*\\*|\\n###\\s+Finding\\s+\\d+|$)`,
-    'i',
-  );
-  const match = block.match(pattern);
-  if (!match) return '';
-  return match[1].replace(/`/g, '').replace(/\r/g, '').trim();
-}
-
-function parseAuditFindings(reportContent: string): IAuditFinding[] {
-  const headingRegex = /^###\s+Finding\s+(\d+)\s*$/gm;
-  const headings: Array<{ number: number; bodyStart: number; headingStart: number }> = [];
-  let match: RegExpExecArray | null;
-
-  while ((match = headingRegex.exec(reportContent)) !== null) {
-    const number = parseInt(match[1], 10);
-    if (!Number.isNaN(number)) {
-      headings.push({
-        number,
-        bodyStart: headingRegex.lastIndex,
-        headingStart: match.index,
-      });
-    }
-  }
-
-  if (headings.length === 0) {
-    return [];
-  }
-
-  const findings: IAuditFinding[] = [];
-  for (let i = 0; i < headings.length; i++) {
-    const current = headings[i];
-    const next = headings[i + 1];
-    const block = reportContent.slice(
-      current.bodyStart,
-      next?.headingStart ?? reportContent.length,
-    );
-
-    const severityRaw = extractAuditField(block, 'Severity');
-    const category = extractAuditField(block, 'Category') || 'uncategorized';
-    const location = extractAuditField(block, 'Location') || 'unknown location';
-    const description = extractAuditField(block, 'Description') || 'No description provided';
-    const suggestedFix = extractAuditField(block, 'Suggested Fix') || 'No suggested fix provided';
-
-    findings.push({
-      number: current.number,
-      severity: normalizeAuditSeverity(severityRaw),
-      category,
-      location,
-      description,
-      suggestedFix,
-    });
-  }
-
-  return findings;
-}
-
 function auditSeverityRank(severity: AuditSeverity): number {
   switch (severity) {
     case 'critical':
@@ -192,17 +116,7 @@ function auditFindingToRoadmapItem(finding: IAuditFinding): IRoadmapItem {
 }
 
 function collectAuditPlannerItems(projectDir: string): IRoadmapItem[] {
-  const reportPath = path.join(projectDir, 'logs', 'audit-report.md');
-  if (!fs.existsSync(reportPath)) {
-    return [];
-  }
-
-  const reportContent = fs.readFileSync(reportPath, 'utf-8');
-  if (!reportContent.trim() || /\bNO_ISSUES_FOUND\b/.test(reportContent)) {
-    return [];
-  }
-
-  const findings = parseAuditFindings(reportContent);
+  const findings = loadAuditFindings(projectDir);
   findings.sort(
     (a, b) => auditSeverityRank(a.severity) - auditSeverityRank(b.severity) || a.number - b.number,
   );
