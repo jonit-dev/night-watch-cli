@@ -8,8 +8,8 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import { createHash } from 'crypto';
 import { AuditSeverity, IAuditFinding, loadAuditFindings } from '../audit/report.js';
-import { INightWatchConfig, Provider } from '../types.js';
-import { resolveJobProvider } from '../config.js';
+import { INightWatchConfig, IProviderPreset } from '../types.js';
+import { resolveJobProvider, resolvePreset } from '../config.js';
 import { getNextPrdNumber, slugify } from './prd-utils.js';
 import { IRoadmapItem, parseRoadmap } from './roadmap-parser.js';
 import {
@@ -239,12 +239,29 @@ function scanExistingPrdSlugs(prdDir: string): Set<string> {
 /**
  * Build provider CLI arguments based on provider type
  */
-function buildProviderArgs(provider: Provider, prompt: string, workingDir: string): string[] {
-  if (provider === 'codex') {
-    return ['exec', '-C', workingDir, '--yolo', prompt];
+function buildProviderArgs(preset: IProviderPreset, prompt: string, workingDir: string): string[] {
+  const args: string[] = [];
+
+  if (preset.subcommand) {
+    args.push(preset.subcommand);
   }
-  // Default: claude
-  return ['-p', prompt, '--dangerously-skip-permissions'];
+  if (preset.workdirFlag) {
+    args.push(preset.workdirFlag, workingDir);
+  }
+  if (preset.promptFlag) {
+    args.push(preset.promptFlag, prompt);
+  }
+  if (preset.modelFlag && preset.model) {
+    args.push(preset.modelFlag, preset.model);
+  }
+  if (preset.autoApproveFlag) {
+    args.push(preset.autoApproveFlag);
+  }
+  if (!preset.promptFlag) {
+    args.push(prompt);
+  }
+
+  return args;
 }
 
 /**
@@ -296,8 +313,9 @@ export async function sliceRoadmapItem(
   const prompt = renderSlicerPrompt(promptVars);
 
   // Spawn the AI provider
-  const provider = resolveJobProvider(config, 'slicer');
-  const providerArgs = buildProviderArgs(provider, prompt, projectDir);
+  const providerId = resolveJobProvider(config, 'slicer');
+  const preset = resolvePreset(config, providerId);
+  const providerArgs = buildProviderArgs(preset, prompt, projectDir);
 
   // Create log file for stdout/stderr
   const logDir = path.join(projectDir, 'logs');
@@ -317,9 +335,10 @@ export async function sliceRoadmapItem(
     const childEnv: NodeJS.ProcessEnv = {
       ...process.env,
       ...config.providerEnv,
+      ...(preset.envVars ?? {}),
     };
 
-    const child = spawn(provider, providerArgs, {
+    const child = spawn(preset.command, providerArgs, {
       env: childEnv,
       cwd: projectDir,
       stdio: ['inherit', 'pipe', 'pipe'],

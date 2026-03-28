@@ -587,7 +587,10 @@ cleanup_worktrees() {
   local project_dir="${1:?project_dir required}"
   local scope="${2:-}"
   local project_name
+  local project_parent
+  local registered_worktrees
   project_name=$(basename "${project_dir}")
+  project_parent=$(dirname "${project_dir}")
 
   # Clear stale worktree registrations first. This fixes cases where a
   # worktree directory was deleted out-of-band (for example by an agent
@@ -599,6 +602,8 @@ cleanup_worktrees() {
     match_token="${scope}"
   fi
 
+  registered_worktrees=$(git -C "${project_dir}" worktree list --porcelain 2>/dev/null || true)
+
   git -C "${project_dir}" worktree list --porcelain 2>/dev/null \
     | grep '^worktree ' \
     | awk '{print $2}' \
@@ -606,6 +611,27 @@ cleanup_worktrees() {
     | while read -r wt; do
         log "CLEANUP: Removing leftover worktree ${wt}"
         git -C "${project_dir}" worktree remove --force "${wt}" 2>/dev/null || true
+      done || true
+
+  # Also remove stale worktree directories on disk that Git no longer tracks.
+  # These can accumulate after hard crashes or interrupted prompt-driven runs.
+  find "${project_parent}" -maxdepth 1 -mindepth 1 -type d -name "${match_token}*" -print0 2>/dev/null \
+    | while IFS= read -r -d '' wt; do
+        local wt_basename
+        wt_basename=$(basename "${wt}")
+
+        if [ "${wt}" = "${project_dir}" ]; then
+          continue
+        fi
+        if ! printf '%s\n' "${wt_basename}" | grep -Fq "${match_token}"; then
+          continue
+        fi
+        if printf '%s\n' "${registered_worktrees}" | grep -qF "worktree ${wt}"; then
+          continue
+        fi
+
+        log "CLEANUP: Removing unregistered stale worktree directory ${wt}"
+        rm -rf "${wt}" 2>/dev/null || true
       done || true
 
   # Prune again after removals so Git drops any admin entries left behind by

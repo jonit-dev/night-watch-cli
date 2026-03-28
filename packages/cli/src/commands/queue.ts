@@ -33,7 +33,16 @@ import { buildQueuedJobEnv } from './shared/env-builder.js';
 
 const logger = createLogger('queue');
 
-const VALID_JOB_TYPES: JobType[] = ['executor', 'reviewer', 'qa', 'audit', 'slicer', 'planner'];
+const VALID_JOB_TYPES: JobType[] = [
+  'executor',
+  'reviewer',
+  'qa',
+  'audit',
+  'slicer',
+  'planner',
+  'pr-resolver',
+  'merger',
+];
 
 function formatTimestamp(unixTs: number | null): string {
   if (unixTs === null) return '-';
@@ -211,7 +220,10 @@ export function createQueueCommand(): Command {
     .command('resolve-key')
     .description('Resolve the provider bucket key for a given project and job type')
     .requiredOption('--project <dir>', 'Project directory')
-    .requiredOption('--job-type <type>', 'Job type (executor, reviewer, qa, audit, slicer)')
+    .requiredOption(
+      '--job-type <type>',
+      'Job type (executor, reviewer, qa, audit, slicer, planner, pr-resolver, merger)',
+    )
     .action((opts: { project: string; jobType: string }) => {
       try {
         const config = loadConfig(opts.project);
@@ -441,6 +453,10 @@ function getScriptNameForJobType(jobType: JobType): string | null {
       return 'night-watch-slicer-cron.sh';
     case 'planner':
       return 'night-watch-plan-cron.sh';
+    case 'pr-resolver':
+      return 'night-watch-pr-resolver-cron.sh';
+    case 'merger':
+      return 'night-watch-merger-cron.sh';
     default:
       return null;
   }

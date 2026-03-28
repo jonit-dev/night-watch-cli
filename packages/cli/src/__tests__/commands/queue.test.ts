@@ -42,6 +42,7 @@ vi.mock('@/cli/commands/shared/env-builder.js', () => ({
 import { spawn } from 'child_process';
 import { queueCommand } from '@/cli/commands/queue.js';
 import {
+  claimJobSlot,
   dispatchNextJob,
   getScriptPath,
   loadConfig,
@@ -133,6 +134,34 @@ describe('queue command', () => {
     expect(markJobRunning).toHaveBeenCalledWith(42);
   });
 
+  it('dispatch resolves the merger cron script for merger jobs', async () => {
+    vi.mocked(dispatchNextJob).mockReturnValue({
+      id: 77,
+      projectPath: '/projects/foo',
+      projectName: 'foo',
+      jobType: 'merger',
+      priority: 4,
+      status: 'dispatched',
+      envJson: {},
+      enqueuedAt: 100,
+      dispatchedAt: 110,
+      expiredAt: null,
+    } as never);
+
+    vi.mocked(getScriptPath).mockReturnValue('/pkg/dist/scripts/night-watch-merger-cron.sh');
+
+    await runQueue(['dispatch']);
+
+    expect(getScriptPath).toHaveBeenCalledWith('night-watch-merger-cron.sh');
+    expect(spawn).toHaveBeenCalledWith(
+      'bash',
+      ['/pkg/dist/scripts/night-watch-merger-cron.sh', '/projects/foo'],
+      expect.objectContaining({
+        cwd: '/projects/foo',
+      }),
+    );
+  });
+
   it('dispatch is a no-op when there are no pending jobs', async () => {
     vi.mocked(dispatchNextJob).mockReturnValue(null);
 
@@ -218,6 +247,28 @@ describe('queue command', () => {
       writeSpy.mockRestore();
       exitSpy.mockRestore();
     });
+  });
+
+  it('claim accepts pr-resolver jobs', async () => {
+    vi.mocked(claimJobSlot).mockReturnValue({ claimed: true, id: 88 } as never);
+
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+
+    await runQueue(['claim', 'pr-resolver', '/projects/foo']);
+
+    expect(claimJobSlot).toHaveBeenCalledWith(
+      '/projects/foo',
+      'foo',
+      'pr-resolver',
+      undefined,
+      queueConfig,
+    );
+    expect(writeSpy).toHaveBeenCalledWith('88\n');
+    expect(exitSpy).toHaveBeenCalledWith(0);
+
+    writeSpy.mockRestore();
+    exitSpy.mockRestore();
   });
 
   it('dispatch preserves persisted reviewer runtime markers from the queue entry', async () => {

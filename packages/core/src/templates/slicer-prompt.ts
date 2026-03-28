@@ -177,10 +177,15 @@ export function loadSlicerTemplate(templateDir?: string): string {
     return cachedTemplate;
   }
 
-  // Determine the template file path
-  const templatePath = templateDir
-    ? path.join(templateDir, 'slicer.md')
-    : path.resolve(__dirname, '..', '..', 'templates', 'slicer.md');
+  const candidatePaths = templateDir
+    ? [path.join(templateDir, 'slicer.md')]
+    : [
+        path.resolve(__dirname, 'slicer.md'),
+        path.resolve(__dirname, '..', 'templates', 'slicer.md'),
+        path.resolve(__dirname, '..', '..', '..', '..', 'templates', 'slicer.md'),
+      ];
+  const templatePath =
+    candidatePaths.find((candidate) => fs.existsSync(candidate)) ?? candidatePaths[0]!;
 
   try {
     cachedTemplate = fs.readFileSync(templatePath, 'utf-8');

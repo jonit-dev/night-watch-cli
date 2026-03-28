@@ -1041,6 +1041,102 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:timeout');
   });
 
+  it('reviewer targeted mode should give attempt 1 the full remaining runtime budget', () => {
+    const projectDir = mkTempDir('nw-smoke-reviewer-budget-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-reviewer-budget-bin-');
+    const scoreReadyFile = path.join(projectDir, '.smoke-review-score-ready');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' + 'sleep 2\n' + 'touch "$NW_SMOKE_SCORE_READY_FILE"\n' + 'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'args="$*"\n' +
+        'if [[ "$1" == "repo" && "$2" == "view" ]]; then\n' +
+        "  echo 'owner/repo'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ "$args" == *"title,headRefName,body,url"* ]]; then\n' +
+        '    echo \'{"title":"Budget Test","headRefName":"night-watch/budget-test","body":"Budget test body","url":"https://example.test/pr/1"}\'\n' +
+        '  elif [[ "$args" == *"mergeStateStatus"* ]]; then\n' +
+        "    echo 'CLEAN'\n" +
+        '  elif [[ "$args" == *"headRefOid"* ]]; then\n' +
+        "    echo 'abc123'\n" +
+        '  elif [[ "$args" == *"comments"* ]]; then\n' +
+        '    if [[ -f "$NW_SMOKE_SCORE_READY_FILE" ]]; then\n' +
+        "      echo 'Overall Score: 85/100'\n" +
+        '    fi\n' +
+        '  else\n' +
+        '    echo \'{"number":1}\'\n' +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  if [[ "$args" == *"number,headRefName,labels"* ]]; then\n' +
+        "    printf '1\\tnight-watch/budget-test\\t\\n'\n" +
+        '  else\n' +
+        "    printf 'night-watch/budget-test\\n'\n" +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "checks" ]]; then\n' +
+        '  if [[ "$args" == *"--json"* ]]; then\n' +
+        "    echo '[]'\n" +
+        '  else\n' +
+        "    echo ''\n" +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "api" ]]; then\n' +
+        '  if [[ -f "$NW_SMOKE_SCORE_READY_FILE" ]]; then\n' +
+        "    echo 'Overall Score: 85/100'\n" +
+        '  else\n' +
+        "    echo ''\n" +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "issue" && "$2" == "view" ]]; then\n' +
+        '  echo \'{"title":"Linked Issue","body":"Body","url":"https://example.test/issue/1"}\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "edit" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(reviewerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BRANCH_PATTERNS: 'night-watch/',
+      NW_REVIEWER_MAX_RUNTIME: '3',
+      NW_REVIEWER_MAX_RETRIES: '2',
+      NW_REVIEWER_RETRY_DELAY: '0',
+      NW_REVIEWER_WORKER_MODE: '0',
+      NW_REVIEWER_PARALLEL: '0',
+      NW_AUTO_MERGE: '0',
+      NW_QUEUE_ENABLED: '0',
+      NW_TARGET_PR: '1',
+      NW_SMOKE_SCORE_READY_FILE: scoreReadyFile,
+    });
+
+    const reviewerLog = fs.readFileSync(path.join(projectDir, 'logs', 'reviewer.log'), 'utf-8');
+
+    expect(result.status).toBe(0);
+    expect(reviewerLog).toContain('RETRY: Starting attempt 1/3 (timeout: 3s) pr=1');
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success_reviewed|prs=#1');
+  });
+
   it('qa should emit timeout when provider exceeds NW_QA_MAX_RUNTIME', () => {
     const projectDir = mkTempDir('nw-smoke-qa-timeout-');
     initGitRepo(projectDir);
@@ -1879,7 +1975,7 @@ describe('core flow smoke tests (bash scripts)', () => {
         'fi\n' +
         'if [[ "$1" == "pr" && "$2" == "checks" ]]; then\n' +
         '  if [[ "$args" == *"--json"* ]]; then\n' +
-        "    echo '[{\"bucket\":\"fail\",\"state\":\"failure\",\"conclusion\":\"failure\",\"name\":\"test-check\"}]'\n" +
+        '    echo \'[{"bucket":"fail","state":"failure","conclusion":"failure","name":"test-check"}]\'\n' +
         '  else\n' +
         "    echo 'fail 1/1 checks'\n" +
         '  fi\n' +

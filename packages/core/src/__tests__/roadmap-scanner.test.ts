@@ -627,6 +627,64 @@ Generated: 2026-03-03T12:00:00.000Z
       expect(providerArgs).not.toContain('--prompt');
     });
 
+    it('sliceRoadmapItem should resolve preset commands and env for named slicer presets', async () => {
+      const item: IRoadmapItem = {
+        hash: 'glm50001',
+        title: 'GLM Preset Feature',
+        description: 'Uses a named preset',
+        checked: false,
+        section: 'Features',
+      };
+
+      mockProviderSuccess('01-glm-preset-feature.md');
+
+      const config: INightWatchConfig = {
+        ...defaultConfig,
+        prdDir: path.relative(tempDir, prdDir),
+        providerEnv: {
+          GLOBAL_PROVIDER_ENV: '1',
+        },
+        jobProviders: {
+          slicer: 'glm-5',
+        },
+        providerPresets: {
+          'glm-5': {
+            name: 'GLM-5',
+            command: 'claude',
+            promptFlag: '-p',
+            autoApproveFlag: '--dangerously-skip-permissions',
+            modelFlag: '--model',
+            model: 'glm-5',
+            envVars: {
+              ANTHROPIC_BASE_URL: 'https://api.z.ai/api/anthropic',
+              API_TIMEOUT_MS: '3000000',
+            },
+          },
+        },
+      };
+
+      const result = await sliceRoadmapItem(tempDir, prdDir, item, config);
+
+      expect(result.sliced).toBe(true);
+
+      const spawnMock = childProcess.spawn as ReturnType<typeof vi.fn>;
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+
+      const [providerCmd, providerArgs, spawnOptions] = spawnMock.mock.calls[0] as [
+        string,
+        string[],
+        { env: Record<string, string> },
+      ];
+      expect(providerCmd).toBe('claude');
+      expect(providerArgs).toContain('-p');
+      expect(providerArgs).toContain('--model');
+      expect(providerArgs).toContain('glm-5');
+      expect(providerArgs).toContain('--dangerously-skip-permissions');
+      expect(spawnOptions.env.ANTHROPIC_BASE_URL).toBe('https://api.z.ai/api/anthropic');
+      expect(spawnOptions.env.API_TIMEOUT_MS).toBe('3000000');
+      expect(spawnOptions.env.GLOBAL_PROVIDER_ENV).toBe('1');
+    });
+
     it('sliceRoadmapItem should fail when provider succeeds but does not create file', async () => {
       const item: IRoadmapItem = {
         hash: 'nofil1234',

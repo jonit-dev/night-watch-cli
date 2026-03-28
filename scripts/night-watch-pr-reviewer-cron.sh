@@ -172,7 +172,7 @@ Auto-merge failed: ${auto_merge_failed_summary}"
     if [ -n "${final_score}" ]; then
       details="${details}|final_score=${final_score}"
     fi
-    log "TIMEOUT: PR reviewer killed after ${MAX_RUNTIME}s"
+    log "TIMEOUT: PR reviewer timed out (runtime budget ${MAX_RUNTIME}s)"
     if [ "${WORKER_MODE}" != "1" ]; then
       send_telegram_status_message "🔍 Night Watch Reviewer: timeout" "Project: ${PROJECT_NAME}
 Provider (model): ${PROVIDER_MODEL_DISPLAY}
@@ -1048,7 +1048,10 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
 
   ATTEMPT_TIMEOUT="${MAX_RUNTIME}"
   if [ -n "${TARGET_PR}" ]; then
-    # Calculate timeout from remaining runtime budget.
+    # Give each targeted attempt the full remaining runtime budget.
+    # Retries only happen after a quick return (low score / invalid output / rate limit);
+    # a timed-out provider run is not retried, so pre-splitting the budget would
+    # incorrectly cap a 1h review to ~20m on attempt 1.
     NOW_TS=$(date +%s)
     ELAPSED=$((NOW_TS - RUN_STARTED_AT))
     REMAINING_BUDGET=$((MAX_RUNTIME - ELAPSED))
@@ -1057,12 +1060,7 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
       log "RETRY: Runtime budget exhausted before attempt ${ATTEMPT}"
       break
     fi
-
-    REMAINING_ATTEMPTS=$((TOTAL_ATTEMPTS - ATTEMPT + 1))
-    ATTEMPT_TIMEOUT=$((REMAINING_BUDGET / REMAINING_ATTEMPTS))
-    if [ "${ATTEMPT_TIMEOUT}" -lt 1 ]; then
-      ATTEMPT_TIMEOUT=1
-    fi
+    ATTEMPT_TIMEOUT="${REMAINING_BUDGET}"
   fi
 
   # Recreate worktree if it was removed unexpectedly between attempts.
