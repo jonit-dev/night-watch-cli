@@ -50,6 +50,7 @@ import {
   getDefaultAnalyticsConfig,
   getDefaultAuditConfig,
   getDefaultMergerConfig,
+  getDefaultPrResolverConfig,
   getDefaultQaConfig,
   getDefaultRoadmapScannerConfig,
 } from '../utils/scheduling-defaults.js';
@@ -387,6 +388,19 @@ const Scheduling: React.FC = () => {
       delayInfo: scheduleInfo.analytics,
     },
     {
+      id: 'pr-resolver',
+      name: 'PR Resolver',
+      description: 'Rebases conflicted PRs and optionally applies AI-powered review fixes',
+      icon: <Search className="h-4 w-4" />,
+      enabled: config?.prResolver?.enabled ?? getDefaultPrResolverConfig().enabled,
+      schedule:
+        scheduleInfo.prResolver?.schedule ||
+        config.prResolver?.schedule ||
+        getDefaultPrResolverConfig().schedule,
+      nextRun: scheduleInfo.prResolver?.nextRun,
+      delayInfo: scheduleInfo.prResolver,
+    },
+    {
       id: 'merger',
       name: 'Merger',
       description: 'Repo-wide PR merge orchestrator — merges eligible PRs in FIFO order',
@@ -429,10 +443,11 @@ const Scheduling: React.FC = () => {
     config.qa?.schedule || getDefaultQaConfig().schedule,
     config.audit?.schedule || getDefaultAuditConfig().schedule,
     config.roadmapScanner?.slicerSchedule || getDefaultRoadmapScannerConfig().slicerSchedule,
+    config.prResolver?.schedule ?? getDefaultPrResolverConfig().schedule,
     config.merger?.schedule ?? getDefaultMergerConfig().schedule,
   );
   const formatScheduleLabel = (
-    job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics' | 'merger',
+    job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics' | 'prResolver' | 'merger',
     configuredCronExpr: string,
     displayedCronExpr: string,
   ): string => {
@@ -516,7 +531,11 @@ const Scheduling: React.FC = () => {
                       <div className="text-sm text-slate-400">Schedule</div>
                       <div className="text-sm text-slate-200 font-medium">
                         {formatScheduleLabel(
-                          (agent.id === 'planner' ? 'slicer' : agent.id) as 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics' | 'merger',
+                          (agent.id === 'planner'
+                            ? 'slicer'
+                            : agent.id === 'pr-resolver'
+                            ? 'prResolver'
+                            : agent.id) as 'executor' | 'reviewer' | 'qa' | 'audit' | 'slicer' | 'analytics' | 'prResolver' | 'merger',
                           agent.id === 'qa'
                             ? config.qa?.schedule || getDefaultQaConfig().schedule
                             : agent.id === 'audit'
@@ -525,6 +544,8 @@ const Scheduling: React.FC = () => {
                             ? config.roadmapScanner?.slicerSchedule || getDefaultRoadmapScannerConfig().slicerSchedule
                             : agent.id === 'analytics'
                             ? config.analytics?.schedule || getDefaultAnalyticsConfig().schedule
+                            : agent.id === 'pr-resolver'
+                            ? config.prResolver?.schedule || getDefaultPrResolverConfig().schedule
                             : agent.id === 'merger'
                             ? config.merger?.schedule || getDefaultMergerConfig().schedule
                             : agent.id === 'reviewer'
@@ -551,7 +572,7 @@ const Scheduling: React.FC = () => {
                       >
                         Edit cadence
                       </button>
-                      {['qa', 'audit', 'planner', 'analytics', 'merger'].includes(agent.id) && (
+                      {['qa', 'audit', 'planner', 'analytics', 'pr-resolver', 'merger'].includes(agent.id) && (
                         <button
                           type="button"
                           onClick={() => openSettingsTab('jobs', agent.id)}
@@ -598,7 +619,7 @@ const Scheduling: React.FC = () => {
               <div>
                 <h3 className="text-lg font-semibold text-slate-200">Cadence is configured in Settings</h3>
                 <p className="text-sm text-slate-400 mt-1">
-                  Use Settings &gt; Schedules for cron cadence and templates. Use Settings &gt; Jobs for enablement, runtime, and merger behavior.
+                  Use Settings &gt; Schedules for cron cadence and templates. Use Settings &gt; Jobs for enablement, runtime, resolver, and merger behavior.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -632,7 +653,7 @@ const Scheduling: React.FC = () => {
                   >
                     Edit cadence
                   </button>
-                  {['qa', 'audit', 'planner', 'analytics', 'merger'].includes(agent.id) && (
+                  {['qa', 'audit', 'planner', 'analytics', 'pr-resolver', 'merger'].includes(agent.id) && (
                     <button
                       type="button"
                       onClick={() => openSettingsTab('jobs', agent.id)}

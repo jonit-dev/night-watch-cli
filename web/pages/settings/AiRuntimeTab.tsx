@@ -135,6 +135,8 @@ const AiRuntimeTab: React.FC<IAiRuntimeTabProps> = ({
             { key: 'audit', label: 'Audit' },
             { key: 'slicer', label: 'Planner' },
             { key: 'analytics', label: 'Analytics' },
+            { key: 'pr-resolver', label: 'PR Resolver' },
+            { key: 'merger', label: 'Merger' },
           ] as const).map(({ key, label }) => (
             <div
               key={key}

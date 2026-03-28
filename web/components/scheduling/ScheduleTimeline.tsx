@@ -79,6 +79,8 @@ const ScheduleTimeline: React.FC<ScheduleTimelineProps> = ({
         audit: config.audit.enabled ? config.audit.schedule : null,
         slicer: config.roadmapScanner.enabled ? config.roadmapScanner.slicerSchedule : null,
         analytics: config.analytics?.enabled ? config.analytics?.schedule : null,
+        'pr-resolver': config.prResolver?.enabled ? config.prResolver.schedule : null,
+        merger: config.merger?.enabled ? config.merger?.schedule : null,
       };
 
       const offset = config.cronScheduleOffset || 0;
@@ -123,6 +125,8 @@ const ScheduleTimeline: React.FC<ScheduleTimelineProps> = ({
     if (configs.every(c => !c.config.audit.enabled)) disabled.add('audit');
     if (configs.every(c => !c.config.roadmapScanner.enabled)) disabled.add('slicer');
     if (configs.every(c => !c.config.analytics?.enabled)) disabled.add('analytics');
+    if (configs.every(c => !c.config.prResolver?.enabled)) disabled.add('pr-resolver');
+    if (configs.every(c => !c.config.merger?.enabled)) disabled.add('merger');
     return disabled;
   }, [configs]);
 

@@ -24,6 +24,7 @@ const JOB_TYPE_LABELS: Record<JobType, string> = {
   slicer: 'Planner',
   analytics: 'Analytics',
   planner: 'Planner',
+  'pr-resolver': 'PR Resolver',
   merger: 'Merger',
 };
 

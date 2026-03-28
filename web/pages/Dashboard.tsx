@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { useApi, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, triggerRun, triggerReview, triggerQa, triggerAudit, triggerAnalytics, triggerPlanner, triggerMerger, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
+import { useApi, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, triggerJob, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
 import { useStore } from '../store/useStore';
 import AgentStatusBar from '../components/dashboard/AgentStatusBar';
 
@@ -118,11 +118,11 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleTriggerJob = async (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics' | 'merger') => {
+  const handleTriggerJob = async (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics' | 'pr-resolver' | 'merger') => {
     setTriggeringJob(job);
     try {
-      const triggerMap = { executor: triggerRun, reviewer: triggerReview, qa: triggerQa, audit: triggerAudit, planner: triggerPlanner, analytics: triggerAnalytics, merger: triggerMerger };
-      await triggerMap[job]();
+      const registryId = job === 'planner' ? 'slicer' : job;
+      await triggerJob(registryId);
       addToast({ title: 'Job Triggered', message: `${job[0].toUpperCase() + job.slice(1)} job has been queued.`, type: 'success' });
     } catch (err) {
       addToast({ title: 'Trigger Failed', message: err instanceof Error ? err.message : `Failed to trigger ${job}`, type: 'error' });
@@ -159,6 +159,9 @@ const Dashboard: React.FC = () => {
       { agent: 'QA', nextRun: scheduleInfo?.qa?.nextRun ?? null },
       { agent: 'Auditor', nextRun: scheduleInfo?.audit?.nextRun ?? null },
       { agent: 'Planner', nextRun: scheduleInfo?.planner?.nextRun ?? null },
+      { agent: 'Analytics', nextRun: scheduleInfo?.analytics?.nextRun ?? null },
+      { agent: 'PR Resolver', nextRun: scheduleInfo?.prResolver?.nextRun ?? null },
+      { agent: 'Merger', nextRun: scheduleInfo?.merger?.nextRun ?? null },
     ];
 
     let earliest: { agent: string; nextRun: string | null } | null = null;

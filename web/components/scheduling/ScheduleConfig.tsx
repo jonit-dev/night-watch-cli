@@ -15,6 +15,7 @@ export interface IScheduleConfigForm {
   audit: { schedule: string; enabled: boolean };
   analytics?: { schedule: string; enabled: boolean };
   roadmapScanner: { slicerSchedule: string; enabled: boolean };
+  prResolver?: { schedule: string; enabled: boolean };
   merger?: { schedule: string; enabled: boolean };
   scheduleBundleId: string | null;
   schedulingPriority: number;
@@ -118,6 +119,7 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
                       ['QA', tpl.hints.qa],
                       ['Audit', tpl.hints.audit],
                       ['Planner', tpl.hints.slicer],
+                      ['PR Resolver', tpl.hints.prResolver],
                       ['Merger', tpl.hints.merger],
                     ] as [string, string][]
                   ).map(([name, hint]) => (
@@ -191,6 +193,20 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
                 onChange={(val) =>
                   onFieldChange('analytics', {
                     ...form.analytics,
+                    schedule: val,
+                  })
+                }
+              />
+            </div>
+          )}
+          {form.prResolver && (
+            <div id="job-schedule-pr-resolver">
+              <CronScheduleInput
+                label="PR Resolver Schedule"
+                value={form.prResolver.schedule}
+                onChange={(val) =>
+                  onFieldChange('prResolver', {
+                    ...form.prResolver,
                     schedule: val,
                   })
                 }

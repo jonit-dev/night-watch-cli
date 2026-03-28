@@ -2,7 +2,15 @@ import { useState } from 'react';
 import { triggerJob } from '../api.js';
 import { useStore } from '../store/useStore.js';
 
-type JobType = 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics';
+type JobType =
+  | 'executor'
+  | 'reviewer'
+  | 'qa'
+  | 'audit'
+  | 'planner'
+  | 'analytics'
+  | 'pr-resolver'
+  | 'merger';
 
 export function useTriggerJob() {
   const { addToast } = useStore();

@@ -10,7 +10,7 @@ interface IAgentStatusBarProps {
   onViewLog: () => void;
   cancellingProcess: 'run' | 'review' | null;
   clearingLock: boolean;
-  onTriggerJob: (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics' | 'merger') => void;
+  onTriggerJob: (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics' | 'pr-resolver' | 'merger') => void;
   triggeringJob: string | null;
 }
 
@@ -18,7 +18,7 @@ interface IAgentConfig {
   name: string;
   displayName: string;
   processName: string;
-  triggerId: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics' | 'merger';
+  triggerId: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics' | 'pr-resolver' | 'merger';
   cancelType?: 'run' | 'review';
   runningLabel: string;
   idleLabel: string;
@@ -31,6 +31,7 @@ const AGENTS: IAgentConfig[] = [
   { name: 'auditor', displayName: 'Auditor', processName: 'audit', triggerId: 'audit', runningLabel: 'Running', idleLabel: 'Idle' },
   { name: 'planner', displayName: 'Planner', processName: 'planner', triggerId: 'planner', runningLabel: 'Writing PRDs', idleLabel: 'Idle' },
   { name: 'analytics', displayName: 'Analytics', processName: 'analytics', triggerId: 'analytics', runningLabel: 'Running', idleLabel: 'Idle' },
+  { name: 'pr-resolver', displayName: 'PR Resolver', processName: 'pr-resolver', triggerId: 'pr-resolver', runningLabel: 'Resolving', idleLabel: 'Idle' },
   { name: 'merger', displayName: 'Merger', processName: 'merger', triggerId: 'merger', runningLabel: 'Running', idleLabel: 'Idle' },
 ];
 
@@ -53,7 +54,7 @@ const AgentStatusBar: React.FC<IAgentStatusBarProps> = ({
   };
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
       {AGENTS.map(agent => {
         const process = getProcess(agent.processName);
         const isRunning = process?.running ?? false;

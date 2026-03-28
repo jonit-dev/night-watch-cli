@@ -1,5 +1,14 @@
 import React from 'react';
-import { IAnalyticsConfig, IQaConfig, IAuditConfig, IMergerConfig, IRoadmapScannerConfig, MergeMethod, QaArtifacts } from '../../api';
+import {
+  IAnalyticsConfig,
+  IQaConfig,
+  IAuditConfig,
+  IMergerConfig,
+  IPrResolverConfig,
+  IRoadmapScannerConfig,
+  MergeMethod,
+  QaArtifacts,
+} from '../../api';
 import TagInput from '../../components/settings/TagInput.js';
 import Card from '../../components/ui/Card';
 import Input from '../../components/ui/Input';
@@ -11,6 +20,7 @@ interface IConfigFormJobs {
   qa: IQaConfig;
   audit: IAuditConfig;
   analytics: IAnalyticsConfig;
+  prResolver: IPrResolverConfig;
   merger: IMergerConfig;
   roadmapScanner: IRoadmapScannerConfig;
   providerEnv: Record<string, string>;
@@ -20,7 +30,7 @@ interface IJobsTabProps {
   form: IConfigFormJobs;
   updateField: <K extends keyof IConfigFormJobs>(key: K, value: IConfigFormJobs[K]) => void;
   handleRoadmapToggle: (enabled: boolean) => Promise<void>;
-  onManageSchedule: (jobType: 'qa' | 'audit' | 'analytics' | 'slicer' | 'merger') => void;
+  onManageSchedule: (jobType: 'qa' | 'audit' | 'analytics' | 'slicer' | 'pr-resolver' | 'merger') => void;
 }
 
 const ScheduleOwnerNotice: React.FC<{
@@ -368,6 +378,131 @@ const JobsTab: React.FC<IJobsTabProps> = ({
                   ]}
                   helperText="Column where planner-created issues are added after PRD generation."
                 />
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* PR Resolver */}
+      <div id="job-section-pr-resolver">
+        <Card className="p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-medium text-slate-200">PR Resolver</h3>
+              <p className="text-sm text-slate-400">
+                Repo-wide conflict resolver that rebases PRs and can optionally apply review feedback
+              </p>
+            </div>
+            <Switch
+              checked={form.prResolver.enabled}
+              onChange={(checked) =>
+                updateField('prResolver', { ...form.prResolver, enabled: checked })
+              }
+            />
+          </div>
+          {form.prResolver.enabled && (
+            <div className="space-y-6 pt-4 border-t border-slate-800">
+              <ScheduleOwnerNotice
+                schedule={form.prResolver.schedule}
+                onManage={() => onManageSchedule('pr-resolver')}
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Input
+                  label="Max Runtime"
+                  type="number"
+                  value={String(form.prResolver.maxRuntime)}
+                  onChange={(e) =>
+                    updateField('prResolver', {
+                      ...form.prResolver,
+                      maxRuntime: Number(e.target.value || 0),
+                    })
+                  }
+                  rightIcon={<span className="text-xs">sec</span>}
+                  helperText="Maximum runtime for the resolver (default: 3600 seconds)"
+                />
+                <Input
+                  label="Per-PR Timeout"
+                  type="number"
+                  value={String(form.prResolver.perPrTimeout)}
+                  onChange={(e) =>
+                    updateField('prResolver', {
+                      ...form.prResolver,
+                      perPrTimeout: Math.max(0, Number(e.target.value || 0)),
+                    })
+                  }
+                  rightIcon={<span className="text-xs">sec</span>}
+                  helperText="Maximum time spent resolving a single PR"
+                />
+                <Input
+                  label="Max PRs Per Run"
+                  type="number"
+                  min="0"
+                  value={String(form.prResolver.maxPrsPerRun)}
+                  onChange={(e) =>
+                    updateField('prResolver', {
+                      ...form.prResolver,
+                      maxPrsPerRun: Math.max(0, Number(e.target.value || 0)),
+                    })
+                  }
+                  helperText="Maximum PRs to process per run (0 = unlimited)"
+                />
+                <Input
+                  label="Ready Label"
+                  value={form.prResolver.readyLabel}
+                  onChange={(e) =>
+                    updateField('prResolver', {
+                      ...form.prResolver,
+                      readyLabel: e.target.value,
+                    })
+                  }
+                  helperText="GitHub label applied when a PR ends conflict-free"
+                />
+              </div>
+              <TagInput
+                label="Branch Patterns"
+                value={form.prResolver.branchPatterns}
+                onChange={(patterns) =>
+                  updateField('prResolver', { ...form.prResolver, branchPatterns: patterns })
+                }
+                placeholder="e.g., feat/, night-watch/"
+                helpText="Branch patterns to filter PRs (empty = all open PRs)"
+              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
+                  <div>
+                    <span className="text-sm font-medium text-slate-200">AI conflict resolution</span>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Use the configured provider when git cannot auto-resolve a rebase
+                    </p>
+                  </div>
+                  <Switch
+                    checked={form.prResolver.aiConflictResolution}
+                    onChange={(checked) =>
+                      updateField('prResolver', {
+                        ...form.prResolver,
+                        aiConflictResolution: checked,
+                      })
+                    }
+                  />
+                </div>
+                <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
+                  <div>
+                    <span className="text-sm font-medium text-slate-200">AI review resolution</span>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Optionally implement open review comments after conflict resolution
+                    </p>
+                  </div>
+                  <Switch
+                    checked={form.prResolver.aiReviewResolution}
+                    onChange={(checked) =>
+                      updateField('prResolver', {
+                        ...form.prResolver,
+                        aiReviewResolution: checked,
+                      })
+                    }
+                  />
+                </div>
               </div>
             </div>
           )}

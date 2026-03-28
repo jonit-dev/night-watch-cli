@@ -2,6 +2,7 @@ import type {
   IAnalyticsConfig,
   IAuditConfig,
   IMergerConfig,
+  IPrResolverConfig,
   IQaConfig,
   IRoadmapScannerConfig,
 } from '../api.js';
@@ -45,6 +46,18 @@ export const DEFAULT_ANALYTICS_CONFIG: IAnalyticsConfig = {
   analysisPrompt: '',
 };
 
+export const DEFAULT_PR_RESOLVER_CONFIG: IPrResolverConfig = {
+  enabled: true,
+  schedule: '15 6,14,22 * * *',
+  maxRuntime: 3600,
+  branchPatterns: [],
+  maxPrsPerRun: 0,
+  perPrTimeout: 600,
+  aiConflictResolution: true,
+  aiReviewResolution: false,
+  readyLabel: 'ready-to-merge',
+};
+
 export const DEFAULT_MERGER_CONFIG: IMergerConfig = {
   enabled: false,
   schedule: '55 */4 * * *',
@@ -73,6 +86,13 @@ export function getDefaultAuditConfig(): IAuditConfig {
 
 export function getDefaultAnalyticsConfig(): IAnalyticsConfig {
   return { ...DEFAULT_ANALYTICS_CONFIG };
+}
+
+export function getDefaultPrResolverConfig(): IPrResolverConfig {
+  return {
+    ...DEFAULT_PR_RESOLVER_CONFIG,
+    branchPatterns: [...DEFAULT_PR_RESOLVER_CONFIG.branchPatterns],
+  };
 }
 
 export function getDefaultMergerConfig(): IMergerConfig {

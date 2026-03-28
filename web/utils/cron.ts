@@ -61,6 +61,7 @@ export interface IScheduleTemplate {
     qa: string;
     audit: string;
     slicer: string;
+    prResolver: string;
     merger: string;
   };
   hints: {
@@ -69,6 +70,7 @@ export interface IScheduleTemplate {
     qa: string;
     audit: string;
     slicer: string;
+    prResolver: string;
     merger: string;
   };
 }
@@ -84,6 +86,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       qa: '45 22,10 * * *',
       audit: '50 4 * * 1',
       slicer: '35 19,7 * * *',
+      prResolver: '15 9,15,21 * * *',
       merger: '55 */4 * * *',
     },
     hints: {
@@ -92,6 +95,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       qa: '10:45pm & 10:45am',
       audit: 'Mon 4:50am',
       slicer: '7:35pm & 7:35am',
+      prResolver: '9:15am, 3:15pm, 9:15pm',
       merger: 'Every 4h at :55',
     },
   },
@@ -105,6 +109,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       qa: '45 2,10,18 * * *',
       audit: '50 3 * * 1',
       slicer: '35 */6 * * *',
+      prResolver: '15 6,14,22 * * *',
       merger: '55 */4 * * *',
     },
     hints: {
@@ -113,6 +118,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       qa: '2:45am, 10:45am & 6:45pm',
       audit: 'Mon 3:50am',
       slicer: 'Every 6h at :35',
+      prResolver: '6:15am, 2:15pm & 10:15pm',
       merger: 'Every 4h at :55',
     },
   },
@@ -126,6 +132,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       qa: '45 10,14,18 * * 1-5',
       audit: '50 9 * * 1',
       slicer: '35 7 * * 1',
+      prResolver: '15 8,12,16 * * 1-5',
       merger: '55 */4 * * 1-5',
     },
     hints: {
@@ -134,6 +141,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       qa: '10:45am, 2:45pm & 6:45pm weekdays',
       audit: 'Mon 9:50am',
       slicer: 'Mon 7:35am',
+      prResolver: '8:15am, 12:15pm & 4:15pm weekdays',
       merger: 'Every 4h at :55 weekdays',
     },
   },
@@ -147,6 +155,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       qa: '45 3 * * 0',
       audit: '50 4 * * 0',
       slicer: '35 1 * * 1',
+      prResolver: '15 8 * * 1,4',
       merger: '55 */8 * * *',
     },
     hints: {
@@ -155,6 +164,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       qa: 'Sun 3:45am',
       audit: 'Sun 4:50am',
       slicer: 'Mon 1:35am',
+      prResolver: 'Mon & Thu at 8:15am',
       merger: 'Every 8h at :55',
     },
   },
@@ -181,6 +191,7 @@ export function templateMatchesSchedules(
   qa: string,
   audit: string,
   slicer: string,
+  prResolver: string,
   merger: string,
 ): boolean {
   return (
@@ -189,6 +200,7 @@ export function templateMatchesSchedules(
     isCronEquivalent(template.schedules.qa, qa) &&
     isCronEquivalent(template.schedules.audit, audit) &&
     isCronEquivalent(template.schedules.slicer, slicer) &&
+    isCronEquivalent(template.schedules.prResolver, prResolver) &&
     isCronEquivalent(template.schedules.merger, merger)
   );
 }
@@ -199,10 +211,11 @@ export function detectTemplate(
   qa: string,
   audit: string,
   slicer: string,
+  prResolver: string,
   merger: string,
 ): IScheduleTemplate | undefined {
   return SCHEDULE_TEMPLATES.find((t) =>
-    templateMatchesSchedules(t, executor, reviewer, qa, audit, slicer, merger),
+    templateMatchesSchedules(t, executor, reviewer, qa, audit, slicer, prResolver, merger),
   );
 }
 
@@ -218,13 +231,17 @@ export function resolveActiveTemplate(
   qa: string,
   audit: string,
   slicer: string,
+  prResolver: string,
   merger: string,
 ): IScheduleTemplate | undefined {
   const byId = getTemplateById(scheduleBundleId);
-  if (byId && templateMatchesSchedules(byId, executor, reviewer, qa, audit, slicer, merger)) {
+  if (
+    byId &&
+    templateMatchesSchedules(byId, executor, reviewer, qa, audit, slicer, prResolver, merger)
+  ) {
     return byId;
   }
-  return detectTemplate(executor, reviewer, qa, audit, slicer, merger);
+  return detectTemplate(executor, reviewer, qa, audit, slicer, prResolver, merger);
 }
 
 /**

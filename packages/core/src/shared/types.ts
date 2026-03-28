@@ -55,6 +55,7 @@ export type JobType =
   | 'slicer'
   | 'analytics'
   | 'planner'
+  | 'pr-resolver'
   | 'merger';
 
 /** Per-job provider configuration */
@@ -65,6 +66,7 @@ export interface IJobProviders {
   audit?: Provider;
   slicer?: Provider;
   analytics?: Provider;
+  'pr-resolver'?: Provider;
   merger?: Provider;
 }
 
@@ -172,6 +174,29 @@ export interface IAuditConfig {
   targetColumn: BoardColumnName;
 }
 
+// ==================== PR Resolver Config ====================
+
+export interface IPrResolverConfig {
+  /** Whether the PR resolver is enabled */
+  enabled: boolean;
+  /** Cron schedule for PR resolver execution */
+  schedule: string;
+  /** Maximum runtime in seconds for the PR resolver */
+  maxRuntime: number;
+  /** Branch patterns to filter which PRs to process (empty = all) */
+  branchPatterns: string[];
+  /** Maximum number of PRs to process per run (0 = unlimited) */
+  maxPrsPerRun: number;
+  /** Per-PR timeout in seconds */
+  perPrTimeout: number;
+  /** Whether to use AI to resolve merge conflicts */
+  aiConflictResolution: boolean;
+  /** Whether to use AI to address review comments */
+  aiReviewResolution: boolean;
+  /** GitHub label to apply to conflict-free PRs */
+  readyLabel: string;
+}
+
 // ==================== Merger Config ====================
 
 export interface IMergerConfig {
@@ -252,6 +277,7 @@ export interface INightWatchConfig {
   qa: IQaConfig;
   audit: IAuditConfig;
   analytics: IAnalyticsConfig;
+  prResolver?: IPrResolverConfig;
   merger?: IMergerConfig;
   queue: IQueueConfig;
   /** Time-based provider schedule overrides */

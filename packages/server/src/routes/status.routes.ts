@@ -91,6 +91,7 @@ function buildScheduleInfoResponse(
   const auditPlan = getSchedulingPlan(projectDir, config, 'audit');
   const plannerPlan = getSchedulingPlan(projectDir, config, 'slicer');
   const analyticsPlan = getSchedulingPlan(projectDir, config, 'analytics');
+  const prResolverPlan = getSchedulingPlan(projectDir, config, 'pr-resolver');
   const mergerPlan = getSchedulingPlan(projectDir, config, 'merger');
 
   const executorInstalled =
@@ -105,6 +106,8 @@ function buildScheduleInfoResponse(
     (hasScheduledCommand(entries, 'planner') || hasScheduledCommand(entries, 'slice'));
   const analyticsInstalled =
     installed && config.analytics.enabled && hasScheduledCommand(entries, 'analytics');
+  const prResolverInstalled =
+    installed && (config.prResolver?.enabled ?? true) && hasScheduledCommand(entries, 'resolve');
   const mergerInstalled =
     installed && (config.merger?.enabled ?? false) && hasScheduledCommand(entries, 'merge');
 
@@ -177,6 +180,19 @@ function buildScheduleInfoResponse(
       delayMinutes: analyticsPlan.totalDelayMinutes,
       manualDelayMinutes: analyticsPlan.manualDelayMinutes,
       balancedDelayMinutes: analyticsPlan.balancedDelayMinutes,
+    },
+    prResolver: {
+      schedule: config.prResolver?.schedule ?? '15 6,14,22 * * *',
+      installed: prResolverInstalled,
+      nextRun: prResolverInstalled
+        ? addDelayToIsoString(
+            computeNextRun(config.prResolver?.schedule ?? '15 6,14,22 * * *'),
+            prResolverPlan.totalDelayMinutes,
+          )
+        : null,
+      delayMinutes: prResolverPlan.totalDelayMinutes,
+      manualDelayMinutes: prResolverPlan.manualDelayMinutes,
+      balancedDelayMinutes: prResolverPlan.balancedDelayMinutes,
     },
     merger: {
       schedule: config.merger?.schedule ?? '55 */4 * * *',

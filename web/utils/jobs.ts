@@ -1,4 +1,12 @@
-import type { IAnalyticsConfig, IAuditConfig, IMergerConfig, INightWatchConfig, IQaConfig, IRoadmapScannerConfig } from '@shared/types';
+import type {
+  IAnalyticsConfig,
+  IAuditConfig,
+  IMergerConfig,
+  INightWatchConfig,
+  IPrResolverConfig,
+  IQaConfig,
+  IRoadmapScannerConfig,
+} from '@shared/types';
 
 export interface IJobDefinition {
   /** Config/API key — matches IJobProviders keys and ScheduleTimeline IDs */
@@ -34,6 +42,7 @@ export const JOB_DEFINITIONS: IJobDefinition[] = [
   { id: 'audit',     label: 'Audit',     processName: 'audit',     color: { bg: 'bg-orange-500', border: 'border-orange-500/60' } },
   { id: 'slicer',    label: 'Planner',   processName: 'planner',   color: { bg: 'bg-yellow-500', border: 'border-yellow-500/60' } },
   { id: 'analytics', label: 'Analytics', processName: 'analytics', color: { bg: 'bg-pink-500',   border: 'border-pink-500/60'   } },
+  { id: 'pr-resolver', label: 'PR Resolver', processName: 'pr-resolver', color: { bg: 'bg-teal-500', border: 'border-teal-500/60' } },
   { id: 'merger',    label: 'Merger',    processName: 'merger',    color: { bg: 'bg-cyan-500',   border: 'border-cyan-500/60'   } },
 ];
 
@@ -109,6 +118,19 @@ export const WEB_JOB_REGISTRY: IWebJobDefinition[] = [
     getSchedule: (config) => config.analytics?.schedule ?? '0 6 * * 1',
     settingsSection: 'advanced',
     buildEnabledPatch: (enabled, config) => ({ analytics: { ...(config.analytics ?? {}), enabled } as IAnalyticsConfig }),
+  },
+  {
+    id: 'pr-resolver',
+    label: 'PR Resolver',
+    processName: 'pr-resolver',
+    color: { bg: 'bg-teal-500', border: 'border-teal-500/60' },
+    triggerEndpoint: '/api/actions/resolve',
+    scheduleTemplateKey: 'prResolver',
+    getEnabled: (config) => config.prResolver?.enabled ?? true,
+    getSchedule: (config) => config.prResolver?.schedule ?? '15 6,14,22 * * *',
+    settingsSection: 'advanced',
+    buildEnabledPatch: (enabled, config) =>
+      ({ prResolver: { ...(config.prResolver ?? {}), enabled } as IPrResolverConfig }),
   },
   {
     id: 'merger',

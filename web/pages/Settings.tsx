@@ -13,6 +13,7 @@ import {
   IMergerConfig,
   INightWatchConfig,
   INotificationConfig,
+  IPrResolverConfig,
   IProviderPreset,
   IProviderScheduleOverride,
   IQaConfig,
@@ -46,11 +47,21 @@ import {
   getDefaultAnalyticsConfig,
   getDefaultAuditConfig,
   getDefaultMergerConfig,
+  getDefaultPrResolverConfig,
   getDefaultQaConfig,
   getDefaultRoadmapScannerConfig,
 } from '../utils/scheduling-defaults.js';
 
-const JOB_PROVIDER_KEYS: Array<keyof IJobProviders> = ['executor', 'reviewer', 'qa', 'audit', 'slicer', 'analytics'];
+const JOB_PROVIDER_KEYS: Array<keyof IJobProviders> = [
+  'executor',
+  'reviewer',
+  'qa',
+  'audit',
+  'slicer',
+  'analytics',
+  'pr-resolver',
+  'merger',
+];
 
 type ConfigForm = {
   provider: INightWatchConfig['provider'];
@@ -92,6 +103,7 @@ type ConfigForm = {
   qa: IQaConfig;
   audit: IAuditConfig;
   analytics: IAnalyticsConfig;
+  prResolver: IPrResolverConfig;
   merger: IMergerConfig;
   queue: INightWatchConfig['queue'];
 };
@@ -137,6 +149,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   qa: config.qa || getDefaultQaConfig(),
   audit: config.audit || getDefaultAuditConfig(),
   analytics: config.analytics || getDefaultAnalyticsConfig(),
+  prResolver: config.prResolver ?? getDefaultPrResolverConfig(),
   merger: config.merger ?? getDefaultMergerConfig(),
   queue: config.queue || {
     enabled: true,
@@ -167,6 +180,7 @@ const resolveScheduleUiState = (form: ConfigForm): ScheduleUiState => {
     form.qa.schedule,
     form.audit.schedule,
     form.roadmapScanner.slicerSchedule ?? getDefaultRoadmapScannerConfig().slicerSchedule,
+    form.prResolver?.schedule ?? getDefaultPrResolverConfig().schedule,
     form.merger?.schedule ?? getDefaultMergerConfig().schedule,
   );
 
@@ -361,7 +375,7 @@ const Settings: React.FC = () => {
     }
 
     const registryId = jobType === 'planner' ? 'slicer' : jobType;
-    const jobsTabTypes = new Set(['qa', 'audit', 'slicer', 'analytics', 'merger']);
+    const jobsTabTypes = new Set(['qa', 'audit', 'slicer', 'analytics', 'pr-resolver', 'merger']);
 
     if (destination === 'job') {
       openJobSettings(registryId);
@@ -393,6 +407,7 @@ const Settings: React.FC = () => {
         qa: { ...prev.qa, schedule: tpl.schedules.qa },
         audit: { ...prev.audit, schedule: tpl.schedules.audit },
         roadmapScanner: { ...prev.roadmapScanner, slicerSchedule: tpl.schedules.slicer },
+        prResolver: { ...prev.prResolver, schedule: tpl.schedules.prResolver },
         merger: { ...prev.merger, schedule: tpl.schedules.merger },
         fallbackOnRateLimit: true,
       };
@@ -418,6 +433,9 @@ const Settings: React.FC = () => {
       form.audit.schedule !== config?.audit.schedule ||
       form.analytics.enabled !== (config?.analytics?.enabled ?? false) ||
       form.analytics.schedule !== (config?.analytics?.schedule ?? getDefaultAnalyticsConfig().schedule) ||
+      form.prResolver.enabled !== (config?.prResolver?.enabled ?? getDefaultPrResolverConfig().enabled) ||
+      form.prResolver.schedule !==
+        (config?.prResolver?.schedule ?? getDefaultPrResolverConfig().schedule) ||
       form.merger.enabled !== (config?.merger?.enabled ?? false) ||
       form.merger.schedule !== (config?.merger?.schedule ?? getDefaultMergerConfig().schedule) ||
       form.roadmapScanner.enabled !== (config?.roadmapScanner?.enabled ?? true) ||
@@ -478,6 +496,7 @@ const Settings: React.FC = () => {
         qa: form.qa,
         audit: form.audit,
         analytics: form.analytics,
+        prResolver: form.prResolver,
         merger: form.merger,
         queue: form.queue,
       });
@@ -688,7 +707,7 @@ const Settings: React.FC = () => {
           form={form}
           updateField={updateField as <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => void}
           handleRoadmapToggle={handleRoadmapToggle}
-          onManageSchedule={openScheduleEditor as (jobType: 'qa' | 'audit' | 'analytics' | 'slicer' | 'merger') => void}
+          onManageSchedule={openScheduleEditor as (jobType: 'qa' | 'audit' | 'analytics' | 'slicer' | 'pr-resolver' | 'merger') => void}
         />
       ),
     },
@@ -708,6 +727,7 @@ const Settings: React.FC = () => {
               slicerSchedule:
                 form.roadmapScanner.slicerSchedule || getDefaultRoadmapScannerConfig().slicerSchedule,
             },
+            prResolver: form.prResolver,
             merger: form.merger,
             scheduleBundleId: form.scheduleBundleId,
             schedulingPriority: form.schedulingPriority,

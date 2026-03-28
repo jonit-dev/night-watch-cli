@@ -20,6 +20,7 @@ import type {
     IProviderPreset,
     IProviderScheduleOverride,
     IPrInfo,
+    IPrResolverConfig,
     IProcessInfo,
     IQaConfig,
     IQueueConfig,
@@ -40,7 +41,7 @@ import { getWebJobDef } from './utils/jobs';
 export type {
     ClaudeModel, DayOfWeek, IAnalyticsConfig, IAuditConfig, IBoardProviderConfig, IJobProviders, ILogInfo, IMergerConfig, INightWatchConfig,
     INotificationConfig, IPrdInfo, IProviderBucketConfig, IProviderPreset, IProviderScheduleOverride, IPrInfo, IProcessInfo, IQaConfig,
-    IQueueConfig, IRoadmapItem, IRoadmapScannerConfig, IRoadmapStatus, IStatusSnapshot, IWebhookConfig,
+    IPrResolverConfig, IQueueConfig, IRoadmapItem, IRoadmapScannerConfig, IRoadmapStatus, IStatusSnapshot, IWebhookConfig,
     JobType, MergeMethod, QaArtifacts, QueueMode
 };
 
@@ -225,6 +226,14 @@ export interface IScheduleInfo {
     manualDelayMinutes: number;
     balancedDelayMinutes: number;
   };
+  prResolver?: {
+    schedule: string;
+    installed: boolean;
+    nextRun: string | null;
+    delayMinutes: number;
+    manualDelayMinutes: number;
+    balancedDelayMinutes: number;
+  };
   merger?: {
     schedule: string;
     installed: boolean;
@@ -339,6 +348,12 @@ export function triggerAnalytics(): Promise<ActionResult> {
 
 export function triggerPlanner(): Promise<ActionResult> {
   return apiFetch<ActionResult>(apiPath('/api/actions/planner'), {
+    method: 'POST',
+  });
+}
+
+export function triggerPrResolver(): Promise<ActionResult> {
+  return apiFetch<ActionResult>(apiPath('/api/actions/resolve'), {
     method: 'POST',
   });
 }

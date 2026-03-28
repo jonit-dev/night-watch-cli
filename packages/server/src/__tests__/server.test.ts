@@ -131,6 +131,10 @@ describe('server API', () => {
       'Reviewer log line 1\nReviewer log line 2\nReviewer log line 3',
     );
     fs.writeFileSync(
+      path.join(logDir, 'pr-resolver.log'),
+      'PR Resolver log line 1\nPR Resolver log line 2\nPR Resolver log line 3',
+    );
+    fs.writeFileSync(
       path.join(logDir, 'merger.log'),
       'Merger log line 1\nMerger log line 2\nMerger log line 3',
     );
@@ -231,6 +235,7 @@ describe('server API', () => {
         `45 2,14 * * * cd "${tempDir}" && night-watch qa >> "${tempDir}/logs/qa.log" 2>&1`,
         `50 3 * * 1 cd "${tempDir}" && night-watch audit >> "${tempDir}/logs/audit.log" 2>&1`,
         `35 */12 * * * cd "${tempDir}" && night-watch planner >> "${tempDir}/logs/planner.log" 2>&1`,
+        `15 6,14,22 * * * cd "${tempDir}" && night-watch resolve >> "${tempDir}/logs/pr-resolver.log" 2>&1`,
       ]);
 
       const response = await request(app).get('/api/schedule-info');
@@ -242,11 +247,13 @@ describe('server API', () => {
       expect(response.body.qa.installed).toBe(true);
       expect(response.body.audit.installed).toBe(true);
       expect(response.body.planner.installed).toBe(true);
+      expect(response.body.prResolver.installed).toBe(true);
       expect(typeof response.body.executor.nextRun).toBe('string');
       expect(typeof response.body.reviewer.nextRun).toBe('string');
       expect(typeof response.body.qa.nextRun).toBe('string');
       expect(typeof response.body.audit.nextRun).toBe('string');
       expect(typeof response.body.planner.nextRun).toBe('string');
+      expect(typeof response.body.prResolver.nextRun).toBe('string');
     });
 
     it('recognizes legacy slice command as planner schedule', async () => {
@@ -275,11 +282,13 @@ describe('server API', () => {
       expect(response.body.qa.installed).toBe(false);
       expect(response.body.audit.installed).toBe(false);
       expect(response.body.planner.installed).toBe(false);
+      expect(response.body.prResolver.installed).toBe(false);
       expect(response.body.executor.nextRun).toBeNull();
       expect(response.body.reviewer.nextRun).toBeNull();
       expect(response.body.qa.nextRun).toBeNull();
       expect(response.body.audit.nextRun).toBeNull();
       expect(response.body.planner.nextRun).toBeNull();
+      expect(response.body.prResolver.nextRun).toBeNull();
     });
 
     it('rejects invalid cron updates at config boundary', async () => {
@@ -297,6 +306,7 @@ describe('server API', () => {
         `45 2,14 * * * cd "${tempDir}" && night-watch qa >> "${tempDir}/logs/qa.log" 2>&1`,
         `50 3 * * 1 cd "${tempDir}" && night-watch audit >> "${tempDir}/logs/audit.log" 2>&1`,
         `35 */12 * * * cd "${tempDir}" && night-watch planner >> "${tempDir}/logs/planner.log" 2>&1`,
+        `15 6,14,22 * * * cd "${tempDir}" && night-watch resolve >> "${tempDir}/logs/pr-resolver.log" 2>&1`,
       ]);
 
       const updateResponse = await request(app)
@@ -307,6 +317,7 @@ describe('server API', () => {
           qa: { enabled: false },
           audit: { enabled: false },
           roadmapScanner: { enabled: false },
+          prResolver: { enabled: false },
         });
       expect(updateResponse.status).toBe(200);
 
@@ -318,6 +329,7 @@ describe('server API', () => {
       expect(response.body.qa.installed).toBe(false);
       expect(response.body.audit.installed).toBe(false);
       expect(response.body.planner.installed).toBe(false);
+      expect(response.body.prResolver.installed).toBe(false);
     });
 
     it('reports cron-triggered delays without rewriting the configured schedule', async () => {
@@ -438,6 +450,14 @@ describe('server API', () => {
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('name', 'reviewer');
       expect(response.body.lines).toContain('Reviewer log line 1');
+    });
+
+    it('should return pr-resolver log lines', async () => {
+      const response = await request(app).get('/api/logs/pr-resolver');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('name', 'pr-resolver');
+      expect(response.body.lines).toContain('PR Resolver log line 1');
     });
 
     it('should return merger log lines', async () => {

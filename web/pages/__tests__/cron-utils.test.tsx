@@ -19,6 +19,7 @@ describe('cron utilities', () => {
           template.schedules.qa,
           template.schedules.audit,
           template.schedules.slicer,
+          template.schedules.prResolver,
           template.schedules.merger,
         );
 
@@ -36,6 +37,7 @@ describe('cron utilities', () => {
         alwaysOn!.schedules.qa,
         '15 1 * * *',
         alwaysOn!.schedules.slicer,
+        alwaysOn!.schedules.prResolver,
         alwaysOn!.schedules.merger,
       );
 
@@ -49,6 +51,7 @@ describe('cron utilities', () => {
         '45 2,10,18 *  * *',
         '50 3 * *   1',
         '35 */6 * * *',
+        '15 6,14,22 * * *',
         '55 */4 * * *',
       );
 
@@ -63,6 +66,7 @@ describe('cron utilities', () => {
           ` ${template.schedules.qa.replace(/\s+/g, '    ')} `,
           ` ${template.schedules.audit.replace(/\s+/g, '  ')} `,
           ` ${template.schedules.slicer.replace(/\s+/g, '   ')} `,
+          ` ${template.schedules.prResolver.replace(/\s+/g, '  ')} `,
           ` ${template.schedules.merger.replace(/\s+/g, '  ')} `,
         );
 
@@ -94,6 +98,7 @@ describe('cron utilities', () => {
         '45 2,10,18 * * *',
         '50 3 * * 1',
         '35 */6 * * *',
+        '15 6,14,22 * * *',
         '55 */4 * * *',
       );
 
@@ -108,6 +113,7 @@ describe('cron utilities', () => {
         '45 2,10,18 * * *',
         '50 3 * * 1',
         '35 */6 * * *',
+        '15 6,14,22 * * *',
         '55 */4 * * *',
       );
 
@@ -122,6 +128,7 @@ describe('cron utilities', () => {
         '45 2,10,18 * * *',
         '50 3 * * 1',
         '35 */6 * * *',
+        '15 6,14,22 * * *',
         '55 */4 * * *',
       );
 
