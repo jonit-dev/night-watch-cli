@@ -21,7 +21,6 @@ import {
   DEFAULT_ANALYTICS,
   DEFAULT_AUDIT,
   DEFAULT_AUTO_MERGE,
-  DEFAULT_MERGER,
   DEFAULT_AUTO_MERGE_METHOD,
   DEFAULT_BOARD_PROVIDER,
   DEFAULT_BRANCH_PATTERNS,
@@ -36,6 +35,7 @@ import {
   DEFAULT_MAX_LOG_SIZE,
   DEFAULT_MAX_RETRIES,
   DEFAULT_MAX_RUNTIME,
+  DEFAULT_MERGER,
   DEFAULT_MIN_REVIEW_SCORE,
   DEFAULT_NOTIFICATIONS,
   DEFAULT_PRD_DIR,
@@ -220,7 +220,9 @@ function mergeConfigs(
     merged.merger = {
       ...merged.merger,
       enabled: true,
-      mergeMethod: (merged as unknown as Record<string, unknown>).autoMergeMethod as IMergerConfig['mergeMethod'] ?? 'squash',
+      mergeMethod:
+        ((merged as unknown as Record<string, unknown>)
+          .autoMergeMethod as IMergerConfig['mergeMethod']) ?? 'squash',
     };
   }
 
