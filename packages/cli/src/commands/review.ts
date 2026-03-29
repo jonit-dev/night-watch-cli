@@ -166,8 +166,7 @@ export function postReadyForHumanReviewComment(
   finalScore: number | undefined,
   cwd: string,
 ): void {
-  const scoreNote =
-    finalScore !== undefined ? ` (score: ${finalScore}/100)` : '';
+  const scoreNote = finalScore !== undefined ? ` (score: ${finalScore}/100)` : '';
   const body =
     `## ✅ Ready for Human Review\n\n` +
     `Night Watch has reviewed this PR${scoreNote} and found no issues requiring automated fixes.\n\n` +
@@ -520,12 +519,12 @@ export function reviewCommand(program: Command): void {
             const reviewedPrNumbers = parseReviewedPrNumbers(scriptResult?.data.prs);
             const noChangesPrNumbers = parseReviewedPrNumbers(scriptResult?.data.no_changes_prs);
             const fallbackPrNumber = fallbackPrDetails?.number;
+            let reviewedPrs: number[] = reviewedPrNumbers;
+            if (reviewedPrs.length === 0 && fallbackPrNumber !== undefined) {
+              reviewedPrs = [fallbackPrNumber];
+            }
             const notificationTargets = buildReviewNotificationTargets(
-              reviewedPrNumbers.length > 0
-                ? reviewedPrNumbers
-                : fallbackPrNumber !== undefined
-                  ? [fallbackPrNumber]
-                  : [],
+              reviewedPrs,
               noChangesPrNumbers,
               legacyNoChangesNeeded,
             );
@@ -567,7 +566,10 @@ export function reviewCommand(program: Command): void {
                   event: reviewEvent,
                   projectName: path.basename(projectDir),
                   exitCode,
-                  provider: formatProviderDisplay(envVars.NW_PROVIDER_CMD, envVars.NW_PROVIDER_LABEL),
+                  provider: formatProviderDisplay(
+                    envVars.NW_PROVIDER_CMD,
+                    envVars.NW_PROVIDER_LABEL,
+                  ),
                   prUrl: prDetails?.url,
                   prTitle: prDetails?.title,
                   prBody: prDetails?.body,
