@@ -22,6 +22,7 @@ import Select from '../components/ui/Select';
 import Switch from '../components/ui/Switch';
 import Tabs from '../components/ui/Tabs';
 import ScheduleTimeline from '../components/scheduling/ScheduleTimeline.js';
+import QueueTab from '../components/scheduling/QueueTab.js';
 import { useStore } from '../store/useStore';
 import type { INightWatchConfig, IQueueAnalytics, IQueueStatus, QueueMode } from '../api';
 import {
@@ -94,6 +95,8 @@ const Scheduling: React.FC = () => {
   const [allProjectConfigs, setAllProjectConfigs] = useState<Array<{ projectId: string; config: INightWatchConfig }>>([]);
   const [queueStatus, setQueueStatus] = useState<IQueueStatus | null>(null);
   const [queueAnalytics, setQueueAnalytics] = useState<IQueueAnalytics | null>(null);
+  const [queueStatusError, setQueueStatusError] = useState<Error | null>(null);
+  const [queueAnalyticsError, setQueueAnalyticsError] = useState<Error | null>(null);
 
   const [editState, setEditState] = useState<IQueueEditState>({
     isDirty: false,
@@ -139,11 +142,21 @@ const Scheduling: React.FC = () => {
     if (globalModeLoading) return;
     const fetchDashboard = () => {
       fetchQueueStatus()
-        .then(setQueueStatus)
-        .catch(() => { /* silently ignore */ });
+        .then((status) => {
+          setQueueStatus(status);
+          setQueueStatusError(null);
+        })
+        .catch((err) => {
+          setQueueStatusError(err instanceof Error ? err : new Error(String(err)));
+        });
       fetchQueueAnalytics(24)
-        .then(setQueueAnalytics)
-        .catch(() => { /* silently ignore */ });
+        .then((analytics) => {
+          setQueueAnalytics(analytics);
+          setQueueAnalyticsError(null);
+        })
+        .catch((err) => {
+          setQueueAnalyticsError(err instanceof Error ? err : new Error(String(err)));
+        });
     };
     fetchDashboard();
     const interval = setInterval(fetchDashboard, 30000);
@@ -460,7 +473,7 @@ const Scheduling: React.FC = () => {
     return `${activeTemplate.label} - ${activeTemplate.hints[job]}`;
   };
 
-  const tabs = [
+  const tabs = useMemo(() => [
     {
       id: 'overview',
       label: 'Overview',
@@ -913,7 +926,38 @@ const Scheduling: React.FC = () => {
         </div>
       ),
     },
-  ];
+    {
+      id: 'queue',
+      label: 'Queue',
+      content: (
+        <QueueTab
+          queueStatus={queueStatus}
+          queueAnalytics={queueAnalytics}
+          queueStatusError={queueStatusError}
+          queueAnalyticsError={queueAnalyticsError}
+        />
+      ),
+    },
+  ], [
+    agents,
+    statusColor,
+    statusText,
+    isPaused,
+    scheduleInfo,
+    config,
+    allProjectConfigs,
+    queueStatus,
+    queueAnalytics,
+    queueStatusError,
+    queueAnalyticsError,
+    toggling,
+    saving,
+    editState,
+    showAddBucket,
+    newBucketKey,
+    newBucketConcurrency,
+    activeTemplate,
+  ]);
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">

@@ -297,4 +297,62 @@ describe('Scheduling page', () => {
     expect(screen.getByRole('button', { name: 'Open Jobs' })).toBeInTheDocument();
     expect(screen.queryByText('PRD Execution Schedule')).not.toBeInTheDocument();
   });
+
+  it('renders Queue tab with queue status and analytics', async () => {
+    apiMocks.fetchQueueStatus.mockResolvedValue(makeQueueStatus({
+      running: {
+        id: 1,
+        jobType: 'executor',
+        projectPath: '/path/to/test-project',
+        projectName: 'test-project',
+        providerKey: 'claude',
+        status: 'running',
+        enqueuedAt: Date.now() / 1000,
+        dispatchedAt: null,
+        priority: 50,
+      },
+      pending: { total: 3, byType: { executor: 2, reviewer: 1 }, byProviderBucket: {} },
+    }));
+    apiMocks.fetchQueueAnalytics.mockResolvedValue(makeQueueAnalytics({
+      recentRuns: [
+        {
+          id: 1,
+          jobType: 'executor',
+          projectPath: '/path/to/test-project',
+          providerKey: 'claude',
+          status: 'completed',
+          startedAt: Date.now() / 1000,
+          finishedAt: Date.now() / 1000,
+          waitSeconds: 0,
+          durationSeconds: 100,
+          throttledCount: 0,
+        },
+      ],
+      byProviderBucket: { claude: { running: 1, pending: 2 } },
+    }));
+
+    renderScheduling();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Queue' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Queue Overview')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('Provider Lanes')).toBeInTheDocument();
+    expect(screen.getByText('Provider Buckets')).toBeInTheDocument();
+    expect(screen.getByText('Recent Runs')).toBeInTheDocument();
+  });
+
+  it('shows error state when queue status fails to load', async () => {
+    apiMocks.fetchQueueStatus.mockRejectedValue(new Error('Network error'));
+
+    renderScheduling();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Queue' }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load queue status')).toBeInTheDocument();
+    });
+  });
 });

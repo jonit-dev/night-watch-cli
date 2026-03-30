@@ -1539,6 +1539,12 @@ describe('core flow smoke tests (bash scripts)', () => {
       { encoding: 'utf-8', mode: 0o755 },
     );
 
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\nexit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
     const result = runScript(reviewerScript, projectDir, {
       PATH: `${fakeBin}:${process.env.PATH}`,
       NW_PROVIDER_CMD: 'claude',
@@ -1593,6 +1599,12 @@ describe('core flow smoke tests (bash scripts)', () => {
         '  exit 0\n' +
         'fi\n' +
         'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\nexit 0\n',
       { encoding: 'utf-8', mode: 0o755 },
     );
 
@@ -1745,6 +1757,12 @@ describe('core flow smoke tests (bash scripts)', () => {
         '  exit 0\n' +
         'fi\n' +
         'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\nexit 0\n',
       { encoding: 'utf-8', mode: 0o755 },
     );
 
