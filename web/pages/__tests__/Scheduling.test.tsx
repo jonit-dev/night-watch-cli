@@ -303,19 +303,32 @@ describe('Scheduling page', () => {
       running: {
         id: 1,
         jobType: 'executor',
+        projectPath: '/path/to/test-project',
         projectName: 'test-project',
         providerKey: 'claude',
         status: 'running',
-        createdAt: new Date().toISOString(),
+        enqueuedAt: Date.now() / 1000,
+        dispatchedAt: null,
         priority: 50,
       },
       pending: { total: 3, byType: { executor: 2, reviewer: 1 }, byProviderBucket: {} },
     }));
     apiMocks.fetchQueueAnalytics.mockResolvedValue(makeQueueAnalytics({
       recentRuns: [
-        { id: 1, jobType: 'executor', projectName: 'test-project', status: 'completed', createdAt: new Date().toISOString(), completedAt: new Date().toISOString() },
+        {
+          id: 1,
+          jobType: 'executor',
+          projectPath: '/path/to/test-project',
+          providerKey: 'claude',
+          status: 'completed',
+          startedAt: Date.now() / 1000,
+          finishedAt: Date.now() / 1000,
+          waitSeconds: 0,
+          durationSeconds: 100,
+          throttledCount: 0,
+        },
       ],
-      byProviderBucket: { claude: { running: 1, pending: 2, completed: 5 } },
+      byProviderBucket: { claude: { running: 1, pending: 2 } },
     }));
 
     renderScheduling();
