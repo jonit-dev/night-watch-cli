@@ -30,15 +30,14 @@ import WebhookEditor from '../components/settings/WebhookEditor.js';
 import PresetFormModal from '../components/providers/PresetFormModal.js';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
+import Badge from '../components/ui/Badge.js';
 import { IScheduleTemplate, resolveActiveTemplate } from '../utils/cron.js';
 import Tabs from '../components/ui/Tabs';
 import { useStore } from '../store/useStore';
-import GeneralTab from './settings/GeneralTab.js';
-import AiRuntimeTab from './settings/AiRuntimeTab.js';
+import ProjectTab from './settings/ProjectTab.js';
+import AiProvidersTab from './settings/AiProvidersTab.js';
 import JobsTab from './settings/JobsTab.js';
-import SchedulesTab from './settings/SchedulesTab.js';
 import IntegrationsTab from './settings/IntegrationsTab.js';
-import AdvancedTab from './settings/AdvancedTab.js';
 import { usePresetManagement } from '../hooks/usePresetManagement.js';
 import { BUILT_IN_PRESET_IDS } from '../constants/presets.js';
 import {
@@ -199,13 +198,15 @@ const Settings: React.FC = () => {
   const [form, setForm] = React.useState<ConfigForm | null>(null);
   const [allProjectConfigs, setAllProjectConfigs] = React.useState<Array<{ projectId: string; config: INightWatchConfig }>>([]);
   const [globalWebhook, setGlobalWebhook] = React.useState<IWebhookConfig | null | undefined>(undefined);
+  const initialFormRef = React.useRef<ConfigForm | null>(null);
+  const [isDirty, setIsDirty] = React.useState(false);
   // Prevents refetchConfig from overwriting the form after a save (form was already set from PUT response)
   const skipNextFormResetRef = React.useRef(false);
   // Tracks when jobProviders was changed by user (to trigger auto-save)
   const jobProvidersChangedRef = React.useRef(false);
   const [scheduleMode, setScheduleMode] = React.useState<'template' | 'custom'>('template');
   const [selectedTemplateId, setSelectedTemplateId] = React.useState<string>('always-on');
-  const [activeSettingsTab, setActiveSettingsTab] = React.useState<string>('general');
+  const [activeSettingsTab, setActiveSettingsTab] = React.useState<string>('project');
   const [highlightedSection, setHighlightedSection] = React.useState<string | null>(null);
 
   const {
@@ -245,8 +246,9 @@ const Settings: React.FC = () => {
     });
   }, [selectedProjectId]);
 
+  // Deep linking: switch tab based on URL param
   React.useEffect(() => {
-    const params = new URLSearchParams(location.search);
+    const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
     const mode = params.get('mode');
 
@@ -257,9 +259,11 @@ const Settings: React.FC = () => {
         roadmap: 'jobs',
         qa: 'jobs',
         audit: 'jobs',
-        analytics: 'jobs',
-        board: 'integrations',
         notifications: 'integrations',
+        schedules: 'jobs',
+        general: 'project',
+        'ai-runtime': 'ai-providers',
+        advanced: 'project',
       };
       setActiveSettingsTab(tabMigration[tab] ?? tab);
     }
@@ -292,13 +296,23 @@ const Settings: React.FC = () => {
     if (config) {
       if (skipNextFormResetRef.current) {
         skipNextFormResetRef.current = false;
-      } else {
-        const newForm = toFormState(config);
-        setForm(newForm);
-        applyScheduleUiState(newForm);
+        return;
       }
+      const initial = toFormState(config);
+      setForm(initial);
+      initialFormRef.current = initial;
+      setIsDirty(false);
+      applyScheduleUiState(initial);
     }
   }, [config, applyScheduleUiState]);
+
+  // Track dirty state
+  React.useEffect(() => {
+    if (!form || !initialFormRef.current) return;
+    const currentStr = JSON.stringify(form);
+    const initialStr = JSON.stringify(initialFormRef.current);
+    setIsDirty(currentStr !== initialStr);
+  }, [form]);
 
   // Auto-save when jobProviders changes from user input
   React.useEffect(() => {
@@ -504,6 +518,8 @@ const Settings: React.FC = () => {
       // Update form directly from server response to ensure it reflects persisted values
       const updatedForm = toFormState(savedConfig);
       setForm(updatedForm);
+      initialFormRef.current = updatedForm;
+      setIsDirty(false);
       applyScheduleUiState(updatedForm);
 
       let cronInstallFailedMessage = '';
@@ -548,9 +564,10 @@ const Settings: React.FC = () => {
   };
 
   const handleReset = () => {
-    if (config) {
-      const resetForm = toFormState(config);
+    if (initialFormRef.current) {
+      const resetForm = initialFormRef.current;
       setForm(resetForm);
+      setIsDirty(false);
       applyScheduleUiState(resetForm);
       addToast({
         title: 'Reset Complete',
@@ -670,10 +687,10 @@ const Settings: React.FC = () => {
 
   const tabs = [
     {
-      id: 'general',
-      label: 'General',
+      id: 'project',
+      label: 'Project',
       content: (
-        <GeneralTab
+        <ProjectTab
           form={form}
           updateField={updateField as <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => void}
           projectName={projectName}
@@ -683,13 +700,12 @@ const Settings: React.FC = () => {
       ),
     },
     {
-      id: 'ai-runtime',
-      label: 'AI & Runtime',
+      id: 'ai-providers',
+      label: 'AI Providers',
       content: (
-        <AiRuntimeTab
+        <AiProvidersTab
           form={form}
           updateField={updateField as <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => void}
-          jobProvidersChangedRef={jobProvidersChangedRef}
           getAllPresets={presetManagement.getAllPresets}
           getPresetOptions={presetManagement.getPresetOptions}
           handleEditPreset={presetManagement.handleEditPreset}
@@ -707,65 +723,14 @@ const Settings: React.FC = () => {
           form={form}
           updateField={updateField as <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => void}
           handleRoadmapToggle={handleRoadmapToggle}
-          onManageSchedule={openScheduleEditor as (jobType: 'qa' | 'audit' | 'analytics' | 'slicer' | 'pr-resolver' | 'merger') => void}
-        />
-      ),
-    },
-    {
-      id: 'schedules',
-      label: 'Schedules',
-      content: (
-        <SchedulesTab
-          form={{
-            cronSchedule: form.cronSchedule,
-            reviewerSchedule: form.reviewerSchedule,
-            qa: form.qa,
-            audit: form.audit,
-            analytics: form.analytics,
-            roadmapScanner: {
-              enabled: form.roadmapScanner.enabled,
-              slicerSchedule:
-                form.roadmapScanner.slicerSchedule || getDefaultRoadmapScannerConfig().slicerSchedule,
-            },
-            prResolver: form.prResolver,
-            merger: form.merger,
-            scheduleBundleId: form.scheduleBundleId,
-            schedulingPriority: form.schedulingPriority,
-            cronScheduleOffset: form.cronScheduleOffset,
-            globalQueueEnabled: form.queue.enabled,
-          }}
+          presetOptions={presetManagement.getPresetOptions(form.providerPresets)}
           scheduleMode={scheduleMode}
-          selectedTemplateId={selectedTemplateId}
-          onFieldChange={(field, value) => {
-            if (field === 'globalQueueEnabled') {
-              updateField('queue', { ...form.queue, enabled: value as boolean });
-            } else {
-              updateField(field as keyof ConfigForm, value as ConfigForm[keyof ConfigForm]);
-            }
-          }}
           onSwitchToTemplate={switchToTemplateMode}
           onSwitchToCustom={switchToCustomMode}
           onApplyTemplate={applyTemplate}
           allProjectConfigs={allProjectConfigs}
           currentProjectId={selectedProjectId}
-          onEditJob={handleEditJob}
         />
-      ),
-    },
-    {
-      id: 'notifications',
-      label: 'Notifications',
-      content: (
-        <Card className="p-6">
-          <h3 className="text-lg font-medium text-slate-200 mb-2">Notification Webhooks</h3>
-          <WebhookEditor
-            notifications={form.notifications}
-            onChange={(notifications) => updateField('notifications', notifications)}
-            globalWebhook={globalWebhook}
-            onSetGlobal={handleSetGlobal}
-            onUnsetGlobal={handleUnsetGlobal}
-          />
-        </Card>
       ),
     },
     {
@@ -774,38 +739,58 @@ const Settings: React.FC = () => {
       content: (
         <IntegrationsTab
           form={form}
-          updateField={updateField as <K extends 'boardProvider' | 'notifications'>(key: K, value: ConfigForm[K]) => void}
-        />
-      ),
-    },
-    {
-      id: 'advanced',
-      label: 'Advanced',
-      content: (
-        <AdvancedTab
-          form={form}
-          updateField={updateField as <K extends 'templatesDir' | 'maxRetries' | 'prdPriority'>(key: K, value: ConfigForm[K]) => void}
+          updateField={updateField as <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => void}
+          globalWebhook={globalWebhook}
+          onSetGlobal={handleSetGlobal}
+          onUnsetGlobal={handleUnsetGlobal}
         />
       ),
     },
   ];
 
   return (
-    <div className="max-w-4xl mx-auto pb-10">
-      <h2 className="text-2xl font-bold text-slate-100 mb-6">Settings</h2>
+    <div className="max-w-4xl mx-auto pb-32">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-100">Settings</h2>
+          <p className="text-sm text-slate-500 mt-1">Configure project automation, providers, and integrations</p>
+        </div>
+        {isDirty && (
+          <Badge variant="warning" className="animate-pulse">
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            Unsaved Changes
+          </Badge>
+        )}
+      </div>
 
       <Tabs tabs={tabs} activeTab={activeSettingsTab} onChange={setActiveSettingsTab} />
 
-      <div className="flex items-center justify-end space-x-4 pt-6 mt-6 border-t border-slate-800">
-        <Button variant="ghost" className="text-slate-400 hover:text-slate-300" onClick={handleReset}>
-          <RotateCcw className="h-4 w-4 mr-2" />
-          Reset
-        </Button>
-        <Button onClick={handleSave} loading={saving}>
-          <Save className="h-4 w-4 mr-2" />
-          Save Changes
-        </Button>
-      </div>
+      {/* Sticky Save Banner */}
+      {isDirty && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="bg-slate-900/90 backdrop-blur-md border border-indigo-500/30 rounded-2xl p-4 shadow-2xl flex items-center justify-between shadow-indigo-500/10">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-indigo-500/20 text-indigo-400">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-slate-200">You have unsaved changes</div>
+                <div className="text-[11px] text-slate-400">Save your configuration to apply changes</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-300" onClick={handleReset}>
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Discard
+              </Button>
+              <Button size="sm" className="bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-500/20" onClick={handleSave} loading={saving}>
+                <Save className="h-4 w-4 mr-2" />
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Danger Zone (global mode only) */}
       {isGlobalMode && selectedProjectId && (

@@ -4,26 +4,26 @@ import { DoctorCheck } from '../../api';
 import TagInput from '../../components/settings/TagInput.js';
 import Card from '../../components/ui/Card';
 import Input from '../../components/ui/Input';
-import Switch from '../../components/ui/Switch';
 
-interface IConfigFormGeneral {
+interface IConfigFormProject {
   defaultBranch: string;
   prdDir: string;
   branchPrefix: string;
   branchPatterns: string[];
-  executorEnabled: boolean;
-  reviewerEnabled: boolean;
+  templatesDir: string;
+  prdPriority: string[];
+  maxLogSize: number;
 }
 
-interface IGeneralTabProps {
-  form: IConfigFormGeneral;
-  updateField: <K extends keyof IConfigFormGeneral>(key: K, value: IConfigFormGeneral[K]) => void;
+interface IProjectTabProps {
+  form: IConfigFormProject;
+  updateField: <K extends keyof IConfigFormProject>(key: K, value: IConfigFormProject[K]) => void;
   projectName: string;
   doctorChecks: DoctorCheck[];
   doctorLoading: boolean;
 }
 
-const GeneralTab: React.FC<IGeneralTabProps> = ({ form, updateField, projectName, doctorChecks, doctorLoading }) => {
+const ProjectTab: React.FC<IProjectTabProps> = ({ form, updateField, projectName, doctorChecks, doctorLoading }) => {
   return (
     <div className="space-y-6">
       <Card className="p-6 space-y-6">
@@ -47,28 +47,35 @@ const GeneralTab: React.FC<IGeneralTabProps> = ({ form, updateField, projectName
               value={form.branchPrefix}
               onChange={(e) => updateField('branchPrefix', e.target.value)}
             />
-            <div className="md:col-span-2">
-              <Switch
-                label="Enable PRD Executor"
-                checked={form.executorEnabled}
-                onChange={(checked) => updateField('executorEnabled', checked)}
+            <Input
+              label="Templates Directory"
+              value={form.templatesDir}
+              onChange={(e) => updateField('templatesDir', e.target.value)}
+              helperText="Directory for custom template overrides"
+            />
+             <Input
+                label="Max Log Size"
+                type="number"
+                value={String(form.maxLogSize)}
+                onChange={(e) => updateField('maxLogSize', Number(e.target.value || 0))}
+                rightIcon={<span className="text-xs">bytes</span>}
+                helperText="Maximum size for process log files"
               />
-            </div>
-            <div className="md:col-span-2">
-              <Switch
-                label="Enable Automated Reviews"
-                checked={form.reviewerEnabled}
-                onChange={(checked) => updateField('reviewerEnabled', checked)}
-              />
-            </div>
           </div>
-          <div className="pt-4 mt-4 border-t border-slate-800">
+          <div className="pt-4 mt-4 border-t border-slate-800 space-y-6">
             <TagInput
               label="Branch Patterns"
               value={form.branchPatterns}
               onChange={(patterns) => updateField('branchPatterns', patterns)}
               placeholder="e.g., feat/"
               helpText="Branch patterns matched by reviewer and related automation jobs"
+            />
+            <TagInput
+              label="PRD Priority"
+              value={form.prdPriority}
+              onChange={(priority) => updateField('prdPriority', priority)}
+              placeholder="e.g., feature-x"
+              helpText="PRDs matching these names are executed first"
             />
           </div>
         </div>
@@ -110,4 +117,4 @@ const GeneralTab: React.FC<IGeneralTabProps> = ({ form, updateField, projectName
   );
 };
 
-export default GeneralTab;
+export default ProjectTab;
