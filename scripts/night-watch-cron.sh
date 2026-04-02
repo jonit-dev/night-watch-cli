@@ -199,7 +199,6 @@ if [ "${NW_BOARD_ENABLED:-}" = "true" ]; then
     # Slugify title for branch naming
     ELIGIBLE_PRD="${ISSUE_NUMBER}-$(printf '%s' "${ISSUE_TITLE_RAW}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-\|-$//g')"
     log "BOARD: Processing issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}"
-    trap "rm -f '${LOCK_FILE}'" EXIT
   fi
 fi
 
@@ -218,8 +217,7 @@ if [ -z "${ISSUE_NUMBER}" ]; then
   fi
   # Claim the PRD to prevent other runs from selecting it
   claim_prd "${PRD_DIR}" "${ELIGIBLE_PRD}"
-  # Update EXIT trap to also release claim
-  trap "rm -f '${LOCK_FILE}'; release_claim '${PRD_DIR}' '${ELIGIBLE_PRD}'" EXIT
+  append_exit_trap "release_claim '${PRD_DIR}' '${ELIGIBLE_PRD}'"
 fi
 
 PRD_NAME="${ELIGIBLE_PRD%.md}"

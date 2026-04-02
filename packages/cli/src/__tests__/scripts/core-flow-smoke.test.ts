@@ -234,6 +234,121 @@ describe('core flow smoke tests (bash scripts)', () => {
     ).toBe(true);
   });
 
+  it('executor filesystem mode should preserve queue cleanup after claiming a PRD', () => {
+    const projectDir = mkTempDir('nw-smoke-executor-queue-filesystem-');
+    initGitRepo(projectDir);
+    createPrd(projectDir, '01-smoke-queue-filesystem');
+    commitAll(projectDir, 'add PRD');
+
+    const fakeBin = mkTempDir('nw-smoke-bin-queue-filesystem-');
+    const callLog = path.join(projectDir, '.smoke-queue-calls');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' + "echo 'provider failed' >&2\n" + 'exit 1\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const nwCli = path.join(fakeBin, 'night-watch');
+    fs.writeFileSync(
+      nwCli,
+      '#!/usr/bin/env bash\n' +
+        'printf \'%s\\n\' "$*" >> "$NW_SMOKE_QUEUE_CALL_LOG"\n' +
+        'if [[ "$1" == "queue" && ( "$2" == "complete" || "$2" == "dispatch" ) ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(executorScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_PRD_DIR: 'docs/PRDs/night-watch',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_CLI_BIN: nwCli,
+      NW_QUEUE_ENABLED: '1',
+      NW_QUEUE_DISPATCHED: '1',
+      NW_QUEUE_ENTRY_ID: '42',
+      NW_SMOKE_QUEUE_CALL_LOG: callLog,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:');
+    const calls = fs.readFileSync(callLog, 'utf-8');
+    expect(calls).toContain('queue complete 42');
+    expect(calls).toContain('queue dispatch --project-dir');
+    expect(calls.indexOf('queue complete 42')).toBeLessThan(
+      calls.indexOf('queue dispatch --project-dir'),
+    );
+  });
+
+  it('executor board mode should preserve queue cleanup after claiming a board issue', () => {
+    const projectDir = mkTempDir('nw-smoke-executor-queue-board-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-bin-queue-board-');
+    const callLog = path.join(projectDir, '.smoke-queue-board-calls');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' + "echo 'provider failed' >&2\n" + 'exit 1\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "issue" && "$2" == "view" ]]; then\n' +
+        '  echo \'{"number":123,"title":"Queue Cleanup Board Issue","body":"Repro body"}\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const nwCli = path.join(fakeBin, 'night-watch');
+    fs.writeFileSync(
+      nwCli,
+      '#!/usr/bin/env bash\n' +
+        'printf \'%s\\n\' "$*" >> "$NW_SMOKE_QUEUE_CALL_LOG"\n' +
+        'if [[ "$1" == "queue" && ( "$2" == "complete" || "$2" == "dispatch" ) ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "board" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(executorScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BOARD_ENABLED: 'true',
+      NW_TARGET_ISSUE: '123',
+      NW_CLI_BIN: nwCli,
+      NW_QUEUE_ENABLED: '1',
+      NW_QUEUE_DISPATCHED: '1',
+      NW_QUEUE_ENTRY_ID: '77',
+      NW_SMOKE_QUEUE_CALL_LOG: callLog,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:failure');
+    const calls = fs.readFileSync(callLog, 'utf-8');
+    expect(calls).toContain('queue complete 77');
+    expect(calls).toContain('queue dispatch --project-dir');
+    expect(calls.indexOf('queue complete 77')).toBeLessThan(
+      calls.indexOf('queue dispatch --project-dir'),
+    );
+  });
+
   it('executor should invoke the provider from a linked worktree instead of the main checkout', () => {
     const projectDir = mkTempDir('nw-smoke-executor-worktree-cwd-');
     initGitRepo(projectDir);

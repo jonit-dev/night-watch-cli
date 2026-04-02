@@ -187,7 +187,7 @@ fi
   kill -TERM $$ 2>/dev/null || true
 ) &
 WATCHDOG_PID=$!
-trap 'kill ${WATCHDOG_PID} 2>/dev/null || true; rm -f "${LOCK_FILE}"' EXIT
+append_exit_trap "kill ${WATCHDOG_PID} 2>/dev/null || true"
 
 # Discover open PRs sorted by creation date (oldest first = FIFO)
 log "INFO: Scanning open PRs..."

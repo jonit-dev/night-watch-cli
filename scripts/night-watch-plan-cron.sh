@@ -83,7 +83,7 @@ cleanup_on_exit() {
   rm -f "${LOCK_FILE}"
 }
 
-trap cleanup_on_exit EXIT
+append_exit_trap "cleanup_on_exit"
 
 # Dry-run mode
 if [ "${NW_DRY_RUN:-0}" = "1" ]; then
