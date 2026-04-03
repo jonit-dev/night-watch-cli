@@ -184,12 +184,12 @@ export function isProcessRunning(pid: number): boolean {
 }
 
 /**
- * Check if the lock holder is genuinely alive (guards against PID reuse).
- * If the process started after the lock was written, a different process reused the PID.
+ * Check if a PID still refers to the same process that was observed at `observedAt`.
+ * Guards against PID reuse by comparing the process start time on Linux.
  */
-function isLockHolderAlive(pid: number, lockCreatedAt: number | null): boolean {
+export function isProcessAliveSince(pid: number, observedAt: number | null): boolean {
   if (!isProcessRunning(pid)) return false;
-  if (lockCreatedAt === null) return true; // old format — no timestamp to compare
+  if (observedAt === null) return true;
 
   try {
     const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf-8');
@@ -206,8 +206,8 @@ function isLockHolderAlive(pid: number, lockCreatedAt: number | null): boolean {
     const clkTck = 100; // standard on Linux
     const procStartSecs = bootTimeSecs + Math.floor(startTicks / clkTck);
 
-    // If the process started more than 2s after the lock was created, PID was reused
-    if (procStartSecs > lockCreatedAt + 2) return false;
+    // If the process started after we observed it, PID was reused.
+    if (procStartSecs > observedAt + 2) return false;
   } catch {
     // /proc not available (macOS, etc.) — fall back to simple PID check
   }
@@ -234,7 +234,7 @@ export function checkLockFile(lockPath: string): { running: boolean; pid: number
     }
 
     return {
-      running: isLockHolderAlive(pid, isNaN(lockTs!) ? null : lockTs),
+      running: isProcessAliveSince(pid, isNaN(lockTs!) ? null : lockTs),
       pid,
     };
   } catch {

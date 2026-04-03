@@ -3,6 +3,7 @@
  * Manages cross-project job queueing to prevent API rate limiting.
  */
 
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import Database from 'better-sqlite3';
@@ -30,7 +31,7 @@ import {
   auditLockPath,
   checkLockFile,
   executorLockPath,
-  isProcessRunning,
+  isProcessAliveSince,
   mergerLockPath,
   plannerLockPath,
   prResolverLockPath,
@@ -108,6 +109,24 @@ function getLockPathForJob(projectPath: string, jobType: JobType): string {
   }
 }
 
+function isRunningEntryStale(entry: IQueueEntry): { isStale: boolean; lockPid: number | null } {
+  const lockPath = getLockPathForJob(entry.projectPath, entry.jobType);
+
+  // If a lock file exists, its liveness check is authoritative because it includes
+  // PID-reuse detection. The stored PID is only a fallback for rows whose lock file
+  // has already been cleaned up.
+  if (fs.existsSync(lockPath)) {
+    const lockInfo = checkLockFile(lockPath);
+    return { isStale: !lockInfo.running, lockPid: lockInfo.pid };
+  }
+
+  const observedAt = entry.dispatchedAt ?? entry.enqueuedAt;
+  const storedPidAlive =
+    entry.pid !== undefined && entry.pid > 0 && isProcessAliveSince(entry.pid, observedAt);
+
+  return { isStale: !storedPidAlive, lockPid: null };
+}
+
 /**
  * Expire queue rows that still claim to be running after their backing process is gone.
  *
@@ -129,19 +148,7 @@ function reconcileStaleRunningJobs(db: Database.Database): number {
 
   for (const row of runningRows) {
     const entry = rowToEntry(row);
-    const lockInfo = checkLockFile(getLockPathForJob(entry.projectPath, entry.jobType));
-
-    // Primary check: lock file PID (includes PID-reuse detection)
-    let isStale = !lockInfo.running;
-
-    // Secondary check: stored PID in queue row (belt-and-suspenders for when
-    // lock file was cleaned up but queue entry is still "running")
-    if (!isStale) {
-      const storedPid = row['pid'] as number | null;
-      if (storedPid && storedPid > 0 && !isProcessRunning(storedPid)) {
-        isStale = true;
-      }
-    }
+    const { isStale, lockPid } = isRunningEntryStale(entry);
 
     if (isStale) {
       staleIds.push(entry.id);
@@ -149,8 +156,8 @@ function reconcileStaleRunningJobs(db: Database.Database): number {
         id: entry.id,
         jobType: entry.jobType,
         project: entry.projectName,
-        lockPid: lockInfo.pid,
-        storedPid: (row['pid'] as number | null) ?? null,
+        lockPid,
+        storedPid: entry.pid ?? null,
       });
     }
   }
@@ -336,11 +343,14 @@ export function getRunningJob(): IQueueEntry | null {
 /**
  * Mark a job as running (used when acquiring the global gate)
  */
-export function markJobRunning(queueId: number): void {
+export function markJobRunning(queueId: number, pid?: number): void {
   const db = openDb();
   try {
-    db.prepare(`UPDATE job_queue SET status = 'running' WHERE id = ?`).run(queueId);
-    logger.debug('Job marked running', { id: queueId });
+    db.prepare(`UPDATE job_queue SET status = 'running', pid = COALESCE(?, pid) WHERE id = ?`).run(
+      pid ?? null,
+      queueId,
+    );
+    logger.debug('Job marked running', { id: queueId, pid: pid ?? null });
   } finally {
     db.close();
   }
@@ -816,10 +826,7 @@ export function claimJobSlot(
 
       for (const row of runningRows) {
         const entry = rowToEntry(row);
-        const lockInfo = checkLockFile(getLockPathForJob(entry.projectPath, entry.jobType));
-        const storedPid = row['pid'] as number | null;
-        const isStale =
-          !lockInfo.running || (storedPid && storedPid > 0 && !isProcessRunning(storedPid));
+        const { isStale } = isRunningEntryStale(entry);
         if (isStale) {
           db.prepare(`UPDATE job_queue SET status = 'expired', expired_at = ? WHERE id = ?`).run(
             now,

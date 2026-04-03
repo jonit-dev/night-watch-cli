@@ -303,7 +303,7 @@ export function createQueueCommand(): Command {
         logger.info(`Spawned PID: ${child.pid}`);
 
         // Mark as running now that the process is launched
-        markJobRunning(entry.id);
+        markJobRunning(entry.id, child.pid ?? undefined);
       } catch (error) {
         updateJobStatus(entry.id, 'pending');
         logger.error(

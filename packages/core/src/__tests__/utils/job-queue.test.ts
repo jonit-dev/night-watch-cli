@@ -236,6 +236,14 @@ describe('markJobRunning', () => {
     const running = getRunningJob();
     expect(running?.id).toBe(id);
   });
+
+  it('stores the running process pid when provided', () => {
+    const id = enqueueJob('/projects/foo', 'foo', 'executor', {});
+    dispatchNextJob();
+    markJobRunning(id, 4321);
+
+    expect(getQueueEntry(id)?.pid).toBe(4321);
+  });
 });
 
 describe('removeJob', () => {
@@ -533,6 +541,28 @@ describe('claimJobSlot', () => {
     expect(entry?.status).toBe('running');
     expect(entry?.jobType).toBe('executor');
     expect(entry?.projectName).toBe('a');
+  });
+
+  it('keeps a claim-based running row alive when the lock file is absent but the stored pid is still live', () => {
+    const first = claimJobSlot('/p/a', 'a', 'executor', undefined, baseConfig, process.pid);
+    expect(first.claimed).toBe(true);
+
+    const second = claimJobSlot('/p/b', 'b', 'executor', undefined, baseConfig, process.pid);
+    expect(second.claimed).toBe(false);
+
+    if (!first.claimed) throw new Error('narrowing');
+    expect(getQueueEntry(first.id)?.status).toBe('running');
+    expect(getQueueEntry(first.id)?.pid).toBe(process.pid);
+  });
+
+  it('does not expire a live stored-pid claim row during queue status reconciliation', () => {
+    const claimed = claimJobSlot('/p/a', 'a', 'executor', undefined, baseConfig, process.pid);
+    expect(claimed.claimed).toBe(true);
+    if (!claimed.claimed) throw new Error('narrowing');
+
+    const status = getQueueStatus();
+    expect(status.running?.id).toBe(claimed.id);
+    expect(getQueueEntry(claimed.id)?.status).toBe('running');
   });
 
   it('should return { claimed: false } when at global maxConcurrency', () => {
