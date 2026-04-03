@@ -3,11 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
   Pause,
   Play,
-  Clock,
   AlertCircle,
   Zap,
-  ChevronDown,
-  ChevronUp,
   Settings2,
   ListRestart,
   RefreshCw,
@@ -177,12 +174,23 @@ const Scheduling: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h2 className="text-2xl font-bold text-slate-100 flex items-center gap-3">
-            Automation Control
+            Automation Queue
             <Badge variant={isPaused ? 'warning' : 'success'} className="px-3 py-1 text-xs uppercase tracking-wider">
               {isPaused ? 'Paused' : 'Active'}
             </Badge>
           </h2>
-          <p className="text-sm text-slate-400 mt-1">Managed cron triggers and global job queue</p>
+          <p className="text-sm text-slate-400 mt-1">Live queue, manual triggers, and run history for automated jobs</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate('/settings?tab=schedules')}>
+              Open Schedules
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate('/settings?tab=jobs')}>
+              Open Jobs
+            </Button>
+          </div>
+          <p className="text-xs text-slate-500 mt-2">
+            Cadence and schedule presets are configured in Settings &gt; Schedules.
+          </p>
         </div>
         
         <Button
@@ -321,7 +329,7 @@ const Scheduling: React.FC = () => {
           {/* Timeline Section */}
           <section className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-200">Operational Timeline</h3>
+            <h3 className="text-lg font-semibold text-slate-200">Operational Timeline</h3>
               <div className="text-xs text-slate-500 flex items-center gap-2">
                 <RefreshCw className="h-3 w-3 animate-spin-slow" /> Live Update
               </div>

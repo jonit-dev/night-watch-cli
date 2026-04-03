@@ -30,8 +30,7 @@ import Switch from '../../components/ui/Switch';
 import Card from '../../components/ui/Card';
 import CronScheduleInput from '../../components/ui/CronScheduleInput';
 import JobAccordion from '../../components/settings/JobAccordion';
-import ScheduleTimeline from '../../components/scheduling/ScheduleTimeline';
-import { cronToHuman, IScheduleTemplate, SCHEDULE_TEMPLATES } from '../../utils/cron.js';
+import { cronToHuman } from '../../utils/cron.js';
 
 interface IConfigFormJobs {
   executorEnabled: boolean;
@@ -65,12 +64,6 @@ interface IJobsTabProps {
   updateField: <K extends keyof IConfigFormJobs>(key: K, value: IConfigFormJobs[K]) => void;
   handleRoadmapToggle: (enabled: boolean) => Promise<void>;
   presetOptions: Array<{ label: string; value: string }>;
-  scheduleMode: 'template' | 'custom';
-  onSwitchToTemplate: () => void;
-  onSwitchToCustom: () => void;
-  onApplyTemplate: (tpl: IScheduleTemplate) => void;
-  allProjectConfigs: Array<{ projectId: string; config: INightWatchConfig }>;
-  currentProjectId: string;
 }
 
 const JobsTab: React.FC<IJobsTabProps> = ({
@@ -78,12 +71,6 @@ const JobsTab: React.FC<IJobsTabProps> = ({
   updateField,
   handleRoadmapToggle,
   presetOptions,
-  scheduleMode,
-  onSwitchToTemplate,
-  onSwitchToCustom,
-  onApplyTemplate,
-  allProjectConfigs,
-  currentProjectId,
 }) => {
   const [expandedJob, setExpandedJob] = React.useState<string | null>(null);
 
@@ -112,17 +99,6 @@ const JobsTab: React.FC<IJobsTabProps> = ({
     updateField('jobProviders', newJobProviders);
   };
 
-  const handleEditJobFromTimeline = (_projectId: string, jobType: string) => {
-    const registryId = jobType === 'planner' ? 'slicer' : jobType;
-    setExpandedJob(registryId);
-    setTimeout(() => {
-        const el = document.getElementById(`job-section-${registryId}`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }, 50);
-  };
-
   const providerOptionsWithDefault = [
     { label: 'Use Global (default)', value: '' },
     ...presetOptions,
@@ -130,111 +106,14 @@ const JobsTab: React.FC<IJobsTabProps> = ({
 
   return (
     <div className="space-y-8">
-      {/* Schedule Presets Section */}
-      <section className="space-y-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-medium text-slate-200 mb-1">Schedule Presets</h3>
-            <p className="text-sm text-slate-400">
-              Apply a template to all jobs or configure custom schedules per job
-            </p>
-          </div>
-          <div className="flex rounded-lg border border-slate-700 overflow-hidden shrink-0">
-            <button
-              type="button"
-              className={`px-4 py-1.5 text-sm font-medium transition-colors ${
-                scheduleMode === 'template'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-              }`}
-              onClick={onSwitchToTemplate}
-            >
-              Template
-            </button>
-            <button
-              type="button"
-              className={`px-4 py-1.5 text-sm font-medium transition-colors ${
-                scheduleMode === 'custom'
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-              }`}
-              onClick={onSwitchToCustom}
-            >
-              Custom
-            </button>
-          </div>
-        </div>
-
-        {scheduleMode === 'template' && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {SCHEDULE_TEMPLATES.map((tpl) => {
-              const active = form.scheduleBundleId === tpl.id;
-              return (
-                <button
-                  key={tpl.id}
-                  type="button"
-                  onClick={() => onApplyTemplate(tpl)}
-                  className={`text-left p-4 rounded-lg border transition-all ${
-                    active
-                      ? 'border-indigo-500 bg-indigo-950/40 ring-1 ring-indigo-500/20'
-                      : 'border-slate-800 bg-slate-900/30 hover:border-slate-700'
-                  }`}
-                >
-                  <div className="font-medium text-slate-200 mb-1 text-sm">{tpl.label}</div>
-                  <p className="text-[11px] text-slate-500 leading-relaxed">{tpl.description}</p>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        <ScheduleTimeline
-          configs={allProjectConfigs}
-          currentProjectId={currentProjectId}
-          onEditJob={handleEditJobFromTimeline}
-        />
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-800/50">
-          <Select
-            label="Scheduling Priority"
-            value={String(form.schedulingPriority)}
-            onChange={(val) => updateField('schedulingPriority', Number(val))}
-            options={[
-              { label: '1 - Lowest', value: '1' },
-              { label: '2 - Low', value: '2' },
-              { label: '3 - Balanced', value: '3' },
-              { label: '4 - High', value: '4' },
-              { label: '5 - Highest', value: '5' },
-            ]}
-            helperText="Projects with higher priority get earlier slots"
-          />
-          <Input
-            label="Extra Start Delay"
-            type="number"
-            min="0"
-            max="59"
-            value={String(form.cronScheduleOffset)}
-            onChange={(e) => updateField('cronScheduleOffset', Math.min(59, Math.max(0, Number(e.target.value || 0))))}
-            rightIcon={<span className="text-xs">min</span>}
-            helperText="Manual delay added to all jobs"
-          />
-          <div className="flex items-center justify-between p-4 rounded-xl border border-slate-800 bg-slate-950/30">
-            <div>
-              <div className="text-sm font-medium text-slate-200">Global Queue</div>
-              <p className="text-[11px] text-slate-500 mt-0.5">Queue overlapping jobs</p>
-            </div>
-            <Switch
-              checked={form.queue.enabled}
-              onChange={(enabled) => updateField('queue', { ...form.queue, enabled })}
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* Individual Jobs Section */}
       <section className="space-y-4">
         <div className="flex items-center justify-between pb-2 border-b border-slate-800/50">
-          <h3 className="text-lg font-medium text-slate-200">Job Configurations</h3>
+          <div>
+            <h3 className="text-lg font-medium text-slate-200">Job Configurations</h3>
+            <p className="text-sm text-slate-400 mt-1">
+              Enable jobs, choose providers, and tune runtime behavior. Cadence lives in the Schedules tab.
+            </p>
+          </div>
           <span className="text-xs text-slate-500">8 total jobs</span>
         </div>
 
@@ -252,11 +131,6 @@ const JobsTab: React.FC<IJobsTabProps> = ({
           providerLabel={form.jobProviders.executor ? presetOptions.find(p => p.value === form.jobProviders.executor)?.label : 'Global'}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <CronScheduleInput
-              label="Schedule"
-              value={form.cronSchedule}
-              onChange={(val) => updateField('cronSchedule', val)}
-            />
             <Select
               label="Provider"
               value={form.jobProviders.executor ?? ''}
@@ -288,11 +162,6 @@ const JobsTab: React.FC<IJobsTabProps> = ({
           providerLabel={form.jobProviders.reviewer ? presetOptions.find(p => p.value === form.jobProviders.reviewer)?.label : 'Global'}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <CronScheduleInput
-              label="Schedule"
-              value={form.reviewerSchedule}
-              onChange={(val) => updateField('reviewerSchedule', val)}
-            />
             <Select
               label="Provider"
               value={form.jobProviders.reviewer ?? ''}

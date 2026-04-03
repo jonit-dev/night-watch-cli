@@ -38,6 +38,7 @@ import ProjectTab from './settings/ProjectTab.js';
 import AiProvidersTab from './settings/AiProvidersTab.js';
 import JobsTab from './settings/JobsTab.js';
 import IntegrationsTab from './settings/IntegrationsTab.js';
+import ScheduleConfig from '../components/scheduling/ScheduleConfig.js';
 import { usePresetManagement } from '../hooks/usePresetManagement.js';
 import { BUILT_IN_PRESET_IDS } from '../constants/presets.js';
 import {
@@ -260,7 +261,7 @@ const Settings: React.FC = () => {
         qa: 'jobs',
         audit: 'jobs',
         notifications: 'integrations',
-        schedules: 'jobs',
+        schedules: 'schedules',
         general: 'project',
         'ai-runtime': 'ai-providers',
         advanced: 'project',
@@ -724,12 +725,47 @@ const Settings: React.FC = () => {
           updateField={updateField as <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => void}
           handleRoadmapToggle={handleRoadmapToggle}
           presetOptions={presetManagement.getPresetOptions(form.providerPresets)}
+        />
+      ),
+    },
+    {
+      id: 'schedules',
+      label: 'Schedules',
+      content: (
+        <ScheduleConfig
+          form={{
+            cronSchedule: form.cronSchedule,
+            reviewerSchedule: form.reviewerSchedule,
+            qa: form.qa,
+            audit: form.audit,
+            analytics: form.analytics,
+            roadmapScanner: {
+              ...form.roadmapScanner,
+              slicerSchedule:
+                form.roadmapScanner.slicerSchedule ?? getDefaultRoadmapScannerConfig().slicerSchedule,
+            },
+            prResolver: form.prResolver,
+            merger: form.merger,
+            scheduleBundleId: form.scheduleBundleId,
+            schedulingPriority: form.schedulingPriority,
+            cronScheduleOffset: form.cronScheduleOffset,
+            globalQueueEnabled: form.queue.enabled,
+          }}
           scheduleMode={scheduleMode}
+          selectedTemplateId={selectedTemplateId}
+          onFieldChange={(field, value) => {
+            if (field === 'globalQueueEnabled') {
+              updateField('queue', { ...form.queue, enabled: Boolean(value) });
+              return;
+            }
+            updateField(field as keyof typeof form, value as never);
+          }}
           onSwitchToTemplate={switchToTemplateMode}
           onSwitchToCustom={switchToCustomMode}
           onApplyTemplate={applyTemplate}
           allProjectConfigs={allProjectConfigs}
           currentProjectId={selectedProjectId}
+          onEditJob={(_projectId, jobType) => openScheduleEditor(jobType)}
         />
       ),
     },

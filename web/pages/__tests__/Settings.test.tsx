@@ -120,26 +120,23 @@ describe('Settings Page - PRD Coverage Verification', () => {
 
   describe('Settings page tabs (from source code)', () => {
     it('should have all required tabs for PRD coverage', () => {
-      // These tabs exist in Settings.tsx (consolidated from 11 → 6)
+      // These tabs exist in Settings.tsx
       const tabs = [
-        'General',
-        'AI & Runtime',
+        'Project',
+        'AI Providers',
         'Jobs',
         'Schedules',
         'Integrations',
-        'Advanced',
       ];
 
       // Core tabs present
-      expect(tabs).toContain('General');
-      expect(tabs).toContain('AI & Runtime');
+      expect(tabs).toContain('Project');
+      expect(tabs).toContain('AI Providers');
       expect(tabs).toContain('Jobs');
       expect(tabs).toContain('Schedules');
       expect(tabs).toContain('Integrations');
-      expect(tabs).toContain('Advanced');
 
-      // Total tabs should be 6
-      expect(tabs.length).toBe(6);
+      expect(tabs.length).toBe(5);
     });
   });
 

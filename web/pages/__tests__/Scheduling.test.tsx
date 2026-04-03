@@ -284,13 +284,12 @@ describe('Scheduling page', () => {
     apiMocks.fetchQueueAnalytics.mockResolvedValue(makeQueueAnalytics());
   });
 
-  it('routes cadence management to Settings instead of duplicating cron controls', async () => {
+  it('positions cadence management in Settings and presents this page as operations', async () => {
     renderScheduling();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cadence' }));
-
     await waitFor(() => {
-      expect(screen.getByText('Cadence is configured in Settings')).toBeInTheDocument();
+      expect(screen.getByText('Automation Queue')).toBeInTheDocument();
+      expect(screen.getByText('Cadence and schedule presets are configured in Settings > Schedules.')).toBeInTheDocument();
     });
 
     expect(screen.getByRole('button', { name: 'Open Schedules' })).toBeInTheDocument();

@@ -229,6 +229,8 @@ describe('Settings schedules mode sync', () => {
   it('persists scheduleBundleId when saving in template mode', async () => {
     renderSettings();
 
+    fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
+    fireEvent.change(screen.getByLabelText('Extra Start Delay'), { target: { value: '1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
     await waitFor(() => {
@@ -266,7 +268,7 @@ describe('Settings schedules mode sync', () => {
       expect(screen.getByText('PRD Execution Schedule')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
 
     await waitFor(() => {
       expect(screen.getByText('Always On (Recommended)')).toBeInTheDocument();
@@ -280,6 +282,7 @@ describe('Settings schedules mode sync', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
     fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
     fireEvent.click(screen.getByRole('button', { name: 'Template' }));
+    fireEvent.change(screen.getByLabelText('Extra Start Delay'), { target: { value: '1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
     await waitFor(() => {
@@ -291,12 +294,13 @@ describe('Settings schedules mode sync', () => {
     });
   });
 
-  it('shows merger cadence in Schedules and removes the duplicate cron editor from Jobs', async () => {
+  it('keeps cadence in Schedules and removes duplicate schedule controls from Jobs', async () => {
     renderSettings();
 
     fireEvent.click(screen.getByRole('button', { name: 'Jobs' }));
-    expect(screen.queryByText('Merger Schedule')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Manage schedule' }).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Schedule Presets')).not.toBeInTheDocument();
+    expect(screen.queryByText('PRD Execution Schedule')).not.toBeInTheDocument();
+    expect(screen.queryByText('Merge Orchestrator Schedule')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
     fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
@@ -323,7 +327,10 @@ describe('Settings schedules mode sync', () => {
     renderSettings();
 
     fireEvent.click(screen.getByRole('button', { name: 'Jobs' }));
-    fireEvent.click(screen.getByLabelText('Enable planner'));
+    const plannerSection = document.getElementById('job-section-slicer');
+    const plannerToggle = plannerSection?.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+    expect(plannerToggle).not.toBeNull();
+    fireEvent.click(plannerToggle!);
 
     await waitFor(() => {
       expect(apiMocks.toggleRoadmapScanner).toHaveBeenCalledWith(false);
@@ -354,7 +361,10 @@ describe('Settings schedules mode sync', () => {
     renderSettings();
 
     fireEvent.click(screen.getByRole('button', { name: 'Jobs' }));
-    fireEvent.click(screen.getByLabelText('Enable planner'));
+    const plannerSection = document.getElementById('job-section-slicer');
+    const plannerToggle = plannerSection?.querySelector('input[type="checkbox"]') as HTMLInputElement | null;
+    expect(plannerToggle).not.toBeNull();
+    fireEvent.click(plannerToggle!);
 
     await waitFor(() => {
       expect(apiMocks.toggleRoadmapScanner).toHaveBeenCalledWith(false);
@@ -367,20 +377,20 @@ describe('Settings schedules mode sync', () => {
     });
   });
 
-  it('shows rate limit fallback preset selectors in AI & Runtime tab', async () => {
+  it('shows rate limit fallback preset selectors in AI Providers tab', async () => {
     currentConfig = makeConfig({ provider: 'codex' });
 
     renderSettings();
-    fireEvent.click(screen.getByRole('button', { name: 'AI & Runtime' }));
+    fireEvent.click(screen.getByRole('button', { name: 'AI Providers' }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Rate Limit Fallback/i)).toBeInTheDocument();
+      expect(screen.getByText(/Reliability & Fallbacks/i)).toBeInTheDocument();
       expect(screen.getAllByText(/Primary Fallback Preset/i).length).toBeGreaterThan(0);
       expect(screen.getAllByText(/Secondary Fallback Preset/i).length).toBeGreaterThan(0);
     });
   });
 
-  it('clears a reviewer provider override when switching back to global', async () => {
+  it('clears a reviewer provider override when saving the Jobs tab', async () => {
     currentConfig = makeConfig({
       jobProviders: { reviewer: 'codex' },
     });
@@ -392,10 +402,13 @@ describe('Settings schedules mode sync', () => {
     });
 
     renderSettings();
-    fireEvent.click(screen.getByRole('button', { name: 'AI & Runtime' }));
-
-    const selects = screen.getAllByRole('combobox');
-    fireEvent.change(selects[2], { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Jobs' }));
+    fireEvent.click(screen.getByText('PR Reviewer'));
+    const reviewerSection = document.getElementById('job-section-reviewer');
+    const reviewerProviderSelect = reviewerSection?.querySelector('select') as HTMLSelectElement | null;
+    expect(reviewerProviderSelect).not.toBeNull();
+    fireEvent.change(reviewerProviderSelect!, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
 
     await waitFor(() => {
       expect(apiMocks.updateConfig).toHaveBeenCalledWith(
@@ -406,7 +419,7 @@ describe('Settings schedules mode sync', () => {
     });
 
     await waitFor(() => {
-      expect((screen.getAllByRole('combobox')[2] as HTMLSelectElement).value).toBe('');
+      expect(reviewerProviderSelect!.value).toBe('');
     });
   });
 });
