@@ -263,6 +263,7 @@ describe('queue command', () => {
       'pr-resolver',
       undefined,
       queueConfig,
+      undefined,
     );
     expect(writeSpy).toHaveBeenCalledWith('88\n');
     expect(exitSpy).toHaveBeenCalledWith(0);
