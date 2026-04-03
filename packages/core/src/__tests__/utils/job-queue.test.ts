@@ -54,7 +54,7 @@ function getLockPath(projectPath: string, jobType: JobType): string {
 
 function createLiveLock(projectPath: string, jobType: JobType = 'executor'): void {
   const lockPath = getLockPath(projectPath, jobType);
-  fs.writeFileSync(lockPath, String(process.pid));
+  fs.writeFileSync(lockPath, `${process.pid} ${Math.floor(Date.now() / 1000)}`);
   createdLockPaths.push(lockPath);
 }
 

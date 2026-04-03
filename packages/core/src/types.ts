@@ -500,6 +500,8 @@ export interface IQueueEntry {
   expiredAt: number | null;
   /** Provider bucket key (e.g. 'claude-native', 'codex', 'claude-proxy:api.z.ai') */
   providerKey?: string;
+  /** PID of the process that claimed this slot (for stale-job detection) */
+  pid?: number;
 }
 
 /**

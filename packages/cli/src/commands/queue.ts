@@ -322,7 +322,8 @@ export function createQueueCommand(): Command {
       'Atomically claim a concurrency slot and insert a running entry (used by cron scripts)',
     )
     .option('--provider-key <key>', 'Provider bucket key (e.g. claude-native, codex)')
-    .action((jobType: string, projectDir: string, opts: { providerKey?: string }) => {
+    .option('--pid <pid>', 'PID of the calling process (stored for stale-job detection)')
+    .action((jobType: string, projectDir: string, opts: { providerKey?: string; pid?: string }) => {
       if (!VALID_JOB_TYPES.includes(jobType as JobType)) {
         console.error(`Invalid job type: ${jobType}`);
         console.error(`Valid types: ${VALID_JOB_TYPES.join(', ')}`);
@@ -331,12 +332,14 @@ export function createQueueCommand(): Command {
 
       const queueConfig = loadConfig(projectDir).queue;
       const projectName = path.basename(projectDir);
+      const callerPid = opts.pid ? parseInt(opts.pid, 10) : undefined;
       const result = claimJobSlot(
         projectDir,
         projectName,
         jobType as JobType,
         opts.providerKey,
         queueConfig,
+        callerPid,
       );
 
       if (!result.claimed) {

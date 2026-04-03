@@ -180,6 +180,13 @@ resolve_night_watch_cli() {
 
   local bundled_bin="${script_dir}/../bin/night-watch.mjs"
   if [ -x "${bundled_bin}" ]; then
+    # Verify dist/ exists — prevents ERR_MODULE_NOT_FOUND crashes
+    local dist_dir
+    dist_dir="$(cd "$(dirname "${bundled_bin}")" && pwd)/../dist"
+    if [ ! -d "${dist_dir}" ]; then
+      echo "ERROR: night-watch dist/ not found at ${dist_dir}; run 'yarn build'" >&2
+      return 1
+    fi
     printf "%s" "${bundled_bin}"
     return 0
   fi
@@ -360,20 +367,58 @@ acquire_lock() {
   local lock_file="${1:?lock_file required}"
 
   if [ -f "${lock_file}" ]; then
-    local lock_pid
-    lock_pid=$(cat "${lock_file}" 2>/dev/null || echo "")
+    local lock_content lock_pid lock_ts
+    lock_content=$(cat "${lock_file}" 2>/dev/null || echo "")
+    lock_pid=$(echo "${lock_content}" | awk '{print $1}')
+    lock_ts=$(echo "${lock_content}" | awk '{print $2}')
+
     if [ -n "${lock_pid}" ] && kill -0 "${lock_pid}" 2>/dev/null; then
-      log "SKIP: Previous run (PID ${lock_pid}) still active"
-      return 1
+      # PID is alive — but guard against PID reuse via /proc start time
+      if _is_lock_holder_alive "${lock_pid}" "${lock_ts}"; then
+        log "SKIP: Previous run (PID ${lock_pid}) still active"
+        return 1
+      fi
+      log "WARN: PID ${lock_pid} reused by another process, lock is stale"
+    else
+      log "WARN: Stale lock file found (PID ${lock_pid}), removing"
     fi
-    log "WARN: Stale lock file found (PID ${lock_pid}), removing"
     rm -f "${lock_file}"
   fi
 
   local quoted_lock_file=""
   printf -v quoted_lock_file '%q' "${lock_file}"
   append_exit_trap "rm -f -- ${quoted_lock_file}"
-  echo $$ > "${lock_file}"
+  echo "$$ $(date +%s)" > "${lock_file}"
+  return 0
+}
+
+# Check if the lock holder process is genuinely the one that wrote the lock.
+# Guards against PID reuse: if the process started after the lock was created,
+# it's a different process that reused the same PID.
+_is_lock_holder_alive() {
+  local pid="${1}" lock_ts="${2:-}"
+
+  # No timestamp in lock file (old format) — fall back to simple PID check
+  if [ -z "${lock_ts}" ]; then
+    return 0
+  fi
+
+  # On Linux, check /proc/<pid>/stat for process start time
+  if [ -f "/proc/${pid}/stat" ]; then
+    local stat_content boot_time_secs start_ticks clk_tck proc_start_secs
+    stat_content=$(cat "/proc/${pid}/stat" 2>/dev/null) || return 0
+    # Field 22 is starttime (in clock ticks since boot)
+    start_ticks=$(echo "${stat_content}" | awk '{print $22}')
+    clk_tck=$(getconf CLK_TCK 2>/dev/null || echo 100)
+    boot_time_secs=$(awk '/^btime/{print $2}' /proc/stat 2>/dev/null) || return 0
+    proc_start_secs=$(( boot_time_secs + start_ticks / clk_tck ))
+
+    # If the process started more than 2 seconds after the lock was written, PID was reused
+    if [ "${proc_start_secs}" -gt "$(( lock_ts + 2 ))" ]; then
+      return 1
+    fi
+  fi
+
   return 0
 }
 
@@ -1105,7 +1150,7 @@ claim_or_enqueue() {
   }
 
   local claim_id
-  if claim_id=$("${cli_bin}" queue claim "${script_type}" "${project_dir}" --provider-key "${provider_key}" 2>/dev/null); then
+  if claim_id=$("${cli_bin}" queue claim "${script_type}" "${project_dir}" --provider-key "${provider_key}" --pid $$ 2>/dev/null); then
     NW_QUEUE_ENTRY_ID="${claim_id}"
     export NW_QUEUE_ENTRY_ID
     arm_global_queue_cleanup
