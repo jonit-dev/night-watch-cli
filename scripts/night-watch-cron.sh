@@ -565,6 +565,15 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
     BACKOFF_MIN=$(( BACKOFF / 60 ))
     log "RATE-LIMITED: Attempt ${ATTEMPT}/${MAX_RETRIES}, retrying in ${BACKOFF_MIN}m"
     sleep "${BACKOFF}"
+  elif check_network_error "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
+    # Transient API network error — retry with a short backoff
+    ATTEMPT=$((ATTEMPT + 1))
+    if [ "${ATTEMPT}" -ge "${MAX_RETRIES}" ]; then
+      log "NETWORK-ERROR: All ${MAX_RETRIES} attempts exhausted for ${ELIGIBLE_PRD}"
+      break
+    fi
+    log "NETWORK-ERROR: Attempt ${ATTEMPT}/${MAX_RETRIES}, retrying in 60s"
+    sleep 60
   elif check_context_exhausted "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
     # Context window exhausted — checkpoint progress and resume in a fresh session
     ATTEMPT=$((ATTEMPT + 1))
