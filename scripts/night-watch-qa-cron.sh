@@ -426,6 +426,11 @@ while IFS=$'\t' read -r pr_number pr_branch pr_title pr_labels; do
     continue
   fi
 
+  if csv_has_label "${pr_labels:-}" "${NW_EXECUTOR_PARTIAL_LABEL}"; then
+    log "SKIP-QA: PR #${pr_number} (${pr_branch}) is labeled ${NW_EXECUTOR_PARTIAL_LABEL}"
+    continue
+  fi
+
   # Skip PRs with the skip label
   if echo "${pr_labels}" | grep -q "${SKIP_LABEL}"; then
     log "SKIP-QA: PR #${pr_number} (${pr_branch}) has '${SKIP_LABEL}' label"

@@ -521,6 +521,47 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_all_qa_done');
   });
 
+  it('qa should skip PRs labeled nw:partial', () => {
+    const projectDir = mkTempDir('nw-smoke-qa-partial-skip-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-bin-qa-partial-skip-');
+    const providerTouched = path.join(projectDir, '.qa-provider-touched');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' + 'touch "$NW_SMOKE_QA_PROVIDER_TOUCHED"\n' + 'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "repo" && "$2" == "view" ]]; then\n' +
+        "  echo 'owner/repo'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  echo \'[{"number":1,"headRefName":"feat/qa-partial","title":"QA partial","labels":[{"name":"nw:partial"}]}]\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(qaScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_BRANCH_PATTERNS: 'feat/',
+      NW_SMOKE_QA_PROVIDER_TOUCHED: providerTouched,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_all_qa_done');
+    expect(fs.existsSync(providerTouched)).toBe(false);
+  });
+
   it('qa should emit success_qa when provider completes successfully on all PRs', () => {
     const projectDir = mkTempDir('nw-smoke-qa-success-');
     initGitRepo(projectDir);
@@ -1724,6 +1765,57 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_all_passing');
   });
 
+  it('reviewer should skip PRs labeled nw:partial', () => {
+    const projectDir = mkTempDir('nw-smoke-reviewer-partial-skip-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-reviewer-partial-skip-bin-');
+    const providerTouched = path.join(projectDir, '.reviewer-provider-touched');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' + 'touch "$NW_SMOKE_REVIEWER_PROVIDER_TOUCHED"\n' + 'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'args="$*"\n' +
+        'if [[ "$1" == "repo" && "$2" == "view" ]]; then\n' +
+        "  echo 'owner/repo'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  if [[ "$args" == *"number,headRefName,labels"* ]]; then\n' +
+        "    printf '1\\tnight-watch/partial-pr\\tnw:partial\\n'\n" +
+        '  else\n' +
+        "    printf 'night-watch/partial-pr\\n'\n" +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(reviewerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BRANCH_PATTERNS: 'night-watch/',
+      NW_REVIEWER_WORKER_MODE: '0',
+      NW_REVIEWER_PARALLEL: '0',
+      NW_AUTO_MERGE: '0',
+      NW_QUEUE_ENABLED: '0',
+      NW_SMOKE_REVIEWER_PROVIDER_TOUCHED: providerTouched,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_all_passing');
+    expect(fs.existsSync(providerTouched)).toBe(false);
+  });
+
   it('reviewer should label targeted PR needs-human-review when score stays missing after max retries', () => {
     const projectDir = mkTempDir('nw-smoke-reviewer-missing-score-exhausted-');
     initGitRepo(projectDir);
@@ -2266,6 +2358,82 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success_open_pr');
     expect(result.stdout).toContain(`branch=${branchName}`);
+  });
+
+  it('executor should prioritize resumable PRs before starting new filesystem PRDs', () => {
+    const projectDir = mkTempDir('nw-smoke-executor-resume-first-');
+    initGitRepo(projectDir);
+    createPrd(projectDir, '01-new-work');
+    createPrd(projectDir, '02-resume-work');
+    commitAll(projectDir, 'add PRDs');
+
+    const fakeBin = mkTempDir('nw-smoke-bin-resume-first-');
+    const activeBranchFile = path.join(projectDir, '.active-branch');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' +
+        'git branch --show-current > "$NW_SMOKE_ACTIVE_BRANCH_FILE"\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'args="$*"\n' +
+        'if [[ "$1" == "label" && "$2" == "create" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "edit" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "ready" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "comment" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  state=""\n' +
+        '  for ((i=1; i<=$#; i++)); do\n' +
+        '    if [[ "${!i}" == "--state" ]]; then\n' +
+        '      j=$((i+1))\n' +
+        '      state="${!j}"\n' +
+        '    fi\n' +
+        '  done\n' +
+        '  if [[ "$state" == "merged" ]]; then\n' +
+        "    printf ''\n" +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$args" == *"number,headRefName,url,title,isDraft,labels,createdAt"* ]]; then\n' +
+        '    echo \'[{"number":22,"headRefName":"night-watch/02-resume-work","url":"https://example.test/pr/22","title":"feat: 02 resume work","isDraft":true,"labels":[{"name":"nw:partial"},{"name":"nw:resumable"}],"createdAt":"2026-04-04T00:00:00Z"}]\'\n' +
+        '  elif [[ "$args" == *"headRefName,url"* ]]; then\n' +
+        '    echo \'[{"headRefName":"night-watch/02-resume-work","url":"https://example.test/pr/22"}]\'\n' +
+        '  else\n' +
+        "    printf 'night-watch/02-resume-work\\n'\n" +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(executorScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_PRD_DIR: 'docs/PRDs/night-watch',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_SMOKE_ACTIVE_BRANCH_FILE: activeBranchFile,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success_open_pr');
+    expect(result.stdout).toContain('branch=night-watch/02-resume-work');
+    expect(fs.readFileSync(activeBranchFile, 'utf-8').trim()).toBe('night-watch/02-resume-work');
+    expect(
+      fs.existsSync(path.join(projectDir, 'docs', 'PRDs', 'night-watch', '01-new-work.md')),
+    ).toBe(true);
   });
 
   it('executor board mode should emit skip_no_eligible_prd when no issues in Ready column', () => {

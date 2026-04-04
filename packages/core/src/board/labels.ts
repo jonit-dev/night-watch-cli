@@ -97,6 +97,10 @@ export interface ILabelDefinition {
   color: string;
 }
 
+export const EXECUTOR_PARTIAL_LABEL = 'nw:partial';
+export const EXECUTOR_RESUMABLE_LABEL = 'nw:resumable';
+export const EXECUTOR_READY_REVIEW_LABEL = 'nw:ready-review';
+
 /**
  * All Night Watch labels with their GitHub color assignments.
  */
@@ -140,6 +144,21 @@ export const NIGHT_WATCH_LABELS: ILabelDefinition[] = [
   {
     name: 'e2e-validated',
     description: 'PR acceptance requirements validated by e2e/integration tests',
+    color: '0e8a16',
+  },
+  {
+    name: EXECUTOR_PARTIAL_LABEL,
+    description: 'Executor started this PR and work is intentionally incomplete',
+    color: 'fbca04',
+  },
+  {
+    name: EXECUTOR_RESUMABLE_LABEL,
+    description: 'Executor should resume this unfinished PR before starting new work',
+    color: 'd93f0b',
+  },
+  {
+    name: EXECUTOR_READY_REVIEW_LABEL,
+    description: 'Executor finished implementation and the PR is ready for automated/human review',
     color: '0e8a16',
   },
 ];

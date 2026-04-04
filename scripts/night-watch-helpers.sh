@@ -87,6 +87,89 @@ validate_provider() {
   return 1
 }
 
+# ── Executor PR status labels ────────────────────────────────────────────────
+
+NW_EXECUTOR_PARTIAL_LABEL="${NW_EXECUTOR_PARTIAL_LABEL:-nw:partial}"
+NW_EXECUTOR_RESUMABLE_LABEL="${NW_EXECUTOR_RESUMABLE_LABEL:-nw:resumable}"
+NW_EXECUTOR_READY_REVIEW_LABEL="${NW_EXECUTOR_READY_REVIEW_LABEL:-nw:ready-review}"
+
+csv_has_label() {
+  local csv="${1:-}"
+  local label="${2:?label required}"
+
+  printf '%s\n' "${csv}" \
+    | tr ',' '\n' \
+    | sed '/^[[:space:]]*$/d' \
+    | grep -Fxq "${label}"
+}
+
+ensure_github_label() {
+  local label_name="${1:?label_name required}"
+  local description="${2:-}"
+  local color="${3:-1d76db}"
+
+  gh label create "${label_name}" \
+    --description "${description}" \
+    --color "${color}" \
+    --force 2>/dev/null || true
+}
+
+ensure_executor_status_labels() {
+  ensure_github_label \
+    "${NW_EXECUTOR_PARTIAL_LABEL}" \
+    "Executor started this PR and work is intentionally incomplete" \
+    "fbca04"
+  ensure_github_label \
+    "${NW_EXECUTOR_RESUMABLE_LABEL}" \
+    "Executor should resume this unfinished PR before starting new work" \
+    "d93f0b"
+  ensure_github_label \
+    "${NW_EXECUTOR_READY_REVIEW_LABEL}" \
+    "Executor finished implementation and the PR is ready for automated/human review" \
+    "0e8a16"
+}
+
+find_open_pr_for_branch() {
+  local branch_name="${1:?branch_name required}"
+  local pr_list=""
+
+  pr_list=$(gh pr list --state open --limit 200 \
+    --json number,headRefName,url,title,isDraft,labels,createdAt 2>/dev/null || echo "[]")
+
+  printf '%s' "${pr_list}" \
+    | jq -c --arg branch_name "${branch_name}" '
+        .[]
+        | select((.headRefName // "") == $branch_name)
+      ' 2>/dev/null \
+    | head -n 1 || true
+}
+
+find_executor_resume_pr() {
+  local branch_prefix="${1:-night-watch}"
+  local pr_list=""
+
+  pr_list=$(gh pr list --state open --limit 200 \
+    --json number,headRefName,url,title,isDraft,labels,createdAt 2>/dev/null || echo "[]")
+
+  printf '%s' "${pr_list}" \
+    | jq -c \
+        --arg primary_prefix "${branch_prefix}/" \
+        --arg resumable_label "${NW_EXECUTOR_RESUMABLE_LABEL}" '
+        [
+          .[]
+          | select(
+              (.headRefName // "" | startswith($primary_prefix))
+              or
+              (.headRefName // "" | startswith("feat/"))
+            )
+          | .labelNames = ((.labels // []) | map(.name))
+          | select((.labelNames | index($resumable_label)) != null)
+        ]
+        | sort_by(.createdAt // "")
+        | .[0] // empty
+      ' 2>/dev/null || true
+}
+
 # ── Generic Provider Command Builder ──────────────────────────────────────────
 
 # Build a provider command from NW_PROVIDER_* environment variables.

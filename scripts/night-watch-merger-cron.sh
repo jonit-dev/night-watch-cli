@@ -192,7 +192,7 @@ append_exit_trap "kill ${WATCHDOG_PID} 2>/dev/null || true"
 # Discover open PRs sorted by creation date (oldest first = FIFO)
 log "INFO: Scanning open PRs..."
 PR_LIST_JSON=$(gh pr list --state open \
-  --json number,headRefName,createdAt,isDraft \
+  --json number,headRefName,createdAt,isDraft,labels \
   --jq 'sort_by(.createdAt)' \
   2>/dev/null || echo "[]")
 
@@ -211,10 +211,16 @@ while IFS= read -r pr_json; do
   pr_number=$(echo "${pr_json}" | jq -r '.number')
   pr_branch=$(echo "${pr_json}" | jq -r '.headRefName')
   is_draft=$(echo "${pr_json}" | jq -r '.isDraft')
+  pr_labels=$(echo "${pr_json}" | jq -r '[.labels[]?.name] | join(",")')
 
   # Skip drafts
   if [ "${is_draft}" = "true" ]; then
     log "INFO: PR #${pr_number} (${pr_branch}): Skipping draft"
+    continue
+  fi
+
+  if csv_has_label "${pr_labels:-}" "${NW_EXECUTOR_PARTIAL_LABEL}"; then
+    log "INFO: PR #${pr_number} (${pr_branch}): Skipping partial executor PR"
     continue
   fi
 

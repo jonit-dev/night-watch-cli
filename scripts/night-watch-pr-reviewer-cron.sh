@@ -631,6 +631,11 @@ while IFS=$'\t' read -r pr_number pr_branch pr_labels; do
     continue
   fi
 
+  if csv_has_label "${pr_labels:-}" "${NW_EXECUTOR_PARTIAL_LABEL}"; then
+    log "INFO: PR #${pr_number} (${pr_branch}) is labeled ${NW_EXECUTOR_PARTIAL_LABEL}; waiting for executor to finish"
+    continue
+  fi
+
   # Merge-conflict signal: this PR needs action even if CI and score look fine.
   MERGE_STATE=$(gh pr view "${pr_number}" --json mergeStateStatus --jq '.mergeStateStatus' 2>/dev/null || echo "")
   if [ "${MERGE_STATE}" = "DIRTY" ] || [ "${MERGE_STATE}" = "CONFLICTING" ]; then
