@@ -1,6 +1,6 @@
 {
   "name": "@jonit-dev/night-watch-cli",
-  "version": "1.8.10-beta.7",
+  "version": "1.8.10-beta.8",
   "description": "AI agent that implements your specs, opens PRs, and reviews code overnight. Queue GitHub issues or PRDs, wake up to pull requests.",
   "type": "module",
   "bin": {
