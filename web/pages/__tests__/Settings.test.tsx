@@ -5,7 +5,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
     it('should include all fields from INightWatchConfig except _cliProviderOverride', () => {
       // This is a compile-time check - the test passes if the code compiles
       // The ConfigForm type in Settings.tsx includes:
-      // - provider, providerLabel, defaultBranch, prdDir, branchPrefix, branchPatterns
+      // - provider, providerLabel, defaultBranch, prdDir, branchPrefix, branchPatterns, gitPushNoVerify
       // - executorEnabled, reviewerEnabled, minReviewScore, maxRuntime, reviewerMaxRuntime, maxLogSize
       // - cronSchedule, reviewerSchedule, cronScheduleOffset, maxRetries
       // - reviewerMaxRetries, reviewerRetryDelay, reviewerMaxPrsPerRun
@@ -21,6 +21,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
         'prdDir',
         'branchPrefix',
         'branchPatterns',
+        'gitPushNoVerify',
         'executorEnabled',
         'reviewerEnabled',
         'minReviewScore',
@@ -70,8 +71,8 @@ describe('Settings Page - PRD Coverage Verification', () => {
       expect(requiredFields).toContain('reviewerRetryDelay');
       expect(requiredFields).toContain('reviewerMaxPrsPerRun');
 
-      // If we got here, all 35 fields are defined in ConfigForm
-      expect(requiredFields.length).toBe(35);
+      // If we got here, all 36 fields are defined in ConfigForm
+      expect(requiredFields.length).toBe(36);
     });
   });
 
@@ -81,6 +82,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
       const defaults = {
         prdDir: 'docs/prds',
         providerLabel: '',
+        gitPushNoVerify: false,
         fallbackOnRateLimit: true,
         primaryFallbackModel: 'sonnet',
         secondaryFallbackModel: 'sonnet',
@@ -109,6 +111,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
       // These defaults match the toFormState() function in Settings.tsx
       expect(defaults.prdDir).toBe('docs/prds');
       expect(defaults.providerLabel).toBe('');
+      expect(defaults.gitPushNoVerify).toBe(false);
       expect(defaults.fallbackOnRateLimit).toBe(true);
       expect(defaults.primaryFallbackModel).toBe('sonnet');
       expect(defaults.secondaryFallbackModel).toBe('sonnet');

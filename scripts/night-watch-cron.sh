@@ -362,11 +362,11 @@ build_executor_pr_body() {
 - ${NW_EXECUTOR_READY_REVIEW_LABEL}: implementation is complete and ready for review"
 
   if [ -n "${ISSUE_NUMBER}" ]; then
-    printf 'Closes #%s\n\nNight Watch opened this draft PR at executor start so progress is preserved across retries and timeouts.\n\n%s\n' \
+    printf 'Closes #%s\n\nNight Watch manages this draft PR automatically so progress is preserved across retries and timeouts.\n\n%s\n' \
       "${ISSUE_NUMBER}" \
       "${status_blurb}"
   else
-    printf 'Source PRD: `%s/%s`\n\nNight Watch opened this draft PR at executor start so progress is preserved across retries and timeouts.\n\n%s\n' \
+    printf 'Source PRD: `%s/%s`\n\nNight Watch manages this draft PR automatically so progress is preserved across retries and timeouts.\n\n%s\n' \
       "${PRD_DIR_REL}" \
       "${ELIGIBLE_PRD}" \
       "${status_blurb}"
@@ -423,16 +423,28 @@ push_executor_branch() {
   local push_mode="${1:-update}"
 
   if [ "${push_mode}" = "initial" ]; then
-    if git -C "${WORKTREE_DIR}" push -u origin "${BRANCH_NAME}" >> "${LOG_FILE}" 2>&1; then
+    if git_push_for_project "${WORKTREE_DIR}" -u origin "${BRANCH_NAME}" >> "${LOG_FILE}" 2>&1; then
       return 0
     fi
   fi
 
-  if git -C "${WORKTREE_DIR}" push origin "${BRANCH_NAME}" --force-with-lease >> "${LOG_FILE}" 2>&1; then
+  if git_push_for_project "${WORKTREE_DIR}" origin "${BRANCH_NAME}" --force-with-lease >> "${LOG_FILE}" 2>&1; then
     return 0
   fi
 
-  git -C "${WORKTREE_DIR}" push -u origin "${BRANCH_NAME}" >> "${LOG_FILE}" 2>&1
+  git_push_for_project "${WORKTREE_DIR}" -u origin "${BRANCH_NAME}" >> "${LOG_FILE}" 2>&1
+}
+
+executor_branch_has_commits_ahead_of_base() {
+  local base_ref=""
+  local ahead_count="0"
+
+  if ! base_ref=$(resolve_worktree_base_ref "${WORKTREE_DIR}" "${DEFAULT_BRANCH}" 2>/dev/null); then
+    return 1
+  fi
+
+  ahead_count=$(git -C "${WORKTREE_DIR}" rev-list --count "${base_ref}..HEAD" 2>/dev/null || echo "0")
+  [ "${ahead_count}" -gt 0 ]
 }
 
 ensure_executor_pr() {
@@ -450,7 +462,12 @@ ensure_executor_pr() {
   pr_title=$(build_executor_pr_title)
   pr_body=$(build_executor_pr_body)
 
-  log "PR: Creating draft PR for ${BRANCH_NAME} before provider execution"
+  if ! executor_branch_has_commits_ahead_of_base; then
+    log "PR: Deferring draft PR creation for ${BRANCH_NAME} until it has commits beyond ${DEFAULT_BRANCH}"
+    return 0
+  fi
+
+  log "PR: Creating draft PR for ${BRANCH_NAME}"
   if ! push_executor_branch "initial"; then
     log "WARN: Initial push for ${BRANCH_NAME} failed before PR creation"
   fi
@@ -592,7 +609,7 @@ finalize_prd_done() {
       git -C "${BOOKKEEP_WORKTREE_DIR}" commit -m "chore: mark ${ELIGIBLE_PRD} as done (${reason})
 
 Co-Authored-By: Night Watch [${EFFECTIVE_PROVIDER_LABEL}] <noreply@anthropic.com>" || true
-      git -C "${BOOKKEEP_WORKTREE_DIR}" push origin "HEAD:${DEFAULT_BRANCH}" || true
+      git_push_for_project "${BOOKKEEP_WORKTREE_DIR}" origin "HEAD:${DEFAULT_BRANCH}" || true
       log "DONE: ${ELIGIBLE_PRD} ${reason}, PRD moved to done/"
       return 0
     fi
@@ -628,6 +645,7 @@ if [ -z "${EXECUTOR_PROMPT_PATH}" ]; then
   exit 1
 fi
 EXECUTOR_PROMPT_REF=$(instruction_ref_for_prompt "${PROJECT_DIR}" "${EXECUTOR_PROMPT_PATH}")
+PROGRESS_PUSH_CMD=$(project_git_push_command "${BRANCH_NAME}")
 
 if [ -n "${ISSUE_NUMBER}" ]; then
   PROMPT="Implement the following PRD (GitHub issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}):
@@ -651,10 +669,11 @@ Read ${EXECUTOR_PROMPT_REF} and follow the FULL execution pipeline:
 Follow all CLAUDE.md conventions (if present).
 
 ## PR Lifecycle
-- The controller already created the draft PR for this branch${EXECUTOR_PR_URL:+: ${EXECUTOR_PR_URL}}
-- Do NOT create another PR and do NOT edit PR status labels; the controller owns PR lifecycle and labels
+- The controller owns PR lifecycle and labels for this branch
+- If a draft PR already exists, do NOT create another one and do NOT edit its labels
+- If no PR exists yet, do NOT create one manually; keep pushing to ${BRANCH_NAME} and the controller will open/update it automatically
 - After each completed phase/wave milestone, commit and push progress to the existing branch:
-  git push origin ${BRANCH_NAME}
+  ${PROGRESS_PUSH_CMD}
 - When all implementation is complete, run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
 - STOP immediately after the final push — do NOT do any additional work, visual checks, or exploration.
 - Do NOT process any other issues — only issue #${ISSUE_NUMBER}"
@@ -679,10 +698,11 @@ Read ${EXECUTOR_PROMPT_REF} and follow the FULL execution pipeline:
 Follow all CLAUDE.md conventions (if present).
 
 ## PR Lifecycle
-- The controller already created the draft PR for this branch${EXECUTOR_PR_URL:+: ${EXECUTOR_PR_URL}}
-- Do NOT create another PR and do NOT edit PR status labels; the controller owns PR lifecycle and labels
+- The controller owns PR lifecycle and labels for this branch
+- If a draft PR already exists, do NOT create another one and do NOT edit its labels
+- If no PR exists yet, do NOT create one manually; keep pushing to ${BRANCH_NAME} and the controller will open/update it automatically
 - After each completed phase/wave milestone, commit and push progress to the existing branch:
-  git push origin ${BRANCH_NAME}
+  ${PROGRESS_PUSH_CMD}
 - When all implementation is complete, run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
 - STOP immediately after the final push — do NOT do any additional work, visual checks, or exploration.
 - Do NOT move the PRD to done/ — the cron script handles that
@@ -831,6 +851,7 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
     log "CONTEXT-EXHAUSTED: Session ${ATTEMPT_NUM} hit context limit — checkpointing and resuming (${ATTEMPT}/${MAX_RETRIES})"
     checkpoint_timeout_progress "${WORKTREE_DIR}" "${BRANCH_NAME}" "${ELIGIBLE_PRD}"
     push_executor_branch "update" >> "${LOG_FILE}" 2>&1 || true
+    ensure_executor_pr >> "${LOG_FILE}" 2>&1 || true
     # Switch prompt to "continue" mode for the next attempt (fresh context)
     if [ -n "${ISSUE_NUMBER}" ]; then
       PROMPT="Continue implementing PRD (GitHub issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}).
@@ -854,10 +875,11 @@ Read ${EXECUTOR_PROMPT_REF} and follow the FULL execution pipeline for remaining
 Follow all CLAUDE.md conventions (if present).
 
 ## PR Lifecycle
-- The controller already created the draft PR for this branch${EXECUTOR_PR_URL:+: ${EXECUTOR_PR_URL}}
-- Do NOT create another PR and do NOT edit PR status labels; the controller owns PR lifecycle and labels
+- The controller owns PR lifecycle and labels for this branch
+- If a draft PR already exists, do NOT create another one and do NOT edit its labels
+- If no PR exists yet, do NOT create one manually; keep pushing to ${BRANCH_NAME} and the controller will open/update it automatically
 - After each completed phase/wave milestone, commit and push progress to the existing branch:
-  git push origin ${BRANCH_NAME}
+  ${PROGRESS_PUSH_CMD}
 - When all implementation is complete, run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
 - STOP immediately after the final push — do NOT do any additional work, visual checks, or exploration.
 - Do NOT process any other issues — only issue #${ISSUE_NUMBER}"
@@ -883,10 +905,11 @@ Read ${EXECUTOR_PROMPT_REF} and follow the FULL execution pipeline for remaining
 Follow all CLAUDE.md conventions (if present).
 
 ## PR Lifecycle
-- The controller already created the draft PR for this branch${EXECUTOR_PR_URL:+: ${EXECUTOR_PR_URL}}
-- Do NOT create another PR and do NOT edit PR status labels; the controller owns PR lifecycle and labels
+- The controller owns PR lifecycle and labels for this branch
+- If a draft PR already exists, do NOT create another one and do NOT edit its labels
+- If no PR exists yet, do NOT create one manually; keep pushing to ${BRANCH_NAME} and the controller will open/update it automatically
 - After each completed phase/wave milestone, commit and push progress to the existing branch:
-  git push origin ${BRANCH_NAME}
+  ${PROGRESS_PUSH_CMD}
 - When all implementation is complete, run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
 - STOP immediately after the final push — do NOT do any additional work, visual checks, or exploration.
 - Do NOT move the PRD to done/ — the cron script handles that
@@ -1048,6 +1071,15 @@ if [ "${EXIT_CODE}" -eq 0 ] && grep -qiF 'Exceeded USD budget' "${LOG_FILE}" 2>/
 fi
 
 if [ ${EXIT_CODE} -eq 0 ]; then
+  if ! ensure_executor_pr; then
+    log "FAIL: Unable to create or reuse executor PR for ${BRANCH_NAME} after provider completion"
+    night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
+    emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=pr_setup_failed|detail=$(latest_failure_detail "${LOG_FILE}")"
+    EXIT_CODE=1
+  fi
+fi
+
+if [ ${EXIT_CODE} -eq 0 ]; then
   OPEN_PR_COUNT=$(count_prs_for_branch open "${BRANCH_NAME}")
   if [ "${OPEN_PR_COUNT}" -gt 0 ]; then
     refresh_executor_pr_metadata
@@ -1108,6 +1140,7 @@ elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: Session limit hit after ${SESSION_MAX_RUNTIME}s while processing ${ELIGIBLE_PRD}"
   checkpoint_timeout_progress "${WORKTREE_DIR}" "${BRANCH_NAME}" "${ELIGIBLE_PRD}"
   push_executor_branch "update" >> "${LOG_FILE}" 2>&1 || true
+  ensure_executor_pr >> "${LOG_FILE}" 2>&1 || true
   if [ -n "${ISSUE_NUMBER}" ]; then
     "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
     if [ "${SESSION_MAX_RUNTIME}" != "${MAX_RUNTIME}" ]; then
@@ -1139,6 +1172,7 @@ elif check_context_exhausted "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
   log "FAIL: Context window exhausted after ${MAX_RETRIES} resume attempts for ${ELIGIBLE_PRD}"
   checkpoint_timeout_progress "${WORKTREE_DIR}" "${BRANCH_NAME}" "${ELIGIBLE_PRD}"
   push_executor_branch "update" >> "${LOG_FILE}" 2>&1 || true
+  ensure_executor_pr >> "${LOG_FILE}" 2>&1 || true
   if [ -n "${ISSUE_NUMBER}" ]; then
     "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
     "${NW_CLI}" board comment "${ISSUE_NUMBER}" \

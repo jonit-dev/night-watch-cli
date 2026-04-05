@@ -21,7 +21,6 @@ import {
   DEFAULT_ANALYTICS,
   DEFAULT_AUDIT,
   DEFAULT_AUTO_MERGE,
-  DEFAULT_MERGER,
   DEFAULT_AUTO_MERGE_METHOD,
   DEFAULT_BOARD_PROVIDER,
   DEFAULT_BRANCH_PATTERNS,
@@ -36,6 +35,7 @@ import {
   DEFAULT_MAX_LOG_SIZE,
   DEFAULT_MAX_RETRIES,
   DEFAULT_MAX_RUNTIME,
+  DEFAULT_MERGER,
   DEFAULT_MIN_REVIEW_SCORE,
   DEFAULT_NOTIFICATIONS,
   DEFAULT_PRD_DIR,
@@ -76,6 +76,7 @@ export function getDefaultConfig(): INightWatchConfig {
     branchPatterns: [...DEFAULT_BRANCH_PATTERNS],
     minReviewScore: DEFAULT_MIN_REVIEW_SCORE,
     maxLogSize: DEFAULT_MAX_LOG_SIZE,
+    gitPushNoVerify: false,
     cronSchedule: DEFAULT_CRON_SCHEDULE,
     reviewerSchedule: DEFAULT_REVIEWER_SCHEDULE,
     scheduleBundleId: 'always-on',
@@ -220,7 +221,9 @@ function mergeConfigs(
     merged.merger = {
       ...merged.merger,
       enabled: true,
-      mergeMethod: (merged as unknown as Record<string, unknown>).autoMergeMethod as IMergerConfig['mergeMethod'] ?? 'squash',
+      mergeMethod:
+        ((merged as unknown as Record<string, unknown>)
+          .autoMergeMethod as IMergerConfig['mergeMethod']) ?? 'squash',
     };
   }
 

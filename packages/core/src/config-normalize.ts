@@ -75,6 +75,7 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
     readStringArray(rawConfig.branchPatterns) ?? readStringArray(review?.branchPatterns);
   normalized.minReviewScore = readNumber(rawConfig.minReviewScore) ?? readNumber(review?.minScore);
   normalized.maxLogSize = readNumber(rawConfig.maxLogSize) ?? readNumber(logging?.maxLogSize);
+  normalized.gitPushNoVerify = readBoolean(rawConfig.gitPushNoVerify);
   normalized.cronSchedule =
     readString(rawConfig.cronSchedule) ?? readString(cron?.executorSchedule);
   normalized.reviewerSchedule =

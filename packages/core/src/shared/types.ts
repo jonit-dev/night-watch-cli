@@ -244,6 +244,7 @@ export interface INightWatchConfig {
   branchPatterns: string[];
   minReviewScore: number;
   maxLogSize: number;
+  gitPushNoVerify?: boolean;
   cronSchedule: string;
   reviewerSchedule: string;
   scheduleBundleId?: string | null;

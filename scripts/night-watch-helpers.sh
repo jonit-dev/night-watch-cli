@@ -87,6 +87,40 @@ validate_provider() {
   return 1
 }
 
+night_watch_push_uses_no_verify() {
+  [ "${NW_GIT_PUSH_NO_VERIFY:-0}" = "1" ]
+}
+
+git_push_for_project() {
+  local repo_dir="${1:?repo_dir required}"
+  shift
+
+  if night_watch_push_uses_no_verify; then
+    git -C "${repo_dir}" push --no-verify "$@"
+  else
+    git -C "${repo_dir}" push "$@"
+  fi
+}
+
+project_git_push_command() {
+  local branch_name="${1:?branch_name required}"
+  local mode="${2:-normal}"
+  local no_verify=""
+
+  if night_watch_push_uses_no_verify; then
+    no_verify=" --no-verify"
+  fi
+
+  case "${mode}" in
+    force-with-lease)
+      printf 'git push%s --force-with-lease origin %s' "${no_verify}" "${branch_name}"
+      ;;
+    *)
+      printf 'git push%s origin %s' "${no_verify}" "${branch_name}"
+      ;;
+  esac
+}
+
 # ── Executor PR status labels ────────────────────────────────────────────────
 
 NW_EXECUTOR_PARTIAL_LABEL="${NW_EXECUTOR_PARTIAL_LABEL:-nw:partial}"

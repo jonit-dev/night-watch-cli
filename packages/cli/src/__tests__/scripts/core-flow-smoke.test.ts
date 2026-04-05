@@ -234,6 +234,216 @@ describe('core flow smoke tests (bash scripts)', () => {
     ).toBe(true);
   });
 
+  it('executor should bypass blocking pre-push hooks when NW_GIT_PUSH_NO_VERIFY=1', () => {
+    const projectDir = mkTempDir('nw-smoke-executor-no-verify-');
+    initGitRepo(projectDir);
+    createPrd(projectDir, '01-smoke-no-verify');
+    commitAll(projectDir, 'add PRD');
+
+    const remoteDir = mkTempDir('nw-smoke-executor-no-verify-origin-');
+    execSync('git init --bare', { cwd: remoteDir, stdio: 'ignore' });
+    execSync(`git remote add origin "${remoteDir}"`, { cwd: projectDir, stdio: 'ignore' });
+
+    const hookLog = path.join(projectDir, '.smoke-pre-push-hook.log');
+    const createdFlag = path.join(projectDir, '.smoke-pr-created');
+    const branchName = 'night-watch/01-smoke-no-verify';
+    fs.writeFileSync(
+      path.join(projectDir, '.git', 'hooks', 'pre-push'),
+      '#!/usr/bin/env bash\n' +
+        'printf \'hook-ran\\n\' >> "$NW_SMOKE_PRE_PUSH_HOOK_LOG"\n' +
+        'exit 1\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const fakeBin = mkTempDir('nw-smoke-bin-no-verify-');
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' +
+        "printf 'provider change\\n' > smoke-provider-change.txt\n" +
+        'git add smoke-provider-change.txt\n' +
+        'git commit -m "feat: smoke provider progress" >/dev/null 2>&1\n' +
+        'exit 0\n',
+      {
+        encoding: 'utf-8',
+        mode: 0o755,
+      },
+    );
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  if [[ -f "$NW_SMOKE_CREATED_FLAG" ]]; then\n' +
+        '    printf \'[{"number":123,"headRefName":"%s","url":"https://example.test/pull/123","title":"Smoke","isDraft":true,"labels":[],"createdAt":"2026-01-01T00:00:00Z"}]\\n\' "$NW_SMOKE_BRANCH"\n' +
+        '  else\n' +
+        "    echo '[]'\n" +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "create" ]]; then\n' +
+        '  touch "$NW_SMOKE_CREATED_FLAG"\n' +
+        "  echo 'https://example.test/pull/123'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(executorScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_PRD_DIR: 'docs/PRDs/night-watch',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_GIT_PUSH_NO_VERIFY: '1',
+      NW_SMOKE_PRE_PUSH_HOOK_LOG: hookLog,
+      NW_SMOKE_CREATED_FLAG: createdFlag,
+      NW_SMOKE_BRANCH: branchName,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:');
+    expect(fs.existsSync(hookLog)).toBe(false);
+
+    const remoteBranches = execSync('git for-each-ref --format="%(refname:short)" refs/heads', {
+      cwd: remoteDir,
+      encoding: 'utf-8',
+    });
+    expect(remoteBranches).toContain('night-watch/01-smoke-no-verify');
+  });
+
+  it('executor should not push or create a PR before the branch is ahead of its resolved base', () => {
+    const projectDir = mkTempDir('nw-smoke-executor-pr-before-commit-');
+    initGitRepo(projectDir);
+    createPrd(projectDir, '01-smoke-pr-before-commit');
+    commitAll(projectDir, 'add PRD');
+
+    const remoteDir = mkTempDir('nw-smoke-executor-pr-before-commit-origin-');
+    execSync('git init --bare', { cwd: remoteDir, stdio: 'ignore' });
+    execSync(`git remote add origin "${remoteDir}"`, { cwd: projectDir, stdio: 'ignore' });
+
+    const hookLog = path.join(projectDir, '.smoke-pre-push-hook.log');
+    const prCreateLog = path.join(projectDir, '.smoke-pr-create.log');
+    fs.writeFileSync(
+      path.join(projectDir, '.git', 'hooks', 'pre-push'),
+      '#!/usr/bin/env bash\n' +
+        'printf \'hook-ran\\n\' >> "$NW_SMOKE_PRE_PUSH_HOOK_LOG"\n' +
+        'exit 1\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const fakeBin = mkTempDir('nw-smoke-bin-pr-before-commit-');
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 1\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        "  echo '[]'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "create" ]]; then\n' +
+        '  printf \'pr-create\\n\' >> "$NW_SMOKE_PR_CREATE_LOG"\n' +
+        '  exit 1\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(executorScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_PRD_DIR: 'docs/PRDs/night-watch',
+      NW_DEFAULT_BRANCH: 'trunk',
+      NW_SMOKE_PRE_PUSH_HOOK_LOG: hookLog,
+      NW_SMOKE_PR_CREATE_LOG: prCreateLog,
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('reason=provider_exit');
+    expect(result.stdout).not.toContain('reason=pr_setup_failed');
+    expect(fs.existsSync(hookLog)).toBe(false);
+    expect(fs.existsSync(prCreateLog)).toBe(false);
+  });
+
+  it('executor should defer draft PR creation until the branch has a real commit', () => {
+    const projectDir = mkTempDir('nw-smoke-executor-pr-deferred-');
+    initGitRepo(projectDir);
+    createPrd(projectDir, '01-smoke-pr-deferred');
+    commitAll(projectDir, 'add PRD');
+
+    const fakeBin = mkTempDir('nw-smoke-bin-pr-deferred-');
+    const providerDoneFlag = path.join(projectDir, '.smoke-provider-done');
+    const createdFlag = path.join(projectDir, '.smoke-pr-created');
+    const branchName = 'night-watch/01-smoke-pr-deferred';
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' +
+        "printf 'provider change\\n' > smoke-provider-change.txt\n" +
+        'git add smoke-provider-change.txt\n' +
+        'git commit -m "feat: smoke provider progress" >/dev/null 2>&1\n' +
+        'touch "$NW_SMOKE_PROVIDER_DONE_FLAG"\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  jq_query=""\n' +
+        '  for ((i=1; i<=$#; i++)); do\n' +
+        '    if [[ "${!i}" == "--jq" ]]; then\n' +
+        '      j=$((i+1))\n' +
+        '      jq_query="${!j}"\n' +
+        '    fi\n' +
+        '  done\n' +
+        '  if [[ -f "$NW_SMOKE_CREATED_FLAG" ]]; then\n' +
+        '    if [[ "$jq_query" == *".url"* ]]; then\n' +
+        "      echo 'https://example.test/pull/123'\n" +
+        '    elif [[ -n "$jq_query" ]]; then\n' +
+        '      echo "$NW_SMOKE_BRANCH"\n' +
+        '    else\n' +
+        '      printf \'[{"number":123,"headRefName":"%s","url":"https://example.test/pull/123","title":"Smoke","isDraft":true,"labels":[],"createdAt":"2026-01-01T00:00:00Z"}]\\n\' "$NW_SMOKE_BRANCH"\n' +
+        '    fi\n' +
+        '  else\n' +
+        '    if [[ -n "$jq_query" ]]; then\n' +
+        '      exit 0\n' +
+        '    fi\n' +
+        "    echo '[]'\n" +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "create" ]]; then\n' +
+        '  if [[ ! -f "$NW_SMOKE_PROVIDER_DONE_FLAG" ]]; then\n' +
+        "    echo 'create called before provider completed' >&2\n" +
+        '    exit 1\n' +
+        '  fi\n' +
+        '  touch "$NW_SMOKE_CREATED_FLAG"\n' +
+        "  echo 'https://example.test/pull/123'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(executorScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_PRD_DIR: 'docs/PRDs/night-watch',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_SMOKE_PROVIDER_DONE_FLAG: providerDoneFlag,
+      NW_SMOKE_CREATED_FLAG: createdFlag,
+      NW_SMOKE_BRANCH: branchName,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success_open_pr');
+    expect(result.stdout).toContain('pr_url=https://example.test/pull/123');
+    expect(fs.existsSync(createdFlag)).toBe(true);
+  });
+
   it('executor filesystem mode should preserve queue cleanup after claiming a PRD', () => {
     const projectDir = mkTempDir('nw-smoke-executor-queue-filesystem-');
     initGitRepo(projectDir);

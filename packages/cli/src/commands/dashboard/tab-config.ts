@@ -80,6 +80,7 @@ export const CONFIG_FIELDS: IConfigField[] = [
   { key: 'defaultBranch', label: 'Default Branch', type: 'string' },
   { key: 'prdDir', label: 'PRD Directory', type: 'string' },
   { key: 'branchPrefix', label: 'Branch Prefix', type: 'string' },
+  { key: 'gitPushNoVerify', label: 'Push With --no-verify', type: 'boolean' },
   { key: 'branchPatterns', label: 'Branch Patterns', type: 'string[]' },
   { key: 'cronSchedule', label: 'Executor Schedule', type: 'string' },
   { key: 'reviewerSchedule', label: 'Reviewer Schedule', type: 'string' },

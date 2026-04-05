@@ -71,6 +71,7 @@ type ConfigForm = {
   prdDir: string;
   branchPrefix: string;
   branchPatterns: string[];
+  gitPushNoVerify: boolean;
   executorEnabled: boolean;
   reviewerEnabled: boolean;
   minReviewScore: number;
@@ -116,6 +117,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   prdDir: config.prdDir || 'docs/prds',
   branchPrefix: config.branchPrefix,
   branchPatterns: config.branchPatterns || [],
+  gitPushNoVerify: config.gitPushNoVerify ?? false,
   executorEnabled: config.executorEnabled ?? true,
   reviewerEnabled: config.reviewerEnabled,
   minReviewScore: config.minReviewScore,
@@ -479,6 +481,7 @@ const Settings: React.FC = () => {
         prdDir: form.prdDir,
         branchPrefix: form.branchPrefix,
         branchPatterns: form.branchPatterns,
+        gitPushNoVerify: form.gitPushNoVerify,
         executorEnabled: form.executorEnabled,
         reviewerEnabled: form.reviewerEnabled,
         minReviewScore: form.minReviewScore,

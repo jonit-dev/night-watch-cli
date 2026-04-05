@@ -118,6 +118,10 @@ function validateConfigChanges(
     return 'maxLogSize must be a positive number';
   }
 
+  if (changes.gitPushNoVerify !== undefined && typeof changes.gitPushNoVerify !== 'boolean') {
+    return 'gitPushNoVerify must be a boolean';
+  }
+
   if (
     changes.maxRetries !== undefined &&
     (typeof changes.maxRetries !== 'number' ||

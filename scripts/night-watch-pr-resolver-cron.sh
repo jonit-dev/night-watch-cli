@@ -167,6 +167,8 @@ process_pr() {
         log "INFO: Invoking AI to resolve conflicts for PR #${pr_number}" "branch=${pr_branch}"
 
         local ai_prompt
+        local force_push_cmd
+        force_push_cmd=$(project_git_push_command "${pr_branch}" "force-with-lease")
         ai_prompt="You are working in a git repository at ${worktree_dir}. \
 Branch '${pr_branch}' has merge conflicts with '${default_branch}'. \
 Please resolve the merge conflicts by: \
@@ -174,7 +176,7 @@ Please resolve the merge conflicts by: \
 2) Resolving any conflict markers in the affected files \
 3) Staging resolved files with: git add <files> \
 4) Continuing the rebase with: git rebase --continue \
-5) Finally pushing with: git push --force-with-lease origin ${pr_branch} \
+5) Finally pushing with: ${force_push_cmd} \
 Work exclusively in the directory: ${worktree_dir}"
 
         local -a cmd_parts
@@ -203,7 +205,7 @@ Work exclusively in the directory: ${worktree_dir}"
         return 1
       fi
       # Push the rebased branch (AI may have already pushed; --force-with-lease is idempotent)
-      git -C "${worktree_dir}" push --force-with-lease origin "${pr_branch}" >> "${LOG_FILE}" 2>&1 || {
+      git_push_for_project "${worktree_dir}" --force-with-lease origin "${pr_branch}" >> "${LOG_FILE}" 2>&1 || {
         log "WARN: Push after rebase failed for PR #${pr_number}" "branch=${pr_branch}"
       }
     fi
@@ -224,13 +226,15 @@ Work exclusively in the directory: ${worktree_dir}"
       fi
 
       local review_prompt
+      local review_push_cmd
+      review_push_cmd=$(project_git_push_command "${pr_branch}")
       review_prompt="You are working in the git repository at ${review_workdir}. \
 PR #${pr_number} on branch '${pr_branch}' has unresolved review comments requesting changes. \
 Please: \
 1) Run 'gh pr view ${pr_number} --comments' to read the review comments \
 2) Implement the requested changes \
 3) Commit the changes with a descriptive message \
-4) Push with: git push origin ${pr_branch} \
+4) Push with: ${review_push_cmd} \
 Work in the directory: ${review_workdir}"
 
       local -a review_cmd_parts

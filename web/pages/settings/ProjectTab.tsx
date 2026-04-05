@@ -4,12 +4,14 @@ import { DoctorCheck } from '../../api';
 import TagInput from '../../components/settings/TagInput.js';
 import Card from '../../components/ui/Card';
 import Input from '../../components/ui/Input';
+import Switch from '../../components/ui/Switch';
 
 interface IConfigFormProject {
   defaultBranch: string;
   prdDir: string;
   branchPrefix: string;
   branchPatterns: string[];
+  gitPushNoVerify: boolean;
   templatesDir: string;
   prdPriority: string[];
   maxLogSize: number;
@@ -63,6 +65,16 @@ const ProjectTab: React.FC<IProjectTabProps> = ({ form, updateField, projectName
               />
           </div>
           <div className="pt-4 mt-4 border-t border-slate-800 space-y-6">
+            <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+              <Switch
+                checked={form.gitPushNoVerify}
+                onChange={(checked) => updateField('gitPushNoVerify', checked)}
+                label="Use --no-verify on automated pushes"
+              />
+              <p className="mt-2 text-sm text-slate-500">
+                Project-scoped. Bypasses local pre-push hooks for Night Watch controller and agent pushes in repos whose hooks block automation.
+              </p>
+            </div>
             <TagInput
               label="Branch Patterns"
               value={form.branchPatterns}
