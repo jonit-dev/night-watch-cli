@@ -6,10 +6,13 @@ import {
   Clock,
   ArrowRight,
   Calendar,
+  Play,
+  Pause,
+  RefreshCw,
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import { useApi, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, triggerJob, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
+import { useApi, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, triggerJob, triggerInstallCron, triggerUninstallCron, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
 import { useStore } from '../store/useStore';
 import AgentStatusBar from '../components/dashboard/AgentStatusBar';
 
@@ -26,6 +29,7 @@ const Dashboard: React.FC = () => {
   const [cancellingProcess, setCancellingProcess] = useState<'run' | 'review' | null>(null);
   const [clearingLock, setClearingLock] = useState(false);
   const [triggeringJob, setTriggeringJob] = useState<string | null>(null);
+  const [togglingSchedule, setTogglingSchedule] = useState(false);
   const { setProjectName, addToast, selectedProjectId, globalModeLoading, status } = useStore();
 
   const { data: scheduleInfo } = useApi(fetchScheduleInfo, [selectedProjectId], { enabled: !globalModeLoading });
@@ -131,6 +135,24 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const handlePauseResume = async () => {
+    if (!scheduleInfo) return;
+    setTogglingSchedule(true);
+    try {
+      if (scheduleInfo.paused) {
+        await triggerInstallCron();
+        addToast({ title: 'Schedule Resumed', message: 'Cron schedules are active.', type: 'success' });
+      } else {
+        await triggerUninstallCron();
+        addToast({ title: 'Schedule Paused', message: 'Cron schedules are deactivated.', type: 'info' });
+      }
+    } catch (err) {
+      addToast({ title: 'Action Failed', message: err instanceof Error ? err.message : 'Toggle failed', type: 'error' });
+    } finally {
+      setTogglingSchedule(false);
+    }
+  };
+
   // Helper to format next run time
   const formatNextRun = (nextRun: string | null | undefined): string => {
     if (!nextRun) return 'Not scheduled';
@@ -230,13 +252,26 @@ const Dashboard: React.FC = () => {
                 {scheduleInfo?.paused ? 'Paused' : (currentStatus.crontab.installed ? 'Active' : 'Inactive')}
               </h3>
             </div>
-            <div className={`p-2 rounded-lg ${
-              scheduleInfo?.paused
-                ? 'bg-amber-500/10 text-amber-400'
-                : (currentStatus.crontab.installed ? 'bg-indigo-500/10 text-indigo-400' : 'bg-slate-700/50 text-slate-500')
-            }`}>
-              <Calendar className="h-5 w-5" />
-            </div>
+            <button
+              onClick={handlePauseResume}
+              disabled={togglingSchedule || !scheduleInfo || !currentStatus.crontab.installed}
+              title={scheduleInfo?.paused ? 'Resume scheduling' : 'Pause scheduling'}
+              className={`p-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                scheduleInfo?.paused
+                  ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20'
+                  : (currentStatus.crontab.installed ? 'bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20' : 'bg-slate-700/50 text-slate-500')
+              }`}
+            >
+              {togglingSchedule ? (
+                <RefreshCw className="h-5 w-5 animate-spin" />
+              ) : scheduleInfo?.paused ? (
+                <Play className="h-5 w-5 fill-current" />
+              ) : currentStatus.crontab.installed ? (
+                <Pause className="h-5 w-5" />
+              ) : (
+                <Calendar className="h-5 w-5" />
+              )}
+            </button>
           </div>
           <p className="text-xs text-slate-500 mt-4">
             {scheduleInfo?.paused
@@ -273,8 +308,8 @@ const Dashboard: React.FC = () => {
         />
       </Card>
 
-      {/* Next Automation Teaser */}
-      {nextAutomation && (
+      {/* Next Automation Teaser / Paused Banner */}
+      {nextAutomation ? (
         <div className="flex items-center justify-between px-4 py-3 bg-slate-900/50 rounded-lg border border-slate-800">
           <div className="flex items-center gap-2 text-sm text-slate-400">
             <span>Next automation:</span>
@@ -288,7 +323,25 @@ const Dashboard: React.FC = () => {
             Manage Schedules <ArrowRight className="ml-1 h-3 w-3" />
           </button>
         </div>
-      )}
+      ) : scheduleInfo?.paused ? (
+        <div className="flex items-center justify-between px-4 py-3 bg-amber-900/20 rounded-lg border border-amber-800/40">
+          <div className="flex items-center gap-2 text-sm text-amber-400">
+            <Pause className="h-3.5 w-3.5" />
+            <span>Automation is paused</span>
+          </div>
+          <button
+            onClick={handlePauseResume}
+            disabled={togglingSchedule}
+            className="text-sm text-emerald-400 hover:text-emerald-300 flex items-center transition-colors disabled:opacity-50"
+          >
+            {togglingSchedule
+              ? <RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+              : <Play className="h-3.5 w-3.5 mr-1.5 fill-current" />
+            }
+            Resume
+          </button>
+        </div>
+      ) : null}
 
       {/* Board Widget */}
       <div className="mt-6">

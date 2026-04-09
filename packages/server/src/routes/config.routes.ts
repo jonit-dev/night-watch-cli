@@ -640,8 +640,13 @@ function validateConfigChanges(
       return 'queue.maxWaitTime must be a number between 300 and 14400';
     }
 
-    if (queue.maxConcurrency !== undefined && queue.maxConcurrency !== 1) {
-      return 'queue.maxConcurrency is currently fixed at 1';
+    if (
+      queue.maxConcurrency !== undefined &&
+      (typeof queue.maxConcurrency !== 'number' ||
+        queue.maxConcurrency < 1 ||
+        queue.maxConcurrency > 20)
+    ) {
+      return 'queue.maxConcurrency must be a number between 1 and 20';
     }
 
     if (queue.priority !== undefined) {
