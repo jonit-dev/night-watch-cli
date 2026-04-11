@@ -485,17 +485,23 @@ function validateConfigChanges(
   }
 
   // claudeModel validation
-  if (changes.claudeModel !== undefined && !VALID_CLAUDE_MODELS.includes(changes.claudeModel)) {
+  if (
+    changes.claudeModel !== undefined &&
+    changes.claudeModel !== null &&
+    !VALID_CLAUDE_MODELS.includes(changes.claudeModel)
+  ) {
     return `Invalid claudeModel. Must be one of: ${VALID_CLAUDE_MODELS.join(', ')}`;
   }
   if (
     changes.primaryFallbackModel !== undefined &&
+    changes.primaryFallbackModel !== null &&
     !VALID_CLAUDE_MODELS.includes(changes.primaryFallbackModel)
   ) {
     return `Invalid primaryFallbackModel. Must be one of: ${VALID_CLAUDE_MODELS.join(', ')}`;
   }
   if (
     changes.secondaryFallbackModel !== undefined &&
+    changes.secondaryFallbackModel !== null &&
     !VALID_CLAUDE_MODELS.includes(changes.secondaryFallbackModel)
   ) {
     return `Invalid secondaryFallbackModel. Must be one of: ${VALID_CLAUDE_MODELS.join(', ')}`;

@@ -61,6 +61,13 @@ emit_result() {
       details="rate_limit_fallback=1"
     fi
   fi
+  if [ "${FALLBACK_CONFIGURATION_MISSING:-0}" = "1" ]; then
+    if [ -n "${details}" ]; then
+      details="${details}|fallback_unconfigured=1"
+    else
+      details="fallback_unconfigured=1"
+    fi
+  fi
   if [ -n "${details}" ]; then
     echo "NIGHT_WATCH_RESULT:${status}|${details}"
   else
@@ -1007,7 +1014,7 @@ if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
     fi
   else
     # Native Claude fallback (existing behavior)
-    PRIMARY_FALLBACK_MODEL="${NW_CLAUDE_PRIMARY_MODEL_ID:-${NW_CLAUDE_MODEL_ID:-claude-sonnet-4-6}}"
+    PRIMARY_FALLBACK_MODEL="${NW_CLAUDE_PRIMARY_MODEL_ID:-${NW_CLAUDE_MODEL_ID:-}}"
     SECONDARY_FALLBACK_MODEL="${NW_CLAUDE_SECONDARY_MODEL_ID:-}"
 
     run_native_fallback() {
@@ -1039,14 +1046,20 @@ if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
       LAST_FALLBACK_LOG_LINE_BEFORE="${log_line_before}"
     }
 
-    LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
-    run_native_fallback "${PRIMARY_FALLBACK_MODEL}" "${LOG_LINE_BEFORE}"
+    if [ -z "${PRIMARY_FALLBACK_MODEL}" ]; then
+      FALLBACK_CONFIGURATION_MISSING=1
+      log "RATE-LIMIT-FALLBACK: Triggered but no fallback preset/model is configured for ${PROJECT_NAME}"
+      send_missing_fallback_configuration_warning "${PROJECT_NAME}"
+    else
+      LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
+      run_native_fallback "${PRIMARY_FALLBACK_MODEL}" "${LOG_LINE_BEFORE}"
 
-    if [ ${EXIT_CODE} -ne 0 ] && [ -n "${SECONDARY_FALLBACK_MODEL}" ] && [ "${SECONDARY_FALLBACK_MODEL}" != "${PRIMARY_FALLBACK_MODEL}" ]; then
-      if check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
-        log "RATE-LIMIT-FALLBACK: Primary native Claude fallback was rate-limited; trying secondary model (${SECONDARY_FALLBACK_MODEL})"
-        LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
-        run_native_fallback "${SECONDARY_FALLBACK_MODEL}" "${LOG_LINE_BEFORE}"
+      if [ ${EXIT_CODE} -ne 0 ] && [ -n "${SECONDARY_FALLBACK_MODEL}" ] && [ "${SECONDARY_FALLBACK_MODEL}" != "${PRIMARY_FALLBACK_MODEL}" ]; then
+        if check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
+          log "RATE-LIMIT-FALLBACK: Primary native Claude fallback was rate-limited; trying secondary model (${SECONDARY_FALLBACK_MODEL})"
+          LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
+          run_native_fallback "${SECONDARY_FALLBACK_MODEL}" "${LOG_LINE_BEFORE}"
+        fi
       fi
     fi
   fi  # end preset vs native choice

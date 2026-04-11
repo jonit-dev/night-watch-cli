@@ -104,4 +104,36 @@ describe('night-watch helpers', () => {
     expect(cleanupResult.status).toBe(0);
     expect(fs.existsSync(orphanWorktreeDir)).toBe(false);
   });
+
+  it('send_missing_fallback_configuration_warning includes configuration guidance', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'night-watch-helpers-telegram-'));
+    const curlBin = path.join(tempDir, 'curl');
+    const captureFile = path.join(tempDir, 'curl-args.txt');
+
+    fs.writeFileSync(
+      curlBin,
+      `#!/usr/bin/env bash
+printf '%s\\n' "$@" > "${captureFile}"
+`,
+      { mode: 0o755 },
+    );
+
+    const result = runShell(
+      `source "${helpersScript}"; send_missing_fallback_configuration_warning "demo-project"`,
+      undefined,
+      {
+        ...process.env,
+        PATH: `${tempDir}:${process.env.PATH}`,
+        NW_TELEGRAM_BOT_TOKEN: 'bot-token',
+        NW_TELEGRAM_CHAT_ID: 'chat-id',
+      },
+    );
+
+    expect(result.status).toBe(0);
+    const curlArgs = fs.readFileSync(captureFile, 'utf-8');
+    expect(curlArgs).toContain('bot-token');
+    expect(curlArgs).toContain('chat-id');
+    expect(curlArgs).toContain('Reliability & Fallbacks');
+    expect(curlArgs).toContain('primaryFallbackPreset / primaryFallbackModel');
+  });
 });

@@ -12,6 +12,8 @@ import { BUILT_IN_PRESET_IDS } from '../../constants/presets.js';
 interface IConfigFormAiProviders {
   provider: string;
   providerPresets: Record<string, IProviderPreset>;
+  primaryFallbackModel: 'sonnet' | 'opus' | '';
+  secondaryFallbackModel: 'sonnet' | 'opus' | '';
   primaryFallbackPreset: string;
   secondaryFallbackPreset: string;
   providerScheduleOverrides: IProviderScheduleOverride[];
@@ -116,6 +118,38 @@ const AiProvidersTab: React.FC<IAiProvidersTabProps> = ({
           <p className="text-sm text-slate-400 mt-1">Configure automated fallback when a provider is rate-limited</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Select
+            label="Primary Native Fallback"
+            value={form.primaryFallbackModel}
+            onChange={(val) =>
+              updateField(
+                'primaryFallbackModel',
+                val as IConfigFormAiProviders['primaryFallbackModel'],
+              )
+            }
+            options={[
+              { label: '— None —', value: '' },
+              { label: 'Claude Sonnet 4.6', value: 'sonnet' },
+              { label: 'Claude Opus 4.6', value: 'opus' },
+            ]}
+            helperText="Used only when no primary fallback preset is configured"
+          />
+          <Select
+            label="Secondary Native Fallback"
+            value={form.secondaryFallbackModel}
+            onChange={(val) =>
+              updateField(
+                'secondaryFallbackModel',
+                val as IConfigFormAiProviders['secondaryFallbackModel'],
+              )
+            }
+            options={[
+              { label: '— None —', value: '' },
+              { label: 'Claude Sonnet 4.6', value: 'sonnet' },
+              { label: 'Claude Opus 4.6', value: 'opus' },
+            ]}
+            helperText="Tried only if the primary native fallback also rate-limits"
+          />
           <Select
             label="Primary Fallback Preset"
             value={form.primaryFallbackPreset}

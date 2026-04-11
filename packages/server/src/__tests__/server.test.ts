@@ -1291,6 +1291,19 @@ describe('server API', () => {
       expect(response.body).toHaveProperty('claudeModel', 'opus');
     });
 
+    it('should accept null fallback model values', async () => {
+      const response = await request(app).put('/api/config').send({
+        primaryFallbackModel: null,
+        secondaryFallbackModel: null,
+        claudeModel: null,
+      });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty('primaryFallbackModel', null);
+      expect(response.body).toHaveProperty('secondaryFallbackModel', null);
+      expect(response.body).toHaveProperty('claudeModel', null);
+    });
+
     it('should validate primaryFallbackModel is valid model', async () => {
       const response = await request(app)
         .put('/api/config')

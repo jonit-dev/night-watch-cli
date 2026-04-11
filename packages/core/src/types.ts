@@ -238,14 +238,14 @@ export interface INightWatchConfig {
    * "sonnet" → claude-sonnet-4-6 (default)
    * "opus"   → claude-opus-4-6
    */
-  primaryFallbackModel?: ClaudeModel;
+  primaryFallbackModel?: ClaudeModel | null;
 
   /**
    * Second native Claude model to try if the primary fallback model is also rate-limited.
    * Defaults to the same model as primaryFallbackModel to preserve existing behavior
    * until explicitly configured otherwise.
    */
-  secondaryFallbackModel?: ClaudeModel;
+  secondaryFallbackModel?: ClaudeModel | null;
 
   /**
    * Preset ID to use as the primary fallback when rate-limited.
@@ -264,7 +264,7 @@ export interface INightWatchConfig {
    * older config files and tests.
    * @deprecated Use primaryFallbackModel instead.
    */
-  claudeModel: ClaudeModel;
+  claudeModel?: ClaudeModel | null;
 
   /** Notification webhook configuration */
   notifications: INotificationConfig;

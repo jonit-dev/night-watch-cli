@@ -1001,7 +1001,20 @@ TOTAL_ATTEMPTS=1
 if [ -n "${TARGET_PR}" ]; then
   TOTAL_ATTEMPTS=$((REVIEWER_MAX_RETRIES + 1))
 fi
-RUN_STARTED_AT=$(date +%s)
+
+epoch_millis() {
+  local now_ms
+
+  now_ms=$(date +%s%3N 2>/dev/null || true)
+  if [[ "${now_ms}" =~ ^[0-9]+$ ]]; then
+    printf "%s" "${now_ms}"
+    return 0
+  fi
+
+  printf "%s000" "$(date +%s)"
+}
+
+RUN_STARTED_AT_MS=$(epoch_millis)
 
 # Capture current HEAD of PR branch so we can detect if the reviewer pushed any commits.
 PR_BRANCH_HEAD_BEFORE=""
@@ -1010,13 +1023,22 @@ if [ -n "${TARGET_PR}" ]; then
 fi
 
 remaining_runtime_budget() {
-  local now_ts
-  local elapsed
+  local now_ms
+  local elapsed_ms
+  local remaining_ms
   local remaining
 
-  now_ts=$(date +%s)
-  elapsed=$((now_ts - RUN_STARTED_AT))
-  remaining=$((MAX_RUNTIME - elapsed))
+  now_ms=$(epoch_millis)
+  elapsed_ms=$((now_ms - RUN_STARTED_AT_MS))
+  remaining_ms=$((MAX_RUNTIME * 1000 - elapsed_ms))
+  if [ "${remaining_ms}" -le 0 ]; then
+    printf "0"
+    return 0
+  fi
+
+  # Round up to avoid shaving nearly a full second off attempt 1 when the
+  # script crosses a wall-clock second boundary before entering `timeout`.
+  remaining=$(( (remaining_ms + 999) / 1000 ))
   printf "%s" "${remaining}"
 }
 
@@ -1063,15 +1085,12 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
     # Retries only happen after a quick return (low score / invalid output / rate limit);
     # a timed-out provider run is not retried, so pre-splitting the budget would
     # incorrectly cap a 1h review to ~20m on attempt 1.
-    NOW_TS=$(date +%s)
-    ELAPSED=$((NOW_TS - RUN_STARTED_AT))
-    REMAINING_BUDGET=$((MAX_RUNTIME - ELAPSED))
-    if [ "${REMAINING_BUDGET}" -le 0 ]; then
+    ATTEMPT_TIMEOUT=$(remaining_runtime_budget)
+    if [ "${ATTEMPT_TIMEOUT}" -le 0 ]; then
       EXIT_CODE=124
       log "RETRY: Runtime budget exhausted before attempt ${ATTEMPT}"
       break
     fi
-    ATTEMPT_TIMEOUT="${REMAINING_BUDGET}"
   fi
 
   # Recreate worktree if it was removed unexpectedly between attempts.

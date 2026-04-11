@@ -323,12 +323,15 @@ export function buildEnvVars(
   }
 
   // Claude models used for native / fallback execution
-  const primaryFallbackModel = config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet';
-  const secondaryFallbackModel = config.secondaryFallbackModel ?? primaryFallbackModel;
-  env.NW_CLAUDE_PRIMARY_MODEL_ID = CLAUDE_MODEL_IDS[primaryFallbackModel];
-  env.NW_CLAUDE_SECONDARY_MODEL_ID = CLAUDE_MODEL_IDS[secondaryFallbackModel];
-  // Backward compatibility for scripts/helpers still reading the legacy env var.
-  env.NW_CLAUDE_MODEL_ID = env.NW_CLAUDE_PRIMARY_MODEL_ID;
+  if (config.primaryFallbackModel) {
+    env.NW_CLAUDE_PRIMARY_MODEL_ID = CLAUDE_MODEL_IDS[config.primaryFallbackModel];
+    // Backward compatibility for scripts/helpers still reading the legacy env var.
+    env.NW_CLAUDE_MODEL_ID = env.NW_CLAUDE_PRIMARY_MODEL_ID;
+  }
+
+  if (config.secondaryFallbackModel) {
+    env.NW_CLAUDE_SECONDARY_MODEL_ID = CLAUDE_MODEL_IDS[config.secondaryFallbackModel];
+  }
 
   // Preset-based fallback (takes precedence over model-based fallback when configured)
   if (config.primaryFallbackPreset) {

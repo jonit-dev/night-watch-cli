@@ -335,6 +335,9 @@ describe('init command', () => {
       expect(config.scheduleBundleId).toBe('always-on');
       expect(config.providerLabel).toBe('');
       expect(config.fallbackOnRateLimit).toBe(defaults.fallbackOnRateLimit);
+      expect(config.primaryFallbackModel).toBeNull();
+      expect(config.secondaryFallbackModel).toBeNull();
+      expect(config.claudeModel).toBeNull();
       expect(config.cronSchedule).toBe(defaults.cronSchedule);
       expect(config.reviewerSchedule).toBe(defaults.reviewerSchedule);
       expect(config.roadmapScanner).toEqual(defaults.roadmapScanner);

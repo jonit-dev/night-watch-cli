@@ -47,6 +47,7 @@ export function validateProvider(value: string): Provider | null {
  */
 export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INightWatchConfig> {
   const normalized: Partial<INightWatchConfig> = {};
+  const hasOwn = (key: string): boolean => Object.prototype.hasOwnProperty.call(rawConfig, key);
 
   const readString = (value: unknown): string | undefined =>
     typeof value === 'string' ? value : undefined;
@@ -233,21 +234,45 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
   }
 
   normalized.fallbackOnRateLimit = readBoolean(rawConfig.fallbackOnRateLimit);
-  const primaryFallbackModelRaw =
-    readString(rawConfig.primaryFallbackModel) ?? readString(rawConfig.claudeModel);
-  if (
-    primaryFallbackModelRaw &&
-    VALID_CLAUDE_MODELS.includes(primaryFallbackModelRaw as ClaudeModel)
-  ) {
-    normalized.primaryFallbackModel = primaryFallbackModelRaw as ClaudeModel;
-    normalized.claudeModel = primaryFallbackModelRaw as ClaudeModel;
+
+  if (hasOwn('primaryFallbackModel')) {
+    if (rawConfig.primaryFallbackModel === null) {
+      normalized.primaryFallbackModel = null;
+      normalized.claudeModel = null;
+    } else {
+      const primaryFallbackModelRaw = readString(rawConfig.primaryFallbackModel);
+      if (
+        primaryFallbackModelRaw &&
+        VALID_CLAUDE_MODELS.includes(primaryFallbackModelRaw as ClaudeModel)
+      ) {
+        normalized.primaryFallbackModel = primaryFallbackModelRaw as ClaudeModel;
+        normalized.claudeModel = primaryFallbackModelRaw as ClaudeModel;
+      }
+    }
+  } else if (hasOwn('claudeModel')) {
+    if (rawConfig.claudeModel === null) {
+      normalized.claudeModel = null;
+    } else {
+      const claudeModelRaw = readString(rawConfig.claudeModel);
+      if (claudeModelRaw && VALID_CLAUDE_MODELS.includes(claudeModelRaw as ClaudeModel)) {
+        normalized.primaryFallbackModel = claudeModelRaw as ClaudeModel;
+        normalized.claudeModel = claudeModelRaw as ClaudeModel;
+      }
+    }
   }
-  const secondaryFallbackModelRaw = readString(rawConfig.secondaryFallbackModel);
-  if (
-    secondaryFallbackModelRaw &&
-    VALID_CLAUDE_MODELS.includes(secondaryFallbackModelRaw as ClaudeModel)
-  ) {
-    normalized.secondaryFallbackModel = secondaryFallbackModelRaw as ClaudeModel;
+
+  if (hasOwn('secondaryFallbackModel')) {
+    if (rawConfig.secondaryFallbackModel === null) {
+      normalized.secondaryFallbackModel = null;
+    } else {
+      const secondaryFallbackModelRaw = readString(rawConfig.secondaryFallbackModel);
+      if (
+        secondaryFallbackModelRaw &&
+        VALID_CLAUDE_MODELS.includes(secondaryFallbackModelRaw as ClaudeModel)
+      ) {
+        normalized.secondaryFallbackModel = secondaryFallbackModelRaw as ClaudeModel;
+      }
+    }
   }
   normalized.primaryFallbackPreset = readString(rawConfig.primaryFallbackPreset);
   normalized.secondaryFallbackPreset = readString(rawConfig.secondaryFallbackPreset);

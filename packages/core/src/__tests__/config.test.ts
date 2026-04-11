@@ -132,6 +132,26 @@ describe('config', () => {
       expect(config.reviewerSchedule).toBe('25 */3 * * *');
     });
 
+    it('should preserve an explicitly disabled fallback configuration', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          provider: 'claude',
+          reviewerEnabled: true,
+          primaryFallbackModel: null,
+          secondaryFallbackModel: null,
+          claudeModel: null,
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.primaryFallbackModel).toBeNull();
+      expect(config.secondaryFallbackModel).toBeNull();
+      expect(config.claudeModel).toBeNull();
+    });
+
     it('should load scheduleBundleId from config file', () => {
       const configPath = path.join(tempDir, 'night-watch.config.json');
       fs.writeFileSync(
@@ -2177,7 +2197,7 @@ describe('config', () => {
       const config = getDefaultConfig();
 
       for (const field of expectedFields) {
-        expect(config[field]).toBeDefined();
+        expect(field in config).toBe(true);
       }
 
       // This test should fail if new fields are added to INightWatchConfig

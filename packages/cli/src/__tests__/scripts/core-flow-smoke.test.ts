@@ -2955,6 +2955,7 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_PRD_DIR: 'docs/PRDs/night-watch',
       NW_DEFAULT_BRANCH: 'main',
       NW_FALLBACK_ON_RATE_LIMIT: 'true',
+      NW_CLAUDE_PRIMARY_MODEL_ID: 'claude-sonnet-4-6',
       ANTHROPIC_BASE_URL: 'https://proxy.example.com', // Simulate proxy mode
       NW_SMOKE_PR_READY_FILE: readyFlag,
       NW_SMOKE_BRANCH: branchName,

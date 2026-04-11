@@ -91,11 +91,11 @@ type ConfigForm = {
   boardProvider: IBoardProviderConfig;
   jobProviders: IJobProviders;
   fallbackOnRateLimit: boolean;
-  primaryFallbackModel: ClaudeModel;
-  secondaryFallbackModel: ClaudeModel;
+  primaryFallbackModel: ClaudeModel | '';
+  secondaryFallbackModel: ClaudeModel | '';
   primaryFallbackPreset: string;
   secondaryFallbackPreset: string;
-  claudeModel: ClaudeModel;
+  claudeModel: ClaudeModel | '';
   providerScheduleOverrides: IProviderScheduleOverride[];
   qa: IQaConfig;
   audit: IAuditConfig;
@@ -105,65 +105,77 @@ type ConfigForm = {
   queue: INightWatchConfig['queue'];
 };
 
-const toFormState = (config: INightWatchConfig): ConfigForm => ({
-  provider: config.provider,
-  providerLabel: config.providerLabel ?? '',
-  providerPresets: config.providerPresets ?? {},
-  defaultBranch: config.defaultBranch,
-  prdDir: config.prdDir || 'docs/prds',
-  branchPrefix: config.branchPrefix,
-  branchPatterns: config.branchPatterns || [],
-  gitPushNoVerify: config.gitPushNoVerify ?? false,
-  executorEnabled: config.executorEnabled ?? true,
-  reviewerEnabled: config.reviewerEnabled,
-  minReviewScore: config.minReviewScore,
-  maxRuntime: config.maxRuntime,
-  reviewerMaxRuntime: config.reviewerMaxRuntime,
-  maxLogSize: config.maxLogSize,
-  cronSchedule: config.cronSchedule || DEFAULT_EXECUTOR_SCHEDULE,
-  reviewerSchedule: config.reviewerSchedule || DEFAULT_REVIEWER_SCHEDULE,
-  scheduleBundleId: config.scheduleBundleId ?? null,
-  cronScheduleOffset: config.cronScheduleOffset ?? 0,
-  schedulingPriority: config.schedulingPriority ?? 3,
-  maxRetries: config.maxRetries ?? 3,
-  reviewerMaxRetries: config.reviewerMaxRetries ?? 2,
-  reviewerRetryDelay: config.reviewerRetryDelay ?? 30,
-  reviewerMaxPrsPerRun: config.reviewerMaxPrsPerRun ?? 0,
-  providerEnv: config.providerEnv || {},
-  notifications: config.notifications || { webhooks: [] },
-  prdPriority: config.prdPriority || [],
-  roadmapScanner: config.roadmapScanner || getDefaultRoadmapScannerConfig(),
-  templatesDir: config.templatesDir || '.night-watch/templates',
-  boardProvider: config.boardProvider || { enabled: true, provider: 'github' },
-  jobProviders: config.jobProviders || {},
-  fallbackOnRateLimit: config.fallbackOnRateLimit ?? true,
-  primaryFallbackModel: config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet',
-  secondaryFallbackModel:
-    config.secondaryFallbackModel ?? config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet',
-  primaryFallbackPreset: config.primaryFallbackPreset ?? '',
-  secondaryFallbackPreset: config.secondaryFallbackPreset ?? '',
-  claudeModel: config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet',
-  providerScheduleOverrides: config.providerScheduleOverrides ?? [],
-  qa: config.qa || getDefaultQaConfig(),
-  audit: config.audit || getDefaultAuditConfig(),
-  analytics: config.analytics || getDefaultAnalyticsConfig(),
-  prResolver: config.prResolver ?? getDefaultPrResolverConfig(),
-  merger: config.merger ?? getDefaultMergerConfig(),
-  queue: config.queue || {
-    enabled: true,
-    mode: 'conservative' as const,
-    maxConcurrency: 1,
-    maxWaitTime: 7200,
-    priority: {
-      executor: 50,
-      reviewer: 40,
-      slicer: 30,
-      qa: 20,
-      audit: 10,
+const toFormState = (config: INightWatchConfig): ConfigForm => {
+  const primaryFallbackModel =
+    config.primaryFallbackModel !== undefined
+      ? (config.primaryFallbackModel ?? '')
+      : (config.claudeModel ?? '');
+  const secondaryFallbackModel =
+    config.secondaryFallbackModel !== undefined
+      ? (config.secondaryFallbackModel ?? '')
+      : config.primaryFallbackModel !== undefined
+        ? (config.primaryFallbackModel ?? '')
+        : (config.claudeModel ?? '');
+
+  return {
+    provider: config.provider,
+    providerLabel: config.providerLabel ?? '',
+    providerPresets: config.providerPresets ?? {},
+    defaultBranch: config.defaultBranch,
+    prdDir: config.prdDir || 'docs/prds',
+    branchPrefix: config.branchPrefix,
+    branchPatterns: config.branchPatterns || [],
+    gitPushNoVerify: config.gitPushNoVerify ?? false,
+    executorEnabled: config.executorEnabled ?? true,
+    reviewerEnabled: config.reviewerEnabled,
+    minReviewScore: config.minReviewScore,
+    maxRuntime: config.maxRuntime,
+    reviewerMaxRuntime: config.reviewerMaxRuntime,
+    maxLogSize: config.maxLogSize,
+    cronSchedule: config.cronSchedule || DEFAULT_EXECUTOR_SCHEDULE,
+    reviewerSchedule: config.reviewerSchedule || DEFAULT_REVIEWER_SCHEDULE,
+    scheduleBundleId: config.scheduleBundleId ?? null,
+    cronScheduleOffset: config.cronScheduleOffset ?? 0,
+    schedulingPriority: config.schedulingPriority ?? 3,
+    maxRetries: config.maxRetries ?? 3,
+    reviewerMaxRetries: config.reviewerMaxRetries ?? 2,
+    reviewerRetryDelay: config.reviewerRetryDelay ?? 30,
+    reviewerMaxPrsPerRun: config.reviewerMaxPrsPerRun ?? 0,
+    providerEnv: config.providerEnv || {},
+    notifications: config.notifications || { webhooks: [] },
+    prdPriority: config.prdPriority || [],
+    roadmapScanner: config.roadmapScanner || getDefaultRoadmapScannerConfig(),
+    templatesDir: config.templatesDir || '.night-watch/templates',
+    boardProvider: config.boardProvider || { enabled: true, provider: 'github' },
+    jobProviders: config.jobProviders || {},
+    fallbackOnRateLimit: config.fallbackOnRateLimit ?? true,
+    primaryFallbackModel,
+    secondaryFallbackModel,
+    primaryFallbackPreset: config.primaryFallbackPreset ?? '',
+    secondaryFallbackPreset: config.secondaryFallbackPreset ?? '',
+    claudeModel: primaryFallbackModel,
+    providerScheduleOverrides: config.providerScheduleOverrides ?? [],
+    qa: config.qa || getDefaultQaConfig(),
+    audit: config.audit || getDefaultAuditConfig(),
+    analytics: config.analytics || getDefaultAnalyticsConfig(),
+    prResolver: config.prResolver ?? getDefaultPrResolverConfig(),
+    merger: config.merger ?? getDefaultMergerConfig(),
+    queue: config.queue || {
+      enabled: true,
+      mode: 'conservative' as const,
+      maxConcurrency: 1,
+      maxWaitTime: 7200,
+      priority: {
+        executor: 50,
+        reviewer: 40,
+        slicer: 30,
+        qa: 20,
+        audit: 10,
+      },
+      providerBuckets: {},
     },
-    providerBuckets: {},
-  },
-});
+  };
+};
 
 
 const Settings: React.FC = () => {
@@ -318,6 +330,9 @@ const Settings: React.FC = () => {
 
     setSaving(true);
     try {
+      const primaryFallbackModel = form.primaryFallbackModel || null;
+      const secondaryFallbackModel = form.secondaryFallbackModel || null;
+
       const savedConfig = await updateConfig({
         provider: form.provider,
         providerLabel: form.providerLabel.trim(),
@@ -350,11 +365,11 @@ const Settings: React.FC = () => {
         boardProvider: form.boardProvider,
         jobProviders: cleanedJobProviders,
         fallbackOnRateLimit: form.fallbackOnRateLimit,
-        primaryFallbackModel: form.primaryFallbackModel,
-        secondaryFallbackModel: form.secondaryFallbackModel,
+        primaryFallbackModel,
+        secondaryFallbackModel,
         primaryFallbackPreset: form.primaryFallbackPreset || undefined,
         secondaryFallbackPreset: form.secondaryFallbackPreset || undefined,
-        claudeModel: form.primaryFallbackModel,
+        claudeModel: primaryFallbackModel,
         providerScheduleOverrides: form.providerScheduleOverrides,
         qa: form.qa,
         audit: form.audit,

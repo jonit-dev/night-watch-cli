@@ -100,9 +100,9 @@ describe('Settings Page - PRD Coverage Verification', () => {
         providerLabel: '',
         gitPushNoVerify: false,
         fallbackOnRateLimit: true,
-        primaryFallbackModel: 'sonnet',
-        secondaryFallbackModel: 'sonnet',
-        claudeModel: 'sonnet',
+        primaryFallbackModel: '',
+        secondaryFallbackModel: '',
+        claudeModel: '',
         cronSchedule: '5 */3 * * *',
         reviewerSchedule: '25 */6 * * *',
         scheduleBundleId: null,
@@ -129,9 +129,9 @@ describe('Settings Page - PRD Coverage Verification', () => {
       expect(defaults.providerLabel).toBe('');
       expect(defaults.gitPushNoVerify).toBe(false);
       expect(defaults.fallbackOnRateLimit).toBe(true);
-      expect(defaults.primaryFallbackModel).toBe('sonnet');
-      expect(defaults.secondaryFallbackModel).toBe('sonnet');
-      expect(defaults.claudeModel).toBe('sonnet');
+      expect(defaults.primaryFallbackModel).toBe('');
+      expect(defaults.secondaryFallbackModel).toBe('');
+      expect(defaults.claudeModel).toBe('');
       expect(defaults.qa.artifacts).toBe('both');
       expect(defaults.audit.maxRuntime).toBe(1800);
     });
