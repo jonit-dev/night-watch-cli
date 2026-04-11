@@ -19,14 +19,11 @@ test.describe('Settings - UX Revamp', () => {
   test('should display settings sections', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 
-    // Check for common settings sections
+    // Check for current settings tabs/sections
     const expectedSections = [
-      'General',
-      'Schedule',
-      'Providers',
-      'Notifications',
-      'Slack',
-      'Board'
+      'Project',
+      'AI Providers',
+      'Integrations',
     ];
 
     // At least some sections should be visible
@@ -117,20 +114,11 @@ test.describe('Settings - UX Revamp', () => {
     console.log(`API settings visible: ${visibleCount}`);
   });
 
-  test('should display scheduling configuration section', async ({ page }) => {
+  test('should keep jobs and schedules out of settings', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 
-    // Check for schedule-related labels
-    const scheduleLabels = ['Schedule', 'Cron', 'Frequency', 'Interval'];
-    const hasAnyScheduleSetting = await Promise.all(
-      scheduleLabels.map(label =>
-        page.locator(`text=${label}`).count().then(count => count > 0)
-      )
-    );
-
-    // At least log what's visible
-    const visibleCount = hasAnyScheduleSetting.filter(Boolean).length;
-    console.log(`Schedule settings visible: ${visibleCount}`);
+    await expect(page.locator('button:has-text("Jobs")')).toHaveCount(0);
+    await expect(page.locator('button:has-text("Schedules")')).toHaveCount(0);
   });
 });
 
@@ -157,7 +145,7 @@ test.describe('Settings - Navigation', () => {
     await page.waitForLoadState('networkidle');
 
     // Try navigating to scheduling
-    const schedulingLink = page.locator('a[href="#/scheduling"]').filter({ hasText: /Scheduling/i });
+    const schedulingLink = page.locator('a[href="#/scheduling"]').filter({ hasText: /Automation/i });
     if (await schedulingLink.count() > 0) {
       await schedulingLink.first().click();
       await expect(page).toHaveURL(/.*#\/scheduling/);

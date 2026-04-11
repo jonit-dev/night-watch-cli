@@ -5,18 +5,18 @@ describe('Settings Page - PRD Coverage Verification', () => {
     it('should include all fields from INightWatchConfig except _cliProviderOverride', () => {
       // This is a compile-time check - the test passes if the code compiles
       // The ConfigForm type in Settings.tsx includes:
-      // - provider, providerLabel, defaultBranch, prdDir, branchPrefix, branchPatterns, gitPushNoVerify
+      // - provider, providerLabel, providerPresets, defaultBranch, prdDir, branchPrefix, branchPatterns, gitPushNoVerify
       // - executorEnabled, reviewerEnabled, minReviewScore, maxRuntime, reviewerMaxRuntime, maxLogSize
-      // - cronSchedule, reviewerSchedule, cronScheduleOffset, maxRetries
+      // - cronSchedule, reviewerSchedule, scheduleBundleId, cronScheduleOffset, schedulingPriority, maxRetries
       // - reviewerMaxRetries, reviewerRetryDelay, reviewerMaxPrsPerRun
-      // - providerEnv, notifications, prdPriority
-      // - roadmapScanner, templatesDir, boardProvider, jobProviders
-      // - autoMerge, autoMergeMethod, fallbackOnRateLimit, primaryFallbackModel, secondaryFallbackModel, claudeModel
-      // - qa, audit
+      // - providerEnv, notifications, prdPriority, roadmapScanner, templatesDir, boardProvider, jobProviders
+      // - fallbackOnRateLimit, primaryFallbackModel, secondaryFallbackModel, primaryFallbackPreset, secondaryFallbackPreset
+      // - claudeModel, providerScheduleOverrides, qa, audit, analytics, prResolver, merger, queue
 
       const requiredFields = [
         'provider',
         'providerLabel',
+        'providerPresets',
         'defaultBranch',
         'prdDir',
         'branchPrefix',
@@ -32,6 +32,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
         'reviewerSchedule',
         'scheduleBundleId',
         'cronScheduleOffset',
+        'schedulingPriority',
         'maxRetries',
         'reviewerMaxRetries',
         'reviewerRetryDelay',
@@ -43,14 +44,19 @@ describe('Settings Page - PRD Coverage Verification', () => {
         'templatesDir',
         'boardProvider',
         'jobProviders',
-        'autoMerge',
-        'autoMergeMethod',
         'fallbackOnRateLimit',
         'primaryFallbackModel',
         'secondaryFallbackModel',
+        'primaryFallbackPreset',
+        'secondaryFallbackPreset',
         'claudeModel',
+        'providerScheduleOverrides',
         'qa',
         'audit',
+        'analytics',
+        'prResolver',
+        'merger',
+        'queue',
       ];
 
       // Verify all new PRD fields are included
@@ -71,8 +77,18 @@ describe('Settings Page - PRD Coverage Verification', () => {
       expect(requiredFields).toContain('reviewerRetryDelay');
       expect(requiredFields).toContain('reviewerMaxPrsPerRun');
 
-      // If we got here, all 36 fields are defined in ConfigForm
-      expect(requiredFields.length).toBe(36);
+      expect(requiredFields).toContain('providerPresets');
+      expect(requiredFields).toContain('schedulingPriority');
+      expect(requiredFields).toContain('primaryFallbackPreset');
+      expect(requiredFields).toContain('secondaryFallbackPreset');
+      expect(requiredFields).toContain('providerScheduleOverrides');
+      expect(requiredFields).toContain('analytics');
+      expect(requiredFields).toContain('prResolver');
+      expect(requiredFields).toContain('merger');
+      expect(requiredFields).toContain('queue');
+
+      // If we got here, all 43 fields are defined in ConfigForm
+      expect(requiredFields.length).toBe(43);
     });
   });
 
@@ -122,24 +138,22 @@ describe('Settings Page - PRD Coverage Verification', () => {
   });
 
   describe('Settings page tabs (from source code)', () => {
-    it('should have all required tabs for PRD coverage', () => {
+    it('should keep Jobs and Schedules out of Settings', () => {
       // These tabs exist in Settings.tsx
       const tabs = [
         'Project',
         'AI Providers',
-        'Jobs',
-        'Schedules',
         'Integrations',
       ];
 
       // Core tabs present
       expect(tabs).toContain('Project');
       expect(tabs).toContain('AI Providers');
-      expect(tabs).toContain('Jobs');
-      expect(tabs).toContain('Schedules');
       expect(tabs).toContain('Integrations');
+      expect(tabs).not.toContain('Jobs');
+      expect(tabs).not.toContain('Schedules');
 
-      expect(tabs.length).toBe(5);
+      expect(tabs.length).toBe(3);
     });
   });
 

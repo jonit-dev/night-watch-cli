@@ -541,14 +541,14 @@ _is_lock_holder_alive() {
 
 append_exit_trap() {
   local command="${1:?command required}"
-  local existing=""
 
-  existing=$(trap -p EXIT | sed -n "s/^trap -- '\\(.*\\)' EXIT$/\\1/p")
-  if [ -n "${existing}" ]; then
-    trap "${existing}; ${command}" EXIT
+  if [ -n "${NW_EXIT_TRAP_CHAIN:-}" ]; then
+    NW_EXIT_TRAP_CHAIN="${NW_EXIT_TRAP_CHAIN}; ${command}"
   else
-    trap "${command}" EXIT
+    NW_EXIT_TRAP_CHAIN="${command}"
   fi
+
+  trap "${NW_EXIT_TRAP_CHAIN}" EXIT
 }
 
 # ── Detect default branch ───────────────────────────────────────────────────
@@ -798,6 +798,31 @@ cleanup_worktrees() {
 
   # Prune again after removals so Git drops any admin entries left behind by
   # force-removal or previously broken worktrees outside Night Watch naming.
+  git -C "${project_dir}" worktree prune >/dev/null 2>&1 || true
+}
+
+cleanup_worktree_path() {
+  local project_dir="${1:?project_dir required}"
+  local worktree_dir="${2:?worktree_dir required}"
+
+  if [ -z "${worktree_dir}" ] || [ "${worktree_dir}" = "${project_dir}" ]; then
+    return 0
+  fi
+
+  git -C "${project_dir}" worktree prune >/dev/null 2>&1 || true
+
+  if git -C "${project_dir}" worktree list --porcelain 2>/dev/null \
+      | grep -qF "worktree ${worktree_dir}"; then
+    log "CLEANUP: Removing worktree ${worktree_dir}"
+    git -C "${project_dir}" worktree remove --force "${worktree_dir}" 2>/dev/null || true
+  fi
+
+  if [ -d "${worktree_dir}" ] && ! git -C "${project_dir}" worktree list --porcelain 2>/dev/null \
+      | grep -qF "worktree ${worktree_dir}"; then
+    log "CLEANUP: Removing stale worktree directory ${worktree_dir}"
+    rm -rf "${worktree_dir}" 2>/dev/null || true
+  fi
+
   git -C "${project_dir}" worktree prune >/dev/null 2>&1 || true
 }
 

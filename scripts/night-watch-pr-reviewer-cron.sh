@@ -881,6 +881,12 @@ if [ -n "${TARGET_PR}" ]; then
 fi
 REVIEW_WORKTREE_DIR="$(dirname "${PROJECT_DIR}")/${REVIEW_WORKTREE_BASENAME}"
 
+cleanup_reviewer_runner_worktree_on_exit() {
+  cleanup_worktree_path "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}"
+}
+
+append_exit_trap "cleanup_reviewer_runner_worktree_on_exit"
+
 cleanup_reviewer_worktrees "${REVIEW_WORKTREE_BASENAME}"
 
 # Dry-run mode: print diagnostics and exit

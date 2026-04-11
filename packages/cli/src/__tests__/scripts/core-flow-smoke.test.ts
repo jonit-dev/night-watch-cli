@@ -1268,6 +1268,17 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success_already_merged');
     expect(result.stdout).toContain(`branch=${branchName}`);
+
+    const bookkeepingDir = path.join(
+      path.dirname(projectDir),
+      `${path.basename(projectDir)}-nw-bookkeeping`,
+    );
+    const worktreeList = execSync('git worktree list --porcelain', {
+      cwd: projectDir,
+      encoding: 'utf-8',
+    });
+    expect(worktreeList).not.toContain(`worktree ${bookkeepingDir}`);
+    expect(fs.existsSync(bookkeepingDir)).toBe(false);
   });
 
   it('executor should emit failure_finalize when finalize_prd_done fails after provider success', () => {

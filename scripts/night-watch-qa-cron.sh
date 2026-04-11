@@ -481,6 +481,12 @@ else
 fi
 QA_WORKTREE_DIR="$(dirname "${PROJECT_DIR}")/${PROJECT_NAME}-nw-qa-runner"
 
+cleanup_qa_worktree_on_exit() {
+  cleanup_worktree_path "${PROJECT_DIR}" "${QA_WORKTREE_DIR}"
+}
+
+append_exit_trap "cleanup_qa_worktree_on_exit"
+
 log "START: Found PR(s) needing QA:${PRS_NEEDING_QA}"
 
 cleanup_worktrees "${PROJECT_DIR}"

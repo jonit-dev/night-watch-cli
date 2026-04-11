@@ -1,8 +1,8 @@
 import { AlertCircle, AlertTriangle, RotateCcw, Save, Trash2 } from 'lucide-react';
 import React from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ClaudeModel,
-  fetchAllConfigs,
   fetchConfig,
   fetchDoctor,
   fetchGlobalNotifications,
@@ -21,7 +21,6 @@ import {
   IWebhookConfig,
   removeProject,
   triggerInstallCron,
-  toggleRoadmapScanner,
   updateConfig,
   updateGlobalNotifications,
   useApi,
@@ -31,14 +30,11 @@ import PresetFormModal from '../components/providers/PresetFormModal.js';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Badge from '../components/ui/Badge.js';
-import { IScheduleTemplate, resolveActiveTemplate } from '../utils/cron.js';
 import Tabs from '../components/ui/Tabs';
 import { useStore } from '../store/useStore';
 import ProjectTab from './settings/ProjectTab.js';
 import AiProvidersTab from './settings/AiProvidersTab.js';
-import JobsTab from './settings/JobsTab.js';
 import IntegrationsTab from './settings/IntegrationsTab.js';
-import ScheduleConfig from '../components/scheduling/ScheduleConfig.js';
 import { usePresetManagement } from '../hooks/usePresetManagement.js';
 import { BUILT_IN_PRESET_IDS } from '../constants/presets.js';
 import {
@@ -169,37 +165,15 @@ const toFormState = (config: INightWatchConfig): ConfigForm => ({
   },
 });
 
-type ScheduleUiState = {
-  mode: 'template' | 'custom';
-  selectedTemplateId: string;
-};
-
-const resolveScheduleUiState = (form: ConfigForm): ScheduleUiState => {
-  const detected = resolveActiveTemplate(
-    form.scheduleBundleId,
-    form.cronSchedule,
-    form.reviewerSchedule,
-    form.qa.schedule,
-    form.audit.schedule,
-    form.roadmapScanner.slicerSchedule ?? getDefaultRoadmapScannerConfig().slicerSchedule,
-    form.prResolver?.schedule ?? getDefaultPrResolverConfig().schedule,
-    form.merger?.schedule ?? getDefaultMergerConfig().schedule,
-  );
-
-  if (detected) {
-    return { mode: 'template', selectedTemplateId: detected.id };
-  }
-
-  return { mode: 'custom', selectedTemplateId: '' };
-};
 
 const Settings: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { addToast, projectName, selectedProjectId, globalModeLoading, isGlobalMode, removeProjectFromList } = useStore();
   const [saving, setSaving] = React.useState(false);
   const [removeModalOpen, setRemoveModalOpen] = React.useState(false);
   const [removing, setRemoving] = React.useState(false);
   const [form, setForm] = React.useState<ConfigForm | null>(null);
-  const [allProjectConfigs, setAllProjectConfigs] = React.useState<Array<{ projectId: string; config: INightWatchConfig }>>([]);
   const [globalWebhook, setGlobalWebhook] = React.useState<IWebhookConfig | null | undefined>(undefined);
   const initialFormRef = React.useRef<ConfigForm | null>(null);
   const [isDirty, setIsDirty] = React.useState(false);
@@ -207,10 +181,11 @@ const Settings: React.FC = () => {
   const skipNextFormResetRef = React.useRef(false);
   // Tracks when jobProviders was changed by user (to trigger auto-save)
   const jobProvidersChangedRef = React.useRef(false);
-  const [scheduleMode, setScheduleMode] = React.useState<'template' | 'custom'>('template');
-  const [selectedTemplateId, setSelectedTemplateId] = React.useState<string>('always-on');
   const [activeSettingsTab, setActiveSettingsTab] = React.useState<string>('project');
-  const [highlightedSection, setHighlightedSection] = React.useState<string | null>(null);
+  const legacyAutomationTab = React.useMemo(() => {
+    const tab = new URLSearchParams(location.search).get('tab');
+    return tab === 'jobs' || tab === 'schedules' ? tab : null;
+  }, [location.search]);
 
   const {
     data: config,
@@ -243,7 +218,6 @@ const Settings: React.FC = () => {
   );
 
   React.useEffect(() => {
-    fetchAllConfigs().then(setAllProjectConfigs).catch(console.error);
     fetchGlobalNotifications().then((cfg) => setGlobalWebhook(cfg.webhook)).catch(() => {
       // server unavailable — leave as undefined so globe buttons stay hidden
     });
@@ -251,49 +225,27 @@ const Settings: React.FC = () => {
 
   // Deep linking: switch tab based on URL param
   React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    if (!legacyAutomationTab) return;
+    navigate({ pathname: '/scheduling', search: location.search }, { replace: true });
+  }, [legacyAutomationTab, location.search, navigate]);
+
+  React.useEffect(() => {
+    if (legacyAutomationTab) return;
+    const params = new URLSearchParams(location.search);
     const tab = params.get('tab');
-    const mode = params.get('mode');
 
     if (tab) {
       const tabMigration: Record<string, string> = {
-        providers: 'ai-runtime',
-        runtime: 'ai-runtime',
-        roadmap: 'jobs',
-        qa: 'jobs',
-        audit: 'jobs',
-        notifications: 'integrations',
-        schedules: 'schedules',
-        general: 'project',
+        providers: 'ai-providers',
+        runtime: 'ai-providers',
         'ai-runtime': 'ai-providers',
+        notifications: 'integrations',
+        general: 'project',
         advanced: 'project',
       };
       setActiveSettingsTab(tabMigration[tab] ?? tab);
     }
-    if (mode === 'custom') {
-      setScheduleMode('custom');
-    } else if (mode === 'template') {
-      setScheduleMode('template');
-    }
-
-    const jobTypeParam = params.get('jobType');
-    if (jobTypeParam) {
-      // Small delay to ensure the tab and mode have settled
-      setTimeout(() => {
-        handleEditJob(
-          'current',
-          jobTypeParam,
-          tab === 'schedules' ? 'schedule' : tab === 'jobs' ? 'job' : undefined,
-        );
-      }, 300);
-    }
-  }, [location.search, config]); // config dependency ensures we wait for data before trying to scroll
-
-  const applyScheduleUiState = React.useCallback((formState: ConfigForm) => {
-    const scheduleUiState = resolveScheduleUiState(formState);
-    setScheduleMode(scheduleUiState.mode);
-    setSelectedTemplateId(scheduleUiState.selectedTemplateId);
-  }, []);
+  }, [legacyAutomationTab, location.search]);
 
   React.useEffect(() => {
     if (config) {
@@ -305,9 +257,8 @@ const Settings: React.FC = () => {
       setForm(initial);
       initialFormRef.current = initial;
       setIsDirty(false);
-      applyScheduleUiState(initial);
     }
-  }, [config, applyScheduleUiState]);
+  }, [config]);
 
   // Track dirty state
   React.useEffect(() => {
@@ -324,112 +275,6 @@ const Settings: React.FC = () => {
       handleSave();
     }
   }, [form?.jobProviders]);
-
-  // Clear highlight after timeout
-  React.useEffect(() => {
-    if (highlightedSection) {
-      const timer = setTimeout(() => setHighlightedSection(null), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [highlightedSection]);
-
-  const switchToTemplateMode = () => {
-    setScheduleMode('template');
-    if (!form) {
-      return;
-    }
-
-    const scheduleUiState = resolveScheduleUiState(form);
-    if (scheduleUiState.mode === 'template') {
-      setSelectedTemplateId(scheduleUiState.selectedTemplateId);
-      updateField('scheduleBundleId', scheduleUiState.selectedTemplateId);
-    }
-  };
-
-  const switchToCustomMode = () => {
-    setScheduleMode('custom');
-    updateField('scheduleBundleId', null);
-    setSelectedTemplateId('');
-  };
-
-  const scrollToSection = (sectionId: string) => {
-    setTimeout(() => {
-      const el = document.getElementById(sectionId);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setHighlightedSection(sectionId);
-      }
-    }, 50);
-  };
-
-  const openJobSettings = (jobType: string) => {
-    const registryId = jobType === 'planner' ? 'slicer' : jobType;
-    setActiveSettingsTab('jobs');
-    scrollToSection(`job-section-${registryId}`);
-  };
-
-  const openScheduleEditor = (jobType: string) => {
-    const registryId = jobType === 'planner' ? 'slicer' : jobType;
-    if (scheduleMode !== 'custom') {
-      switchToCustomMode();
-    }
-    setActiveSettingsTab('schedules');
-    scrollToSection(`job-schedule-${registryId}`);
-  };
-
-  const handleEditJob = (
-    projectId: string,
-    jobType: string,
-    destination?: 'job' | 'schedule',
-  ) => {
-    if (projectId !== projectName && projectId !== 'current') {
-      addToast({
-        title: 'Project Switch Required',
-        message: `To edit ${projectId}, please switch to that project in the sidebar.`,
-        type: 'info',
-      });
-      return;
-    }
-
-    const registryId = jobType === 'planner' ? 'slicer' : jobType;
-    const jobsTabTypes = new Set(['qa', 'audit', 'slicer', 'analytics', 'pr-resolver', 'merger']);
-
-    if (destination === 'job') {
-      openJobSettings(registryId);
-      return;
-    }
-
-    if (destination === 'schedule') {
-      openScheduleEditor(registryId);
-      return;
-    }
-
-    if (jobsTabTypes.has(registryId)) {
-      openJobSettings(registryId);
-      return;
-    }
-
-    openScheduleEditor(registryId);
-  };
-
-  const applyTemplate = (tpl: IScheduleTemplate) => {
-    setSelectedTemplateId(tpl.id);
-    setForm((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        cronSchedule: tpl.schedules.executor,
-        reviewerSchedule: tpl.schedules.reviewer,
-        scheduleBundleId: tpl.id,
-        qa: { ...prev.qa, schedule: tpl.schedules.qa },
-        audit: { ...prev.audit, schedule: tpl.schedules.audit },
-        roadmapScanner: { ...prev.roadmapScanner, slicerSchedule: tpl.schedules.slicer },
-        prResolver: { ...prev.prResolver, schedule: tpl.schedules.prResolver },
-        merger: { ...prev.merger, schedule: tpl.schedules.merger },
-        fallbackOnRateLimit: true,
-      };
-    });
-  };
 
   const handleSave = async () => {
     if (!form) {
@@ -490,7 +335,7 @@ const Settings: React.FC = () => {
         maxLogSize: form.maxLogSize,
         cronSchedule: form.cronSchedule,
         reviewerSchedule: form.reviewerSchedule,
-        scheduleBundleId: scheduleMode === 'template' ? form.scheduleBundleId : null,
+        scheduleBundleId: form.scheduleBundleId,
         cronScheduleOffset: form.cronScheduleOffset,
         schedulingPriority: form.schedulingPriority,
         maxRetries: form.maxRetries,
@@ -524,7 +369,6 @@ const Settings: React.FC = () => {
       setForm(updatedForm);
       initialFormRef.current = updatedForm;
       setIsDirty(false);
-      applyScheduleUiState(updatedForm);
 
       let cronInstallFailedMessage = '';
       if (shouldReinstallCron) {
@@ -569,10 +413,8 @@ const Settings: React.FC = () => {
 
   const handleReset = () => {
     if (initialFormRef.current) {
-      const resetForm = initialFormRef.current;
-      setForm(resetForm);
+      setForm(initialFormRef.current);
       setIsDirty(false);
-      applyScheduleUiState(resetForm);
       addToast({
         title: 'Reset Complete',
         message: 'Unsaved changes were discarded.',
@@ -610,41 +452,6 @@ const Settings: React.FC = () => {
     }
   };
 
-  const handleRoadmapToggle = async (enabled: boolean) => {
-    try {
-      const updatedConfig = await toggleRoadmapScanner(enabled);
-      updateField('roadmapScanner', updatedConfig.roadmapScanner);
-
-      let cronInstallFailedMessage = '';
-      try {
-        await triggerInstallCron();
-      } catch (cronErr) {
-        cronInstallFailedMessage =
-          cronErr instanceof Error ? cronErr.message : 'Failed to reinstall cron schedules';
-      }
-
-      addToast(
-        cronInstallFailedMessage
-          ? {
-              title: 'Planner Saved (Cron Reinstall Failed)',
-              message: cronInstallFailedMessage,
-              type: 'warning',
-            }
-          : {
-              title: enabled ? 'Roadmap Scanner Enabled' : 'Roadmap Scanner Disabled',
-              message: `Roadmap scanner has been ${enabled ? 'enabled' : 'disabled'}.`,
-              type: 'success',
-            },
-      );
-    } catch (err) {
-      addToast({
-        title: 'Toggle Failed',
-        message: err instanceof Error ? err.message : 'Failed to toggle roadmap scanner',
-        type: 'error',
-      });
-    }
-  };
-
   const handleRemoveProject = async () => {
     if (!selectedProjectId) return;
     setRemoving(true);
@@ -668,6 +475,14 @@ const Settings: React.FC = () => {
     }
   };
 
+  if (legacyAutomationTab) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-slate-400">Opening automation...</div>
+      </div>
+    );
+  }
+
   if (configLoading || !form) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -686,8 +501,6 @@ const Settings: React.FC = () => {
       </div>
     );
   }
-
-  const highlightClass = 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-slate-900 rounded-lg';
 
   const tabs = [
     {
@@ -716,59 +529,6 @@ const Settings: React.FC = () => {
           handleDeletePreset={presetManagement.handleDeletePreset}
           handleResetPreset={presetManagement.handleResetPreset}
           handleAddPreset={presetManagement.handleAddPreset}
-        />
-      ),
-    },
-    {
-      id: 'jobs',
-      label: 'Jobs',
-      content: (
-        <JobsTab
-          form={form}
-          updateField={updateField as <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => void}
-          handleRoadmapToggle={handleRoadmapToggle}
-          presetOptions={presetManagement.getPresetOptions(form.providerPresets)}
-        />
-      ),
-    },
-    {
-      id: 'schedules',
-      label: 'Schedules',
-      content: (
-        <ScheduleConfig
-          form={{
-            cronSchedule: form.cronSchedule,
-            reviewerSchedule: form.reviewerSchedule,
-            qa: form.qa,
-            audit: form.audit,
-            analytics: form.analytics,
-            roadmapScanner: {
-              ...form.roadmapScanner,
-              slicerSchedule:
-                form.roadmapScanner.slicerSchedule ?? getDefaultRoadmapScannerConfig().slicerSchedule,
-            },
-            prResolver: form.prResolver,
-            merger: form.merger,
-            scheduleBundleId: form.scheduleBundleId,
-            schedulingPriority: form.schedulingPriority,
-            cronScheduleOffset: form.cronScheduleOffset,
-            globalQueueEnabled: form.queue.enabled,
-          }}
-          scheduleMode={scheduleMode}
-          selectedTemplateId={selectedTemplateId}
-          onFieldChange={(field, value) => {
-            if (field === 'globalQueueEnabled') {
-              updateField('queue', { ...form.queue, enabled: Boolean(value) });
-              return;
-            }
-            updateField(field as keyof typeof form, value as never);
-          }}
-          onSwitchToTemplate={switchToTemplateMode}
-          onSwitchToCustom={switchToCustomMode}
-          onApplyTemplate={applyTemplate}
-          allProjectConfigs={allProjectConfigs}
-          currentProjectId={selectedProjectId}
-          onEditJob={(_projectId, jobType) => openScheduleEditor(jobType)}
         />
       ),
     },

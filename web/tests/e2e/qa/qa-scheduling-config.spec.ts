@@ -13,13 +13,14 @@ test.describe('Scheduling - ScheduleConfig UX Revamp', () => {
     await page.waitForLoadState('networkidle');
 
     // Check for main heading
-    await expect(page.locator('h1:has-text("Scheduling"), h2:has-text("Scheduling")').or(
+    await expect(page.locator('h1:has-text("Automation"), h2:has-text("Automation")').or(
       page.locator('text=Job Schedules')
     )).toBeVisible({ timeout: 10000 });
   });
 
   test('should display schedule mode toggle (Template/Custom)', async ({ page }) => {
     await page.waitForLoadState('networkidle');
+    await page.click('button:has-text("Schedules")');
 
     // Check for Template button
     await expect(page.locator('button:has-text("Template")')).toBeVisible();
@@ -30,6 +31,7 @@ test.describe('Scheduling - ScheduleConfig UX Revamp', () => {
 
   test('should switch between template and custom modes', async ({ page }) => {
     await page.waitForLoadState('networkidle');
+    await page.click('button:has-text("Schedules")');
 
     // Click on Custom button
     await page.click('button:has-text("Custom")');
@@ -42,16 +44,14 @@ test.describe('Scheduling - ScheduleConfig UX Revamp', () => {
     // Click back to Template
     await page.click('button:has-text("Template")');
 
-    // Should show template cards - check for either label text or Balanced button
-    const hasLabelOrButton = await Promise.all([
-      page.locator('text=label').count().then(c => c > 0),
-      page.locator('button:has-text("Balanced")').count().then(c => c > 0)
-    ]);
-    expect(hasLabelOrButton.some(Boolean)).toBeTruthy();
+    await expect(
+      page.locator('button:has-text("Always On"), button:has-text("Night Surge")')
+    ).toBeVisible({ timeout: 5000 });
   });
 
   test('should display schedule templates in template mode', async ({ page }) => {
     await page.waitForLoadState('networkidle');
+    await page.click('button:has-text("Schedules")');
 
     // Ensure template mode is active
     const templateBtn = page.locator('button:has-text("Template")');
@@ -59,8 +59,8 @@ test.describe('Scheduling - ScheduleConfig UX Revamp', () => {
       await templateBtn.click();
     }
 
-    // Check for common schedule template labels
-    const templateLabels = ['Frequent', 'Balanced', 'Moderate', 'Sparse'];
+    // Check for current schedule template labels
+    const templateLabels = ['Night Surge', 'Always On', 'Day Shift', 'Minimal'];
     const hasAnyLabel = await Promise.all(
       templateLabels.map(label =>
         page.locator(`text=${label}`).count().then(count => count > 0)
@@ -73,6 +73,7 @@ test.describe('Scheduling - ScheduleConfig UX Revamp', () => {
 
   test('should display custom schedule inputs in custom mode', async ({ page }) => {
     await page.waitForLoadState('networkidle');
+    await page.click('button:has-text("Schedules")');
 
     // Switch to custom mode
     const customBtn = page.locator('button:has-text("Custom")');
@@ -101,53 +102,24 @@ test.describe('Scheduling - ScheduleConfig UX Revamp', () => {
     }
   });
 
-  test('should display scheduling priority dropdown', async ({ page }) => {
+  test('should keep scheduling controls on the overview tab', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 
-    // Check for Scheduling Priority label
-    const priorityLabel = page.locator('text=Scheduling Priority');
-    const isVisible = await priorityLabel.isVisible().catch(() => false);
-
-    if (isVisible) {
-      await expect(priorityLabel).toBeVisible();
-
-      // Check for priority options
-      await expect(page.locator('text=Lowest').or(
-        page.locator('text=Balanced')
-      ).or(
-        page.locator('text=Highest')
-      )).toBeVisible();
-    }
+    await expect(page.locator('text=Automation Controls')).toBeVisible();
+    await expect(page.locator('text=Scheduling Priority')).toBeVisible();
+    await expect(page.locator('text=Extra Start Delay')).toBeVisible();
   });
 
-  test('should display global queue toggle', async ({ page }) => {
+  test('should display queue controls from the overview tab', async ({ page }) => {
     await page.waitForLoadState('networkidle');
-
-    // Check for Global Queue label
-    const globalQueueLabel = page.locator('text=Global Queue');
-    const isVisible = await globalQueueLabel.isVisible().catch(() => false);
-
-    if (isVisible) {
-      await expect(globalQueueLabel).toBeVisible();
-      await expect(page.locator('text=Queue overlapping jobs')).toBeVisible();
-    }
-  });
-
-  test('should display extra start delay input', async ({ page }) => {
-    await page.waitForLoadState('networkidle');
-
-    // Check for Extra Start Delay label
-    const delayLabel = page.locator('text=Extra Start Delay').or(
-      page.locator('text=delay')
-    );
-
-    // This may not be visible in all states
-    await delayLabel.first().isVisible().catch(() => false);
-    // Don't fail if not visible
+    await page.locator('[title="Automation Settings"]').click();
+    await expect(page.locator('text=Dispatch Mode')).toBeVisible();
+    await expect(page.locator('text=Coordinator Enabled')).toBeVisible();
   });
 
   test('should have interactive template cards', async ({ page }) => {
     await page.waitForLoadState('networkidle');
+    await page.click('button:has-text("Schedules")');
 
     // Ensure template mode
     const templateBtn = page.locator('button:has-text("Template")');
@@ -156,7 +128,7 @@ test.describe('Scheduling - ScheduleConfig UX Revamp', () => {
     }
 
     // Look for clickable template buttons
-    const templateButtons = page.locator('button').filter({ hasText: /Every/i });
+    const templateButtons = page.locator('button').filter({ hasText: /Always On|Night Surge|Day Shift|Minimal/i });
 
     const count = await templateButtons.count();
     // If templates exist, they should be clickable
@@ -167,6 +139,7 @@ test.describe('Scheduling - ScheduleConfig UX Revamp', () => {
 
   test('should display schedule descriptions on template cards', async ({ page }) => {
     await page.waitForLoadState('networkidle');
+    await page.click('button:has-text("Schedules")');
 
     // Ensure template mode
     const templateBtn = page.locator('button:has-text("Template")');
@@ -175,7 +148,7 @@ test.describe('Scheduling - ScheduleConfig UX Revamp', () => {
     }
 
     // Look for agent hints (Executor, Reviewer, QA, etc.)
-    const agentHints = ['Executor', 'Reviewer', 'QA', 'Audit', 'Slicer'];
+    const agentHints = ['Executor', 'Reviewer', 'QA', 'Audit', 'Planner'];
     const hasAnyHint = await Promise.all(
       agentHints.map(agent =>
         page.locator(`text=${agent}`).count().then(count => count > 0)
@@ -184,6 +157,16 @@ test.describe('Scheduling - ScheduleConfig UX Revamp', () => {
 
     // At least some agent hints should be visible
     expect(hasAnyHint.some(Boolean)).toBeTruthy();
+  });
+
+  test('should keep the schedules tab focused on job cadence only', async ({ page }) => {
+    await page.waitForLoadState('networkidle');
+    await page.click('button:has-text("Schedules")');
+
+    await expect(page.locator('text=Job Schedules')).toBeVisible();
+    await expect(page.locator('text=Scheduling Priority')).toHaveCount(0);
+    await expect(page.locator('text=Extra Start Delay')).toHaveCount(0);
+    await expect(page.locator('text=Coordinator Enabled')).toHaveCount(0);
   });
 
   test('should navigate between pages using sidebar', async ({ page }) => {

@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Activity,
   BarChart3,
   CheckCircle2,
   Eye,
@@ -20,17 +19,25 @@ import {
   IJobProviders,
   MergeMethod,
   QaArtifacts,
-  QueueMode,
   INightWatchConfig,
 } from '../../api';
 import TagInput from '../../components/settings/TagInput.js';
+import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Select from '../../components/ui/Select';
 import Switch from '../../components/ui/Switch';
-import Card from '../../components/ui/Card';
-import CronScheduleInput from '../../components/ui/CronScheduleInput';
 import JobAccordion from '../../components/settings/JobAccordion';
 import { cronToHuman } from '../../utils/cron.js';
+
+type JobKey =
+  | 'executor'
+  | 'reviewer'
+  | 'qa'
+  | 'audit'
+  | 'slicer'
+  | 'analytics'
+  | 'pr-resolver'
+  | 'merger';
 
 interface IConfigFormJobs {
   executorEnabled: boolean;
@@ -64,31 +71,33 @@ interface IJobsTabProps {
   updateField: <K extends keyof IConfigFormJobs>(key: K, value: IConfigFormJobs[K]) => void;
   handleRoadmapToggle: (enabled: boolean) => Promise<void>;
   presetOptions: Array<{ label: string; value: string }>;
+  expandedJob: string | null;
+  onExpandedJobChange: (jobId: string | null) => void;
+  onOpenSchedule: (jobId: JobKey) => void;
 }
+
+const CadencePanel: React.FC<{ summary: string; onOpen: () => void }> = ({ summary, onOpen }) => (
+  <div className="flex flex-col gap-4 rounded-xl border border-slate-800 bg-slate-950/50 p-4 md:flex-row md:items-center md:justify-between">
+    <div>
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Cadence</div>
+      <div className="mt-1 text-sm font-medium text-slate-200">{summary}</div>
+      <p className="mt-1 text-xs text-slate-500">Managed centrally in Automation &gt; Schedules.</p>
+    </div>
+    <Button variant="outline" size="sm" onClick={onOpen} className="border-slate-700 text-slate-300 hover:bg-slate-800">
+      Open Schedules
+    </Button>
+  </div>
+);
 
 const JobsTab: React.FC<IJobsTabProps> = ({
   form,
   updateField,
   handleRoadmapToggle,
   presetOptions,
+  expandedJob,
+  onExpandedJobChange,
+  onOpenSchedule,
 }) => {
-  const [expandedJob, setExpandedJob] = React.useState<string | null>(null);
-
-  // Deep linking: expand correct job on load
-  React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const jobType = params.get('jobType');
-    if (jobType) {
-      setExpandedJob(jobType);
-      setTimeout(() => {
-        const el = document.getElementById(`job-section-${jobType}`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }, 100);
-    }
-  }, []);
-
   const updateJobProvider = (jobKey: keyof IJobProviders, value: string) => {
     const newJobProviders = { ...form.jobProviders };
     if (value === '') {
@@ -111,7 +120,7 @@ const JobsTab: React.FC<IJobsTabProps> = ({
           <div>
             <h3 className="text-lg font-medium text-slate-200">Job Configurations</h3>
             <p className="text-sm text-slate-400 mt-1">
-              Enable jobs, choose providers, and tune runtime behavior. Cadence lives in the Schedules tab.
+              Enable jobs, choose providers, and tune runtime behavior. Cadence stays in Automation &gt; Schedules.
             </p>
           </div>
           <span className="text-xs text-slate-500">8 total jobs</span>
@@ -126,25 +135,28 @@ const JobsTab: React.FC<IJobsTabProps> = ({
           enabled={form.executorEnabled}
           onToggle={(checked) => updateField('executorEnabled', checked)}
           expanded={expandedJob === 'executor'}
-          onExpandChange={(expanded) => setExpandedJob(expanded ? 'executor' : null)}
+          onExpandChange={(expanded) => onExpandedJobChange(expanded ? 'executor' : null)}
           scheduleSummary={cronToHuman(form.cronSchedule)}
           providerLabel={form.jobProviders.executor ? presetOptions.find(p => p.value === form.jobProviders.executor)?.label : 'Global'}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Select
-              label="Provider"
-              value={form.jobProviders.executor ?? ''}
-              onChange={(val) => updateJobProvider('executor', val)}
-              options={providerOptionsWithDefault}
-            />
-            <Input
-              label="Max Runtime"
-              type="number"
-              value={String(form.maxRuntime)}
-              onChange={(e) => updateField('maxRuntime', Number(e.target.value || 0))}
-              rightIcon={<span className="text-xs">sec</span>}
-              helperText="Maximum runtime for executor tasks"
-            />
+          <div className="space-y-6">
+            <CadencePanel summary={cronToHuman(form.cronSchedule)} onOpen={() => onOpenSchedule('executor')} />
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <Select
+                label="Provider"
+                value={form.jobProviders.executor ?? ''}
+                onChange={(val) => updateJobProvider('executor', val)}
+                options={providerOptionsWithDefault}
+              />
+              <Input
+                label="Max Runtime"
+                type="number"
+                value={String(form.maxRuntime)}
+                onChange={(e) => updateField('maxRuntime', Number(e.target.value || 0))}
+                rightIcon={<span className="text-xs">sec</span>}
+                helperText="Maximum runtime for executor tasks"
+              />
+            </div>
           </div>
         </JobAccordion>
 
@@ -157,55 +169,58 @@ const JobsTab: React.FC<IJobsTabProps> = ({
           enabled={form.reviewerEnabled}
           onToggle={(checked) => updateField('reviewerEnabled', checked)}
           expanded={expandedJob === 'reviewer'}
-          onExpandChange={(expanded) => setExpandedJob(expanded ? 'reviewer' : null)}
+          onExpandChange={(expanded) => onExpandedJobChange(expanded ? 'reviewer' : null)}
           scheduleSummary={cronToHuman(form.reviewerSchedule)}
           providerLabel={form.jobProviders.reviewer ? presetOptions.find(p => p.value === form.jobProviders.reviewer)?.label : 'Global'}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Select
-              label="Provider"
-              value={form.jobProviders.reviewer ?? ''}
-              onChange={(val) => updateJobProvider('reviewer', val)}
-              options={providerOptionsWithDefault}
-            />
-            <Input
-              label="Max Runtime"
-              type="number"
-              value={String(form.reviewerMaxRuntime)}
-              onChange={(e) => updateField('reviewerMaxRuntime', Number(e.target.value || 0))}
-              rightIcon={<span className="text-xs">sec</span>}
-            />
-            <Input
-              label="Min Review Score"
-              type="number"
-              min="0"
-              max="100"
-              value={String(form.minReviewScore)}
-              onChange={(e) => updateField('minReviewScore', Number(e.target.value || 0))}
-              helperText="PRs below this score will be marked as 'Needs Work'"
-            />
-            <Input
-              label="Max Retries"
-              type="number"
-              value={String(form.reviewerMaxRetries)}
-              onChange={(e) => updateField('reviewerMaxRetries', Number(e.target.value || 0))}
-              helperText="Fix attempts after initial review"
-            />
-            <Input
-              label="Retry Delay"
-              type="number"
-              value={String(form.reviewerRetryDelay)}
-              onChange={(e) => updateField('reviewerRetryDelay', Number(e.target.value || 0))}
-              rightIcon={<span className="text-xs">sec</span>}
-            />
-            <div className="md:col-span-2">
-              <Input
-                label="Max PRs Per Run"
-                type="number"
-                value={String(form.reviewerMaxPrsPerRun)}
-                onChange={(e) => updateField('reviewerMaxPrsPerRun', Number(e.target.value || 0))}
-                helperText="Hard cap on PRs processed per run (0 = unlimited)"
+          <div className="space-y-6">
+            <CadencePanel summary={cronToHuman(form.reviewerSchedule)} onOpen={() => onOpenSchedule('reviewer')} />
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <Select
+                label="Provider"
+                value={form.jobProviders.reviewer ?? ''}
+                onChange={(val) => updateJobProvider('reviewer', val)}
+                options={providerOptionsWithDefault}
               />
+              <Input
+                label="Max Runtime"
+                type="number"
+                value={String(form.reviewerMaxRuntime)}
+                onChange={(e) => updateField('reviewerMaxRuntime', Number(e.target.value || 0))}
+                rightIcon={<span className="text-xs">sec</span>}
+              />
+              <Input
+                label="Min Review Score"
+                type="number"
+                min="0"
+                max="100"
+                value={String(form.minReviewScore)}
+                onChange={(e) => updateField('minReviewScore', Number(e.target.value || 0))}
+                helperText="PRs below this score will be marked as 'Needs Work'"
+              />
+              <Input
+                label="Max Retries"
+                type="number"
+                value={String(form.reviewerMaxRetries)}
+                onChange={(e) => updateField('reviewerMaxRetries', Number(e.target.value || 0))}
+                helperText="Fix attempts after initial review"
+              />
+              <Input
+                label="Retry Delay"
+                type="number"
+                value={String(form.reviewerRetryDelay)}
+                onChange={(e) => updateField('reviewerRetryDelay', Number(e.target.value || 0))}
+                rightIcon={<span className="text-xs">sec</span>}
+              />
+              <div className="md:col-span-2">
+                <Input
+                  label="Max PRs Per Run"
+                  type="number"
+                  value={String(form.reviewerMaxPrsPerRun)}
+                  onChange={(e) => updateField('reviewerMaxPrsPerRun', Number(e.target.value || 0))}
+                  helperText="Hard cap on PRs processed per run (0 = unlimited)"
+                />
+              </div>
             </div>
           </div>
         </JobAccordion>
@@ -219,17 +234,13 @@ const JobsTab: React.FC<IJobsTabProps> = ({
           enabled={form.qa.enabled}
           onToggle={(checked) => updateField('qa', { ...form.qa, enabled: checked })}
           expanded={expandedJob === 'qa'}
-          onExpandChange={(expanded) => setExpandedJob(expanded ? 'qa' : null)}
+          onExpandChange={(expanded) => onExpandedJobChange(expanded ? 'qa' : null)}
           scheduleSummary={cronToHuman(form.qa.schedule)}
           providerLabel={form.jobProviders.qa ? presetOptions.find(p => p.value === form.jobProviders.qa)?.label : 'Global'}
         >
           <div className="space-y-6">
+            <CadencePanel summary={cronToHuman(form.qa.schedule)} onOpen={() => onOpenSchedule('qa')} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <CronScheduleInput
-                label="Schedule"
-                value={form.qa.schedule}
-                onChange={(val) => updateField('qa', { ...form.qa, schedule: val })}
-              />
               <Select
                 label="Provider"
                 value={form.jobProviders.qa ?? ''}
@@ -289,41 +300,39 @@ const JobsTab: React.FC<IJobsTabProps> = ({
           enabled={form.audit.enabled}
           onToggle={(checked) => updateField('audit', { ...form.audit, enabled: checked })}
           expanded={expandedJob === 'audit'}
-          onExpandChange={(expanded) => setExpandedJob(expanded ? 'audit' : null)}
+          onExpandChange={(expanded) => onExpandedJobChange(expanded ? 'audit' : null)}
           scheduleSummary={cronToHuman(form.audit.schedule)}
           providerLabel={form.jobProviders.audit ? presetOptions.find(p => p.value === form.jobProviders.audit)?.label : 'Global'}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <CronScheduleInput
-              label="Schedule"
-              value={form.audit.schedule}
-              onChange={(val) => updateField('audit', { ...form.audit, schedule: val })}
-            />
-            <Select
-              label="Provider"
-              value={form.jobProviders.audit ?? ''}
-              onChange={(val) => updateJobProvider('audit', val)}
-              options={providerOptionsWithDefault}
-            />
-            <Input
-              label="Max Runtime"
-              type="number"
-              value={String(form.audit.maxRuntime)}
-              onChange={(e) => updateField('audit', { ...form.audit, maxRuntime: Number(e.target.value || 0) })}
-              rightIcon={<span className="text-xs">sec</span>}
-            />
-            <Select
-              label="Target Column"
-              value={form.audit.targetColumn}
-              onChange={(value) => updateField('audit', { ...form.audit, targetColumn: value as IAuditConfig['targetColumn'] })}
-              options={[
-                { value: 'Draft', label: 'Draft' },
-                { value: 'Ready', label: 'Ready' },
-                { value: 'In Progress', label: 'In Progress' },
-                { value: 'Review', label: 'Review' },
-                { value: 'Done', label: 'Done' },
-              ]}
-            />
+          <div className="space-y-6">
+            <CadencePanel summary={cronToHuman(form.audit.schedule)} onOpen={() => onOpenSchedule('audit')} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Select
+                label="Provider"
+                value={form.jobProviders.audit ?? ''}
+                onChange={(val) => updateJobProvider('audit', val)}
+                options={providerOptionsWithDefault}
+              />
+              <Input
+                label="Max Runtime"
+                type="number"
+                value={String(form.audit.maxRuntime)}
+                onChange={(e) => updateField('audit', { ...form.audit, maxRuntime: Number(e.target.value || 0) })}
+                rightIcon={<span className="text-xs">sec</span>}
+              />
+              <Select
+                label="Target Column"
+                value={form.audit.targetColumn}
+                onChange={(value) => updateField('audit', { ...form.audit, targetColumn: value as IAuditConfig['targetColumn'] })}
+                options={[
+                  { value: 'Draft', label: 'Draft' },
+                  { value: 'Ready', label: 'Ready' },
+                  { value: 'In Progress', label: 'In Progress' },
+                  { value: 'Review', label: 'Review' },
+                  { value: 'Done', label: 'Done' },
+                ]}
+              />
+            </div>
           </div>
         </JobAccordion>
 
@@ -336,53 +345,51 @@ const JobsTab: React.FC<IJobsTabProps> = ({
           enabled={form.roadmapScanner.enabled}
           onToggle={handleRoadmapToggle}
           expanded={expandedJob === 'slicer'}
-          onExpandChange={(expanded) => setExpandedJob(expanded ? 'slicer' : null)}
+          onExpandChange={(expanded) => onExpandedJobChange(expanded ? 'slicer' : null)}
           scheduleSummary={cronToHuman(form.roadmapScanner.slicerSchedule)}
           providerLabel={form.jobProviders.slicer ? presetOptions.find(p => p.value === form.jobProviders.slicer)?.label : 'Global'}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <CronScheduleInput
-              label="Schedule"
-              value={form.roadmapScanner.slicerSchedule}
-              onChange={(val) => updateField('roadmapScanner', { ...form.roadmapScanner, slicerSchedule: val })}
-            />
-            <Select
-              label="Provider"
-              value={form.jobProviders.slicer ?? ''}
-              onChange={(val) => updateJobProvider('slicer', val)}
-              options={providerOptionsWithDefault}
-            />
-            <Input
-              label="Roadmap File Path"
-              value={form.roadmapScanner.roadmapPath}
-              onChange={(e) => updateField('roadmapScanner', { ...form.roadmapScanner, roadmapPath: e.target.value })}
-              helperText="Primary planning source (relative to project root)."
-            />
-            <Input
-              label="Max Runtime"
-              type="number"
-              value={String(form.roadmapScanner.slicerMaxRuntime || '')}
-              onChange={(e) => updateField('roadmapScanner', { ...form.roadmapScanner, slicerMaxRuntime: Number(e.target.value || 0) })}
-              rightIcon={<span className="text-xs">sec</span>}
-            />
-            <Select
-              label="Priority Mode"
-              value={form.roadmapScanner.priorityMode || 'roadmap-first'}
-              onChange={(val) => updateField('roadmapScanner', { ...form.roadmapScanner, priorityMode: val === 'audit-first' ? 'audit-first' : 'roadmap-first' })}
-              options={[
-                { label: 'Roadmap first (recommended)', value: 'roadmap-first' },
-                { label: 'Audit first', value: 'audit-first' },
-              ]}
-            />
-            <Select
-              label="Issue Column"
-              value={form.roadmapScanner.issueColumn || 'Ready'}
-              onChange={(val) => updateField('roadmapScanner', { ...form.roadmapScanner, issueColumn: val === 'Draft' ? 'Draft' : 'Ready' })}
-              options={[
-                { label: 'Ready (default)', value: 'Ready' },
-                { label: 'Draft', value: 'Draft' },
-              ]}
-            />
+          <div className="space-y-6">
+            <CadencePanel summary={cronToHuman(form.roadmapScanner.slicerSchedule)} onOpen={() => onOpenSchedule('slicer')} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Select
+                label="Provider"
+                value={form.jobProviders.slicer ?? ''}
+                onChange={(val) => updateJobProvider('slicer', val)}
+                options={providerOptionsWithDefault}
+              />
+              <Input
+                label="Roadmap File Path"
+                value={form.roadmapScanner.roadmapPath}
+                onChange={(e) => updateField('roadmapScanner', { ...form.roadmapScanner, roadmapPath: e.target.value })}
+                helperText="Primary planning source (relative to project root)."
+              />
+              <Input
+                label="Max Runtime"
+                type="number"
+                value={String(form.roadmapScanner.slicerMaxRuntime || '')}
+                onChange={(e) => updateField('roadmapScanner', { ...form.roadmapScanner, slicerMaxRuntime: Number(e.target.value || 0) })}
+                rightIcon={<span className="text-xs">sec</span>}
+              />
+              <Select
+                label="Priority Mode"
+                value={form.roadmapScanner.priorityMode || 'roadmap-first'}
+                onChange={(val) => updateField('roadmapScanner', { ...form.roadmapScanner, priorityMode: val === 'audit-first' ? 'audit-first' : 'roadmap-first' })}
+                options={[
+                  { label: 'Roadmap first (recommended)', value: 'roadmap-first' },
+                  { label: 'Audit first', value: 'audit-first' },
+                ]}
+              />
+              <Select
+                label="Issue Column"
+                value={form.roadmapScanner.issueColumn || 'Ready'}
+                onChange={(val) => updateField('roadmapScanner', { ...form.roadmapScanner, issueColumn: val === 'Draft' ? 'Draft' : 'Ready' })}
+                options={[
+                  { label: 'Ready (default)', value: 'Ready' },
+                  { label: 'Draft', value: 'Draft' },
+                ]}
+              />
+            </div>
           </div>
         </JobAccordion>
 
@@ -395,73 +402,71 @@ const JobsTab: React.FC<IJobsTabProps> = ({
           enabled={form.analytics.enabled}
           onToggle={(checked) => updateField('analytics', { ...form.analytics, enabled: checked })}
           expanded={expandedJob === 'analytics'}
-          onExpandChange={(expanded) => setExpandedJob(expanded ? 'analytics' : null)}
+          onExpandChange={(expanded) => onExpandedJobChange(expanded ? 'analytics' : null)}
           scheduleSummary={cronToHuman(form.analytics.schedule)}
           providerLabel={form.jobProviders.analytics ? presetOptions.find(p => p.value === form.jobProviders.analytics)?.label : 'Global'}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <CronScheduleInput
-              label="Schedule"
-              value={form.analytics.schedule}
-              onChange={(val) => updateField('analytics', { ...form.analytics, schedule: val })}
-            />
-            <Select
-              label="Provider"
-              value={form.jobProviders.analytics ?? ''}
-              onChange={(val) => updateJobProvider('analytics', val)}
-              options={providerOptionsWithDefault}
-            />
-            <Input
-              label="Amplitude API Key"
-              value={form.providerEnv?.AMPLITUDE_API_KEY ?? ''}
-              onChange={(e) => updateField('providerEnv', { ...form.providerEnv, AMPLITUDE_API_KEY: e.target.value })}
-              placeholder="Required"
-            />
-            <Input
-              label="Amplitude Secret Key"
-              type="password"
-              value={form.providerEnv?.AMPLITUDE_SECRET_KEY ?? ''}
-              onChange={(e) => updateField('providerEnv', { ...form.providerEnv, AMPLITUDE_SECRET_KEY: e.target.value })}
-              placeholder="Required"
-            />
-            <Input
-              label="Max Runtime"
-              type="number"
-              value={String(form.analytics.maxRuntime)}
-              onChange={(e) => updateField('analytics', { ...form.analytics, maxRuntime: Number(e.target.value || 0) })}
-              rightIcon={<span className="text-xs">sec</span>}
-            />
-            <Input
-              label="Lookback Days"
-              type="number"
-              min="1"
-              max="90"
-              value={String(form.analytics.lookbackDays)}
-              onChange={(e) => updateField('analytics', { ...form.analytics, lookbackDays: Math.max(1, Math.min(90, Number(e.target.value || 7))) })}
-            />
-            <Select
-              label="Target Column"
-              value={form.analytics.targetColumn}
-              onChange={(value) => updateField('analytics', { ...form.analytics, targetColumn: value as IAnalyticsConfig['targetColumn'] })}
-              options={[
-                { value: 'Draft', label: 'Draft' },
-                { value: 'Ready', label: 'Ready' },
-                { value: 'In Progress', label: 'In Progress' },
-                { value: 'Review', label: 'Review' },
-                { value: 'Done', label: 'Done' },
-              ]}
-            />
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-slate-400 mb-1.5">
-                Analysis Prompt (optional)
-              </label>
-              <textarea
-                rows={4}
-                value={form.analytics.analysisPrompt ?? ''}
-                onChange={(e) => updateField('analytics', { ...form.analytics, analysisPrompt: e.target.value })}
-                placeholder="Custom prompt for AI analysis. Leave empty to use default."
-                className="w-full bg-slate-950/50 border border-white/10 text-slate-200 rounded-lg px-3 py-2.5 text-sm placeholder-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 resize-y"
+          <div className="space-y-6">
+            <CadencePanel summary={cronToHuman(form.analytics.schedule)} onOpen={() => onOpenSchedule('analytics')} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Select
+                label="Provider"
+                value={form.jobProviders.analytics ?? ''}
+                onChange={(val) => updateJobProvider('analytics', val)}
+                options={providerOptionsWithDefault}
               />
+              <Input
+                label="Amplitude API Key"
+                value={form.providerEnv?.AMPLITUDE_API_KEY ?? ''}
+                onChange={(e) => updateField('providerEnv', { ...form.providerEnv, AMPLITUDE_API_KEY: e.target.value })}
+                placeholder="Required"
+              />
+              <Input
+                label="Amplitude Secret Key"
+                type="password"
+                value={form.providerEnv?.AMPLITUDE_SECRET_KEY ?? ''}
+                onChange={(e) => updateField('providerEnv', { ...form.providerEnv, AMPLITUDE_SECRET_KEY: e.target.value })}
+                placeholder="Required"
+              />
+              <Input
+                label="Max Runtime"
+                type="number"
+                value={String(form.analytics.maxRuntime)}
+                onChange={(e) => updateField('analytics', { ...form.analytics, maxRuntime: Number(e.target.value || 0) })}
+                rightIcon={<span className="text-xs">sec</span>}
+              />
+              <Input
+                label="Lookback Days"
+                type="number"
+                min="1"
+                max="90"
+                value={String(form.analytics.lookbackDays)}
+                onChange={(e) => updateField('analytics', { ...form.analytics, lookbackDays: Math.max(1, Math.min(90, Number(e.target.value || 7))) })}
+              />
+              <Select
+                label="Target Column"
+                value={form.analytics.targetColumn}
+                onChange={(value) => updateField('analytics', { ...form.analytics, targetColumn: value as IAnalyticsConfig['targetColumn'] })}
+                options={[
+                  { value: 'Draft', label: 'Draft' },
+                  { value: 'Ready', label: 'Ready' },
+                  { value: 'In Progress', label: 'In Progress' },
+                  { value: 'Review', label: 'Review' },
+                  { value: 'Done', label: 'Done' },
+                ]}
+              />
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-slate-400 mb-1.5">
+                  Analysis Prompt (optional)
+                </label>
+                <textarea
+                  rows={4}
+                  value={form.analytics.analysisPrompt ?? ''}
+                  onChange={(e) => updateField('analytics', { ...form.analytics, analysisPrompt: e.target.value })}
+                  placeholder="Custom prompt for AI analysis. Leave empty to use default."
+                  className="w-full bg-slate-950/50 border border-white/10 text-slate-200 rounded-lg px-3 py-2.5 text-sm placeholder-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20 resize-y"
+                />
+              </div>
             </div>
           </div>
         </JobAccordion>
@@ -475,17 +480,13 @@ const JobsTab: React.FC<IJobsTabProps> = ({
           enabled={form.prResolver.enabled}
           onToggle={(checked) => updateField('prResolver', { ...form.prResolver, enabled: checked })}
           expanded={expandedJob === 'pr-resolver'}
-          onExpandChange={(expanded) => setExpandedJob(expanded ? 'pr-resolver' : null)}
+          onExpandChange={(expanded) => onExpandedJobChange(expanded ? 'pr-resolver' : null)}
           scheduleSummary={cronToHuman(form.prResolver.schedule)}
           providerLabel={form.jobProviders['pr-resolver'] ? presetOptions.find(p => p.value === form.jobProviders['pr-resolver'])?.label : 'Global'}
         >
           <div className="space-y-6">
+            <CadencePanel summary={cronToHuman(form.prResolver.schedule)} onOpen={() => onOpenSchedule('pr-resolver')} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <CronScheduleInput
-                label="Schedule"
-                value={form.prResolver.schedule}
-                onChange={(val) => updateField('prResolver', { ...form.prResolver, schedule: val })}
-              />
               <Select
                 label="Provider"
                 value={form.jobProviders['pr-resolver'] ?? ''}
@@ -560,17 +561,13 @@ const JobsTab: React.FC<IJobsTabProps> = ({
           enabled={form.merger.enabled}
           onToggle={(checked) => updateField('merger', { ...form.merger, enabled: checked })}
           expanded={expandedJob === 'merger'}
-          onExpandChange={(expanded) => setExpandedJob(expanded ? 'merger' : null)}
+          onExpandChange={(expanded) => onExpandedJobChange(expanded ? 'merger' : null)}
           scheduleSummary={cronToHuman(form.merger.schedule)}
           providerLabel={form.jobProviders.merger ? presetOptions.find(p => p.value === form.jobProviders.merger)?.label : 'Global'}
         >
           <div className="space-y-6">
+            <CadencePanel summary={cronToHuman(form.merger.schedule)} onOpen={() => onOpenSchedule('merger')} />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <CronScheduleInput
-                label="Schedule"
-                value={form.merger.schedule}
-                onChange={(val) => updateField('merger', { ...form.merger, schedule: val })}
-              />
               <Select
                 label="Provider"
                 value={form.jobProviders.merger ?? ''}

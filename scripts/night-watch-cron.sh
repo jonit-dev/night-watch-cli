@@ -292,6 +292,14 @@ if [ -n "${NW_DEFAULT_BRANCH:-}" ]; then
 else
   DEFAULT_BRANCH=$(detect_default_branch "${PROJECT_DIR}")
 fi
+
+cleanup_executor_worktrees_on_exit() {
+  cleanup_worktree_path "${PROJECT_DIR}" "${WORKTREE_DIR}"
+  cleanup_worktree_path "${PROJECT_DIR}" "${BOOKKEEP_WORKTREE_DIR}"
+}
+
+append_exit_trap "cleanup_executor_worktrees_on_exit"
+
 if [[ "${PRD_DIR_REL}" = /* ]]; then
   BOOKKEEP_PRD_DIR="${PRD_DIR_REL}"
 else
