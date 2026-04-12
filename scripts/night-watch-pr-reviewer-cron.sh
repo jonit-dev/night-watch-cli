@@ -943,7 +943,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
   cleanup_reviewer_worktrees
 
   emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${MAX_WORKER_ATTEMPTS}" "${MAX_WORKER_FINAL_SCORE}"
-  exit 0
+  exit "${EXIT_CODE}"
 fi
 
 REVIEW_RUN_TOKEN="${PROJECT_RUNTIME_KEY}-$$"
@@ -1125,20 +1125,15 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
 
   ATTEMPT_TIMEOUT="${MAX_RUNTIME}"
   if [ -n "${TARGET_PR}" ]; then
-    # Calculate timeout from remaining runtime budget.
-    NOW_TS=$(date +%s)
-    ELAPSED=$((NOW_TS - RUN_STARTED_AT))
-    REMAINING_BUDGET=$((MAX_RUNTIME - ELAPSED))
-    if [ "${REMAINING_BUDGET}" -le 0 ]; then
+    # Give each targeted attempt the full remaining runtime budget.
+    # Retries only happen after a quick return (low score / invalid output / rate limit);
+    # a timed-out provider run is not retried, so pre-splitting the budget would
+    # incorrectly cap a 1h review to ~20m on attempt 1.
+    ATTEMPT_TIMEOUT=$(remaining_runtime_budget)
+    if [ "${ATTEMPT_TIMEOUT}" -le 0 ]; then
       EXIT_CODE=124
       log "RETRY: Runtime budget exhausted before attempt ${ATTEMPT}"
       break
-    fi
-
-    REMAINING_ATTEMPTS=$((TOTAL_ATTEMPTS - ATTEMPT + 1))
-    ATTEMPT_TIMEOUT=$((REMAINING_BUDGET / REMAINING_ATTEMPTS))
-    if [ "${ATTEMPT_TIMEOUT}" -lt 1 ]; then
-      ATTEMPT_TIMEOUT=1
     fi
   fi
 
@@ -1226,7 +1221,8 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
 	        fi
 	        continue
 	      fi
-	      log "RETRY: No review score found for PR #${TARGET_PR} after ${TOTAL_ATTEMPTS} attempts; failing run."
+	      log "RETRY: No review score found for PR #${TARGET_PR} after ${TOTAL_ATTEMPTS} attempts; labeling needs-human-review and failing run."
+      gh pr edit "${TARGET_PR}" --add-label "needs-human-review" 2>/dev/null || true
       EXIT_CODE=1
       break
     fi
@@ -1330,3 +1326,4 @@ fi
 REVIEWER_TOTAL_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
 log "OUTCOME: exit_code=${EXIT_CODE} total_elapsed=${REVIEWER_TOTAL_ELAPSED}s prs=${PRS_NEEDING_WORK_CSV:-none} attempts=${ATTEMPTS_MADE}"
 emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${ATTEMPTS_MADE}" "${FINAL_SCORE}"
+exit "${EXIT_CODE}"
