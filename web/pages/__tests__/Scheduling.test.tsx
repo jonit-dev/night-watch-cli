@@ -312,6 +312,19 @@ describe('Scheduling page', () => {
         priority: 50,
       },
       pending: { total: 3, byType: { executor: 2, reviewer: 1 }, byProviderBucket: {} },
+      items: [
+        {
+          id: 2,
+          jobType: 'executor',
+          projectPath: '/path/to/test-project',
+          projectName: 'test-project',
+          providerKey: 'claude',
+          status: 'pending',
+          enqueuedAt: Date.now() / 1000,
+          dispatchedAt: null,
+          priority: 50,
+        },
+      ],
     }));
     apiMocks.fetchQueueAnalytics.mockResolvedValue(makeQueueAnalytics({
       recentRuns: [
@@ -342,17 +355,31 @@ describe('Scheduling page', () => {
     expect(screen.getByText('Provider Lanes')).toBeInTheDocument();
     expect(screen.getByText('Provider Buckets')).toBeInTheDocument();
     expect(screen.getByText('Recent Runs')).toBeInTheDocument();
+
+    // Verify sub-components render actual data
+    expect(screen.getByTestId('provider-lanes-chart')).toBeInTheDocument();
+    expect(screen.getByTestId('provider-lane-label-claude')).toBeInTheDocument();
+    expect(screen.getByTestId('provider-bucket-summary')).toBeInTheDocument();
+    expect(screen.getByTestId('provider-bucket-claude')).toBeInTheDocument();
+    expect(screen.getByTestId('recent-runs-chart')).toBeInTheDocument();
+    expect(screen.getByTestId('run-row-1')).toBeInTheDocument();
   });
 
   it('shows error state when queue status fails to load', async () => {
     apiMocks.fetchQueueStatus.mockRejectedValue(new Error('Network error'));
+    apiMocks.fetchQueueAnalytics.mockRejectedValue(new Error('Network error'));
 
     renderScheduling();
 
     fireEvent.click(screen.getByRole('button', { name: 'Queue' }));
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to load queue status')).toBeInTheDocument();
+      const statusErrors = screen.getAllByText('Failed to load queue status');
+      expect(statusErrors.length).toBeGreaterThanOrEqual(1);
     });
+
+    // Analytics errors also shown in respective cards
+    const analyticsErrors = screen.getAllByText('Failed to load analytics');
+    expect(analyticsErrors.length).toBeGreaterThanOrEqual(1);
   });
 });

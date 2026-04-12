@@ -6,6 +6,18 @@ import ProviderLanesChart from './ProviderLanesChart.js';
 import ProviderBucketSummary from './ProviderBucketSummary.js';
 import RecentRunsChart from './RecentRunsChart.js';
 
+const ERROR_MESSAGES = {
+  queueStatus: 'Failed to load queue status',
+  analytics: 'Failed to load analytics',
+} as const;
+
+const ErrorMessage: React.FC<{ message: string; className?: string }> = ({ message, className }) => (
+  <div className={`flex items-center gap-2 text-red-400 ${className ?? 'py-2'}`}>
+    <AlertCircle className="h-4 w-4" />
+    <span className="text-sm">{message}</span>
+  </div>
+);
+
 interface IQueueTabProps {
   queueStatus: IQueueStatus | null;
   queueAnalytics: IQueueAnalytics | null;
@@ -25,10 +37,7 @@ const QueueTab: React.FC<IQueueTabProps> = ({
       <Card className="p-6">
         <h3 className="text-lg font-semibold text-slate-200 mb-4">Queue Overview</h3>
         {queueStatusError ? (
-          <div className="flex items-center gap-2 text-red-400 py-4">
-            <AlertCircle className="h-4 w-4" />
-            <span className="text-sm">Failed to load queue status</span>
-          </div>
+          <ErrorMessage message={ERROR_MESSAGES.queueStatus} className="py-4" />
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-slate-950/40 rounded-lg p-4 border border-slate-800">
@@ -79,10 +88,7 @@ const QueueTab: React.FC<IQueueTabProps> = ({
           </div>
         </div>
         {queueStatusError ? (
-          <div className="flex items-center gap-2 text-red-400 py-2">
-            <AlertCircle className="h-4 w-4" />
-            <span className="text-sm">Failed to load queue status</span>
-          </div>
+          <ErrorMessage message={ERROR_MESSAGES.queueStatus} />
         ) : queueStatus ? (
           <ProviderLanesChart status={queueStatus} />
         ) : (
@@ -101,10 +107,7 @@ const QueueTab: React.FC<IQueueTabProps> = ({
           </div>
         </div>
         {queueAnalyticsError ? (
-          <div className="flex items-center gap-2 text-red-400 py-2">
-            <AlertCircle className="h-4 w-4" />
-            <span className="text-sm">Failed to load analytics</span>
-          </div>
+          <ErrorMessage message={ERROR_MESSAGES.analytics} />
         ) : queueAnalytics ? (
           <ProviderBucketSummary analytics={queueAnalytics} />
         ) : (
@@ -128,10 +131,7 @@ const QueueTab: React.FC<IQueueTabProps> = ({
           )}
         </div>
         {queueAnalyticsError ? (
-          <div className="flex items-center gap-2 text-red-400 py-2">
-            <AlertCircle className="h-4 w-4" />
-            <span className="text-sm">Failed to load analytics</span>
-          </div>
+          <ErrorMessage message={ERROR_MESSAGES.analytics} />
         ) : queueAnalytics ? (
           <RecentRunsChart analytics={queueAnalytics} />
         ) : (
