@@ -1929,6 +1929,89 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_all_passing');
   });
 
+  it('reviewer should skip PRs already marked ready-for-review for the current head', () => {
+    const projectDir = mkTempDir('nw-smoke-reviewer-current-head-skip-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-reviewer-current-head-skip-bin-');
+    const providerTouched = path.join(projectDir, '.reviewer-provider-touched');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' + 'touch "$NW_SMOKE_REVIEWER_PROVIDER_TOUCHED"\n' + 'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'args="$*"\n' +
+        'if [[ "$1" == "repo" && "$2" == "view" ]]; then\n' +
+        "  echo 'owner/repo'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  if [[ "$args" == *"number,headRefName,labels"* ]]; then\n' +
+        "    printf '1\\tnight-watch/already-reviewed\\tready-for-review\\n'\n" +
+        '  elif [[ "$args" == *"number,headRefName"* ]]; then\n' +
+        "    printf '1\\tnight-watch/already-reviewed\\n'\n" +
+        '  else\n' +
+        "    echo 'night-watch/already-reviewed'\n" +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ "$args" == *"mergeStateStatus"* ]]; then\n' +
+        "    echo 'CLEAN'\n" +
+        '  elif [[ "$args" == *"headRefOid"* ]]; then\n' +
+        "    echo 'abc123'\n" +
+        '  elif [[ "$args" == *"comments"* ]]; then\n' +
+        '    exit 0\n' +
+        '  else\n' +
+        '    echo \'{"number":1}\'\n' +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "checks" ]]; then\n' +
+        '  if [[ "$args" == *"--json bucket,state,conclusion"* ]]; then\n' +
+        "    echo '1'\n" +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$args" == *"--json name,bucket,state,conclusion"* ]]; then\n' +
+        "    echo 'review [state=completed, conclusion=startup_failure]'\n" +
+        '    exit 0\n' +
+        '  fi\n' +
+        "  echo 'review startup_failure'\n" +
+        '  exit 1\n' +
+        'fi\n' +
+        'if [[ "$1" == "api" ]]; then\n' +
+        "  printf '<!-- night-watch-ready-for-review headRefOid:abc123 -->\\n\\n**Overall Score:** 85/100\\n'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(reviewerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BRANCH_PATTERNS: 'night-watch/',
+      NW_MIN_REVIEW_SCORE: '80',
+      NW_AUTO_MERGE: '0',
+      NW_QUEUE_ENABLED: '0',
+      NW_SMOKE_REVIEWER_PROVIDER_TOUCHED: providerTouched,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_no_actionable_prs');
+    expect(fs.existsSync(providerTouched)).toBe(false);
+
+    const reviewerLog = fs.readFileSync(path.join(projectDir, 'logs', 'reviewer.log'), 'utf-8');
+    expect(reviewerLog).toContain('already marked ready for human review at head abc123');
+  });
+
   it('reviewer should skip PRs labeled needs-human-review', () => {
     const projectDir = mkTempDir('nw-smoke-reviewer-needs-human-review-');
     initGitRepo(projectDir);

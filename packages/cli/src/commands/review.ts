@@ -166,11 +166,59 @@ export function postReadyForHumanReviewComment(
   finalScore: number | undefined,
   cwd: string,
 ): void {
-  const scoreNote =
-    finalScore !== undefined ? ` (score: ${finalScore}/100)` : '';
+  const markerName = 'night-watch-ready-for-review';
+  let headRefOid = '';
+
+  try {
+    headRefOid = execFileSync(
+      'gh',
+      ['pr', 'view', String(prNumber), '--json', 'headRefOid', '--jq', '.headRefOid'],
+      {
+        cwd,
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      },
+    ).trim();
+  } catch {
+    headRefOid = '';
+  }
+
+  if (headRefOid) {
+    try {
+      const existingComments = execFileSync(
+        'gh',
+        ['api', `repos/{owner}/{repo}/issues/${prNumber}/comments`, '--jq', '.[].body'],
+        {
+          cwd,
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+        },
+      );
+      const marker = `<!-- ${markerName} headRefOid:${headRefOid} -->`;
+      if (existingComments.includes(marker)) {
+        try {
+          execFileSync('gh', ['pr', 'edit', String(prNumber), '--add-label', 'ready-for-review'], {
+            cwd,
+            encoding: 'utf-8',
+            stdio: ['pipe', 'pipe', 'pipe'],
+          });
+        } catch {
+          // Label may not exist yet — ignore
+        }
+        return;
+      }
+    } catch {
+      // Ignore comment lookup failures and try to post the comment below.
+    }
+  }
+
+  const scoreNote = finalScore !== undefined ? ` (score: ${finalScore}/100)` : '';
+  const shortSha = headRefOid ? headRefOid.slice(0, 12) : '';
+  const marker = headRefOid ? `<!-- ${markerName} headRefOid:${headRefOid} -->\n\n` : '';
+  const shaNote = shortSha ? ` at commit \`${shortSha}\`` : '';
   const body =
-    `## ✅ Ready for Human Review\n\n` +
-    `Night Watch has reviewed this PR${scoreNote} and found no issues requiring automated fixes.\n\n` +
+    `${marker}## ✅ Ready for Human Review\n\n` +
+    `Night Watch has reviewed this PR${scoreNote}${shaNote} and found no issues requiring automated fixes for the current head.\n\n` +
     `This PR is ready for human code review and merge.`;
 
   try {
@@ -520,12 +568,12 @@ export function reviewCommand(program: Command): void {
             const reviewedPrNumbers = parseReviewedPrNumbers(scriptResult?.data.prs);
             const noChangesPrNumbers = parseReviewedPrNumbers(scriptResult?.data.no_changes_prs);
             const fallbackPrNumber = fallbackPrDetails?.number;
+            let notificationPrNumbers = reviewedPrNumbers;
+            if (notificationPrNumbers.length === 0 && fallbackPrNumber !== undefined) {
+              notificationPrNumbers = [fallbackPrNumber];
+            }
             const notificationTargets = buildReviewNotificationTargets(
-              reviewedPrNumbers.length > 0
-                ? reviewedPrNumbers
-                : fallbackPrNumber !== undefined
-                  ? [fallbackPrNumber]
-                  : [],
+              notificationPrNumbers,
               noChangesPrNumbers,
               legacyNoChangesNeeded,
             );
@@ -567,7 +615,10 @@ export function reviewCommand(program: Command): void {
                   event: reviewEvent,
                   projectName: path.basename(projectDir),
                   exitCode,
-                  provider: formatProviderDisplay(envVars.NW_PROVIDER_CMD, envVars.NW_PROVIDER_LABEL),
+                  provider: formatProviderDisplay(
+                    envVars.NW_PROVIDER_CMD,
+                    envVars.NW_PROVIDER_LABEL,
+                  ),
                   prUrl: prDetails?.url,
                   prTitle: prDetails?.title,
                   prBody: prDetails?.body,

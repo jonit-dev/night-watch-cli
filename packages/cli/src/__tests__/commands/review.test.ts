@@ -238,7 +238,6 @@ describe('review command', () => {
       // jobProviders should remain unchanged
       expect(overridden.jobProviders.reviewer).toBe('claude');
     });
-
   });
 
   describe('notification integration', () => {
@@ -255,6 +254,7 @@ describe('review command', () => {
     it('should suppress notifications for skip statuses', () => {
       expect(shouldSendReviewNotification('skip_no_open_prs')).toBe(false);
       expect(shouldSendReviewNotification('skip_all_passing')).toBe(false);
+      expect(shouldSendReviewNotification('skip_no_actionable_prs')).toBe(false);
     });
 
     it('should suppress notifications when job is queued', () => {
@@ -276,6 +276,7 @@ describe('review command', () => {
 
     it('should suppress completion notifications for no-op outcomes', () => {
       expect(shouldSendReviewCompletionNotification(0, 'skip_no_open_prs')).toBe(false);
+      expect(shouldSendReviewCompletionNotification(0, 'skip_no_actionable_prs')).toBe(false);
       expect(shouldSendReviewCompletionNotification(0, 'queued')).toBe(false);
     });
 
