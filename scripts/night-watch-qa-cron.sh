@@ -26,6 +26,7 @@ PROVIDER_LABEL="${NW_PROVIDER_LABEL:-}"
 BRANCH_PATTERNS_RAW="${NW_BRANCH_PATTERNS:-feat/,night-watch/}"
 SKIP_LABEL="${NW_QA_SKIP_LABEL:-skip-qa}"
 VALIDATED_LABEL="${NW_QA_VALIDATED_LABEL:-e2e-validated}"
+READY_TO_MERGE_LABEL="${NW_PR_RESOLVER_READY_LABEL:-ready-to-merge}"
 QA_ARTIFACTS="${NW_QA_ARTIFACTS:-both}"
 QA_AUTO_INSTALL_PLAYWRIGHT="${NW_QA_AUTO_INSTALL_PLAYWRIGHT:-1}"
 SCRIPT_START_TIME=$(date +%s)
@@ -366,7 +367,7 @@ fi
 rotate_log
 log_separator
 log "RUN-START: qa invoked project=${PROJECT_DIR} provider=${PROVIDER_CMD} dry_run=${NW_DRY_RUN:-0}"
-log "CONFIG: max_runtime=${MAX_RUNTIME}s artifacts=${QA_ARTIFACTS} skip_label=${SKIP_LABEL} branch_patterns=${BRANCH_PATTERNS_RAW}"
+log "CONFIG: max_runtime=${MAX_RUNTIME}s artifacts=${QA_ARTIFACTS} skip_label=${SKIP_LABEL} ready_label=${READY_TO_MERGE_LABEL} branch_patterns=${BRANCH_PATTERNS_RAW}"
 
 if ! acquire_lock "${LOCK_FILE}"; then
   emit_result "skip_locked"
@@ -428,6 +429,11 @@ while IFS=$'\t' read -r pr_number pr_branch pr_title pr_labels; do
 
   if csv_has_label "${pr_labels:-}" "${NW_EXECUTOR_PARTIAL_LABEL}"; then
     log "SKIP-QA: PR #${pr_number} (${pr_branch}) is labeled ${NW_EXECUTOR_PARTIAL_LABEL}"
+    continue
+  fi
+
+  if csv_has_label "${pr_labels:-}" "${READY_TO_MERGE_LABEL}"; then
+    log "SKIP-QA: PR #${pr_number} (${pr_branch}) is labeled ${READY_TO_MERGE_LABEL}"
     continue
   fi
 

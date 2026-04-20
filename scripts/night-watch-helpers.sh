@@ -126,6 +126,7 @@ project_git_push_command() {
 NW_EXECUTOR_PARTIAL_LABEL="${NW_EXECUTOR_PARTIAL_LABEL:-nw:partial}"
 NW_EXECUTOR_RESUMABLE_LABEL="${NW_EXECUTOR_RESUMABLE_LABEL:-nw:resumable}"
 NW_EXECUTOR_READY_REVIEW_LABEL="${NW_EXECUTOR_READY_REVIEW_LABEL:-nw:ready-review}"
+NW_PR_RESOLVER_READY_LABEL="${NW_PR_RESOLVER_READY_LABEL:-ready-to-merge}"
 
 csv_has_label() {
   local csv="${1:-}"
@@ -188,7 +189,8 @@ find_executor_resume_pr() {
   printf '%s' "${pr_list}" \
     | jq -c \
         --arg primary_prefix "${branch_prefix}/" \
-        --arg resumable_label "${NW_EXECUTOR_RESUMABLE_LABEL}" '
+        --arg resumable_label "${NW_EXECUTOR_RESUMABLE_LABEL}" \
+        --arg ready_label "${NW_PR_RESOLVER_READY_LABEL}" '
         [
           .[]
           | select(
@@ -198,6 +200,7 @@ find_executor_resume_pr() {
             )
           | .labelNames = ((.labels // []) | map(.name))
           | select((.labelNames | index($resumable_label)) != null)
+          | select((.labelNames | index($ready_label)) == null)
         ]
         | sort_by(.createdAt // "")
         | .[0] // empty

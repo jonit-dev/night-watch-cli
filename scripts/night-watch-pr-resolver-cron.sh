@@ -359,6 +359,11 @@ while IFS= read -r pr_line; do
     continue
   fi
 
+  if csv_has_label "${labels:-}" "${READY_LABEL}"; then
+    log "INFO: Skipping PR #${pr_number} (${pr_branch}) because it is labeled ${READY_LABEL}"
+    continue
+  fi
+
   # Apply branch pattern filter
   if ! matches_branch_patterns "${pr_branch}"; then
     log "DEBUG: Skipping PR #${pr_number} — branch '${pr_branch}' does not match patterns" "patterns=${BRANCH_PATTERNS_RAW}"

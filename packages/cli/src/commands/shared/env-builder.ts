@@ -98,6 +98,8 @@ export function buildBaseEnvVars(
     env.NW_DEFAULT_BRANCH = config.defaultBranch;
   }
 
+  env.NW_PR_RESOLVER_READY_LABEL = config.prResolver?.readyLabel ?? 'ready-to-merge';
+
   env.NW_GIT_PUSH_NO_VERIFY = config.gitPushNoVerify ? '1' : '0';
 
   // Provider environment variables (API keys, base URLs, etc.)

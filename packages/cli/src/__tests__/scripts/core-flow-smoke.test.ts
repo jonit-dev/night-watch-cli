@@ -13,6 +13,7 @@ const reviewerScript = path.join(repoRoot, 'scripts', 'night-watch-pr-reviewer-c
 const qaScript = path.join(repoRoot, 'scripts', 'night-watch-qa-cron.sh');
 const auditScript = path.join(repoRoot, 'scripts', 'night-watch-audit-cron.sh');
 const prResolverScript = path.join(repoRoot, 'scripts', 'night-watch-pr-resolver-cron.sh');
+const mergerScript = path.join(repoRoot, 'scripts', 'night-watch-merger-cron.sh');
 
 const tempDirs: string[] = [];
 
@@ -770,6 +771,51 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_all_qa_done');
     expect(fs.existsSync(providerTouched)).toBe(false);
+  });
+
+  it('qa should skip PRs labeled ready-to-merge', () => {
+    const projectDir = mkTempDir('nw-smoke-qa-ready-skip-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-bin-qa-ready-skip-');
+    const providerTouched = path.join(projectDir, '.qa-provider-touched');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' + 'touch "$NW_SMOKE_QA_PROVIDER_TOUCHED"\n' + 'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "repo" && "$2" == "view" ]]; then\n' +
+        "  echo 'owner/repo'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  echo \'[{"number":1,"headRefName":"feat/qa-ready","title":"QA ready","labels":[{"name":"ready-to-merge"}]}]\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(qaScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_BRANCH_PATTERNS: 'feat/',
+      NW_SMOKE_QA_PROVIDER_TOUCHED: providerTouched,
+      NW_PR_RESOLVER_READY_LABEL: 'ready-to-merge',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_all_qa_done');
+    expect(fs.existsSync(providerTouched)).toBe(false);
+
+    const qaLog = fs.readFileSync(path.join(projectDir, 'logs', 'night-watch-qa.log'), 'utf-8');
+    expect(qaLog).toContain('is labeled ready-to-merge');
   });
 
   it('qa should emit success_qa when provider completes successfully on all PRs', () => {
@@ -3427,5 +3473,89 @@ describe('core flow smoke tests (bash scripts)', () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_no_open_prs');
+  });
+
+  it('pr-resolver should skip PRs labeled ready-to-merge without editing them', () => {
+    const projectDir = mkTempDir('nw-smoke-pr-resolver-ready-skip-');
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-bin-pr-resolver-ready-skip-');
+    const prTouched = path.join(projectDir, '.resolver-pr-touched');
+
+    fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+      encoding: 'utf-8',
+      mode: 0o755,
+    });
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  echo \'[{"number":1,"title":"Ready PR","headRefName":"feat/ready","mergeable":"MERGEABLE","isDraft":false,"labels":[{"name":"ready-to-merge"}]}]\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "edit" ]]; then\n' +
+        '  touch "$NW_SMOKE_RESOLVER_PR_TOUCHED"\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "label" && "$2" == "create" ]]; then\n' +
+        '  touch "$NW_SMOKE_RESOLVER_PR_TOUCHED"\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(prResolverScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_PR_RESOLVER_READY_LABEL: 'ready-to-merge',
+      NW_SMOKE_RESOLVER_PR_TOUCHED: prTouched,
+    });
+
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(prTouched)).toBe(false);
+
+    const resolverLog = fs.readFileSync(path.join(projectDir, 'logs', 'pr-resolver.log'), 'utf-8');
+    expect(resolverLog).toContain('because it is labeled ready-to-merge');
+  });
+
+  it('merger should skip PRs labeled ready-to-merge without rebasing or merging them', () => {
+    const projectDir = mkTempDir('nw-smoke-merger-ready-skip-');
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-bin-merger-ready-skip-');
+    const mergerTouched = path.join(projectDir, '.merger-pr-touched');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  echo \'[{"number":1,"headRefName":"feat/ready","createdAt":"2026-04-19T12:00:00Z","isDraft":false,"labels":[{"name":"ready-to-merge"}]}]\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "checks" ]]; then\n' +
+        '  touch "$NW_SMOKE_MERGER_TOUCHED"\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && ( "$2" == "merge" || "$2" == "update-branch" ) ]]; then\n' +
+        '  touch "$NW_SMOKE_MERGER_TOUCHED"\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(mergerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PR_RESOLVER_READY_LABEL: 'ready-to-merge',
+    });
+
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(mergerTouched)).toBe(false);
+
+    const mergerLog = fs.readFileSync(path.join(projectDir, 'logs', 'merger.log'), 'utf-8');
+    expect(mergerLog).toContain('Skipping PR labeled ready-to-merge');
   });
 });

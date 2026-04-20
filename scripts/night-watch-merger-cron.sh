@@ -27,6 +27,7 @@ MIN_REVIEW_SCORE="${NW_MERGER_MIN_REVIEW_SCORE:-80}"
 REBASE_BEFORE_MERGE="${NW_MERGER_REBASE_BEFORE_MERGE:-1}"
 MAX_PRS_PER_RUN="${NW_MERGER_MAX_PRS_PER_RUN:-0}"
 BRANCH_PATTERNS_RAW="${NW_MERGER_BRANCH_PATTERNS:-}"
+READY_TO_MERGE_LABEL="${NW_PR_RESOLVER_READY_LABEL:-ready-to-merge}"
 SCRIPT_START_TIME=$(date +%s)
 DRY_RUN="${NW_DRY_RUN:-0}"
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
@@ -140,6 +141,23 @@ rebase_pr() {
   return $?
 }
 
+cleanup_watchdog() {
+  local pid="${1:-}"
+  local child_pids=""
+
+  if [ -z "${pid}" ]; then
+    return 0
+  fi
+
+  child_pids=$(pgrep -P "${pid}" 2>/dev/null || true)
+  if [ -n "${child_pids}" ]; then
+    kill ${child_pids} 2>/dev/null || true
+  fi
+
+  kill "${pid}" 2>/dev/null || true
+  wait "${pid}" 2>/dev/null || true
+}
+
 log() {
   echo "[$(date '+%Y-%m-%dT%H:%M:%S')] $*" | tee -a "${LOG_FILE}"
 }
@@ -158,7 +176,7 @@ cd "${PROJECT_DIR}"
 
 log "========================================"
 log "RUN-START: merger invoked project=${PROJECT_DIR} dry_run=${DRY_RUN}"
-log "CONFIG: merge_method=${MERGE_METHOD} min_review_score=${MIN_REVIEW_SCORE} rebase_before_merge=${REBASE_BEFORE_MERGE} max_prs=${MAX_PRS_PER_RUN} max_runtime=${MAX_RUNTIME}s branch_patterns=${BRANCH_PATTERNS_RAW:-<all>}"
+log "CONFIG: merge_method=${MERGE_METHOD} min_review_score=${MIN_REVIEW_SCORE} rebase_before_merge=${REBASE_BEFORE_MERGE} max_prs=${MAX_PRS_PER_RUN} max_runtime=${MAX_RUNTIME}s ready_label=${READY_TO_MERGE_LABEL} branch_patterns=${BRANCH_PATTERNS_RAW:-<all>}"
 log "========================================"
 
 if ! acquire_lock "${LOCK_FILE}"; then
@@ -187,7 +205,7 @@ fi
   kill -TERM $$ 2>/dev/null || true
 ) &
 WATCHDOG_PID=$!
-append_exit_trap "kill ${WATCHDOG_PID} 2>/dev/null || true"
+append_exit_trap "cleanup_watchdog ${WATCHDOG_PID}"
 
 # Discover open PRs sorted by creation date (oldest first = FIFO)
 log "INFO: Scanning open PRs..."
@@ -221,6 +239,11 @@ while IFS= read -r pr_json; do
 
   if csv_has_label "${pr_labels:-}" "${NW_EXECUTOR_PARTIAL_LABEL}"; then
     log "INFO: PR #${pr_number} (${pr_branch}): Skipping partial executor PR"
+    continue
+  fi
+
+  if csv_has_label "${pr_labels:-}" "${READY_TO_MERGE_LABEL}"; then
+    log "INFO: PR #${pr_number} (${pr_branch}): Skipping PR labeled ${READY_TO_MERGE_LABEL}"
     continue
   fi
 
@@ -284,12 +307,17 @@ while IFS= read -r pr_json; do
     # Rebase remaining PRs after each successful merge
     log "INFO: Rebasing remaining open PRs after merging #${pr_number}..."
     REMAINING_JSON=$(gh pr list --state open \
-      --json number,headRefName \
+      --json number,headRefName,labels \
       2>/dev/null || echo "[]")
     while IFS= read -r remaining_pr; do
       remaining_number=$(echo "${remaining_pr}" | jq -r '.number')
       remaining_branch=$(echo "${remaining_pr}" | jq -r '.headRefName')
+      remaining_labels=$(echo "${remaining_pr}" | jq -r '[.labels[]?.name] | join(",")')
       if [ "${remaining_number}" != "${pr_number}" ]; then
+        if csv_has_label "${remaining_labels:-}" "${READY_TO_MERGE_LABEL}"; then
+          log "INFO: Skipping post-merge rebase for PR #${remaining_number} (${remaining_branch}) because it is labeled ${READY_TO_MERGE_LABEL}"
+          continue
+        fi
         log "INFO: Rebasing remaining PR #${remaining_number} (${remaining_branch})"
         gh pr update-branch --rebase "${remaining_number}" 2>/dev/null || \
           log "WARN: PR #${remaining_number}: Rebase failed (continuing)"
