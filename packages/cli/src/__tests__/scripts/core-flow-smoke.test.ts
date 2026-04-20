@@ -2069,6 +2069,72 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_all_passing');
   });
 
+  it('reviewer should skip PRs labeled ready-to-merge', () => {
+    const projectDir = mkTempDir('nw-smoke-reviewer-ready-to-merge-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-reviewer-ready-to-merge-bin-');
+    const providerTouched = path.join(projectDir, '.reviewer-provider-touched');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' + 'touch "$NW_SMOKE_REVIEWER_PROVIDER_TOUCHED"\n' + 'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'args="$*"\n' +
+        'if [[ "$1" == "repo" && "$2" == "view" ]]; then\n' +
+        "  echo 'owner/repo'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  if [[ "$args" == *"number,headRefName,labels"* ]]; then\n' +
+        "    printf '1\\tnight-watch/ready\\tready-to-merge\\n'\n" +
+        '  elif [[ "$args" == *"number,headRefName"* ]]; then\n' +
+        "    printf '1\\tnight-watch/ready\\n'\n" +
+        '  else\n' +
+        "    echo 'night-watch/ready'\n" +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  echo \'{"number":1}\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "checks" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "api" ]]; then\n' +
+        "  echo '[]'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(reviewerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BRANCH_PATTERNS: 'night-watch/',
+      NW_MIN_REVIEW_SCORE: '80',
+      NW_AUTO_MERGE: '0',
+      NW_PR_RESOLVER_READY_LABEL: 'ready-to-merge',
+      NW_SMOKE_REVIEWER_PROVIDER_TOUCHED: providerTouched,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_all_passing');
+    expect(fs.existsSync(providerTouched)).toBe(false);
+
+    const reviewerLog = fs.readFileSync(path.join(projectDir, 'logs', 'reviewer.log'), 'utf-8');
+    expect(reviewerLog).toContain('is labeled ready-to-merge; skipping automated review');
+  });
+
   it('reviewer should skip PRs labeled nw:partial', () => {
     const projectDir = mkTempDir('nw-smoke-reviewer-partial-skip-');
     initGitRepo(projectDir);

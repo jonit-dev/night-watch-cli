@@ -81,6 +81,7 @@ fi
 SCRIPT_TYPE="reviewer"
 READY_FOR_REVIEW_LABEL="${NW_READY_FOR_REVIEW_LABEL:-ready-for-review}"
 READY_FOR_REVIEW_MARKER_NAME="night-watch-ready-for-review"
+READY_TO_MERGE_LABEL="${NW_PR_RESOLVER_READY_LABEL:-ready-to-merge}"
 
 emit_result() {
   local status="${1:?status required}"
@@ -698,6 +699,11 @@ while IFS=$'\t' read -r pr_number pr_branch pr_labels; do
   fi
 
   if [ -z "${TARGET_PR}" ] && ! printf '%s\n' "${pr_branch}" | grep -Eq "${BRANCH_REGEX}"; then
+    continue
+  fi
+
+  if csv_has_label "${pr_labels:-}" "${READY_TO_MERGE_LABEL}"; then
+    log "INFO: PR #${pr_number} (${pr_branch}) is labeled ${READY_TO_MERGE_LABEL}; skipping automated review"
     continue
   fi
 

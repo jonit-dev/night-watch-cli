@@ -158,91 +158,6 @@ export function parseFinalReviewScore(raw?: string): number | undefined {
 }
 
 /**
- * Post a "ready for human review" comment and add a label to the PR.
- * Silently ignores failures — gh CLI may not be available.
- */
-export function postReadyForHumanReviewComment(
-  prNumber: number,
-  finalScore: number | undefined,
-  cwd: string,
-): void {
-  const markerName = 'night-watch-ready-for-review';
-  let headRefOid = '';
-
-  try {
-    headRefOid = execFileSync(
-      'gh',
-      ['pr', 'view', String(prNumber), '--json', 'headRefOid', '--jq', '.headRefOid'],
-      {
-        cwd,
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      },
-    ).trim();
-  } catch {
-    headRefOid = '';
-  }
-
-  if (headRefOid) {
-    try {
-      const existingComments = execFileSync(
-        'gh',
-        ['api', `repos/{owner}/{repo}/issues/${prNumber}/comments`, '--jq', '.[].body'],
-        {
-          cwd,
-          encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-        },
-      );
-      const marker = `<!-- ${markerName} headRefOid:${headRefOid} -->`;
-      if (existingComments.includes(marker)) {
-        try {
-          execFileSync('gh', ['pr', 'edit', String(prNumber), '--add-label', 'ready-for-review'], {
-            cwd,
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-          });
-        } catch {
-          // Label may not exist yet — ignore
-        }
-        return;
-      }
-    } catch {
-      // Ignore comment lookup failures and try to post the comment below.
-    }
-  }
-
-  const scoreNote = finalScore !== undefined ? ` (score: ${finalScore}/100)` : '';
-  const shortSha = headRefOid ? headRefOid.slice(0, 12) : '';
-  const marker = headRefOid ? `<!-- ${markerName} headRefOid:${headRefOid} -->\n\n` : '';
-  const shaNote = shortSha ? ` at commit \`${shortSha}\`` : '';
-  const body =
-    `${marker}## ✅ Ready for Human Review\n\n` +
-    `Night Watch has reviewed this PR${scoreNote}${shaNote} and found no issues requiring automated fixes for the current head.\n\n` +
-    `This PR is ready for human code review and merge.`;
-
-  try {
-    execFileSync('gh', ['pr', 'comment', String(prNumber), '--body', body], {
-      cwd,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-  } catch {
-    // gh CLI unavailable or not authenticated — ignore
-  }
-
-  try {
-    execFileSync('gh', ['pr', 'edit', String(prNumber), '--add-label', 'ready-for-review'], {
-      cwd,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
-  } catch {
-    // Label may not exist yet — ignore
-  }
-}
-
-/**
  * Build environment variables map from config and CLI options for reviewer
  */
 export function buildEnvVars(
@@ -260,6 +175,7 @@ export function buildEnvVars(
   env.NW_MIN_REVIEW_SCORE = String(config.minReviewScore);
   env.NW_BRANCH_PATTERNS = config.branchPatterns.join(',');
   env.NW_PRD_DIR = config.prdDir;
+  env.NW_PR_RESOLVER_READY_LABEL = config.prResolver.readyLabel;
   env.NW_CLAUDE_MODEL_ID =
     CLAUDE_MODEL_IDS[config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet'];
 
@@ -603,10 +519,6 @@ export function reviewCommand(program: Command): void {
                   fallbackPrDetails?.number === target.prNumber
                     ? fallbackPrDetails
                     : fetchPrDetailsByNumber(target.prNumber, projectDir);
-
-                if (target.noChangesNeeded && prDetails?.number) {
-                  postReadyForHumanReviewComment(prDetails.number, finalScore, projectDir);
-                }
 
                 const reviewEvent = target.noChangesNeeded
                   ? ('review_ready_for_human' as const)

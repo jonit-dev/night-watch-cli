@@ -36,12 +36,14 @@ import {
   shouldSendReviewNotification,
   shouldSendReviewCompletionNotification,
 } from '@/cli/commands/review.js';
+import { getDefaultConfig } from '@night-watch/core';
 import { INightWatchConfig } from '@night-watch/core/types.js';
 import { sendNotifications } from '@night-watch/core/utils/notify.js';
 
 // Helper to create a valid config without budget fields
 function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConfig {
   return {
+    ...getDefaultConfig(),
     prdDir: 'docs/PRDs/night-watch',
     maxRuntime: 7200,
     reviewerMaxRuntime: 3600,
@@ -150,6 +152,20 @@ describe('review command', () => {
       const env = buildEnvVars(config, options);
 
       expect(env.NW_DEFAULT_BRANCH).toBe('main');
+    });
+
+    it('should pass the configured ready label to the reviewer script', () => {
+      const config = createTestConfig({
+        prResolver: {
+          ...getDefaultConfig().prResolver,
+          readyLabel: 'merge-ready',
+        },
+      });
+      const options: IReviewOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_PR_RESOLVER_READY_LABEL).toBe('merge-ready');
     });
 
     it('should set NW_DRY_RUN when dryRun is true', () => {
