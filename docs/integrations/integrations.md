@@ -4,6 +4,59 @@
 
 Night Watch CLI integrates with several third-party services to enable notifications, avatar generation, analytics, and project management.
 
+## Inbound Webhook Triggers
+
+### GitHub Webhooks
+
+GitHub repository webhooks can start a Night Watch job when a configured event rule matches.
+Night Watch verifies GitHub's `X-Hub-Signature-256` HMAC signature before it evaluates the event.
+
+**Setup:**
+
+1. Create a strong shared secret and expose it to the Night Watch server:
+
+```bash
+export NIGHT_WATCH_WEBHOOK_SECRET="your-random-webhook-secret"
+```
+
+2. In GitHub, go to Repository Settings -> Webhooks -> Add webhook:
+   - Payload URL: `https://YOUR_NIGHT_WATCH_HOST/api/jobs/reviewer/run`
+   - Content type: `application/json`
+   - Secret: the same value as `NIGHT_WATCH_WEBHOOK_SECRET`
+   - SSL verification: enabled
+   - Selected events: choose the events used by your rules, such as `workflow_run`, `check_suite`, `pull_request`, or `repository_dispatch`
+
+3. Enable webhook triggers in `night-watch.config.json`:
+
+```json
+{
+  "webhookTriggers": {
+    "enabled": true,
+    "secretEnv": "NIGHT_WATCH_WEBHOOK_SECRET",
+    "allowedJobIds": ["reviewer", "qa"],
+    "github": {
+      "enabled": true,
+      "events": ["workflow_run"],
+      "rules": [
+        {
+          "event": "workflow_run",
+          "action": "completed",
+          "jobId": "qa",
+          "branchPatterns": ["main", "release/*"],
+          "onlyOnFailure": true
+        }
+      ]
+    }
+  }
+}
+```
+
+The endpoint format is `/api/jobs/:id/run` in single-project mode and
+`/api/projects/:projectId/jobs/:id/run` in global mode. For GitHub webhooks,
+the matched rule's `jobId` is dispatched. If the signature is valid but no rule
+matches, Night Watch returns `202` with `accepted: false` and does not start a
+job.
+
 ## Notification Integrations
 
 ### Slack
