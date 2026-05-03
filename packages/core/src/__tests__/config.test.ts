@@ -102,6 +102,57 @@ describe('config', () => {
       expect(config.reviewerEnabled).toBe(true);
     });
 
+    it('should default webhook triggers to disabled', () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.webhookTriggers.enabled).toBe(false);
+      expect(config.webhookTriggers.secretEnv).toBe('NIGHT_WATCH_WEBHOOK_SECRET');
+      expect(config.webhookTriggers.requireTimestamp).toBe(false);
+      expect(config.webhookTriggers.maxSkewSeconds).toBe(300);
+    });
+
+    it('should reject invalid webhook job ids', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          webhookTriggers: {
+            enabled: false,
+            allowedJobIds: ['executor', 'not-a-job', 'reviewer'],
+            github: {
+              enabled: true,
+              rules: [
+                { event: 'workflow_run', jobId: 'qa' },
+                { event: 'workflow_run', jobId: 'not-a-job' },
+              ],
+            },
+          },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.webhookTriggers.allowedJobIds).toEqual(['executor', 'reviewer']);
+      expect(config.webhookTriggers.github.rules).toEqual([{ event: 'workflow_run', jobId: 'qa' }]);
+    });
+
+    it('should reject enabled webhook triggers with an empty secret env name', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          webhookTriggers: {
+            enabled: true,
+            secretEnv: '   ',
+          },
+        }),
+      );
+
+      expect(() => loadConfig(tempDir)).toThrow(
+        'webhookTriggers.secretEnv must be non-empty when webhook triggers are enabled',
+      );
+    });
+
     it('should merge config file with defaults', () => {
       // Write a config file with some overrides
       const configPath = path.join(tempDir, 'night-watch.config.json');
