@@ -1713,7 +1713,9 @@ describe('status-data utilities', () => {
 
       expect(result).toBe(true);
       expect(fs.existsSync(lockPath)).toBe(true);
-      expect(fs.readFileSync(lockPath, 'utf-8').trim()).toBe(String(process.pid));
+      expect(fs.readFileSync(lockPath, 'utf-8').trim()).toMatch(
+        new RegExp(`^${process.pid} \\d+$`),
+      );
     });
 
     it('should acquire lock with custom PID', async () => {
@@ -1721,7 +1723,7 @@ describe('status-data utilities', () => {
       const result = acquireLock(lockPath, 99999);
 
       expect(result).toBe(true);
-      expect(fs.readFileSync(lockPath, 'utf-8').trim()).toBe('99999');
+      expect(fs.readFileSync(lockPath, 'utf-8').trim()).toMatch(/^99999 \d+$/);
     });
 
     it('should fail to acquire lock when held by running process', async () => {
@@ -1742,7 +1744,9 @@ describe('status-data utilities', () => {
 
       const result = acquireLock(lockPath);
       expect(result).toBe(true);
-      expect(fs.readFileSync(lockPath, 'utf-8').trim()).toBe(String(process.pid));
+      expect(fs.readFileSync(lockPath, 'utf-8').trim()).toMatch(
+        new RegExp(`^${process.pid} \\d+$`),
+      );
     });
   });
 

@@ -1,12 +1,17 @@
 import React from 'react';
-import { INightWatchConfig } from '../../api.js';
+import {
+  BarChart3,
+  CheckCircle2,
+  Eye,
+  GitMerge,
+  GitPullRequest,
+  Layout,
+  Play,
+  Search,
+} from 'lucide-react';
 import Card from '../ui/Card';
 import CronScheduleInput from '../ui/CronScheduleInput';
-import Input from '../ui/Input';
-import Select from '../ui/Select';
-import Switch from '../ui/Switch';
 import { IScheduleTemplate, SCHEDULE_TEMPLATES } from '../../utils/cron.js';
-import ScheduleTimeline from './ScheduleTimeline.js';
 
 export interface IScheduleConfigForm {
   cronSchedule: string;
@@ -17,10 +22,6 @@ export interface IScheduleConfigForm {
   roadmapScanner: { slicerSchedule: string; enabled: boolean };
   prResolver?: { schedule: string; enabled: boolean };
   merger?: { schedule: string; enabled: boolean };
-  scheduleBundleId: string | null;
-  schedulingPriority: number;
-  cronScheduleOffset: number;
-  globalQueueEnabled?: boolean;
 }
 
 interface IScheduleConfigProps {
@@ -31,10 +32,38 @@ interface IScheduleConfigProps {
   onSwitchToTemplate: () => void;
   onSwitchToCustom: () => void;
   onApplyTemplate: (tpl: IScheduleTemplate) => void;
-  allProjectConfigs?: Array<{ projectId: string; config: INightWatchConfig }>;
-  currentProjectId?: string;
-  onEditJob?: (projectId: string, jobType: string) => void;
 }
+
+interface IJobScheduleCardProps {
+  id: string;
+  icon: React.FC<{ size?: number; className?: string }>;
+  title: string;
+  description: string;
+  value: string;
+  onChange: (val: string) => void;
+}
+
+const JobScheduleCard: React.FC<IJobScheduleCardProps> = ({
+  id,
+  icon: Icon,
+  title,
+  description,
+  value,
+  onChange,
+}) => (
+  <div id={id} className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 space-y-4">
+    <div className="flex items-start gap-3">
+      <div className="mt-0.5 p-1.5 rounded-md bg-slate-800 text-slate-400">
+        <Icon size={14} />
+      </div>
+      <div>
+        <div className="text-sm font-medium text-slate-200">{title}</div>
+        <div className="text-xs text-slate-500 mt-0.5">{description}</div>
+      </div>
+    </div>
+    <CronScheduleInput label="" value={value} onChange={onChange} />
+  </div>
+);
 
 const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
   form,
@@ -44,28 +73,17 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
   onSwitchToTemplate,
   onSwitchToCustom,
   onApplyTemplate,
-  allProjectConfigs,
-  currentProjectId,
-  onEditJob,
 }) => {
   return (
     <Card className="p-6 space-y-6">
-      {allProjectConfigs && allProjectConfigs.length > 0 && (
-        <ScheduleTimeline
-          configs={allProjectConfigs}
-          currentProjectId={currentProjectId}
-          onEditJob={onEditJob}
-        />
-      )}
-
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-lg font-medium text-slate-200 mb-1">Job Schedules</h3>
           <p className="text-sm text-slate-400">
             Configure when automated jobs run using a preset template or custom cron expressions
           </p>
-          <p className="text-xs text-slate-500 mt-2">
-            Cadence is managed here. Enablement and runtime settings live in the Jobs tab.
+          <p className="text-xs text-slate-500 mt-2 mb-2">
+            This tab only controls cadence. Runtime and provider settings live in the Jobs tab.
           </p>
         </div>
         <div className="flex rounded-lg border border-slate-700 overflow-hidden shrink-0">
@@ -134,145 +152,79 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
           })}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div id="job-schedule-executor">
-            <CronScheduleInput
-              label="PRD Execution Schedule"
-              value={form.cronSchedule}
-              onChange={(val) => onFieldChange('cronSchedule', val)}
-            />
-          </div>
-          <div id="job-schedule-reviewer">
-            <CronScheduleInput
-              label="PR Review Schedule"
-              value={form.reviewerSchedule}
-              onChange={(val) => onFieldChange('reviewerSchedule', val)}
-            />
-          </div>
-          <div id="job-schedule-qa">
-            <CronScheduleInput
-              label="QA Schedule"
-              value={form.qa.schedule}
-              onChange={(val) =>
-                onFieldChange('qa', {
-                  ...form.qa,
-                  schedule: val,
-                })
-              }
-            />
-          </div>
-          <div id="job-schedule-audit">
-            <CronScheduleInput
-              label="Audit Schedule"
-              value={form.audit.schedule}
-              onChange={(val) =>
-                onFieldChange('audit', {
-                  ...form.audit,
-                  schedule: val,
-                })
-              }
-            />
-          </div>
-          <div id="job-schedule-slicer">
-            <CronScheduleInput
-              label="Planner Schedule"
-              value={form.roadmapScanner.slicerSchedule}
-              onChange={(val) =>
-                onFieldChange('roadmapScanner', {
-                  ...form.roadmapScanner,
-                  slicerSchedule: val,
-                })
-              }
-            />
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <JobScheduleCard
+            id="job-schedule-executor"
+            icon={Play}
+            title="PRD Executor"
+            description="Executes PRDs to generate code and create PRs"
+            value={form.cronSchedule}
+            onChange={(val) => onFieldChange('cronSchedule', val)}
+          />
+          <JobScheduleCard
+            id="job-schedule-reviewer"
+            icon={Eye}
+            title="PR Reviewer"
+            description="Reviews PRs and provides feedback or automated fixes"
+            value={form.reviewerSchedule}
+            onChange={(val) => onFieldChange('reviewerSchedule', val)}
+          />
+          <JobScheduleCard
+            id="job-schedule-qa"
+            icon={CheckCircle2}
+            title="Quality Assurance"
+            description="Automated UI testing using Playwright"
+            value={form.qa.schedule}
+            onChange={(val) => onFieldChange('qa', { ...form.qa, schedule: val })}
+          />
+          <JobScheduleCard
+            id="job-schedule-audit"
+            icon={Search}
+            title="Code Audit"
+            description="Automated code quality and security audits"
+            value={form.audit.schedule}
+            onChange={(val) => onFieldChange('audit', { ...form.audit, schedule: val })}
+          />
+          <JobScheduleCard
+            id="job-schedule-slicer"
+            icon={Layout}
+            title="Planner"
+            description="Generate PRDs from ROADMAP.md or audit findings"
+            value={form.roadmapScanner.slicerSchedule}
+            onChange={(val) => onFieldChange('roadmapScanner', { ...form.roadmapScanner, slicerSchedule: val })}
+          />
           {form.analytics && (
-            <div id="job-schedule-analytics">
-              <CronScheduleInput
-                label="Analytics Schedule"
-                value={form.analytics.schedule}
-                onChange={(val) =>
-                  onFieldChange('analytics', {
-                    ...form.analytics,
-                    schedule: val,
-                  })
-                }
-              />
-            </div>
+            <JobScheduleCard
+              id="job-schedule-analytics"
+              icon={BarChart3}
+              title="Analytics"
+              description="Fetch Amplitude data, analyze with AI, and create issues"
+              value={form.analytics.schedule}
+              onChange={(val) => onFieldChange('analytics', { ...form.analytics, schedule: val })}
+            />
           )}
           {form.prResolver && (
-            <div id="job-schedule-pr-resolver">
-              <CronScheduleInput
-                label="PR Resolver Schedule"
-                value={form.prResolver.schedule}
-                onChange={(val) =>
-                  onFieldChange('prResolver', {
-                    ...form.prResolver,
-                    schedule: val,
-                  })
-                }
-              />
-            </div>
+            <JobScheduleCard
+              id="job-schedule-pr-resolver"
+              icon={GitMerge}
+              title="PR Resolver"
+              description="Rebases PRs and applies review feedback"
+              value={form.prResolver.schedule}
+              onChange={(val) => onFieldChange('prResolver', { ...form.prResolver, schedule: val })}
+            />
           )}
           {form.merger && (
-            <div id="job-schedule-merger">
-              <CronScheduleInput
-                label="Merge Orchestrator Schedule"
-                value={form.merger.schedule}
-                onChange={(val) =>
-                  onFieldChange('merger', {
-                    ...form.merger,
-                    schedule: val,
-                  })
-                }
-              />
-            </div>
+            <JobScheduleCard
+              id="job-schedule-merger"
+              icon={GitPullRequest}
+              title="Merge Orchestrator"
+              description="Scans, rebases, and merges approved PRs"
+              value={form.merger.schedule}
+              onChange={(val) => onFieldChange('merger', { ...form.merger, schedule: val })}
+            />
           )}
         </div>
       )}
-
-      <div className="pt-4 border-t border-slate-800 grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Select
-          label="Scheduling Priority"
-          value={String(form.schedulingPriority)}
-          onChange={(val) => onFieldChange('schedulingPriority', Number(val))}
-          options={[
-            { label: '1 - Lowest', value: '1' },
-            { label: '2 - Low', value: '2' },
-            { label: '3 - Balanced', value: '3' },
-            { label: '4 - High', value: '4' },
-            { label: '5 - Highest', value: '5' },
-          ]}
-          helperText="Higher-priority projects get earlier balanced start slots and win queue tie-breakers first."
-        />
-
-        <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-sm font-medium text-slate-200">Global Queue</div>
-              <p className="text-xs text-slate-400 mt-1">
-                Queue overlapping jobs across projects instead of letting them burst the provider API.
-              </p>
-            </div>
-            <Switch
-              checked={form.globalQueueEnabled ?? true}
-              onChange={(enabled) => onFieldChange('globalQueueEnabled', enabled)}
-            />
-          </div>
-        </div>
-
-        <Input
-          label="Extra Start Delay"
-          type="number"
-          min="0"
-          max="59"
-          value={String(form.cronScheduleOffset)}
-          onChange={(e) => {
-            const val = Math.min(59, Math.max(0, Number(e.target.value || 0)));
-            onFieldChange('cronScheduleOffset', val);
-          }}
-          helperText="Manual delay in minutes added before cron jobs start. This stacks on top of automatic balancing."
-        />
-      </div>
     </Card>
   );
 };

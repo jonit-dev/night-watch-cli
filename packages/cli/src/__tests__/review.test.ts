@@ -119,6 +119,21 @@ describe('review command', () => {
       expect(envVars.NW_PRD_DIR).toBe(config.prdDir);
     });
 
+    it('should include the configured ready-to-merge label', () => {
+      const config: INightWatchConfig = {
+        ...getDefaultConfig(),
+        provider: 'claude',
+        prResolver: {
+          ...getDefaultConfig().prResolver,
+          readyLabel: 'merge-ready',
+        },
+      };
+
+      const envVars = buildEnvVars(config, { dryRun: false });
+
+      expect(envVars.NW_PR_RESOLVER_READY_LABEL).toBe('merge-ready');
+    });
+
     it('should include custom retry values when configured', () => {
       const config: INightWatchConfig = {
         ...getDefaultConfig(),

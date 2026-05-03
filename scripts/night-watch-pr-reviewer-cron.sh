@@ -81,6 +81,9 @@ fi
 # Acquire global gate before per-project lock to serialize jobs across projects.
 # When gate is busy, enqueue the job and exit cleanly.
 SCRIPT_TYPE="reviewer"
+READY_FOR_REVIEW_LABEL="${NW_READY_FOR_REVIEW_LABEL:-ready-for-review}"
+READY_FOR_REVIEW_MARKER_NAME="night-watch-ready-for-review"
+READY_TO_MERGE_LABEL="${NW_PR_RESOLVER_READY_LABEL:-ready-to-merge}"
 
 emit_result() {
   local status="${1:?status required}"
@@ -139,6 +142,80 @@ get_pr_latest_review_body() {
   printf '%s' "${review_body}"
 }
 
+build_ready_for_review_marker() {
+  local head_sha="${1:-}"
+  [ -z "${head_sha}" ] && return 1
+  printf '<!-- %s headRefOid:%s -->' "${READY_FOR_REVIEW_MARKER_NAME}" "${head_sha}"
+}
+
+has_ready_for_human_review_marker() {
+  local comments_text="${1:-}"
+  local head_sha="${2:-}"
+  local marker=""
+
+  marker=$(build_ready_for_review_marker "${head_sha}" || true)
+  [ -z "${marker}" ] && return 1
+
+  printf '%s\n' "${comments_text}" | grep -Fq "${marker}"
+}
+
+get_pr_comments() {
+  local pr_number="${1:?PR number required}"
+
+  {
+    gh pr view "${pr_number}" --json comments --jq '.comments[].body' 2>/dev/null || true
+    if [ -n "${REPO:-}" ]; then
+      gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
+    fi
+  } | awk '!seen[$0]++'
+}
+
+get_pr_head_ref_oid() {
+  local pr_number="${1:?PR number required}"
+  gh pr view "${pr_number}" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo ""
+}
+
+clear_ready_for_human_review_label() {
+  local pr_number="${1:?PR number required}"
+  gh pr edit "${pr_number}" --remove-label "${READY_FOR_REVIEW_LABEL}" 2>/dev/null || true
+}
+
+ensure_ready_for_human_review_comment() {
+  local pr_number="${1:?PR number required}"
+  local final_score="${2:-}"
+  local head_sha="${3:-}"
+  local comments_text=""
+  local marker=""
+  local score_note=""
+  local short_sha=""
+  local body=""
+
+  [ -z "${head_sha}" ] && return 0
+
+  comments_text=$(get_pr_comments "${pr_number}")
+  if has_ready_for_human_review_marker "${comments_text}" "${head_sha}"; then
+    gh pr edit "${pr_number}" --add-label "${READY_FOR_REVIEW_LABEL}" 2>/dev/null || true
+    return 0
+  fi
+
+  marker=$(build_ready_for_review_marker "${head_sha}" || true)
+  short_sha=$(printf '%s' "${head_sha}" | cut -c1-12)
+  if [ -n "${final_score}" ]; then
+    score_note=" (score: ${final_score}/100)"
+  fi
+
+  body="${marker}
+
+## ✅ Ready for Human Review
+
+Night Watch reviewed this PR${score_note} at commit \`${short_sha}\` and found no automated fixes to apply for the current head.
+
+This PR is ready for human review and merge."
+
+  gh pr comment "${pr_number}" --body "${body}" 2>/dev/null || true
+  gh pr edit "${pr_number}" --add-label "${READY_FOR_REVIEW_LABEL}" 2>/dev/null || true
+}
+
 # ── Global Job Queue Gate ────────────────────────────────────────────────────
 # Atomically claim a DB slot or enqueue for later dispatch.
 if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
@@ -159,6 +236,8 @@ emit_final_status() {
   local auto_merge_failed="${4:-}"
   local attempts="${5:-1}"
   local final_score="${6:-}"
+  local no_changes="${7:-0}"
+  local no_changes_prs="${8:-}"
   local details=""
   local prs_summary=""
   local auto_merged_summary=""
@@ -181,15 +260,29 @@ emit_final_status() {
     if [ -n "${final_score}" ]; then
       details="${details}|final_score=${final_score}"
     fi
+    if [ "${no_changes}" = "1" ]; then
+      details="${details}|no_changes_needed=1"
+    fi
+    if [ -n "${no_changes_prs}" ]; then
+      details="${details}|no_changes_prs=${no_changes_prs}"
+    fi
     log "DONE: PR reviewer completed successfully"
     if [ "${WORKER_MODE}" != "1" ]; then
-      send_telegram_status_message "🔍 Night Watch Reviewer: completed" "Project: ${PROJECT_NAME}
+      if [ "${no_changes}" = "1" ]; then
+        send_telegram_status_message "✅ Night Watch Reviewer: ready for human review" "Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Processed PRs: ${prs_summary}
+${final_score_line}
+No automated fixes needed - ready for human review & merge."
+      else
+        send_telegram_status_message "🔍 Night Watch Reviewer: completed" "Project: ${PROJECT_NAME}
 Provider (model): ${PROVIDER_MODEL_DISPLAY}
 Processed PRs: ${prs_summary}
 Attempts: ${attempts}
 ${final_score_line}
 Auto-merged PRs: ${auto_merged_summary}
 Auto-merge failed: ${auto_merge_failed_summary}"
+      fi
     fi
     emit_result "success_reviewed" "${details}"
   elif [ "${exit_code}" -eq 124 ]; then
@@ -424,14 +517,7 @@ build_prd_context_prompt() {
 get_pr_score() {
   local pr_number="${1:?PR number required}"
   local all_comments
-  all_comments=$(
-    {
-      gh pr view "${pr_number}" --json comments --jq '.comments[].body' 2>/dev/null || true
-      if [ -n "${REPO:-}" ]; then
-        gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
-      fi
-    } | awk '!seen[$0]++'
-  )
+  all_comments=$(get_pr_comments "${pr_number}")
   extract_review_score_from_text "${all_comments}"
 }
 
@@ -637,8 +723,14 @@ fi
 NEEDS_WORK=0
 REPO=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || echo "")
 PRS_NEEDING_WORK=""
+SKIPPED_ALREADY_REVIEWED_CURRENT_HEAD=0
 
 while IFS=$'\t' read -r pr_number pr_branch pr_labels; do
+  local_ready_for_review_label_present=0
+  current_head_sha=""
+  all_comments=""
+  latest_score=""
+
   if [ -z "${pr_number}" ] || [ -z "${pr_branch}" ]; then
     continue
   fi
@@ -651,54 +743,79 @@ while IFS=$'\t' read -r pr_number pr_branch pr_labels; do
     continue
   fi
 
+  if csv_has_label "${pr_labels:-}" "${READY_TO_MERGE_LABEL}"; then
+    log "INFO: PR #${pr_number} (${pr_branch}) is labeled ${READY_TO_MERGE_LABEL}; skipping automated review"
+    continue
+  fi
+
   if printf '%s\n' "${pr_labels:-}" | tr ',' '\n' | grep -Fxq 'needs-human-review'; then
     log "INFO: PR #${pr_number} (${pr_branch}) is labeled needs-human-review; skipping automated review"
     continue
   fi
 
+  if csv_has_label "${pr_labels:-}" "${NW_EXECUTOR_PARTIAL_LABEL}"; then
+    log "INFO: PR #${pr_number} (${pr_branch}) is labeled ${NW_EXECUTOR_PARTIAL_LABEL}; waiting for executor to finish"
+    continue
+  fi
+
+  if csv_has_label "${pr_labels:-}" "${READY_FOR_REVIEW_LABEL}"; then
+    local_ready_for_review_label_present=1
+  fi
+
   # Merge-conflict signal: this PR needs action even if CI and score look fine.
   MERGE_STATE=$(gh pr view "${pr_number}" --json mergeStateStatus --jq '.mergeStateStatus' 2>/dev/null || echo "")
   if [ "${MERGE_STATE}" = "DIRTY" ] || [ "${MERGE_STATE}" = "CONFLICTING" ]; then
+    if [ "${local_ready_for_review_label_present}" -eq 1 ]; then
+      log "INFO: PR #${pr_number} (${pr_branch}) is actionable again; removing stale ${READY_FOR_REVIEW_LABEL} label"
+      clear_ready_for_human_review_label "${pr_number}"
+    fi
     log "INFO: PR #${pr_number} (${pr_branch}) has merge conflicts (${MERGE_STATE})"
     NEEDS_WORK=1
     PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
     continue
   fi
 
+  current_head_sha=$(get_pr_head_ref_oid "${pr_number}")
+  all_comments=$(get_pr_comments "${pr_number}")
+  latest_score=$(extract_review_score_from_text "${all_comments}")
+  if [ -z "${latest_score}" ]; then
+    if [ "${local_ready_for_review_label_present}" -eq 1 ]; then
+      log "INFO: PR #${pr_number} (${pr_branch}) needs a fresh review; removing stale ${READY_FOR_REVIEW_LABEL} label"
+      clear_ready_for_human_review_label "${pr_number}"
+    fi
+    log "INFO: PR #${pr_number} (${pr_branch}) has no review score yet — needs initial review"
+    NEEDS_WORK=1
+    PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
+    continue
+  elif [ "${latest_score}" -lt "${MIN_REVIEW_SCORE}" ]; then
+    if [ "${local_ready_for_review_label_present}" -eq 1 ]; then
+      log "INFO: PR #${pr_number} (${pr_branch}) fell below review threshold; removing stale ${READY_FOR_REVIEW_LABEL} label"
+      clear_ready_for_human_review_label "${pr_number}"
+    fi
+    log "INFO: PR #${pr_number} (${pr_branch}) has review score ${latest_score}/100 (threshold: ${MIN_REVIEW_SCORE})"
+    NEEDS_WORK=1
+    PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
+    continue
+  fi
+
+  if has_ready_for_human_review_marker "${all_comments}" "${current_head_sha}"; then
+    SKIPPED_ALREADY_REVIEWED_CURRENT_HEAD=1
+    log "INFO: PR #${pr_number} (${pr_branch}) is already marked ready for human review at head ${current_head_sha:0:12}; skipping repeat automated review"
+    continue
+  fi
+
   FAILED_CHECKS=$(get_pr_failed_ci_checks "${pr_number}")
   if [ "${FAILED_CHECKS}" -gt 0 ]; then
+    if [ "${local_ready_for_review_label_present}" -eq 1 ]; then
+      log "INFO: PR #${pr_number} (${pr_branch}) is actionable again; removing stale ${READY_FOR_REVIEW_LABEL} label"
+      clear_ready_for_human_review_label "${pr_number}"
+    fi
     FAILED_SUMMARY=$(get_pr_failed_ci_summary "${pr_number}")
     if [ -n "${FAILED_SUMMARY}" ]; then
       log "INFO: PR #${pr_number} (${pr_branch}) has ${FAILED_CHECKS} failed CI check(s): ${FAILED_SUMMARY}"
     else
       log "INFO: PR #${pr_number} (${pr_branch}) has ${FAILED_CHECKS} failed CI check(s)"
     fi
-    NEEDS_WORK=1
-    PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
-    continue
-  fi
-
-  ALL_COMMENTS=$(
-    {
-      gh pr view "${pr_number}" --json comments --jq '.comments[].body' 2>/dev/null || true
-      if [ -n "${REPO}" ]; then
-        gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
-      fi
-    } | awk '!seen[$0]++'
-  )
-  LATEST_SCORE=$(extract_review_score_from_text "${ALL_COMMENTS}")
-
-  # Review-first, fix-later flow:
-  # - No review yet → mark as needs_review (Claude will post review, exit without fixing)
-  # - Review exists, score < threshold → mark as needs_fix (Claude will fix all issues)
-  # - Review exists, score >= threshold → skip (no action needed)
-  if [ -z "${LATEST_SCORE}" ]; then
-    # No review yet - this PR needs a review to be posted
-    log "INFO: PR #${pr_number} (${pr_branch}) has no review score yet - marking as needs_review"
-    NEEDS_WORK=1
-    PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
-  elif [ "${LATEST_SCORE}" -lt "${MIN_REVIEW_SCORE}" ]; then
-    log "INFO: PR #${pr_number} (${pr_branch}) has review score ${LATEST_SCORE}/100 (threshold: ${MIN_REVIEW_SCORE})"
     NEEDS_WORK=1
     PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
   fi
@@ -708,69 +825,25 @@ done < <(
 )
 
 if [ "${NEEDS_WORK}" -eq 0 ]; then
-  log "SKIP: All ${OPEN_PRS} open PR(s) have passing CI and review score >= ${MIN_REVIEW_SCORE} (all reviews posted)"
+  if [ "${SKIPPED_ALREADY_REVIEWED_CURRENT_HEAD}" -eq 1 ]; then
+    log "SKIP: All ${OPEN_PRS} open PR(s) already pass review threshold or have already been reviewed for their current head"
 
-  # ── Auto-merge eligible PRs ───────────────────────────────
-  if [ "${NW_AUTO_MERGE:-0}" = "1" ]; then
-    AUTO_MERGE_METHOD="${NW_AUTO_MERGE_METHOD:-squash}"
-    AUTO_MERGED_COUNT=0
-
-    log "AUTO-MERGE: Checking for merge-ready PRs (method: ${AUTO_MERGE_METHOD})"
-
-    while IFS=$'\t' read -r pr_number pr_branch; do
-      [ -z "${pr_number}" ] || [ -z "${pr_branch}" ] && continue
-      printf '%s\n' "${pr_branch}" | grep -Eq "${BRANCH_REGEX}" || continue
-
-      # Check CI status - must have ALL checks passing (not just "no failures")
-      # gh pr checks exits 0 if all pass, 8 if pending, non-zero otherwise
-      if ! gh pr checks "${pr_number}" --required >/dev/null 2>&1; then
-        log "AUTO-MERGE: PR #${pr_number} has pending or failed CI checks"
-        continue
-      fi
-
-      # Check review score
-      PR_COMMENTS=$(
-        {
-          gh pr view "${pr_number}" --json comments --jq '.comments[].body' 2>/dev/null || true
-          if [ -n "${REPO}" ]; then
-            gh api "repos/${REPO}/issues/${pr_number}/comments" --jq '.[].body' 2>/dev/null || true
-          fi
-        } | awk '!seen[$0]++'
-      )
-      PR_SCORE=$(extract_review_score_from_text "${PR_COMMENTS}")
-
-      # Skip PRs without a score or with score below threshold
-      [ -z "${PR_SCORE}" ] && continue
-      [ "${PR_SCORE}" -lt "${MIN_REVIEW_SCORE}" ] && continue
-
-      # PR is merge-ready
-      log "AUTO-MERGE: PR #${pr_number} (${pr_branch}) — score ${PR_SCORE}/100, CI passing"
-
-      # Dry-run mode: show what would be merged
-      if [ "${NW_DRY_RUN:-0}" = "1" ]; then
-        log "AUTO-MERGE (dry-run): Would queue merge for PR #${pr_number} using ${AUTO_MERGE_METHOD}"
-        continue
-      fi
-
-      if gh pr merge "${pr_number}" --"${AUTO_MERGE_METHOD}" --auto --delete-branch 2>>"${LOG_FILE}"; then
-        log "AUTO-MERGE: Successfully queued merge for PR #${pr_number}"
-        AUTO_MERGED_COUNT=$((AUTO_MERGED_COUNT + 1))
-      else
-        log "WARN: Auto-merge failed for PR #${pr_number}"
-      fi
-    done < <(gh pr list --state open --json number,headRefName --jq '.[] | [.number, .headRefName] | @tsv' 2>/dev/null || true)
-
-    if [ "${AUTO_MERGED_COUNT}" -gt 0 ]; then
-      log "AUTO-MERGE: Queued ${AUTO_MERGED_COUNT} PR(s) for merge"
+    if [ "${WORKER_MODE}" != "1" ]; then
+      send_telegram_status_message "🔍 Night Watch Reviewer: nothing actionable" "Project: ${PROJECT_NAME}
+Provider (model): ${PROVIDER_MODEL_DISPLAY}
+Result: all ${OPEN_PRS} matching PRs either already pass review threshold or were already reviewed for their current head."
     fi
-  fi
+    emit_result "skip_no_actionable_prs"
+  else
+    log "SKIP: All ${OPEN_PRS} open PR(s) have passing CI and review score >= ${MIN_REVIEW_SCORE}"
 
-  if [ "${WORKER_MODE}" != "1" ]; then
-    send_telegram_status_message "🔍 Night Watch Reviewer: nothing to do" "Project: ${PROJECT_NAME}
+    if [ "${WORKER_MODE}" != "1" ]; then
+      send_telegram_status_message "🔍 Night Watch Reviewer: nothing to do" "Project: ${PROJECT_NAME}
 Provider (model): ${PROVIDER_MODEL_DISPLAY}
 Result: all ${OPEN_PRS} matching PRs already pass CI and review threshold (${MIN_REVIEW_SCORE})."
+    fi
+    emit_result "skip_all_passing"
   fi
-  emit_result "skip_all_passing"
   exit 0
 fi
 
@@ -860,6 +933,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
   EXIT_CODE=0
   AUTO_MERGED_PRS=""
   AUTO_MERGE_FAILED_PRS=""
+  NO_CHANGES_PRS=""
   MAX_WORKER_ATTEMPTS=1
   MAX_WORKER_FINAL_SCORE=""
 
@@ -885,9 +959,15 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
     worker_auto_merge_failed=$(printf '%s' "${worker_result}" | grep -oP '(?<=auto_merge_failed=)[^|]+' || true)
     worker_attempts=$(printf '%s' "${worker_result}" | grep -oP '(?<=attempts=)[^|]+' || true)
     worker_final_score=$(printf '%s' "${worker_result}" | grep -oP '(?<=final_score=)[^|]+' || true)
+    worker_no_changes=$(printf '%s' "${worker_result}" | grep -oP '(?<=no_changes_needed=)[^|]+' || true)
+    worker_no_changes_prs=$(printf '%s' "${worker_result}" | grep -oP '(?<=no_changes_prs=)[^|]+' || true)
 
     AUTO_MERGED_PRS=$(append_csv "${AUTO_MERGED_PRS}" "${worker_auto_merged}")
     AUTO_MERGE_FAILED_PRS=$(append_csv "${AUTO_MERGE_FAILED_PRS}" "${worker_auto_merge_failed}")
+    NO_CHANGES_PRS=$(append_csv "${NO_CHANGES_PRS}" "${worker_no_changes_prs}")
+    if [ -z "${worker_no_changes_prs}" ] && [ "${worker_no_changes}" = "1" ]; then
+      NO_CHANGES_PRS=$(append_csv "${NO_CHANGES_PRS}" "#${worker_pr}")
+    fi
 
     if [[ "${worker_attempts}" =~ ^[0-9]+$ ]] && [ "${worker_attempts}" -gt "${MAX_WORKER_ATTEMPTS}" ]; then
       MAX_WORKER_ATTEMPTS="${worker_attempts}"
@@ -928,7 +1008,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
   # worker runs may have left behind.
   cleanup_reviewer_worktrees
 
-  emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${MAX_WORKER_ATTEMPTS}" "${MAX_WORKER_FINAL_SCORE}"
+  emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${MAX_WORKER_ATTEMPTS}" "${MAX_WORKER_FINAL_SCORE}" "0" "${NO_CHANGES_PRS}"
   exit "${EXIT_CODE}"
 fi
 
@@ -938,6 +1018,12 @@ if [ -n "${TARGET_PR}" ]; then
   REVIEW_WORKTREE_BASENAME="${PROJECT_NAME}-nw-review-runner-pr-${TARGET_PR}-${REVIEW_RUN_TOKEN}"
 fi
 REVIEW_WORKTREE_DIR="$(dirname "${PROJECT_DIR}")/${REVIEW_WORKTREE_BASENAME}"
+
+cleanup_reviewer_runner_worktree_on_exit() {
+  cleanup_worktree_path "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}"
+}
+
+append_exit_trap "cleanup_reviewer_runner_worktree_on_exit"
 
 cleanup_reviewer_worktrees "${REVIEW_WORKTREE_BASENAME}"
 
@@ -1012,6 +1098,8 @@ REVIEWER_PROMPT_BASE="${REVIEWER_PROMPT_BASE}"$'\n\n'"## Reviewer Attribution (R
 EXIT_CODE=0
 ATTEMPTS_MADE=1
 FINAL_SCORE=""
+NO_CHANGES_NEEDED=0
+NO_CHANGES_PRS=""
 TARGET_SCOPE_PROMPT=""
 if [ -n "${TARGET_PR}" ]; then
   TARGET_SCOPE_PROMPT=$'\n\n## Target Scope\n- Only process PR #'"${TARGET_PR}"$'.\n- Ignore all other PRs.\n- If this PR no longer needs work, stop immediately.\n'
@@ -1067,16 +1155,44 @@ TOTAL_ATTEMPTS=1
 if [ -n "${TARGET_PR}" ]; then
   TOTAL_ATTEMPTS=$((REVIEWER_MAX_RETRIES + 1))
 fi
-RUN_STARTED_AT=$(date +%s)
+
+epoch_millis() {
+  local now_ms
+
+  now_ms=$(date +%s%3N 2>/dev/null || true)
+  if [[ "${now_ms}" =~ ^[0-9]+$ ]]; then
+    printf "%s" "${now_ms}"
+    return 0
+  fi
+
+  printf "%s000" "$(date +%s)"
+}
+
+RUN_STARTED_AT_MS=$(epoch_millis)
+
+# Capture current HEAD of PR branch so we can detect if the reviewer pushed any commits.
+PR_BRANCH_HEAD_BEFORE=""
+if [ -n "${TARGET_PR}" ]; then
+  PR_BRANCH_HEAD_BEFORE=$(gh pr view "${TARGET_PR}" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")
+fi
 
 remaining_runtime_budget() {
-  local now_ts
-  local elapsed
+  local now_ms
+  local elapsed_ms
+  local remaining_ms
   local remaining
 
-  now_ts=$(date +%s)
-  elapsed=$((now_ts - RUN_STARTED_AT))
-  remaining=$((MAX_RUNTIME - elapsed))
+  now_ms=$(epoch_millis)
+  elapsed_ms=$((now_ms - RUN_STARTED_AT_MS))
+  remaining_ms=$((MAX_RUNTIME * 1000 - elapsed_ms))
+  if [ "${remaining_ms}" -le 0 ]; then
+    printf "0"
+    return 0
+  fi
+
+  # Round up to avoid shaving nearly a full second off attempt 1 when the
+  # script crosses a wall-clock second boundary before entering `timeout`.
+  remaining=$(( (remaining_ms + 999) / 1000 ))
   printf "%s" "${remaining}"
 }
 
@@ -1245,6 +1361,18 @@ done
 
 cleanup_reviewer_worktrees "${REVIEW_WORKTREE_BASENAME}"
 
+# ── Detect no-changes run ────────────────────────────────────────────────────────
+# If the run succeeded and the PR branch HEAD is unchanged, the reviewer made no commits.
+if [ "${EXIT_CODE}" -eq 0 ] && [ -n "${TARGET_PR}" ] && [ -n "${PR_BRANCH_HEAD_BEFORE}" ]; then
+  PR_BRANCH_HEAD_AFTER=$(gh pr view "${TARGET_PR}" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo "")
+  if [ -n "${PR_BRANCH_HEAD_AFTER}" ] && [ "${PR_BRANCH_HEAD_BEFORE}" = "${PR_BRANCH_HEAD_AFTER}" ]; then
+    NO_CHANGES_NEEDED=1
+    NO_CHANGES_PRS="#${TARGET_PR}"
+    log "INFO: PR #${TARGET_PR} — reviewer made no commits; marking as ready for human review"
+    ensure_ready_for_human_review_comment "${TARGET_PR}" "${FINAL_SCORE}" "${PR_BRANCH_HEAD_AFTER}"
+  fi
+fi
+
 # ── Auto-merge eligible PRs ─────────────────────────────────────────────────────
 # After the reviewer completes, check for PRs that are merge-ready and queue them
 # for auto-merge if enabled. Uses gh pr merge --auto to respect GitHub branch protection.
@@ -1319,5 +1447,5 @@ fi
 
 REVIEWER_TOTAL_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
 log "OUTCOME: exit_code=${EXIT_CODE} total_elapsed=${REVIEWER_TOTAL_ELAPSED}s prs=${PRS_NEEDING_WORK_CSV:-none} attempts=${ATTEMPTS_MADE}"
-emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${ATTEMPTS_MADE}" "${FINAL_SCORE}"
+emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${ATTEMPTS_MADE}" "${FINAL_SCORE}" "${NO_CHANGES_NEEDED}" "${NO_CHANGES_PRS}"
 exit "${EXIT_CODE}"

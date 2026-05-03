@@ -75,7 +75,7 @@ cleanup_on_exit() {
   rm -f "${LOCK_FILE}"
 }
 
-trap cleanup_on_exit EXIT
+append_exit_trap "cleanup_on_exit"
 
 log "START: Running roadmap slicer for ${PROJECT_DIR}"
 send_telegram_status_message "📋 Night Watch Planner: started" "Project: ${PROJECT_NAME}

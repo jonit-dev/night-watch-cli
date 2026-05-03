@@ -87,6 +87,126 @@ validate_provider() {
   return 1
 }
 
+night_watch_push_uses_no_verify() {
+  [ "${NW_GIT_PUSH_NO_VERIFY:-0}" = "1" ]
+}
+
+git_push_for_project() {
+  local repo_dir="${1:?repo_dir required}"
+  shift
+
+  if night_watch_push_uses_no_verify; then
+    git -C "${repo_dir}" push --no-verify "$@"
+  else
+    git -C "${repo_dir}" push "$@"
+  fi
+}
+
+project_git_push_command() {
+  local branch_name="${1:?branch_name required}"
+  local mode="${2:-normal}"
+  local no_verify=""
+
+  if night_watch_push_uses_no_verify; then
+    no_verify=" --no-verify"
+  fi
+
+  case "${mode}" in
+    force-with-lease)
+      printf 'git push%s --force-with-lease origin %s' "${no_verify}" "${branch_name}"
+      ;;
+    *)
+      printf 'git push%s origin %s' "${no_verify}" "${branch_name}"
+      ;;
+  esac
+}
+
+# ── Executor PR status labels ────────────────────────────────────────────────
+
+NW_EXECUTOR_PARTIAL_LABEL="${NW_EXECUTOR_PARTIAL_LABEL:-nw:partial}"
+NW_EXECUTOR_RESUMABLE_LABEL="${NW_EXECUTOR_RESUMABLE_LABEL:-nw:resumable}"
+NW_EXECUTOR_READY_REVIEW_LABEL="${NW_EXECUTOR_READY_REVIEW_LABEL:-nw:ready-review}"
+NW_PR_RESOLVER_READY_LABEL="${NW_PR_RESOLVER_READY_LABEL:-ready-to-merge}"
+
+csv_has_label() {
+  local csv="${1:-}"
+  local label="${2:?label required}"
+
+  printf '%s\n' "${csv}" \
+    | tr ',' '\n' \
+    | sed '/^[[:space:]]*$/d' \
+    | grep -Fxq "${label}"
+}
+
+ensure_github_label() {
+  local label_name="${1:?label_name required}"
+  local description="${2:-}"
+  local color="${3:-1d76db}"
+
+  gh label create "${label_name}" \
+    --description "${description}" \
+    --color "${color}" \
+    --force 2>/dev/null || true
+}
+
+ensure_executor_status_labels() {
+  ensure_github_label \
+    "${NW_EXECUTOR_PARTIAL_LABEL}" \
+    "Executor started this PR and work is intentionally incomplete" \
+    "fbca04"
+  ensure_github_label \
+    "${NW_EXECUTOR_RESUMABLE_LABEL}" \
+    "Executor should resume this unfinished PR before starting new work" \
+    "d93f0b"
+  ensure_github_label \
+    "${NW_EXECUTOR_READY_REVIEW_LABEL}" \
+    "Executor finished implementation and the PR is ready for automated/human review" \
+    "0e8a16"
+}
+
+find_open_pr_for_branch() {
+  local branch_name="${1:?branch_name required}"
+  local pr_list=""
+
+  pr_list=$(gh pr list --state open --limit 200 \
+    --json number,headRefName,url,title,isDraft,labels,createdAt 2>/dev/null || echo "[]")
+
+  printf '%s' "${pr_list}" \
+    | jq -c --arg branch_name "${branch_name}" '
+        .[]
+        | select((.headRefName // "") == $branch_name)
+      ' 2>/dev/null \
+    | head -n 1 || true
+}
+
+find_executor_resume_pr() {
+  local branch_prefix="${1:-night-watch}"
+  local pr_list=""
+
+  pr_list=$(gh pr list --state open --limit 200 \
+    --json number,headRefName,url,title,isDraft,labels,createdAt 2>/dev/null || echo "[]")
+
+  printf '%s' "${pr_list}" \
+    | jq -c \
+        --arg primary_prefix "${branch_prefix}/" \
+        --arg resumable_label "${NW_EXECUTOR_RESUMABLE_LABEL}" \
+        --arg ready_label "${NW_PR_RESOLVER_READY_LABEL}" '
+        [
+          .[]
+          | select(
+              (.headRefName // "" | startswith($primary_prefix))
+              or
+              (.headRefName // "" | startswith("feat/"))
+            )
+          | .labelNames = ((.labels // []) | map(.name))
+          | select((.labelNames | index($resumable_label)) != null)
+          | select((.labelNames | index($ready_label)) == null)
+        ]
+        | sort_by(.createdAt // "")
+        | .[0] // empty
+      ' 2>/dev/null || true
+}
+
 # ── Generic Provider Command Builder ──────────────────────────────────────────
 
 # Build a provider command from NW_PROVIDER_* environment variables.
@@ -180,6 +300,13 @@ resolve_night_watch_cli() {
 
   local bundled_bin="${script_dir}/../bin/night-watch.mjs"
   if [ -x "${bundled_bin}" ]; then
+    # Verify dist/ exists — prevents ERR_MODULE_NOT_FOUND crashes
+    local dist_dir
+    dist_dir="$(cd "$(dirname "${bundled_bin}")" && pwd)/../dist"
+    if [ ! -d "${dist_dir}" ]; then
+      echo "ERROR: night-watch dist/ not found at ${dist_dir}; run 'yarn build'" >&2
+      return 1
+    fi
     printf "%s" "${bundled_bin}"
     return 0
   fi
@@ -360,33 +487,71 @@ acquire_lock() {
   local lock_file="${1:?lock_file required}"
 
   if [ -f "${lock_file}" ]; then
-    local lock_pid
-    lock_pid=$(cat "${lock_file}" 2>/dev/null || echo "")
+    local lock_content lock_pid lock_ts
+    lock_content=$(cat "${lock_file}" 2>/dev/null || echo "")
+    lock_pid=$(echo "${lock_content}" | awk '{print $1}')
+    lock_ts=$(echo "${lock_content}" | awk '{print $2}')
+
     if [ -n "${lock_pid}" ] && kill -0 "${lock_pid}" 2>/dev/null; then
-      log "SKIP: Previous run (PID ${lock_pid}) still active"
-      return 1
+      # PID is alive — but guard against PID reuse via /proc start time
+      if _is_lock_holder_alive "${lock_pid}" "${lock_ts}"; then
+        log "SKIP: Previous run (PID ${lock_pid}) still active"
+        return 1
+      fi
+      log "WARN: PID ${lock_pid} reused by another process, lock is stale"
+    else
+      log "WARN: Stale lock file found (PID ${lock_pid}), removing"
     fi
-    log "WARN: Stale lock file found (PID ${lock_pid}), removing"
     rm -f "${lock_file}"
   fi
 
   local quoted_lock_file=""
   printf -v quoted_lock_file '%q' "${lock_file}"
   append_exit_trap "rm -f -- ${quoted_lock_file}"
-  echo $$ > "${lock_file}"
+  echo "$$ $(date +%s)" > "${lock_file}"
+  return 0
+}
+
+# Check if the lock holder process is genuinely the one that wrote the lock.
+# Guards against PID reuse: if the process started after the lock was created,
+# it's a different process that reused the same PID.
+_is_lock_holder_alive() {
+  local pid="${1}" lock_ts="${2:-}"
+
+  # No timestamp in lock file (old format) — fall back to simple PID check
+  if [ -z "${lock_ts}" ]; then
+    return 0
+  fi
+
+  # On Linux, check /proc/<pid>/stat for process start time
+  if [ -f "/proc/${pid}/stat" ]; then
+    local stat_content boot_time_secs start_ticks clk_tck proc_start_secs
+    stat_content=$(cat "/proc/${pid}/stat" 2>/dev/null) || return 0
+    # Field 22 is starttime (in clock ticks since boot)
+    start_ticks=$(echo "${stat_content}" | awk '{print $22}')
+    clk_tck=$(getconf CLK_TCK 2>/dev/null || echo 100)
+    boot_time_secs=$(awk '/^btime/{print $2}' /proc/stat 2>/dev/null) || return 0
+    proc_start_secs=$(( boot_time_secs + start_ticks / clk_tck ))
+
+    # If the process started more than 2 seconds after the lock was written, PID was reused
+    if [ "${proc_start_secs}" -gt "$(( lock_ts + 2 ))" ]; then
+      return 1
+    fi
+  fi
+
   return 0
 }
 
 append_exit_trap() {
   local command="${1:?command required}"
-  local existing=""
 
-  existing=$(trap -p EXIT | sed -n "s/^trap -- '\\(.*\\)' EXIT$/\\1/p")
-  if [ -n "${existing}" ]; then
-    trap "${existing}; ${command}" EXIT
+  if [ -n "${NW_EXIT_TRAP_CHAIN:-}" ]; then
+    NW_EXIT_TRAP_CHAIN="${NW_EXIT_TRAP_CHAIN}; ${command}"
   else
-    trap "${command}" EXIT
+    NW_EXIT_TRAP_CHAIN="${command}"
   fi
+
+  trap "${NW_EXIT_TRAP_CHAIN}" EXIT
 }
 
 # ── Detect default branch ───────────────────────────────────────────────────
@@ -639,6 +804,31 @@ cleanup_worktrees() {
   git -C "${project_dir}" worktree prune >/dev/null 2>&1 || true
 }
 
+cleanup_worktree_path() {
+  local project_dir="${1:?project_dir required}"
+  local worktree_dir="${2:?worktree_dir required}"
+
+  if [ -z "${worktree_dir}" ] || [ "${worktree_dir}" = "${project_dir}" ]; then
+    return 0
+  fi
+
+  git -C "${project_dir}" worktree prune >/dev/null 2>&1 || true
+
+  if git -C "${project_dir}" worktree list --porcelain 2>/dev/null \
+      | grep -qF "worktree ${worktree_dir}"; then
+    log "CLEANUP: Removing worktree ${worktree_dir}"
+    git -C "${project_dir}" worktree remove --force "${worktree_dir}" 2>/dev/null || true
+  fi
+
+  if [ -d "${worktree_dir}" ] && ! git -C "${project_dir}" worktree list --porcelain 2>/dev/null \
+      | grep -qF "worktree ${worktree_dir}"; then
+    log "CLEANUP: Removing stale worktree directory ${worktree_dir}"
+    rm -rf "${worktree_dir}" 2>/dev/null || true
+  fi
+
+  git -C "${project_dir}" worktree prune >/dev/null 2>&1 || true
+}
+
 # Pick the best available ref for creating a new detached worktree.
 resolve_worktree_base_ref() {
   local project_dir="${1:?project_dir required}"
@@ -799,6 +989,19 @@ check_rate_limited() {
     tail -n "+$((start_line + 1))" "${log_file}" 2>/dev/null | grep -qw "429"
   else
     tail -20 "${log_file}" 2>/dev/null | grep -qw "429"
+  fi
+}
+
+# Detect transient API network errors (e.g. "Network error" in a 400 response).
+# Usage: check_network_error <log_file> [start_line]
+# Returns 0 if a network error was detected, 1 otherwise.
+check_network_error() {
+  local log_file="${1:?log_file required}"
+  local start_line="${2:-0}"
+  if [ "${start_line}" -gt 0 ] 2>/dev/null; then
+    tail -n "+$((start_line + 1))" "${log_file}" 2>/dev/null | grep -qi "Network error"
+  else
+    tail -20 "${log_file}" 2>/dev/null | grep -qi "Network error"
   fi
 }
 
@@ -994,6 +1197,53 @@ Proxy quota exhausted - falling back to native Claude (${model})"
     --data-urlencode "text=${msg}" > /dev/null 2>&1 || true
 }
 
+# Send an immediate Telegram warning when a rate-limit fallback was attempted
+# but no fallback preset/model is configured for the project.
+# Preferred input: NW_TELEGRAM_RATE_LIMIT_WEBHOOKS (JSON array with botToken/chatId).
+# Legacy fallback: NW_TELEGRAM_BOT_TOKEN + NW_TELEGRAM_CHAT_ID.
+# Usage: send_missing_fallback_configuration_warning <project_name>
+send_missing_fallback_configuration_warning() {
+  local project_name="${1:-unknown}"
+  local msg="⚠️ Rate Limit Fallback Unconfigured
+
+Project: ${project_name}
+Rate-limit fallback was attempted, but no fallback preset/model is configured.
+
+Configure one in Settings -> AI Providers -> Reliability & Fallbacks
+or set primaryFallbackPreset / primaryFallbackModel in night-watch.config.json."
+
+  # Preferred path: iterate all opted-in Telegram webhooks.
+  if [ -n "${NW_TELEGRAM_RATE_LIMIT_WEBHOOKS:-}" ] && command -v jq >/dev/null 2>&1; then
+    local sent=0
+    local webhook_json
+    while IFS= read -r webhook_json; do
+      [ -z "${webhook_json}" ] && continue
+      local bot_token
+      local chat_id
+      bot_token=$(printf '%s' "${webhook_json}" | jq -r '.botToken // empty' 2>/dev/null || true)
+      chat_id=$(printf '%s' "${webhook_json}" | jq -r '.chatId // empty' 2>/dev/null || true)
+      if [ -n "${bot_token}" ] && [ -n "${chat_id}" ]; then
+        curl -s -X POST "https://api.telegram.org/bot${bot_token}/sendMessage" \
+          --data-urlencode "chat_id=${chat_id}" \
+          --data-urlencode "text=${msg}" > /dev/null 2>&1 || true
+        sent=1
+      fi
+    done < <(printf '%s' "${NW_TELEGRAM_RATE_LIMIT_WEBHOOKS}" | jq -c '.[]?' 2>/dev/null || true)
+
+    if [ "${sent}" -eq 1 ]; then
+      return 0
+    fi
+  fi
+
+  # Legacy single-webhook fallback.
+  if [ -z "${NW_TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${NW_TELEGRAM_CHAT_ID:-}" ]; then
+    return 0
+  fi
+  curl -s -X POST "https://api.telegram.org/bot${NW_TELEGRAM_BOT_TOKEN}/sendMessage" \
+    --data-urlencode "chat_id=${NW_TELEGRAM_CHAT_ID}" \
+    --data-urlencode "text=${msg}" > /dev/null 2>&1 || true
+}
+
 # ── Board mode issue discovery ────────────────────────────────────────────────
 
 # Get the next eligible issue from the board provider.
@@ -1105,7 +1355,7 @@ claim_or_enqueue() {
   }
 
   local claim_id
-  if claim_id=$("${cli_bin}" queue claim "${script_type}" "${project_dir}" --provider-key "${provider_key}" 2>/dev/null); then
+  if claim_id=$("${cli_bin}" queue claim "${script_type}" "${project_dir}" --provider-key "${provider_key}" --pid $$ 2>/dev/null); then
     NW_QUEUE_ENTRY_ID="${claim_id}"
     export NW_QUEUE_ENTRY_ID
     arm_global_queue_cleanup

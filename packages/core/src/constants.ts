@@ -72,9 +72,9 @@ export const DEFAULT_PROVIDER_ENV: Record<string, string> = {};
 export const DEFAULT_FALLBACK_ON_RATE_LIMIT = true;
 
 // Claude model selection (for native / fallback execution)
-export const DEFAULT_CLAUDE_MODEL: ClaudeModel = 'sonnet';
-export const DEFAULT_PRIMARY_FALLBACK_MODEL: ClaudeModel = DEFAULT_CLAUDE_MODEL;
-export const DEFAULT_SECONDARY_FALLBACK_MODEL: ClaudeModel = DEFAULT_PRIMARY_FALLBACK_MODEL;
+export const DEFAULT_CLAUDE_MODEL: ClaudeModel | undefined = undefined;
+export const DEFAULT_PRIMARY_FALLBACK_MODEL: ClaudeModel | undefined = undefined;
+export const DEFAULT_SECONDARY_FALLBACK_MODEL: ClaudeModel | undefined = undefined;
 export const VALID_CLAUDE_MODELS: ClaudeModel[] = ['sonnet', 'opus'];
 /** Full Anthropic model IDs used in the --model flag */
 export const CLAUDE_MODEL_IDS: Record<ClaudeModel, string> = {
@@ -341,7 +341,7 @@ export const MAX_HISTORY_RECORDS_PER_PRD = 10;
 // Global Job Queue Configuration
 export const DEFAULT_QUEUE_ENABLED = true;
 export const DEFAULT_QUEUE_MODE: QueueMode = 'auto';
-export const DEFAULT_QUEUE_MAX_CONCURRENCY = 1;
+export const DEFAULT_QUEUE_MAX_CONCURRENCY = 3;
 export const DEFAULT_QUEUE_MAX_WAIT_TIME = 7200; // 2 hours in seconds
 // Default per-job queue priority mapping (derived from JOB_REGISTRY)
 export const DEFAULT_QUEUE_PRIORITY: Record<string, number> = getDefaultQueuePriority();

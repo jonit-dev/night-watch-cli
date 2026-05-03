@@ -174,6 +174,7 @@ export function mergerLockPath(projectDir: string): string {
  * Check if a process with the given PID is running
  */
 export function isProcessRunning(pid: number): boolean {
+  if (pid <= 0) return false;
   try {
     process.kill(pid, 0);
     return true;
@@ -183,7 +184,39 @@ export function isProcessRunning(pid: number): boolean {
 }
 
 /**
- * Read PID from lock file and check if process is running
+ * Check if a PID still refers to the same process that was observed at `observedAt`.
+ * Guards against PID reuse by comparing the process start time on Linux.
+ */
+export function isProcessAliveSince(pid: number, observedAt: number | null): boolean {
+  if (!isProcessRunning(pid)) return false;
+  if (observedAt === null) return true;
+
+  try {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf-8');
+    const startTicks = parseInt(stat.split(' ')[21]!, 10);
+    if (isNaN(startTicks)) return true;
+
+    const btimeLine = fs
+      .readFileSync('/proc/stat', 'utf-8')
+      .split('\n')
+      .find((l) => l.startsWith('btime '));
+    if (!btimeLine) return true;
+    const bootTimeSecs = parseInt(btimeLine.split(' ')[1]!, 10);
+
+    const clkTck = 100; // standard on Linux
+    const procStartSecs = bootTimeSecs + Math.floor(startTicks / clkTck);
+
+    // If the process started after we observed it, PID was reused.
+    if (procStartSecs > observedAt + 2) return false;
+  } catch {
+    // /proc not available (macOS, etc.) — fall back to simple PID check
+  }
+  return true;
+}
+
+/**
+ * Read PID from lock file and check if process is running.
+ * Lock file format: "PID" (legacy) or "PID EPOCH" (new, with PID-reuse detection).
  */
 export function checkLockFile(lockPath: string): { running: boolean; pid: number | null } {
   if (!fs.existsSync(lockPath)) {
@@ -191,15 +224,17 @@ export function checkLockFile(lockPath: string): { running: boolean; pid: number
   }
 
   try {
-    const pidStr = fs.readFileSync(lockPath, 'utf-8').trim();
-    const pid = parseInt(pidStr, 10);
+    const content = fs.readFileSync(lockPath, 'utf-8').trim();
+    const parts = content.split(/\s+/);
+    const pid = parseInt(parts[0]!, 10);
+    const lockTs = parts[1] ? parseInt(parts[1], 10) : null;
 
     if (isNaN(pid)) {
       return { running: false, pid: null };
     }
 
     return {
-      running: isProcessRunning(pid),
+      running: isProcessAliveSince(pid, isNaN(lockTs!) ? null : lockTs),
       pid,
     };
   } catch {
@@ -233,9 +268,9 @@ export function acquireLock(lockPath: string, pid?: number): boolean {
     }
   }
 
-  // Write our PID to the lock file
+  // Write PID + creation timestamp to the lock file (enables PID-reuse detection)
   try {
-    fs.writeFileSync(lockPath, String(effectivePid), 'utf-8');
+    fs.writeFileSync(lockPath, `${effectivePid} ${Math.floor(Date.now() / 1000)}`, 'utf-8');
     return true;
   } catch {
     return false;

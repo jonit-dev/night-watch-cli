@@ -1,29 +1,19 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
-import type { INightWatchConfig, IRoadmapScannerConfig } from '../../api';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import type { INightWatchConfig } from '../../api';
 import Settings from '../Settings';
-
-function renderSettings() {
-  return render(<MemoryRouter><Settings /></MemoryRouter>);
-}
 
 const apiMocks = vi.hoisted(() => ({
   fetchConfig: vi.fn(),
   fetchDoctor: vi.fn(),
-  fetchAllConfigs: vi.fn(),
   fetchGlobalNotifications: vi.fn(),
   updateConfig: vi.fn(),
   triggerInstallCron: vi.fn(),
-  toggleRoadmapScanner: vi.fn(),
   removeProject: vi.fn(),
   updateGlobalNotifications: vi.fn(),
   refetchConfig: vi.fn(),
   refetchDoctor: vi.fn(),
-}));
-
-const storeMocks = vi.hoisted(() => ({
-  addToast: vi.fn(),
 }));
 
 let currentConfig: INightWatchConfig;
@@ -34,15 +24,15 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     defaultBranch: 'main',
     prdDir: 'docs/prds',
     branchPrefix: 'night-watch/',
-    branchPatterns: ['night-watch/', 'feat/'],
+    branchPatterns: ['night-watch/'],
     executorEnabled: true,
     reviewerEnabled: true,
     minReviewScore: 80,
     maxRuntime: 7200,
     reviewerMaxRuntime: 3600,
     maxLogSize: 524288,
-    cronSchedule: '5 * * * *',
-    reviewerSchedule: '25 */3 * * *',
+    cronSchedule: '5 */3 * * *',
+    reviewerSchedule: '25 */6 * * *',
     scheduleBundleId: 'always-on',
     cronScheduleOffset: 0,
     schedulingPriority: 3,
@@ -106,6 +96,17 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
       targetColumn: 'Draft',
       analysisPrompt: '',
     },
+    prResolver: {
+      enabled: true,
+      schedule: '10 */4 * * *',
+      maxRuntime: 1800,
+      perPrTimeout: 600,
+      maxPrsPerRun: 0,
+      readyLabel: 'ready',
+      branchPatterns: [],
+      aiConflictResolution: true,
+      aiReviewResolution: true,
+    },
     merger: {
       enabled: true,
       schedule: '55 */4 * * *',
@@ -118,36 +119,15 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     },
   };
 
-  return {
-    ...base,
-    ...overrides,
-    roadmapScanner: {
-      ...base.roadmapScanner,
-      ...(overrides.roadmapScanner ?? {}),
-    },
-    qa: {
-      ...base.qa,
-      ...(overrides.qa ?? {}),
-    },
-    audit: {
-      ...base.audit,
-      ...(overrides.audit ?? {}),
-    },
-    analytics: {
-      ...base.analytics,
-      ...(overrides.analytics ?? {}),
-    },
-  };
+  return { ...base, ...overrides };
 }
 
 vi.mock('../../api', () => ({
   fetchConfig: apiMocks.fetchConfig,
   fetchDoctor: apiMocks.fetchDoctor,
-  fetchAllConfigs: apiMocks.fetchAllConfigs,
   fetchGlobalNotifications: apiMocks.fetchGlobalNotifications,
   updateConfig: apiMocks.updateConfig,
   triggerInstallCron: apiMocks.triggerInstallCron,
-  toggleRoadmapScanner: apiMocks.toggleRoadmapScanner,
   removeProject: apiMocks.removeProject,
   updateGlobalNotifications: apiMocks.updateGlobalNotifications,
   useApi: (fetchFn: unknown) => {
@@ -178,235 +158,51 @@ vi.mock('../../api', () => ({
 
 vi.mock('../../store/useStore', () => ({
   useStore: () => ({
-    addToast: storeMocks.addToast,
+    addToast: vi.fn(),
     projectName: 'Night Watch',
     selectedProjectId: null,
     globalModeLoading: false,
+    isGlobalMode: false,
+    removeProjectFromList: vi.fn(),
   }),
 }));
 
-describe('Settings schedules mode sync', () => {
+vi.mock('../../hooks/usePresetManagement.js', () => ({
+  usePresetManagement: () => ({
+    getAllPresets: () => [],
+    getPresetOptions: () => [],
+    handleEditPreset: vi.fn(),
+    handleDeletePreset: vi.fn(),
+    handleResetPreset: vi.fn(),
+    handleAddPreset: vi.fn(),
+    modalState: { isOpen: false, presetId: null, mode: 'create' as const },
+    handleModalSave: vi.fn(),
+    closeModal: vi.fn(),
+  }),
+}));
+
+describe('Settings automation redirects', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     currentConfig = makeConfig();
-    apiMocks.updateConfig.mockResolvedValue(currentConfig);
-    apiMocks.triggerInstallCron.mockResolvedValue({ started: true });
-    apiMocks.toggleRoadmapScanner.mockResolvedValue(currentConfig);
-    apiMocks.fetchAllConfigs.mockResolvedValue([]);
     apiMocks.fetchGlobalNotifications.mockResolvedValue({ webhook: null });
   });
 
-  it('initializes schedule tab in template mode for a known bundle', async () => {
-    renderSettings();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Always On (Recommended)')).toBeInTheDocument();
-      expect(screen.queryByText('PRD Execution Schedule')).not.toBeInTheDocument();
-    });
-  });
-
-  it('switches to custom mode when config reload no longer matches a template', async () => {
-    const { rerender } = renderSettings();
-    fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
+  it.each([
+    '/settings?tab=jobs&jobType=reviewer',
+    '/settings?tab=schedules&jobType=qa',
+  ])('redirects legacy automation links to the Automation page: %s', async (initialEntry) => {
+    render(
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <Routes>
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/scheduling" element={<div data-testid="automation-route">Automation route</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
 
     await waitFor(() => {
-      expect(screen.getByText('Always On (Recommended)')).toBeInTheDocument();
-    });
-
-    currentConfig = makeConfig({
-      reviewerSchedule: '0 * * * *',
-    });
-    rerender(<MemoryRouter><Settings /></MemoryRouter>);
-
-    await waitFor(() => {
-      expect(screen.getByText('PRD Execution Schedule')).toBeInTheDocument();
-      expect(screen.queryByText('Night Surge')).not.toBeInTheDocument();
-    });
-  });
-
-  it('persists scheduleBundleId when saving in template mode', async () => {
-    renderSettings();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
-
-    await waitFor(() => {
-      expect(apiMocks.updateConfig).toHaveBeenCalledWith(
-        expect.objectContaining({
-          scheduleBundleId: 'always-on',
-        }),
-      );
-    });
-  });
-
-  it('clears scheduleBundleId when switching to custom mode and saving', async () => {
-    renderSettings();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
-
-    await waitFor(() => {
-      expect(apiMocks.updateConfig).toHaveBeenCalledWith(
-        expect.objectContaining({
-          scheduleBundleId: null,
-        }),
-      );
-    });
-  });
-
-  it('recomputes template mode after reset', async () => {
-    renderSettings();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('PRD Execution Schedule')).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Always On (Recommended)')).toBeInTheDocument();
-      expect(screen.queryByText('PRD Execution Schedule')).not.toBeInTheDocument();
-    });
-  });
-
-  it('rebinds scheduleBundleId when switching back to template mode', async () => {
-    renderSettings();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Template' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
-
-    await waitFor(() => {
-      expect(apiMocks.updateConfig).toHaveBeenCalledWith(
-        expect.objectContaining({
-          scheduleBundleId: 'always-on',
-        }),
-      );
-    });
-  });
-
-  it('shows merger cadence in Schedules and removes the duplicate cron editor from Jobs', async () => {
-    renderSettings();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Jobs' }));
-    expect(screen.queryByText('Merger Schedule')).not.toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Manage schedule' }).length).toBeGreaterThan(0);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Schedules' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Custom' }));
-
-    await waitFor(() => {
-      expect(screen.getByText('Merge Orchestrator Schedule')).toBeInTheDocument();
-    });
-  });
-
-  it('reinstalls cron when planner is toggled from settings', async () => {
-    const disabledConfig = makeConfig({
-      roadmapScanner: {
-        enabled: false,
-        roadmapPath: 'ROADMAP.md',
-        autoScanInterval: 300,
-        slicerSchedule: '35 */6 * * *',
-        slicerMaxRuntime: 600,
-        priorityMode: 'roadmap-first',
-        issueColumn: 'Draft',
-      },
-    });
-    apiMocks.toggleRoadmapScanner.mockResolvedValue(disabledConfig);
-
-    renderSettings();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Jobs' }));
-    fireEvent.click(screen.getByLabelText('Enable planner'));
-
-    await waitFor(() => {
-      expect(apiMocks.toggleRoadmapScanner).toHaveBeenCalledWith(false);
-      expect(apiMocks.triggerInstallCron).toHaveBeenCalledTimes(1);
-      expect(storeMocks.addToast).toHaveBeenCalledWith({
-        title: 'Roadmap Scanner Disabled',
-        message: 'Roadmap scanner has been disabled.',
-        type: 'success',
-      });
-    });
-  });
-
-  it('shows a warning when planner toggle saves but cron reinstall fails', async () => {
-    const disabledConfig = makeConfig({
-      roadmapScanner: {
-        enabled: false,
-        roadmapPath: 'ROADMAP.md',
-        autoScanInterval: 300,
-        slicerSchedule: '35 */6 * * *',
-        slicerMaxRuntime: 600,
-        priorityMode: 'roadmap-first',
-        issueColumn: 'Draft',
-      },
-    });
-    apiMocks.toggleRoadmapScanner.mockResolvedValue(disabledConfig);
-    apiMocks.triggerInstallCron.mockRejectedValue(new Error('cron install failed'));
-
-    renderSettings();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Jobs' }));
-    fireEvent.click(screen.getByLabelText('Enable planner'));
-
-    await waitFor(() => {
-      expect(apiMocks.toggleRoadmapScanner).toHaveBeenCalledWith(false);
-      expect(apiMocks.triggerInstallCron).toHaveBeenCalledTimes(1);
-      expect(storeMocks.addToast).toHaveBeenCalledWith({
-        title: 'Planner Saved (Cron Reinstall Failed)',
-        message: 'cron install failed',
-        type: 'warning',
-      });
-    });
-  });
-
-  it('shows rate limit fallback preset selectors in AI & Runtime tab', async () => {
-    currentConfig = makeConfig({ provider: 'codex' });
-
-    renderSettings();
-    fireEvent.click(screen.getByRole('button', { name: 'AI & Runtime' }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/Rate Limit Fallback/i)).toBeInTheDocument();
-      expect(screen.getAllByText(/Primary Fallback Preset/i).length).toBeGreaterThan(0);
-      expect(screen.getAllByText(/Secondary Fallback Preset/i).length).toBeGreaterThan(0);
-    });
-  });
-
-  it('clears a reviewer provider override when switching back to global', async () => {
-    currentConfig = makeConfig({
-      jobProviders: { reviewer: 'codex' },
-    });
-    apiMocks.updateConfig.mockImplementation(async (changes) => {
-      currentConfig = makeConfig({
-        jobProviders: changes.jobProviders ?? {},
-      });
-      return currentConfig;
-    });
-
-    renderSettings();
-    fireEvent.click(screen.getByRole('button', { name: 'AI & Runtime' }));
-
-    const selects = screen.getAllByRole('combobox');
-    fireEvent.change(selects[2], { target: { value: '' } });
-
-    await waitFor(() => {
-      expect(apiMocks.updateConfig).toHaveBeenCalledWith(
-        expect.objectContaining({
-          jobProviders: { reviewer: null },
-        }),
-      );
-    });
-
-    await waitFor(() => {
-      expect((screen.getAllByRole('combobox')[2] as HTMLSelectElement).value).toBe('');
+      expect(screen.getByTestId('automation-route')).toBeInTheDocument();
     });
   });
 });

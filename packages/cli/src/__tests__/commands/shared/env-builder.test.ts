@@ -165,6 +165,31 @@ describe('buildBaseEnvVars', () => {
     expect(env.NW_DEFAULT_BRANCH).toBe('main');
   });
 
+  it('should default the ready-to-merge label when prResolver config is absent', () => {
+    const config = createTestConfig();
+    const env = buildBaseEnvVars(config, 'executor', false);
+
+    expect(env.NW_PR_RESOLVER_READY_LABEL).toBe('ready-to-merge');
+  });
+
+  it('should export the configured ready-to-merge label', () => {
+    const config = createTestConfig({
+      prResolver: {
+        readyLabel: 'merge-ready',
+      } as INightWatchConfig['prResolver'],
+    });
+    const env = buildBaseEnvVars(config, 'executor', false);
+
+    expect(env.NW_PR_RESOLVER_READY_LABEL).toBe('merge-ready');
+  });
+
+  it('should export NW_GIT_PUSH_NO_VERIFY when configured', () => {
+    const config = createTestConfig({ gitPushNoVerify: true });
+    const env = buildBaseEnvVars(config, 'executor', false);
+
+    expect(env.NW_GIT_PUSH_NO_VERIFY).toBe('1');
+  });
+
   it('should use job-specific provider when configured', () => {
     const config = createTestConfig({
       provider: 'claude',

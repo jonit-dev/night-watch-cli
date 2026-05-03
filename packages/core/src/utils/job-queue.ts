@@ -3,6 +3,7 @@
  * Manages cross-project job queueing to prevent API rate limiting.
  */
 
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import Database from 'better-sqlite3';
@@ -30,6 +31,7 @@ import {
   auditLockPath,
   checkLockFile,
   executorLockPath,
+  isProcessAliveSince,
   mergerLockPath,
   plannerLockPath,
   prResolverLockPath,
@@ -81,6 +83,7 @@ function rowToEntry(row: Record<string, unknown>): IQueueEntry {
     dispatchedAt: row.dispatched_at as number | null,
     expiredAt: row.expired_at as number | null,
     providerKey: (row.provider_key as string | null) ?? undefined,
+    pid: (row.pid as number | null) ?? undefined,
   };
 }
 
@@ -106,6 +109,24 @@ function getLockPathForJob(projectPath: string, jobType: JobType): string {
   }
 }
 
+function isRunningEntryStale(entry: IQueueEntry): { isStale: boolean; lockPid: number | null } {
+  const lockPath = getLockPathForJob(entry.projectPath, entry.jobType);
+
+  // If a lock file exists, its liveness check is authoritative because it includes
+  // PID-reuse detection. The stored PID is only a fallback for rows whose lock file
+  // has already been cleaned up.
+  if (fs.existsSync(lockPath)) {
+    const lockInfo = checkLockFile(lockPath);
+    return { isStale: !lockInfo.running, lockPid: lockInfo.pid };
+  }
+
+  const observedAt = entry.dispatchedAt ?? entry.enqueuedAt;
+  const storedPidAlive =
+    entry.pid !== undefined && entry.pid > 0 && isProcessAliveSince(entry.pid, observedAt);
+
+  return { isStale: !storedPidAlive, lockPid: null };
+}
+
 /**
  * Expire queue rows that still claim to be running after their backing process is gone.
  *
@@ -127,15 +148,16 @@ function reconcileStaleRunningJobs(db: Database.Database): number {
 
   for (const row of runningRows) {
     const entry = rowToEntry(row);
-    const lockInfo = checkLockFile(getLockPathForJob(entry.projectPath, entry.jobType));
+    const { isStale, lockPid } = isRunningEntryStale(entry);
 
-    if (!lockInfo.running) {
+    if (isStale) {
       staleIds.push(entry.id);
       logger.warn('Expiring stale running queue entry', {
         id: entry.id,
         jobType: entry.jobType,
         project: entry.projectName,
-        lockPid: lockInfo.pid,
+        lockPid,
+        storedPid: entry.pid ?? null,
       });
     }
   }
@@ -321,11 +343,14 @@ export function getRunningJob(): IQueueEntry | null {
 /**
  * Mark a job as running (used when acquiring the global gate)
  */
-export function markJobRunning(queueId: number): void {
+export function markJobRunning(queueId: number, pid?: number): void {
   const db = openDb();
   try {
-    db.prepare(`UPDATE job_queue SET status = 'running' WHERE id = ?`).run(queueId);
-    logger.debug('Job marked running', { id: queueId });
+    db.prepare(`UPDATE job_queue SET status = 'running', pid = COALESCE(?, pid) WHERE id = ?`).run(
+      pid ?? null,
+      queueId,
+    );
+    logger.debug('Job marked running', { id: queueId, pid: pid ?? null });
   } finally {
     db.close();
   }
@@ -776,6 +801,7 @@ export function claimJobSlot(
   jobType: JobType,
   providerKey: string | undefined,
   config?: IQueueConfig,
+  pid?: number,
 ): { claimed: false } | { claimed: true; id: number } {
   const db = openDb();
   try {
@@ -800,8 +826,8 @@ export function claimJobSlot(
 
       for (const row of runningRows) {
         const entry = rowToEntry(row);
-        const lockInfo = checkLockFile(getLockPathForJob(entry.projectPath, entry.jobType));
-        if (!lockInfo.running) {
+        const { isStale } = isRunningEntryStale(entry);
+        if (isStale) {
           db.prepare(`UPDATE job_queue SET status = 'expired', expired_at = ? WHERE id = ?`).run(
             now,
             entry.id,
@@ -857,14 +883,24 @@ export function claimJobSlot(
 
       // 5. Slot available — insert a running entry directly.
       const priority = getJobPriority(jobType, config);
+      const effectivePid = pid ?? process.pid;
       const insertResult = db
         .prepare(
           `INSERT INTO job_queue
              (project_path, project_name, job_type, priority, status, env_json, enqueued_at,
-              dispatched_at, provider_key)
-           VALUES (?, ?, ?, ?, 'running', '{}', ?, ?, ?)`,
+              dispatched_at, provider_key, pid)
+           VALUES (?, ?, ?, ?, 'running', '{}', ?, ?, ?, ?)`,
         )
-        .run(projectPath, projectName, jobType, priority, now, now, providerKey ?? null);
+        .run(
+          projectPath,
+          projectName,
+          jobType,
+          priority,
+          now,
+          now,
+          providerKey ?? null,
+          effectivePid,
+        );
 
       const id = insertResult.lastInsertRowid as number;
       logger.info('claimJobSlot: slot claimed', {

@@ -151,6 +151,12 @@ export interface INightWatchConfig {
   /** Maximum log file size in bytes before rotation */
   maxLogSize: number;
 
+  /**
+   * When true, Night Watch uses `git push --no-verify` for its automated pushes
+   * in this project to bypass local pre-push hooks.
+   */
+  gitPushNoVerify?: boolean;
+
   // Cron scheduling configuration
 
   /** Cron schedule for PRD execution */
@@ -232,14 +238,14 @@ export interface INightWatchConfig {
    * "sonnet" → claude-sonnet-4-6 (default)
    * "opus"   → claude-opus-4-6
    */
-  primaryFallbackModel?: ClaudeModel;
+  primaryFallbackModel?: ClaudeModel | null;
 
   /**
    * Second native Claude model to try if the primary fallback model is also rate-limited.
    * Defaults to the same model as primaryFallbackModel to preserve existing behavior
    * until explicitly configured otherwise.
    */
-  secondaryFallbackModel?: ClaudeModel;
+  secondaryFallbackModel?: ClaudeModel | null;
 
   /**
    * Preset ID to use as the primary fallback when rate-limited.
@@ -258,7 +264,7 @@ export interface INightWatchConfig {
    * older config files and tests.
    * @deprecated Use primaryFallbackModel instead.
    */
-  claudeModel: ClaudeModel;
+  claudeModel?: ClaudeModel | null;
 
   /** Notification webhook configuration */
   notifications: INotificationConfig;
@@ -500,6 +506,8 @@ export interface IQueueEntry {
   expiredAt: number | null;
   /** Provider bucket key (e.g. 'claude-native', 'codex', 'claude-proxy:api.z.ai') */
   providerKey?: string;
+  /** PID of the process that claimed this slot (for stale-job detection) */
+  pid?: number;
 }
 
 /**

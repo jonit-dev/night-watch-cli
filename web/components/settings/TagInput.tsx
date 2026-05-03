@@ -10,7 +10,7 @@ interface ITagInputProps {
   helpText?: string;
 }
 
-const TagInput: React.FC<ITagInputProps> = ({ label, value, onChange, placeholder, helpText }) => {
+const TagInput: React.FC<ITagInputProps> = ({ label, value = [], onChange, placeholder, helpText }) => {
   const [input, setInput] = React.useState('');
 
   const handleAdd = () => {

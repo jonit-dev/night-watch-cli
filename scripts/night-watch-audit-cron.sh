@@ -116,6 +116,12 @@ fi
 AUDIT_WORKTREE_BASENAME="${PROJECT_NAME}-nw-audit-runner"
 AUDIT_WORKTREE_DIR="$(dirname "${PROJECT_DIR}")/${AUDIT_WORKTREE_BASENAME}"
 
+cleanup_audit_worktree_on_exit() {
+  cleanup_worktree_path "${PROJECT_DIR}" "${AUDIT_WORKTREE_DIR}"
+}
+
+append_exit_trap "cleanup_audit_worktree_on_exit"
+
 cleanup_worktrees "${PROJECT_DIR}" "${AUDIT_WORKTREE_BASENAME}"
 
 if ! prepare_detached_worktree "${PROJECT_DIR}" "${AUDIT_WORKTREE_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then

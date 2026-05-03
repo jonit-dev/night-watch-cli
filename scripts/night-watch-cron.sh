@@ -61,6 +61,13 @@ emit_result() {
       details="rate_limit_fallback=1"
     fi
   fi
+  if [ "${FALLBACK_CONFIGURATION_MISSING:-0}" = "1" ]; then
+    if [ -n "${details}" ]; then
+      details="${details}|fallback_unconfigured=1"
+    else
+      details="fallback_unconfigured=1"
+    fi
+  fi
   if [ -n "${details}" ]; then
     echo "NIGHT_WATCH_RESULT:${status}|${details}"
   else
@@ -140,6 +147,12 @@ ISSUE_NUMBER=""    # board mode: GitHub issue number
 ISSUE_BODY=""      # board mode: issue body (PRD content)
 ISSUE_TITLE_RAW="" # board mode: issue title
 NW_CLI=""          # board mode: resolved night-watch CLI binary
+EXECUTOR_PR_JSON=""
+EXECUTOR_PR_NUMBER=""
+EXECUTOR_PR_URL=""
+EXECUTOR_PR_DRAFT=""
+RESUME_FROM_EXISTING_PR=0
+RESUME_BRANCH_NAME=""
 
 restore_issue_to_ready() {
   local reason="${1:-Execution failed before implementation started.}"
@@ -148,6 +161,26 @@ restore_issue_to_ready() {
     "${NW_CLI}" board comment "${ISSUE_NUMBER}" --body "${reason}" 2>>"${LOG_FILE}" || true
   fi
 }
+
+if [ -z "${NW_TARGET_ISSUE:-}" ]; then
+  EXECUTOR_PR_JSON=$(find_executor_resume_pr "${BRANCH_PREFIX}" || true)
+  if [ -n "${EXECUTOR_PR_JSON}" ]; then
+    RESUME_FROM_EXISTING_PR=1
+    RESUME_BRANCH_NAME=$(printf '%s' "${EXECUTOR_PR_JSON}" | jq -r '.headRefName // empty' 2>/dev/null || true)
+    EXECUTOR_PR_NUMBER=$(printf '%s' "${EXECUTOR_PR_JSON}" | jq -r '.number // empty' 2>/dev/null || true)
+    EXECUTOR_PR_URL=$(printf '%s' "${EXECUTOR_PR_JSON}" | jq -r '.url // empty' 2>/dev/null || true)
+    EXECUTOR_PR_DRAFT=$(printf '%s' "${EXECUTOR_PR_JSON}" | jq -r '.isDraft // false' 2>/dev/null || true)
+    if [ -n "${RESUME_BRANCH_NAME}" ]; then
+      log "RESUME: Prioritizing resumable PR #${EXECUTOR_PR_NUMBER:-unknown} on ${RESUME_BRANCH_NAME}"
+    else
+      RESUME_FROM_EXISTING_PR=0
+      EXECUTOR_PR_JSON=""
+      EXECUTOR_PR_NUMBER=""
+      EXECUTOR_PR_URL=""
+      EXECUTOR_PR_DRAFT=""
+    fi
+  fi
+fi
 
 if [ "${NW_BOARD_ENABLED:-}" = "true" ]; then
   # Board mode: discover next task from GitHub Projects board
@@ -169,37 +202,52 @@ if [ "${NW_BOARD_ENABLED:-}" = "true" ]; then
     ISSUE_TITLE_RAW=$(printf '%s' "${ISSUE_JSON}" | jq -r '.title // empty' 2>/dev/null || true)
     ISSUE_BODY=$(printf '%s' "${ISSUE_JSON}" | jq -r '.body // empty' 2>/dev/null || true)
   else
-    BOARD_DISCOVERY_STATUS=0
-    if ISSUE_JSON=$(find_eligible_board_issue "${PROJECT_DIR}" "${MAX_RUNTIME}"); then
-      BOARD_DISCOVERY_STATUS=0
-    else
-      BOARD_DISCOVERY_STATUS=$?
-    fi
-    if [ -z "${ISSUE_JSON}" ]; then
-      if [ "${BOARD_DISCOVERY_STATUS}" -eq 2 ]; then
-        log "INFO: Ready board issues were found, but all are in cooldown; skipping this run"
+    if [ "${RESUME_FROM_EXISTING_PR}" = "1" ] && [ -n "${RESUME_BRANCH_NAME}" ]; then
+      ELIGIBLE_PRD="${RESUME_BRANCH_NAME#*/}"
+      ISSUE_NUMBER=$(printf '%s' "${ELIGIBLE_PRD}" | grep -oE '^[0-9]+' || true)
+      if [ -n "${ISSUE_NUMBER}" ]; then
+        ISSUE_JSON=$(gh issue view "${ISSUE_NUMBER}" --json number,title,body 2>/dev/null || true)
+        ISSUE_TITLE_RAW=$(printf '%s' "${ISSUE_JSON}" | jq -r '.title // empty' 2>/dev/null || true)
+        ISSUE_BODY=$(printf '%s' "${ISSUE_JSON}" | jq -r '.body // empty' 2>/dev/null || true)
+        "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "In Progress" 2>>"${LOG_FILE}" || \
+          log "WARN: Failed to move resumed issue #${ISSUE_NUMBER} to In Progress"
       else
-        log "INFO: No Ready board issues found; skipping this run"
+        ISSUE_TITLE_RAW=$(printf '%s' "${EXECUTOR_PR_JSON}" | jq -r '.title // empty' 2>/dev/null || true)
       fi
     else
-      ISSUE_NUMBER=$(printf '%s' "${ISSUE_JSON}" | jq -r '.number // empty' 2>/dev/null || true)
-      ISSUE_TITLE_RAW=$(printf '%s' "${ISSUE_JSON}" | jq -r '.title // empty' 2>/dev/null || true)
-      ISSUE_BODY=$(printf '%s' "${ISSUE_JSON}" | jq -r '.body // empty' 2>/dev/null || true)
-      if [ -z "${ISSUE_NUMBER}" ]; then
-        log "ERROR: Board mode: failed to parse issue number from JSON"
-        exit 1
+      BOARD_DISCOVERY_STATUS=0
+      if ISSUE_JSON=$(find_eligible_board_issue "${PROJECT_DIR}" "${MAX_RUNTIME}"); then
+        BOARD_DISCOVERY_STATUS=0
+      else
+        BOARD_DISCOVERY_STATUS=$?
       fi
-      # Move issue to In Progress (claim it on the board)
-      "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "In Progress" 2>>"${LOG_FILE}" || \
-        log "WARN: Failed to move issue #${ISSUE_NUMBER} to In Progress"
+      if [ -z "${ISSUE_JSON}" ]; then
+        if [ "${BOARD_DISCOVERY_STATUS}" -eq 2 ]; then
+          log "INFO: Ready board issues were found, but all are in cooldown; skipping this run"
+        else
+          log "INFO: No Ready board issues found; skipping this run"
+        fi
+      else
+        ISSUE_NUMBER=$(printf '%s' "${ISSUE_JSON}" | jq -r '.number // empty' 2>/dev/null || true)
+        ISSUE_TITLE_RAW=$(printf '%s' "${ISSUE_JSON}" | jq -r '.title // empty' 2>/dev/null || true)
+        ISSUE_BODY=$(printf '%s' "${ISSUE_JSON}" | jq -r '.body // empty' 2>/dev/null || true)
+        if [ -z "${ISSUE_NUMBER}" ]; then
+          log "ERROR: Board mode: failed to parse issue number from JSON"
+          exit 1
+        fi
+        # Move issue to In Progress (claim it on the board)
+        "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "In Progress" 2>>"${LOG_FILE}" || \
+          log "WARN: Failed to move issue #${ISSUE_NUMBER} to In Progress"
+      fi
     fi
   fi
 
   if [ -n "${ISSUE_NUMBER}" ]; then
-    # Slugify title for branch naming
-    ELIGIBLE_PRD="${ISSUE_NUMBER}-$(printf '%s' "${ISSUE_TITLE_RAW}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-\|-$//g')"
+    # Slugify title for branch naming unless we're resuming an existing PR branch.
+    if [ "${RESUME_FROM_EXISTING_PR}" != "1" ] || [ -z "${ELIGIBLE_PRD:-}" ]; then
+      ELIGIBLE_PRD="${ISSUE_NUMBER}-$(printf '%s' "${ISSUE_TITLE_RAW}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-\|-$//g')"
+    fi
     log "BOARD: Processing issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}"
-    trap "rm -f '${LOCK_FILE}'" EXIT
   fi
 fi
 
@@ -209,8 +257,25 @@ if [ -z "${ISSUE_NUMBER}" ]; then
     emit_result "skip_no_eligible_prd"
     exit 0
   fi
+  if [ "${RESUME_FROM_EXISTING_PR}" = "1" ] && [ -n "${RESUME_BRANCH_NAME}" ]; then
+    RESUME_PRD_NAME="${RESUME_BRANCH_NAME#*/}"
+    if [ -f "${PRD_DIR}/${RESUME_PRD_NAME}.md" ]; then
+      ELIGIBLE_PRD="${RESUME_PRD_NAME}.md"
+      log "RESUME: Using resumable filesystem PRD ${ELIGIBLE_PRD}"
+    else
+      log "WARN: Resumable PR branch ${RESUME_BRANCH_NAME} has no matching PRD file in ${PRD_DIR}; falling back to normal selection"
+      RESUME_FROM_EXISTING_PR=0
+      EXECUTOR_PR_JSON=""
+      EXECUTOR_PR_NUMBER=""
+      EXECUTOR_PR_URL=""
+      EXECUTOR_PR_DRAFT=""
+      RESUME_BRANCH_NAME=""
+    fi
+  fi
   # Filesystem mode: scan PRD directory
-  ELIGIBLE_PRD=$(find_eligible_prd "${PRD_DIR}" "${MAX_RUNTIME}" "${PROJECT_DIR}")
+  if [ -z "${ELIGIBLE_PRD:-}" ]; then
+    ELIGIBLE_PRD=$(find_eligible_prd "${PRD_DIR}" "${MAX_RUNTIME}" "${PROJECT_DIR}")
+  fi
   if [ -z "${ELIGIBLE_PRD}" ]; then
     log "SKIP: No eligible PRDs (all done, in-progress, or blocked)"
     emit_result "skip_no_eligible_prd"
@@ -218,12 +283,15 @@ if [ -z "${ISSUE_NUMBER}" ]; then
   fi
   # Claim the PRD to prevent other runs from selecting it
   claim_prd "${PRD_DIR}" "${ELIGIBLE_PRD}"
-  # Update EXIT trap to also release claim
-  trap "rm -f '${LOCK_FILE}'; release_claim '${PRD_DIR}' '${ELIGIBLE_PRD}'" EXIT
+  append_exit_trap "release_claim '${PRD_DIR}' '${ELIGIBLE_PRD}'"
 fi
 
 PRD_NAME="${ELIGIBLE_PRD%.md}"
-BRANCH_NAME="${BRANCH_PREFIX}/${PRD_NAME}"
+if [ -n "${RESUME_BRANCH_NAME}" ]; then
+  BRANCH_NAME="${RESUME_BRANCH_NAME}"
+else
+  BRANCH_NAME="${BRANCH_PREFIX}/${PRD_NAME}"
+fi
 WORKTREE_DIR="$(dirname "${PROJECT_DIR}")/${PROJECT_NAME}-nw-${PRD_NAME}"
 BOOKKEEP_WORKTREE_DIR="$(dirname "${PROJECT_DIR}")/${PROJECT_NAME}-nw-bookkeeping"
 if [ -n "${NW_DEFAULT_BRANCH:-}" ]; then
@@ -231,6 +299,14 @@ if [ -n "${NW_DEFAULT_BRANCH:-}" ]; then
 else
   DEFAULT_BRANCH=$(detect_default_branch "${PROJECT_DIR}")
 fi
+
+cleanup_executor_worktrees_on_exit() {
+  cleanup_worktree_path "${PROJECT_DIR}" "${WORKTREE_DIR}"
+  cleanup_worktree_path "${PROJECT_DIR}" "${BOOKKEEP_WORKTREE_DIR}"
+}
+
+append_exit_trap "cleanup_executor_worktrees_on_exit"
+
 if [[ "${PRD_DIR_REL}" = /* ]]; then
   BOOKKEEP_PRD_DIR="${PRD_DIR_REL}"
 else
@@ -248,6 +324,194 @@ count_prs_for_branch() {
       | tr -d '[:space:]'
   )
   echo "${count:-0}"
+}
+
+extract_prd_title() {
+  local prd_path=""
+  local title=""
+
+  if [ -n "${ISSUE_TITLE_RAW}" ]; then
+    printf '%s' "${ISSUE_TITLE_RAW}"
+    return 0
+  fi
+
+  if [ -f "${PRD_DIR}/${ELIGIBLE_PRD}" ]; then
+    prd_path="${PRD_DIR}/${ELIGIBLE_PRD}"
+  elif [ -f "${PROJECT_DIR}/${PRD_DIR_REL}/${ELIGIBLE_PRD}" ]; then
+    prd_path="${PROJECT_DIR}/${PRD_DIR_REL}/${ELIGIBLE_PRD}"
+  fi
+
+  if [ -n "${prd_path}" ]; then
+    title=$(awk '/^[[:space:]]*#[[:space:]]+/ { sub(/^[[:space:]]*#[[:space:]]+/, "", $0); print; exit }' "${prd_path}" 2>/dev/null || true)
+  fi
+
+  if [ -n "${title}" ]; then
+    printf '%s' "${title}"
+  else
+    printf '%s' "${PRD_NAME}"
+  fi
+}
+
+build_executor_pr_title() {
+  local raw_title=""
+
+  raw_title=$(extract_prd_title)
+  raw_title=$(printf '%s' "${raw_title}" | tr '\r\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^[[:space:]]+//; s/[[:space:]]+$//')
+  if [ -z "${raw_title}" ]; then
+    raw_title="${PRD_NAME}"
+  fi
+
+  if printf '%s' "${raw_title}" | grep -Eqi '^feat:'; then
+    printf '%s' "${raw_title}"
+  else
+    printf 'feat: %s' "${raw_title}"
+  fi
+}
+
+build_executor_pr_body() {
+  local status_blurb=""
+
+  status_blurb="Status labels:
+- ${NW_EXECUTOR_PARTIAL_LABEL}: implementation is in progress and intentionally incomplete
+- ${NW_EXECUTOR_RESUMABLE_LABEL}: resume this PR before starting new work
+- ${NW_EXECUTOR_READY_REVIEW_LABEL}: implementation is complete and ready for review"
+
+  if [ -n "${ISSUE_NUMBER}" ]; then
+    printf 'Closes #%s\n\nNight Watch manages this draft PR automatically so progress is preserved across retries and timeouts.\n\n%s\n' \
+      "${ISSUE_NUMBER}" \
+      "${status_blurb}"
+  else
+    printf 'Source PRD: `%s/%s`\n\nNight Watch manages this draft PR automatically so progress is preserved across retries and timeouts.\n\n%s\n' \
+      "${PRD_DIR_REL}" \
+      "${ELIGIBLE_PRD}" \
+      "${status_blurb}"
+  fi
+}
+
+refresh_executor_pr_metadata() {
+  EXECUTOR_PR_JSON=$(find_open_pr_for_branch "${BRANCH_NAME}" || true)
+  EXECUTOR_PR_NUMBER=$(printf '%s' "${EXECUTOR_PR_JSON}" | jq -r '.number // empty' 2>/dev/null || true)
+  EXECUTOR_PR_URL=$(printf '%s' "${EXECUTOR_PR_JSON}" | jq -r '.url // empty' 2>/dev/null || true)
+  EXECUTOR_PR_DRAFT=$(printf '%s' "${EXECUTOR_PR_JSON}" | jq -r '.isDraft // false' 2>/dev/null || true)
+}
+
+sync_executor_pr_status() {
+  local add_labels="${1:-}"
+  local remove_labels="${2:-}"
+  local mark_ready="${3:-0}"
+
+  if [ -z "${EXECUTOR_PR_NUMBER}" ]; then
+    return 1
+  fi
+
+  ensure_executor_status_labels
+
+  if [ -n "${add_labels}" ]; then
+    gh pr edit "${EXECUTOR_PR_NUMBER}" --add-label "${add_labels}" >> "${LOG_FILE}" 2>&1 || true
+  fi
+  if [ -n "${remove_labels}" ]; then
+    gh pr edit "${EXECUTOR_PR_NUMBER}" --remove-label "${remove_labels}" >> "${LOG_FILE}" 2>&1 || true
+  fi
+  if [ "${mark_ready}" = "1" ]; then
+    gh pr ready "${EXECUTOR_PR_NUMBER}" >> "${LOG_FILE}" 2>&1 || true
+  fi
+
+  refresh_executor_pr_metadata
+  return 0
+}
+
+mark_executor_pr_incomplete() {
+  sync_executor_pr_status \
+    "${NW_EXECUTOR_PARTIAL_LABEL},${NW_EXECUTOR_RESUMABLE_LABEL}" \
+    "${NW_EXECUTOR_READY_REVIEW_LABEL}" \
+    "0"
+}
+
+mark_executor_pr_ready_for_review() {
+  sync_executor_pr_status \
+    "${NW_EXECUTOR_READY_REVIEW_LABEL}" \
+    "${NW_EXECUTOR_PARTIAL_LABEL},${NW_EXECUTOR_RESUMABLE_LABEL}" \
+    "1"
+}
+
+push_executor_branch() {
+  local push_mode="${1:-update}"
+
+  if [ "${push_mode}" = "initial" ]; then
+    if git_push_for_project "${WORKTREE_DIR}" -u origin "${BRANCH_NAME}" >> "${LOG_FILE}" 2>&1; then
+      return 0
+    fi
+  fi
+
+  if git_push_for_project "${WORKTREE_DIR}" origin "${BRANCH_NAME}" --force-with-lease >> "${LOG_FILE}" 2>&1; then
+    return 0
+  fi
+
+  git_push_for_project "${WORKTREE_DIR}" -u origin "${BRANCH_NAME}" >> "${LOG_FILE}" 2>&1
+}
+
+executor_branch_has_commits_ahead_of_base() {
+  local base_ref=""
+  local ahead_count="0"
+
+  if ! base_ref=$(resolve_worktree_base_ref "${WORKTREE_DIR}" "${DEFAULT_BRANCH}" 2>/dev/null); then
+    return 1
+  fi
+
+  ahead_count=$(git -C "${WORKTREE_DIR}" rev-list --count "${base_ref}..HEAD" 2>/dev/null || echo "0")
+  [ "${ahead_count}" -gt 0 ]
+}
+
+ensure_executor_pr() {
+  local pr_title=""
+  local pr_body=""
+  local create_output=""
+
+  refresh_executor_pr_metadata
+  if [ -n "${EXECUTOR_PR_NUMBER}" ]; then
+    log "PR: Reusing existing open PR #${EXECUTOR_PR_NUMBER} for ${BRANCH_NAME}"
+    mark_executor_pr_incomplete
+    return 0
+  fi
+
+  pr_title=$(build_executor_pr_title)
+  pr_body=$(build_executor_pr_body)
+
+  if ! executor_branch_has_commits_ahead_of_base; then
+    log "PR: Deferring draft PR creation for ${BRANCH_NAME} until it has commits beyond ${DEFAULT_BRANCH}"
+    return 0
+  fi
+
+  log "PR: Creating draft PR for ${BRANCH_NAME}"
+  if ! push_executor_branch "initial"; then
+    log "WARN: Initial push for ${BRANCH_NAME} failed before PR creation"
+  fi
+
+  ensure_executor_status_labels
+  if ! create_output=$(
+    gh pr create \
+      --draft \
+      --base "${DEFAULT_BRANCH}" \
+      --head "${BRANCH_NAME}" \
+      --title "${pr_title}" \
+      --body "${pr_body}" 2>> "${LOG_FILE}"
+  ); then
+    log "FAIL: gh pr create failed for ${BRANCH_NAME}"
+    return 1
+  fi
+
+  refresh_executor_pr_metadata
+  if [ -z "${EXECUTOR_PR_URL}" ]; then
+    EXECUTOR_PR_URL=$(printf '%s' "${create_output}" | grep -Eo 'https://[^[:space:]]+/pull/[0-9]+' | tail -n 1 || true)
+  fi
+  if [ -n "${EXECUTOR_PR_NUMBER}" ]; then
+    mark_executor_pr_incomplete
+    log "PR: Draft PR ready at ${EXECUTOR_PR_URL:-unknown} for ${BRANCH_NAME}"
+  else
+    log "WARN: gh pr create succeeded for ${BRANCH_NAME}, but PR metadata lookup did not resolve a number yet"
+  fi
+
+  return 0
 }
 
 checkpoint_timeout_progress() {
@@ -360,7 +624,7 @@ finalize_prd_done() {
       git -C "${BOOKKEEP_WORKTREE_DIR}" commit -m "chore: mark ${ELIGIBLE_PRD} as done (${reason})
 
 Co-Authored-By: Night Watch [${EFFECTIVE_PROVIDER_LABEL}] <noreply@anthropic.com>" || true
-      git -C "${BOOKKEEP_WORKTREE_DIR}" push origin "HEAD:${DEFAULT_BRANCH}" || true
+      git_push_for_project "${BOOKKEEP_WORKTREE_DIR}" origin "HEAD:${DEFAULT_BRANCH}" || true
       log "DONE: ${ELIGIBLE_PRD} ${reason}, PRD moved to done/"
       return 0
     fi
@@ -396,6 +660,7 @@ if [ -z "${EXECUTOR_PROMPT_PATH}" ]; then
   exit 1
 fi
 EXECUTOR_PROMPT_REF=$(instruction_ref_for_prompt "${PROJECT_DIR}" "${EXECUTOR_PROMPT_PATH}")
+PROGRESS_PUSH_CMD=$(project_git_push_command "${BRANCH_NAME}")
 
 if [ -n "${ISSUE_NUMBER}" ]; then
   PROMPT="Implement the following PRD (GitHub issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}):
@@ -418,13 +683,13 @@ Read ${EXECUTOR_PROMPT_REF} and follow the FULL execution pipeline:
 5. Run the project's verify/test command between waves to catch issues early
 Follow all CLAUDE.md conventions (if present).
 
-## Finalize — open the PR FIRST, then verify
-- Commit all changes, push, and open the PR immediately:
-  git push -u origin ${BRANCH_NAME}
-  gh pr create --title \"feat: <short title>\" --body \"Closes #${ISSUE_NUMBER}
-
-<summary>\"
-- After the PR is open, run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
+## PR Lifecycle
+- The controller owns PR lifecycle and labels for this branch
+- If a draft PR already exists, do NOT create another one and do NOT edit its labels
+- If no PR exists yet, do NOT create one manually; keep pushing to ${BRANCH_NAME} and the controller will open/update it automatically
+- After each completed phase/wave milestone, commit and push progress to the existing branch:
+  ${PROGRESS_PUSH_CMD}
+- When all implementation is complete, run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
 - STOP immediately after the final push — do NOT do any additional work, visual checks, or exploration.
 - Do NOT process any other issues — only issue #${ISSUE_NUMBER}"
 else
@@ -447,11 +712,13 @@ Read ${EXECUTOR_PROMPT_REF} and follow the FULL execution pipeline:
 5. Run the project's verify/test command between waves to catch issues early
 Follow all CLAUDE.md conventions (if present).
 
-## Finalize — open the PR FIRST, then verify
-- Commit all changes, push, and open the PR immediately:
-  git push -u origin ${BRANCH_NAME}
-  gh pr create --title \"feat: <short title>\" --body \"<summary referencing PRD>\"
-- After the PR is open, run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
+## PR Lifecycle
+- The controller owns PR lifecycle and labels for this branch
+- If a draft PR already exists, do NOT create another one and do NOT edit its labels
+- If no PR exists yet, do NOT create one manually; keep pushing to ${BRANCH_NAME} and the controller will open/update it automatically
+- After each completed phase/wave milestone, commit and push progress to the existing branch:
+  ${PROGRESS_PUSH_CMD}
+- When all implementation is complete, run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
 - STOP immediately after the final push — do NOT do any additional work, visual checks, or exploration.
 - Do NOT move the PRD to done/ — the cron script handles that
 - Do NOT process any other PRDs — only ${ELIGIBLE_PRD}"
@@ -505,6 +772,19 @@ if ! assert_isolated_worktree "${PROJECT_DIR}" "${WORKTREE_DIR}" "executor"; the
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
   emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=worktree_guard_failed|detail=$(latest_failure_detail "${LOG_FILE}")"
   exit 1
+fi
+
+if ! ensure_executor_pr; then
+  log "FAIL: Unable to create or reuse executor PR for ${BRANCH_NAME}"
+  restore_issue_to_ready "Failed to create or reuse the draft PR for branch ${BRANCH_NAME}. Moved back to Ready for retry."
+  night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
+  emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=pr_setup_failed|detail=$(latest_failure_detail "${LOG_FILE}")"
+  exit 1
+fi
+
+if [ -n "${ISSUE_NUMBER}" ] && [ -n "${NW_CLI}" ] && [ -n "${EXECUTOR_PR_URL}" ] && [ "${RESUME_FROM_EXISTING_PR}" != "1" ]; then
+  "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
+    --body "Draft PR opened at executor start: ${EXECUTOR_PR_URL} (labels: \`${NW_EXECUTOR_PARTIAL_LABEL}\`, \`${NW_EXECUTOR_RESUMABLE_LABEL}\`)." 2>>"${LOG_FILE}" || true
 fi
 
 # Sandbox: prevent the agent from modifying crontab during execution
@@ -567,6 +847,15 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
     BACKOFF_MIN=$(( BACKOFF / 60 ))
     log "RATE-LIMITED: Attempt ${ATTEMPT}/${MAX_RETRIES}, retrying in ${BACKOFF_MIN}m"
     sleep "${BACKOFF}"
+  elif check_network_error "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
+    # Transient API network error — retry with a short backoff
+    ATTEMPT=$((ATTEMPT + 1))
+    if [ "${ATTEMPT}" -ge "${MAX_RETRIES}" ]; then
+      log "NETWORK-ERROR: All ${MAX_RETRIES} attempts exhausted for ${ELIGIBLE_PRD}"
+      break
+    fi
+    log "NETWORK-ERROR: Attempt ${ATTEMPT}/${MAX_RETRIES}, retrying in 60s"
+    sleep 60
   elif check_context_exhausted "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
     # Context window exhausted — checkpoint progress and resume in a fresh session
     ATTEMPT=$((ATTEMPT + 1))
@@ -576,7 +865,8 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
     fi
     log "CONTEXT-EXHAUSTED: Session ${ATTEMPT_NUM} hit context limit — checkpointing and resuming (${ATTEMPT}/${MAX_RETRIES})"
     checkpoint_timeout_progress "${WORKTREE_DIR}" "${BRANCH_NAME}" "${ELIGIBLE_PRD}"
-    git -C "${WORKTREE_DIR}" push origin "${BRANCH_NAME}" --force-with-lease >> "${LOG_FILE}" 2>&1 || true
+    push_executor_branch "update" >> "${LOG_FILE}" 2>&1 || true
+    ensure_executor_pr >> "${LOG_FILE}" 2>&1 || true
     # Switch prompt to "continue" mode for the next attempt (fresh context)
     if [ -n "${ISSUE_NUMBER}" ]; then
       PROMPT="Continue implementing PRD (GitHub issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}).
@@ -599,13 +889,13 @@ The previous session ran out of context window. Progress has been committed on b
 Read ${EXECUTOR_PROMPT_REF} and follow the FULL execution pipeline for remaining phases only.
 Follow all CLAUDE.md conventions (if present).
 
-## Finalize — open the PR FIRST, then verify
-- Commit all changes, push, and open the PR immediately:
-  git push -u origin ${BRANCH_NAME}
-  gh pr create --title \"feat: <short title>\" --body \"Closes #${ISSUE_NUMBER}
-
-<summary>\"
-- After the PR is open, run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
+## PR Lifecycle
+- The controller owns PR lifecycle and labels for this branch
+- If a draft PR already exists, do NOT create another one and do NOT edit its labels
+- If no PR exists yet, do NOT create one manually; keep pushing to ${BRANCH_NAME} and the controller will open/update it automatically
+- After each completed phase/wave milestone, commit and push progress to the existing branch:
+  ${PROGRESS_PUSH_CMD}
+- When all implementation is complete, run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
 - STOP immediately after the final push — do NOT do any additional work, visual checks, or exploration.
 - Do NOT process any other issues — only issue #${ISSUE_NUMBER}"
     else
@@ -629,11 +919,13 @@ The previous session ran out of context window. Progress has been committed on b
 Read ${EXECUTOR_PROMPT_REF} and follow the FULL execution pipeline for remaining phases only.
 Follow all CLAUDE.md conventions (if present).
 
-## Finalize — open the PR FIRST, then verify
-- Commit all changes, push, and open the PR immediately:
-  git push -u origin ${BRANCH_NAME}
-  gh pr create --title \"feat: <short title>\" --body \"<summary referencing PRD>\"
-- After the PR is open, run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
+## PR Lifecycle
+- The controller owns PR lifecycle and labels for this branch
+- If a draft PR already exists, do NOT create another one and do NOT edit its labels
+- If no PR exists yet, do NOT create one manually; keep pushing to ${BRANCH_NAME} and the controller will open/update it automatically
+- After each completed phase/wave milestone, commit and push progress to the existing branch:
+  ${PROGRESS_PUSH_CMD}
+- When all implementation is complete, run final verification (lint, typecheck, tests). If anything fails, fix it, commit, and push again.
 - STOP immediately after the final push — do NOT do any additional work, visual checks, or exploration.
 - Do NOT move the PRD to done/ — the cron script handles that
 - Do NOT process any other PRDs — only ${ELIGIBLE_PRD}"
@@ -722,7 +1014,7 @@ if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
     fi
   else
     # Native Claude fallback (existing behavior)
-    PRIMARY_FALLBACK_MODEL="${NW_CLAUDE_PRIMARY_MODEL_ID:-${NW_CLAUDE_MODEL_ID:-claude-sonnet-4-6}}"
+    PRIMARY_FALLBACK_MODEL="${NW_CLAUDE_PRIMARY_MODEL_ID:-${NW_CLAUDE_MODEL_ID:-}}"
     SECONDARY_FALLBACK_MODEL="${NW_CLAUDE_SECONDARY_MODEL_ID:-}"
 
     run_native_fallback() {
@@ -754,14 +1046,20 @@ if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
       LAST_FALLBACK_LOG_LINE_BEFORE="${log_line_before}"
     }
 
-    LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
-    run_native_fallback "${PRIMARY_FALLBACK_MODEL}" "${LOG_LINE_BEFORE}"
+    if [ -z "${PRIMARY_FALLBACK_MODEL}" ]; then
+      FALLBACK_CONFIGURATION_MISSING=1
+      log "RATE-LIMIT-FALLBACK: Triggered but no fallback preset/model is configured for ${PROJECT_NAME}"
+      send_missing_fallback_configuration_warning "${PROJECT_NAME}"
+    else
+      LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
+      run_native_fallback "${PRIMARY_FALLBACK_MODEL}" "${LOG_LINE_BEFORE}"
 
-    if [ ${EXIT_CODE} -ne 0 ] && [ -n "${SECONDARY_FALLBACK_MODEL}" ] && [ "${SECONDARY_FALLBACK_MODEL}" != "${PRIMARY_FALLBACK_MODEL}" ]; then
-      if check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
-        log "RATE-LIMIT-FALLBACK: Primary native Claude fallback was rate-limited; trying secondary model (${SECONDARY_FALLBACK_MODEL})"
-        LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
-        run_native_fallback "${SECONDARY_FALLBACK_MODEL}" "${LOG_LINE_BEFORE}"
+      if [ ${EXIT_CODE} -ne 0 ] && [ -n "${SECONDARY_FALLBACK_MODEL}" ] && [ "${SECONDARY_FALLBACK_MODEL}" != "${PRIMARY_FALLBACK_MODEL}" ]; then
+        if check_rate_limited "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
+          log "RATE-LIMIT-FALLBACK: Primary native Claude fallback was rate-limited; trying secondary model (${SECONDARY_FALLBACK_MODEL})"
+          LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
+          run_native_fallback "${SECONDARY_FALLBACK_MODEL}" "${LOG_LINE_BEFORE}"
+        fi
       fi
     fi
   fi  # end preset vs native choice
@@ -794,8 +1092,19 @@ if [ "${EXIT_CODE}" -eq 0 ] && grep -qiF 'Exceeded USD budget' "${LOG_FILE}" 2>/
 fi
 
 if [ ${EXIT_CODE} -eq 0 ]; then
+  if ! ensure_executor_pr; then
+    log "FAIL: Unable to create or reuse executor PR for ${BRANCH_NAME} after provider completion"
+    night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
+    emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=pr_setup_failed|detail=$(latest_failure_detail "${LOG_FILE}")"
+    EXIT_CODE=1
+  fi
+fi
+
+if [ ${EXIT_CODE} -eq 0 ]; then
   OPEN_PR_COUNT=$(count_prs_for_branch open "${BRANCH_NAME}")
   if [ "${OPEN_PR_COUNT}" -gt 0 ]; then
+    refresh_executor_pr_metadata
+    mark_executor_pr_ready_for_review || true
     if [ -n "${ISSUE_NUMBER}" ]; then
       # Board mode: comment with PR URL, then close issue and move to Done
       PR_URL=$(gh pr list --state open --json headRefName,url \
@@ -851,6 +1160,8 @@ if [ ${EXIT_CODE} -eq 0 ]; then
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: Session limit hit after ${SESSION_MAX_RUNTIME}s while processing ${ELIGIBLE_PRD}"
   checkpoint_timeout_progress "${WORKTREE_DIR}" "${BRANCH_NAME}" "${ELIGIBLE_PRD}"
+  push_executor_branch "update" >> "${LOG_FILE}" 2>&1 || true
+  ensure_executor_pr >> "${LOG_FILE}" 2>&1 || true
   if [ -n "${ISSUE_NUMBER}" ]; then
     "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
     if [ "${SESSION_MAX_RUNTIME}" != "${MAX_RUNTIME}" ]; then
@@ -881,7 +1192,8 @@ elif check_context_exhausted "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
   # All resume attempts for context exhaustion were used up
   log "FAIL: Context window exhausted after ${MAX_RETRIES} resume attempts for ${ELIGIBLE_PRD}"
   checkpoint_timeout_progress "${WORKTREE_DIR}" "${BRANCH_NAME}" "${ELIGIBLE_PRD}"
-  git -C "${WORKTREE_DIR}" push origin "${BRANCH_NAME}" --force-with-lease >> "${LOG_FILE}" 2>&1 || true
+  push_executor_branch "update" >> "${LOG_FILE}" 2>&1 || true
+  ensure_executor_pr >> "${LOG_FILE}" 2>&1 || true
   if [ -n "${ISSUE_NUMBER}" ]; then
     "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
     "${NW_CLI}" board comment "${ISSUE_NUMBER}" \

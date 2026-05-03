@@ -104,4 +104,68 @@ describe('night-watch helpers', () => {
     expect(cleanupResult.status).toBe(0);
     expect(fs.existsSync(orphanWorktreeDir)).toBe(false);
   });
+
+  it('find_executor_resume_pr ignores resumable PRs already labeled ready-to-merge', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'night-watch-helpers-resume-ready-'));
+    const fakeBinDir = path.join(tempDir, 'bin');
+    fs.mkdirSync(fakeBinDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(fakeBinDir, 'gh'),
+      `#!/usr/bin/env bash
+if [[ "$1" == "pr" && "$2" == "list" ]]; then
+  cat <<'EOF'
+[{"number":1,"headRefName":"night-watch/frozen","url":"https://example.test/pull/1","title":"Frozen PR","isDraft":false,"createdAt":"2026-04-19T12:00:00Z","labels":[{"name":"nw:resumable"},{"name":"ready-to-merge"}]}]
+EOF
+  exit 0
+fi
+exit 0
+`,
+      { mode: 0o755 },
+    );
+
+    const result = runShell(
+      `source "${helpersScript}"; find_executor_resume_pr "night-watch"`,
+      tempDir,
+      {
+        ...process.env,
+        PATH: `${fakeBinDir}:${process.env.PATH}`,
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe('');
+  });
+
+  it('send_missing_fallback_configuration_warning includes configuration guidance', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'night-watch-helpers-telegram-'));
+    const curlBin = path.join(tempDir, 'curl');
+    const captureFile = path.join(tempDir, 'curl-args.txt');
+
+    fs.writeFileSync(
+      curlBin,
+      `#!/usr/bin/env bash
+printf '%s\\n' "$@" > "${captureFile}"
+`,
+      { mode: 0o755 },
+    );
+
+    const result = runShell(
+      `source "${helpersScript}"; send_missing_fallback_configuration_warning "demo-project"`,
+      undefined,
+      {
+        ...process.env,
+        PATH: `${tempDir}:${process.env.PATH}`,
+        NW_TELEGRAM_BOT_TOKEN: 'bot-token',
+        NW_TELEGRAM_CHAT_ID: 'chat-id',
+      },
+    );
+
+    expect(result.status).toBe(0);
+    const curlArgs = fs.readFileSync(captureFile, 'utf-8');
+    expect(curlArgs).toContain('bot-token');
+    expect(curlArgs).toContain('chat-id');
+    expect(curlArgs).toContain('Reliability & Fallbacks');
+    expect(curlArgs).toContain('primaryFallbackPreset / primaryFallbackModel');
+  });
 });

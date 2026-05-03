@@ -244,6 +244,7 @@ export interface INightWatchConfig {
   branchPatterns: string[];
   minReviewScore: number;
   maxLogSize: number;
+  gitPushNoVerify?: boolean;
   cronSchedule: string;
   reviewerSchedule: string;
   scheduleBundleId?: string | null;
@@ -269,11 +270,11 @@ export interface INightWatchConfig {
   autoMerge?: boolean;
   autoMergeMethod?: MergeMethod;
   fallbackOnRateLimit: boolean;
-  primaryFallbackModel?: ClaudeModel;
-  secondaryFallbackModel?: ClaudeModel;
+  primaryFallbackModel?: ClaudeModel | null;
+  secondaryFallbackModel?: ClaudeModel | null;
   primaryFallbackPreset?: string;
   secondaryFallbackPreset?: string;
-  claudeModel: ClaudeModel;
+  claudeModel?: ClaudeModel | null;
   qa: IQaConfig;
   audit: IAuditConfig;
   analytics: IAnalyticsConfig;

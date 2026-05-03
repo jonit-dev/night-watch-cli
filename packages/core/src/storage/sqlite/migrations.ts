@@ -136,32 +136,41 @@ export function runMigrations(db: Database.Database): void {
     // Column already exists — safe to ignore
   }
 
+  // Store PID in queue entries for direct stale-job detection (guards against
+  // cases where lock files are cleaned up but the queue entry is still "running").
+  try {
+    db.exec(`ALTER TABLE job_queue ADD COLUMN pid INTEGER`);
+  } catch {
+    // Column already exists — safe to ignore
+  }
+
   // Phase 2 cleanup: drop slack_channel_id column from projects (no longer needed)
   // Guarded by schema_meta so this destructive recreation runs exactly once.
   // Without the guard, every server restart would DROP TABLE projects, creating a
   // race window where concurrent queries get "no such table: projects".
   const projectsSchemaV2Done = db
-    .prepare<[], { value: string }>(
-      "SELECT value FROM schema_meta WHERE key = 'projects_schema_v2'",
-    )
+    .prepare<
+      [],
+      { value: string }
+    >("SELECT value FROM schema_meta WHERE key = 'projects_schema_v2'")
     .get();
 
   if (!projectsSchemaV2Done) {
-    const columns = db
-      .prepare<[], { name: string }>('PRAGMA table_info(projects)')
-      .all();
+    const columns = db.prepare<[], { name: string }>('PRAGMA table_info(projects)').all();
 
     if (columns.some((c) => c.name === 'slack_channel_id')) {
       // Only recreate if the old column is actually present
       db.transaction(() => {
-        db.prepare(`
+        db.prepare(
+          `
           CREATE TABLE projects_new (
             id         INTEGER PRIMARY KEY,
             name       TEXT    NOT NULL,
             path       TEXT    NOT NULL UNIQUE,
             created_at INTEGER NOT NULL
           )
-        `).run();
+        `,
+        ).run();
         db.prepare(
           `INSERT OR IGNORE INTO projects_new (id, name, path, created_at)
            SELECT id, name, path, created_at FROM projects`,

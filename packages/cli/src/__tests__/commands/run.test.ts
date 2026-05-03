@@ -321,6 +321,38 @@ describe('run command', () => {
       expect(env.NW_TELEGRAM_BOT_TOKEN).toBeUndefined();
       expect(env.NW_TELEGRAM_CHAT_ID).toBeUndefined();
     });
+
+    it('does not export Claude fallback models when no native fallback is configured', () => {
+      const config = createTestConfig({
+        fallbackOnRateLimit: true,
+        primaryFallbackModel: null,
+        secondaryFallbackModel: null,
+        claudeModel: null,
+      });
+      const options: IRunOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_FALLBACK_ON_RATE_LIMIT).toBe('true');
+      expect(env.NW_CLAUDE_PRIMARY_MODEL_ID).toBeUndefined();
+      expect(env.NW_CLAUDE_SECONDARY_MODEL_ID).toBeUndefined();
+      expect(env.NW_CLAUDE_MODEL_ID).toBeUndefined();
+    });
+
+    it('exports configured Claude fallback models when present', () => {
+      const config = createTestConfig({
+        fallbackOnRateLimit: true,
+        primaryFallbackModel: 'opus',
+        secondaryFallbackModel: 'sonnet',
+      });
+      const options: IRunOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_CLAUDE_PRIMARY_MODEL_ID).toBe('claude-opus-4-6');
+      expect(env.NW_CLAUDE_SECONDARY_MODEL_ID).toBe('claude-sonnet-4-6');
+      expect(env.NW_CLAUDE_MODEL_ID).toBe('claude-opus-4-6');
+    });
   });
 
   describe('applyCliOverrides', () => {

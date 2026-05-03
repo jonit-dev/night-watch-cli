@@ -369,7 +369,9 @@ export function buildInitConfig(params: {
     autoMerge: defaults.autoMerge,
     autoMergeMethod: defaults.autoMergeMethod,
     fallbackOnRateLimit: defaults.fallbackOnRateLimit,
-    claudeModel: defaults.claudeModel,
+    primaryFallbackModel: null,
+    secondaryFallbackModel: null,
+    claudeModel: null,
     qa: {
       ...defaults.qa,
       branchPatterns: [...defaults.qa.branchPatterns],

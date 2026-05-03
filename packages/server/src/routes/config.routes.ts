@@ -118,6 +118,10 @@ function validateConfigChanges(
     return 'maxLogSize must be a positive number';
   }
 
+  if (changes.gitPushNoVerify !== undefined && typeof changes.gitPushNoVerify !== 'boolean') {
+    return 'gitPushNoVerify must be a boolean';
+  }
+
   if (
     changes.maxRetries !== undefined &&
     (typeof changes.maxRetries !== 'number' ||
@@ -481,17 +485,23 @@ function validateConfigChanges(
   }
 
   // claudeModel validation
-  if (changes.claudeModel !== undefined && !VALID_CLAUDE_MODELS.includes(changes.claudeModel)) {
+  if (
+    changes.claudeModel !== undefined &&
+    changes.claudeModel !== null &&
+    !VALID_CLAUDE_MODELS.includes(changes.claudeModel)
+  ) {
     return `Invalid claudeModel. Must be one of: ${VALID_CLAUDE_MODELS.join(', ')}`;
   }
   if (
     changes.primaryFallbackModel !== undefined &&
+    changes.primaryFallbackModel !== null &&
     !VALID_CLAUDE_MODELS.includes(changes.primaryFallbackModel)
   ) {
     return `Invalid primaryFallbackModel. Must be one of: ${VALID_CLAUDE_MODELS.join(', ')}`;
   }
   if (
     changes.secondaryFallbackModel !== undefined &&
+    changes.secondaryFallbackModel !== null &&
     !VALID_CLAUDE_MODELS.includes(changes.secondaryFallbackModel)
   ) {
     return `Invalid secondaryFallbackModel. Must be one of: ${VALID_CLAUDE_MODELS.join(', ')}`;
@@ -636,8 +646,13 @@ function validateConfigChanges(
       return 'queue.maxWaitTime must be a number between 300 and 14400';
     }
 
-    if (queue.maxConcurrency !== undefined && queue.maxConcurrency !== 1) {
-      return 'queue.maxConcurrency is currently fixed at 1';
+    if (
+      queue.maxConcurrency !== undefined &&
+      (typeof queue.maxConcurrency !== 'number' ||
+        queue.maxConcurrency < 1 ||
+        queue.maxConcurrency > 20)
+    ) {
+      return 'queue.maxConcurrency must be a number between 1 and 20';
     }
 
     if (queue.priority !== undefined) {

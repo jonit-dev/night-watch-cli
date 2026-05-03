@@ -76,6 +76,7 @@ export function getDefaultConfig(): INightWatchConfig {
     branchPatterns: [...DEFAULT_BRANCH_PATTERNS],
     minReviewScore: DEFAULT_MIN_REVIEW_SCORE,
     maxLogSize: DEFAULT_MAX_LOG_SIZE,
+    gitPushNoVerify: false,
     cronSchedule: DEFAULT_CRON_SCHEDULE,
     reviewerSchedule: DEFAULT_REVIEWER_SCHEDULE,
     scheduleBundleId: 'always-on',
@@ -239,13 +240,19 @@ function mergeConfigs(
     merged.reviewerMaxPrsPerRun,
     DEFAULT_REVIEWER_MAX_PRS_PER_RUN,
   );
-  merged.primaryFallbackModel =
-    merged.primaryFallbackModel ?? merged.claudeModel ?? DEFAULT_PRIMARY_FALLBACK_MODEL;
-  merged.secondaryFallbackModel =
-    merged.secondaryFallbackModel ??
-    merged.primaryFallbackModel ??
-    DEFAULT_SECONDARY_FALLBACK_MODEL;
-  merged.claudeModel = merged.primaryFallbackModel;
+  if (merged.secondaryFallbackModel === undefined) {
+    merged.secondaryFallbackModel =
+      merged.primaryFallbackModel === undefined
+        ? DEFAULT_SECONDARY_FALLBACK_MODEL
+        : merged.primaryFallbackModel;
+  }
+
+  if (merged.claudeModel === undefined) {
+    merged.claudeModel =
+      merged.primaryFallbackModel === undefined
+        ? DEFAULT_CLAUDE_MODEL
+        : merged.primaryFallbackModel;
+  }
 
   return merged;
 }

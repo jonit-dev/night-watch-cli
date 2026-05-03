@@ -5,22 +5,23 @@ describe('Settings Page - PRD Coverage Verification', () => {
     it('should include all fields from INightWatchConfig except _cliProviderOverride', () => {
       // This is a compile-time check - the test passes if the code compiles
       // The ConfigForm type in Settings.tsx includes:
-      // - provider, providerLabel, defaultBranch, prdDir, branchPrefix, branchPatterns
+      // - provider, providerLabel, providerPresets, defaultBranch, prdDir, branchPrefix, branchPatterns, gitPushNoVerify
       // - executorEnabled, reviewerEnabled, minReviewScore, maxRuntime, reviewerMaxRuntime, maxLogSize
-      // - cronSchedule, reviewerSchedule, cronScheduleOffset, maxRetries
+      // - cronSchedule, reviewerSchedule, scheduleBundleId, cronScheduleOffset, schedulingPriority, maxRetries
       // - reviewerMaxRetries, reviewerRetryDelay, reviewerMaxPrsPerRun
-      // - providerEnv, notifications, prdPriority
-      // - roadmapScanner, templatesDir, boardProvider, jobProviders
-      // - autoMerge, autoMergeMethod, fallbackOnRateLimit, primaryFallbackModel, secondaryFallbackModel, claudeModel
-      // - qa, audit
+      // - providerEnv, notifications, prdPriority, roadmapScanner, templatesDir, boardProvider, jobProviders
+      // - fallbackOnRateLimit, primaryFallbackModel, secondaryFallbackModel, primaryFallbackPreset, secondaryFallbackPreset
+      // - claudeModel, providerScheduleOverrides, qa, audit, analytics, prResolver, merger, queue
 
       const requiredFields = [
         'provider',
         'providerLabel',
+        'providerPresets',
         'defaultBranch',
         'prdDir',
         'branchPrefix',
         'branchPatterns',
+        'gitPushNoVerify',
         'executorEnabled',
         'reviewerEnabled',
         'minReviewScore',
@@ -31,6 +32,7 @@ describe('Settings Page - PRD Coverage Verification', () => {
         'reviewerSchedule',
         'scheduleBundleId',
         'cronScheduleOffset',
+        'schedulingPriority',
         'maxRetries',
         'reviewerMaxRetries',
         'reviewerRetryDelay',
@@ -42,14 +44,19 @@ describe('Settings Page - PRD Coverage Verification', () => {
         'templatesDir',
         'boardProvider',
         'jobProviders',
-        'autoMerge',
-        'autoMergeMethod',
         'fallbackOnRateLimit',
         'primaryFallbackModel',
         'secondaryFallbackModel',
+        'primaryFallbackPreset',
+        'secondaryFallbackPreset',
         'claudeModel',
+        'providerScheduleOverrides',
         'qa',
         'audit',
+        'analytics',
+        'prResolver',
+        'merger',
+        'queue',
       ];
 
       // Verify all new PRD fields are included
@@ -70,8 +77,18 @@ describe('Settings Page - PRD Coverage Verification', () => {
       expect(requiredFields).toContain('reviewerRetryDelay');
       expect(requiredFields).toContain('reviewerMaxPrsPerRun');
 
-      // If we got here, all 35 fields are defined in ConfigForm
-      expect(requiredFields.length).toBe(35);
+      expect(requiredFields).toContain('providerPresets');
+      expect(requiredFields).toContain('schedulingPriority');
+      expect(requiredFields).toContain('primaryFallbackPreset');
+      expect(requiredFields).toContain('secondaryFallbackPreset');
+      expect(requiredFields).toContain('providerScheduleOverrides');
+      expect(requiredFields).toContain('analytics');
+      expect(requiredFields).toContain('prResolver');
+      expect(requiredFields).toContain('merger');
+      expect(requiredFields).toContain('queue');
+
+      // If we got here, all 43 fields are defined in ConfigForm
+      expect(requiredFields.length).toBe(43);
     });
   });
 
@@ -81,10 +98,11 @@ describe('Settings Page - PRD Coverage Verification', () => {
       const defaults = {
         prdDir: 'docs/prds',
         providerLabel: '',
+        gitPushNoVerify: false,
         fallbackOnRateLimit: true,
-        primaryFallbackModel: 'sonnet',
-        secondaryFallbackModel: 'sonnet',
-        claudeModel: 'sonnet',
+        primaryFallbackModel: '',
+        secondaryFallbackModel: '',
+        claudeModel: '',
         cronSchedule: '5 */3 * * *',
         reviewerSchedule: '25 */6 * * *',
         scheduleBundleId: null,
@@ -109,37 +127,33 @@ describe('Settings Page - PRD Coverage Verification', () => {
       // These defaults match the toFormState() function in Settings.tsx
       expect(defaults.prdDir).toBe('docs/prds');
       expect(defaults.providerLabel).toBe('');
+      expect(defaults.gitPushNoVerify).toBe(false);
       expect(defaults.fallbackOnRateLimit).toBe(true);
-      expect(defaults.primaryFallbackModel).toBe('sonnet');
-      expect(defaults.secondaryFallbackModel).toBe('sonnet');
-      expect(defaults.claudeModel).toBe('sonnet');
+      expect(defaults.primaryFallbackModel).toBe('');
+      expect(defaults.secondaryFallbackModel).toBe('');
+      expect(defaults.claudeModel).toBe('');
       expect(defaults.qa.artifacts).toBe('both');
       expect(defaults.audit.maxRuntime).toBe(1800);
     });
   });
 
   describe('Settings page tabs (from source code)', () => {
-    it('should have all required tabs for PRD coverage', () => {
-      // These tabs exist in Settings.tsx (consolidated from 11 → 6)
+    it('should keep Jobs and Schedules out of Settings', () => {
+      // These tabs exist in Settings.tsx
       const tabs = [
-        'General',
-        'AI & Runtime',
-        'Jobs',
-        'Schedules',
+        'Project',
+        'AI Providers',
         'Integrations',
-        'Advanced',
       ];
 
       // Core tabs present
-      expect(tabs).toContain('General');
-      expect(tabs).toContain('AI & Runtime');
-      expect(tabs).toContain('Jobs');
-      expect(tabs).toContain('Schedules');
+      expect(tabs).toContain('Project');
+      expect(tabs).toContain('AI Providers');
       expect(tabs).toContain('Integrations');
-      expect(tabs).toContain('Advanced');
+      expect(tabs).not.toContain('Jobs');
+      expect(tabs).not.toContain('Schedules');
 
-      // Total tabs should be 6
-      expect(tabs.length).toBe(6);
+      expect(tabs.length).toBe(3);
     });
   });
 

@@ -1,8 +1,8 @@
 import { AlertCircle, AlertTriangle, RotateCcw, Save, Trash2 } from 'lucide-react';
 import React from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ClaudeModel,
-  fetchAllConfigs,
   fetchConfig,
   fetchDoctor,
   fetchGlobalNotifications,
@@ -21,7 +21,6 @@ import {
   IWebhookConfig,
   removeProject,
   triggerInstallCron,
-  toggleRoadmapScanner,
   updateConfig,
   updateGlobalNotifications,
   useApi,
@@ -30,15 +29,12 @@ import WebhookEditor from '../components/settings/WebhookEditor.js';
 import PresetFormModal from '../components/providers/PresetFormModal.js';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
-import { IScheduleTemplate, resolveActiveTemplate } from '../utils/cron.js';
+import Badge from '../components/ui/Badge.js';
 import Tabs from '../components/ui/Tabs';
 import { useStore } from '../store/useStore';
-import GeneralTab from './settings/GeneralTab.js';
-import AiRuntimeTab from './settings/AiRuntimeTab.js';
-import JobsTab from './settings/JobsTab.js';
-import SchedulesTab from './settings/SchedulesTab.js';
+import ProjectTab from './settings/ProjectTab.js';
+import AiProvidersTab from './settings/AiProvidersTab.js';
 import IntegrationsTab from './settings/IntegrationsTab.js';
-import AdvancedTab from './settings/AdvancedTab.js';
 import { usePresetManagement } from '../hooks/usePresetManagement.js';
 import { BUILT_IN_PRESET_IDS } from '../constants/presets.js';
 import {
@@ -71,6 +67,7 @@ type ConfigForm = {
   prdDir: string;
   branchPrefix: string;
   branchPatterns: string[];
+  gitPushNoVerify: boolean;
   executorEnabled: boolean;
   reviewerEnabled: boolean;
   minReviewScore: number;
@@ -94,11 +91,11 @@ type ConfigForm = {
   boardProvider: IBoardProviderConfig;
   jobProviders: IJobProviders;
   fallbackOnRateLimit: boolean;
-  primaryFallbackModel: ClaudeModel;
-  secondaryFallbackModel: ClaudeModel;
+  primaryFallbackModel: ClaudeModel | '';
+  secondaryFallbackModel: ClaudeModel | '';
   primaryFallbackPreset: string;
   secondaryFallbackPreset: string;
-  claudeModel: ClaudeModel;
+  claudeModel: ClaudeModel | '';
   providerScheduleOverrides: IProviderScheduleOverride[];
   qa: IQaConfig;
   audit: IAuditConfig;
@@ -108,105 +105,99 @@ type ConfigForm = {
   queue: INightWatchConfig['queue'];
 };
 
-const toFormState = (config: INightWatchConfig): ConfigForm => ({
-  provider: config.provider,
-  providerLabel: config.providerLabel ?? '',
-  providerPresets: config.providerPresets ?? {},
-  defaultBranch: config.defaultBranch,
-  prdDir: config.prdDir || 'docs/prds',
-  branchPrefix: config.branchPrefix,
-  branchPatterns: config.branchPatterns || [],
-  executorEnabled: config.executorEnabled ?? true,
-  reviewerEnabled: config.reviewerEnabled,
-  minReviewScore: config.minReviewScore,
-  maxRuntime: config.maxRuntime,
-  reviewerMaxRuntime: config.reviewerMaxRuntime,
-  maxLogSize: config.maxLogSize,
-  cronSchedule: config.cronSchedule || DEFAULT_EXECUTOR_SCHEDULE,
-  reviewerSchedule: config.reviewerSchedule || DEFAULT_REVIEWER_SCHEDULE,
-  scheduleBundleId: config.scheduleBundleId ?? null,
-  cronScheduleOffset: config.cronScheduleOffset ?? 0,
-  schedulingPriority: config.schedulingPriority ?? 3,
-  maxRetries: config.maxRetries ?? 3,
-  reviewerMaxRetries: config.reviewerMaxRetries ?? 2,
-  reviewerRetryDelay: config.reviewerRetryDelay ?? 30,
-  reviewerMaxPrsPerRun: config.reviewerMaxPrsPerRun ?? 0,
-  providerEnv: config.providerEnv || {},
-  notifications: config.notifications || { webhooks: [] },
-  prdPriority: config.prdPriority || [],
-  roadmapScanner: config.roadmapScanner || getDefaultRoadmapScannerConfig(),
-  templatesDir: config.templatesDir || '.night-watch/templates',
-  boardProvider: config.boardProvider || { enabled: true, provider: 'github' },
-  jobProviders: config.jobProviders || {},
-  fallbackOnRateLimit: config.fallbackOnRateLimit ?? true,
-  primaryFallbackModel: config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet',
-  secondaryFallbackModel:
-    config.secondaryFallbackModel ?? config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet',
-  primaryFallbackPreset: config.primaryFallbackPreset ?? '',
-  secondaryFallbackPreset: config.secondaryFallbackPreset ?? '',
-  claudeModel: config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet',
-  providerScheduleOverrides: config.providerScheduleOverrides ?? [],
-  qa: config.qa || getDefaultQaConfig(),
-  audit: config.audit || getDefaultAuditConfig(),
-  analytics: config.analytics || getDefaultAnalyticsConfig(),
-  prResolver: config.prResolver ?? getDefaultPrResolverConfig(),
-  merger: config.merger ?? getDefaultMergerConfig(),
-  queue: config.queue || {
-    enabled: true,
-    mode: 'conservative' as const,
-    maxConcurrency: 1,
-    maxWaitTime: 7200,
-    priority: {
-      executor: 50,
-      reviewer: 40,
-      slicer: 30,
-      qa: 20,
-      audit: 10,
+const toFormState = (config: INightWatchConfig): ConfigForm => {
+  const primaryFallbackModel =
+    config.primaryFallbackModel !== undefined
+      ? (config.primaryFallbackModel ?? '')
+      : (config.claudeModel ?? '');
+  const secondaryFallbackModel =
+    config.secondaryFallbackModel !== undefined
+      ? (config.secondaryFallbackModel ?? '')
+      : config.primaryFallbackModel !== undefined
+        ? (config.primaryFallbackModel ?? '')
+        : (config.claudeModel ?? '');
+
+  return {
+    provider: config.provider,
+    providerLabel: config.providerLabel ?? '',
+    providerPresets: config.providerPresets ?? {},
+    defaultBranch: config.defaultBranch,
+    prdDir: config.prdDir || 'docs/prds',
+    branchPrefix: config.branchPrefix,
+    branchPatterns: config.branchPatterns || [],
+    gitPushNoVerify: config.gitPushNoVerify ?? false,
+    executorEnabled: config.executorEnabled ?? true,
+    reviewerEnabled: config.reviewerEnabled,
+    minReviewScore: config.minReviewScore,
+    maxRuntime: config.maxRuntime,
+    reviewerMaxRuntime: config.reviewerMaxRuntime,
+    maxLogSize: config.maxLogSize,
+    cronSchedule: config.cronSchedule || DEFAULT_EXECUTOR_SCHEDULE,
+    reviewerSchedule: config.reviewerSchedule || DEFAULT_REVIEWER_SCHEDULE,
+    scheduleBundleId: config.scheduleBundleId ?? null,
+    cronScheduleOffset: config.cronScheduleOffset ?? 0,
+    schedulingPriority: config.schedulingPriority ?? 3,
+    maxRetries: config.maxRetries ?? 3,
+    reviewerMaxRetries: config.reviewerMaxRetries ?? 2,
+    reviewerRetryDelay: config.reviewerRetryDelay ?? 30,
+    reviewerMaxPrsPerRun: config.reviewerMaxPrsPerRun ?? 0,
+    providerEnv: config.providerEnv || {},
+    notifications: config.notifications || { webhooks: [] },
+    prdPriority: config.prdPriority || [],
+    roadmapScanner: config.roadmapScanner || getDefaultRoadmapScannerConfig(),
+    templatesDir: config.templatesDir || '.night-watch/templates',
+    boardProvider: config.boardProvider || { enabled: true, provider: 'github' },
+    jobProviders: config.jobProviders || {},
+    fallbackOnRateLimit: config.fallbackOnRateLimit ?? true,
+    primaryFallbackModel,
+    secondaryFallbackModel,
+    primaryFallbackPreset: config.primaryFallbackPreset ?? '',
+    secondaryFallbackPreset: config.secondaryFallbackPreset ?? '',
+    claudeModel: primaryFallbackModel,
+    providerScheduleOverrides: config.providerScheduleOverrides ?? [],
+    qa: config.qa || getDefaultQaConfig(),
+    audit: config.audit || getDefaultAuditConfig(),
+    analytics: config.analytics || getDefaultAnalyticsConfig(),
+    prResolver: config.prResolver ?? getDefaultPrResolverConfig(),
+    merger: config.merger ?? getDefaultMergerConfig(),
+    queue: config.queue || {
+      enabled: true,
+      mode: 'conservative' as const,
+      maxConcurrency: 1,
+      maxWaitTime: 7200,
+      priority: {
+        executor: 50,
+        reviewer: 40,
+        slicer: 30,
+        qa: 20,
+        audit: 10,
+      },
+      providerBuckets: {},
     },
-    providerBuckets: {},
-  },
-});
-
-type ScheduleUiState = {
-  mode: 'template' | 'custom';
-  selectedTemplateId: string;
+  };
 };
 
-const resolveScheduleUiState = (form: ConfigForm): ScheduleUiState => {
-  const detected = resolveActiveTemplate(
-    form.scheduleBundleId,
-    form.cronSchedule,
-    form.reviewerSchedule,
-    form.qa.schedule,
-    form.audit.schedule,
-    form.roadmapScanner.slicerSchedule ?? getDefaultRoadmapScannerConfig().slicerSchedule,
-    form.prResolver?.schedule ?? getDefaultPrResolverConfig().schedule,
-    form.merger?.schedule ?? getDefaultMergerConfig().schedule,
-  );
-
-  if (detected) {
-    return { mode: 'template', selectedTemplateId: detected.id };
-  }
-
-  return { mode: 'custom', selectedTemplateId: '' };
-};
 
 const Settings: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const { addToast, projectName, selectedProjectId, globalModeLoading, isGlobalMode, removeProjectFromList } = useStore();
   const [saving, setSaving] = React.useState(false);
   const [removeModalOpen, setRemoveModalOpen] = React.useState(false);
   const [removing, setRemoving] = React.useState(false);
   const [form, setForm] = React.useState<ConfigForm | null>(null);
-  const [allProjectConfigs, setAllProjectConfigs] = React.useState<Array<{ projectId: string; config: INightWatchConfig }>>([]);
   const [globalWebhook, setGlobalWebhook] = React.useState<IWebhookConfig | null | undefined>(undefined);
+  const initialFormRef = React.useRef<ConfigForm | null>(null);
+  const [isDirty, setIsDirty] = React.useState(false);
   // Prevents refetchConfig from overwriting the form after a save (form was already set from PUT response)
   const skipNextFormResetRef = React.useRef(false);
   // Tracks when jobProviders was changed by user (to trigger auto-save)
   const jobProvidersChangedRef = React.useRef(false);
-  const [scheduleMode, setScheduleMode] = React.useState<'template' | 'custom'>('template');
-  const [selectedTemplateId, setSelectedTemplateId] = React.useState<string>('always-on');
-  const [activeSettingsTab, setActiveSettingsTab] = React.useState<string>('general');
-  const [highlightedSection, setHighlightedSection] = React.useState<string | null>(null);
+  const [activeSettingsTab, setActiveSettingsTab] = React.useState<string>('project');
+  const legacyAutomationTab = React.useMemo(() => {
+    const tab = new URLSearchParams(location.search).get('tab');
+    return tab === 'jobs' || tab === 'schedules' ? tab : null;
+  }, [location.search]);
 
   const {
     data: config,
@@ -239,66 +230,55 @@ const Settings: React.FC = () => {
   );
 
   React.useEffect(() => {
-    fetchAllConfigs().then(setAllProjectConfigs).catch(console.error);
     fetchGlobalNotifications().then((cfg) => setGlobalWebhook(cfg.webhook)).catch(() => {
       // server unavailable — leave as undefined so globe buttons stay hidden
     });
   }, [selectedProjectId]);
 
+  // Deep linking: switch tab based on URL param
   React.useEffect(() => {
+    if (!legacyAutomationTab) return;
+    navigate({ pathname: '/scheduling', search: location.search }, { replace: true });
+  }, [legacyAutomationTab, location.search, navigate]);
+
+  React.useEffect(() => {
+    if (legacyAutomationTab) return;
     const params = new URLSearchParams(location.search);
     const tab = params.get('tab');
-    const mode = params.get('mode');
 
     if (tab) {
       const tabMigration: Record<string, string> = {
-        providers: 'ai-runtime',
-        runtime: 'ai-runtime',
-        roadmap: 'jobs',
-        qa: 'jobs',
-        audit: 'jobs',
-        analytics: 'jobs',
-        board: 'integrations',
+        providers: 'ai-providers',
+        runtime: 'ai-providers',
+        'ai-runtime': 'ai-providers',
         notifications: 'integrations',
+        general: 'project',
+        advanced: 'project',
       };
       setActiveSettingsTab(tabMigration[tab] ?? tab);
     }
-    if (mode === 'custom') {
-      setScheduleMode('custom');
-    } else if (mode === 'template') {
-      setScheduleMode('template');
-    }
-
-    const jobTypeParam = params.get('jobType');
-    if (jobTypeParam) {
-      // Small delay to ensure the tab and mode have settled
-      setTimeout(() => {
-        handleEditJob(
-          'current',
-          jobTypeParam,
-          tab === 'schedules' ? 'schedule' : tab === 'jobs' ? 'job' : undefined,
-        );
-      }, 300);
-    }
-  }, [location.search, config]); // config dependency ensures we wait for data before trying to scroll
-
-  const applyScheduleUiState = React.useCallback((formState: ConfigForm) => {
-    const scheduleUiState = resolveScheduleUiState(formState);
-    setScheduleMode(scheduleUiState.mode);
-    setSelectedTemplateId(scheduleUiState.selectedTemplateId);
-  }, []);
+  }, [legacyAutomationTab, location.search]);
 
   React.useEffect(() => {
     if (config) {
       if (skipNextFormResetRef.current) {
         skipNextFormResetRef.current = false;
-      } else {
-        const newForm = toFormState(config);
-        setForm(newForm);
-        applyScheduleUiState(newForm);
+        return;
       }
+      const initial = toFormState(config);
+      setForm(initial);
+      initialFormRef.current = initial;
+      setIsDirty(false);
     }
-  }, [config, applyScheduleUiState]);
+  }, [config]);
+
+  // Track dirty state
+  React.useEffect(() => {
+    if (!form || !initialFormRef.current) return;
+    const currentStr = JSON.stringify(form);
+    const initialStr = JSON.stringify(initialFormRef.current);
+    setIsDirty(currentStr !== initialStr);
+  }, [form]);
 
   // Auto-save when jobProviders changes from user input
   React.useEffect(() => {
@@ -307,112 +287,6 @@ const Settings: React.FC = () => {
       handleSave();
     }
   }, [form?.jobProviders]);
-
-  // Clear highlight after timeout
-  React.useEffect(() => {
-    if (highlightedSection) {
-      const timer = setTimeout(() => setHighlightedSection(null), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [highlightedSection]);
-
-  const switchToTemplateMode = () => {
-    setScheduleMode('template');
-    if (!form) {
-      return;
-    }
-
-    const scheduleUiState = resolveScheduleUiState(form);
-    if (scheduleUiState.mode === 'template') {
-      setSelectedTemplateId(scheduleUiState.selectedTemplateId);
-      updateField('scheduleBundleId', scheduleUiState.selectedTemplateId);
-    }
-  };
-
-  const switchToCustomMode = () => {
-    setScheduleMode('custom');
-    updateField('scheduleBundleId', null);
-    setSelectedTemplateId('');
-  };
-
-  const scrollToSection = (sectionId: string) => {
-    setTimeout(() => {
-      const el = document.getElementById(sectionId);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setHighlightedSection(sectionId);
-      }
-    }, 50);
-  };
-
-  const openJobSettings = (jobType: string) => {
-    const registryId = jobType === 'planner' ? 'slicer' : jobType;
-    setActiveSettingsTab('jobs');
-    scrollToSection(`job-section-${registryId}`);
-  };
-
-  const openScheduleEditor = (jobType: string) => {
-    const registryId = jobType === 'planner' ? 'slicer' : jobType;
-    if (scheduleMode !== 'custom') {
-      switchToCustomMode();
-    }
-    setActiveSettingsTab('schedules');
-    scrollToSection(`job-schedule-${registryId}`);
-  };
-
-  const handleEditJob = (
-    projectId: string,
-    jobType: string,
-    destination?: 'job' | 'schedule',
-  ) => {
-    if (projectId !== projectName && projectId !== 'current') {
-      addToast({
-        title: 'Project Switch Required',
-        message: `To edit ${projectId}, please switch to that project in the sidebar.`,
-        type: 'info',
-      });
-      return;
-    }
-
-    const registryId = jobType === 'planner' ? 'slicer' : jobType;
-    const jobsTabTypes = new Set(['qa', 'audit', 'slicer', 'analytics', 'pr-resolver', 'merger']);
-
-    if (destination === 'job') {
-      openJobSettings(registryId);
-      return;
-    }
-
-    if (destination === 'schedule') {
-      openScheduleEditor(registryId);
-      return;
-    }
-
-    if (jobsTabTypes.has(registryId)) {
-      openJobSettings(registryId);
-      return;
-    }
-
-    openScheduleEditor(registryId);
-  };
-
-  const applyTemplate = (tpl: IScheduleTemplate) => {
-    setSelectedTemplateId(tpl.id);
-    setForm((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        cronSchedule: tpl.schedules.executor,
-        reviewerSchedule: tpl.schedules.reviewer,
-        scheduleBundleId: tpl.id,
-        qa: { ...prev.qa, schedule: tpl.schedules.qa },
-        audit: { ...prev.audit, schedule: tpl.schedules.audit },
-        roadmapScanner: { ...prev.roadmapScanner, slicerSchedule: tpl.schedules.slicer },
-        prResolver: { ...prev.prResolver, schedule: tpl.schedules.prResolver },
-        merger: { ...prev.merger, schedule: tpl.schedules.merger },
-        fallbackOnRateLimit: true,
-      };
-    });
-  };
 
   const handleSave = async () => {
     if (!form) {
@@ -456,6 +330,9 @@ const Settings: React.FC = () => {
 
     setSaving(true);
     try {
+      const primaryFallbackModel = form.primaryFallbackModel || null;
+      const secondaryFallbackModel = form.secondaryFallbackModel || null;
+
       const savedConfig = await updateConfig({
         provider: form.provider,
         providerLabel: form.providerLabel.trim(),
@@ -464,6 +341,7 @@ const Settings: React.FC = () => {
         prdDir: form.prdDir,
         branchPrefix: form.branchPrefix,
         branchPatterns: form.branchPatterns,
+        gitPushNoVerify: form.gitPushNoVerify,
         executorEnabled: form.executorEnabled,
         reviewerEnabled: form.reviewerEnabled,
         minReviewScore: form.minReviewScore,
@@ -472,7 +350,7 @@ const Settings: React.FC = () => {
         maxLogSize: form.maxLogSize,
         cronSchedule: form.cronSchedule,
         reviewerSchedule: form.reviewerSchedule,
-        scheduleBundleId: scheduleMode === 'template' ? form.scheduleBundleId : null,
+        scheduleBundleId: form.scheduleBundleId,
         cronScheduleOffset: form.cronScheduleOffset,
         schedulingPriority: form.schedulingPriority,
         maxRetries: form.maxRetries,
@@ -487,11 +365,11 @@ const Settings: React.FC = () => {
         boardProvider: form.boardProvider,
         jobProviders: cleanedJobProviders,
         fallbackOnRateLimit: form.fallbackOnRateLimit,
-        primaryFallbackModel: form.primaryFallbackModel,
-        secondaryFallbackModel: form.secondaryFallbackModel,
+        primaryFallbackModel,
+        secondaryFallbackModel,
         primaryFallbackPreset: form.primaryFallbackPreset || undefined,
         secondaryFallbackPreset: form.secondaryFallbackPreset || undefined,
-        claudeModel: form.primaryFallbackModel,
+        claudeModel: primaryFallbackModel,
         providerScheduleOverrides: form.providerScheduleOverrides,
         qa: form.qa,
         audit: form.audit,
@@ -504,7 +382,8 @@ const Settings: React.FC = () => {
       // Update form directly from server response to ensure it reflects persisted values
       const updatedForm = toFormState(savedConfig);
       setForm(updatedForm);
-      applyScheduleUiState(updatedForm);
+      initialFormRef.current = updatedForm;
+      setIsDirty(false);
 
       let cronInstallFailedMessage = '';
       if (shouldReinstallCron) {
@@ -548,10 +427,9 @@ const Settings: React.FC = () => {
   };
 
   const handleReset = () => {
-    if (config) {
-      const resetForm = toFormState(config);
-      setForm(resetForm);
-      applyScheduleUiState(resetForm);
+    if (initialFormRef.current) {
+      setForm(initialFormRef.current);
+      setIsDirty(false);
       addToast({
         title: 'Reset Complete',
         message: 'Unsaved changes were discarded.',
@@ -589,41 +467,6 @@ const Settings: React.FC = () => {
     }
   };
 
-  const handleRoadmapToggle = async (enabled: boolean) => {
-    try {
-      const updatedConfig = await toggleRoadmapScanner(enabled);
-      updateField('roadmapScanner', updatedConfig.roadmapScanner);
-
-      let cronInstallFailedMessage = '';
-      try {
-        await triggerInstallCron();
-      } catch (cronErr) {
-        cronInstallFailedMessage =
-          cronErr instanceof Error ? cronErr.message : 'Failed to reinstall cron schedules';
-      }
-
-      addToast(
-        cronInstallFailedMessage
-          ? {
-              title: 'Planner Saved (Cron Reinstall Failed)',
-              message: cronInstallFailedMessage,
-              type: 'warning',
-            }
-          : {
-              title: enabled ? 'Roadmap Scanner Enabled' : 'Roadmap Scanner Disabled',
-              message: `Roadmap scanner has been ${enabled ? 'enabled' : 'disabled'}.`,
-              type: 'success',
-            },
-      );
-    } catch (err) {
-      addToast({
-        title: 'Toggle Failed',
-        message: err instanceof Error ? err.message : 'Failed to toggle roadmap scanner',
-        type: 'error',
-      });
-    }
-  };
-
   const handleRemoveProject = async () => {
     if (!selectedProjectId) return;
     setRemoving(true);
@@ -647,6 +490,14 @@ const Settings: React.FC = () => {
     }
   };
 
+  if (legacyAutomationTab) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-slate-400">Opening automation...</div>
+      </div>
+    );
+  }
+
   if (configLoading || !form) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -666,14 +517,12 @@ const Settings: React.FC = () => {
     );
   }
 
-  const highlightClass = 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-slate-900 rounded-lg';
-
   const tabs = [
     {
-      id: 'general',
-      label: 'General',
+      id: 'project',
+      label: 'Project',
       content: (
-        <GeneralTab
+        <ProjectTab
           form={form}
           updateField={updateField as <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => void}
           projectName={projectName}
@@ -683,13 +532,12 @@ const Settings: React.FC = () => {
       ),
     },
     {
-      id: 'ai-runtime',
-      label: 'AI & Runtime',
+      id: 'ai-providers',
+      label: 'AI Providers',
       content: (
-        <AiRuntimeTab
+        <AiProvidersTab
           form={form}
           updateField={updateField as <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => void}
-          jobProvidersChangedRef={jobProvidersChangedRef}
           getAllPresets={presetManagement.getAllPresets}
           getPresetOptions={presetManagement.getPresetOptions}
           handleEditPreset={presetManagement.handleEditPreset}
@@ -700,112 +548,63 @@ const Settings: React.FC = () => {
       ),
     },
     {
-      id: 'jobs',
-      label: 'Jobs',
-      content: (
-        <JobsTab
-          form={form}
-          updateField={updateField as <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => void}
-          handleRoadmapToggle={handleRoadmapToggle}
-          onManageSchedule={openScheduleEditor as (jobType: 'qa' | 'audit' | 'analytics' | 'slicer' | 'pr-resolver' | 'merger') => void}
-        />
-      ),
-    },
-    {
-      id: 'schedules',
-      label: 'Schedules',
-      content: (
-        <SchedulesTab
-          form={{
-            cronSchedule: form.cronSchedule,
-            reviewerSchedule: form.reviewerSchedule,
-            qa: form.qa,
-            audit: form.audit,
-            analytics: form.analytics,
-            roadmapScanner: {
-              enabled: form.roadmapScanner.enabled,
-              slicerSchedule:
-                form.roadmapScanner.slicerSchedule || getDefaultRoadmapScannerConfig().slicerSchedule,
-            },
-            prResolver: form.prResolver,
-            merger: form.merger,
-            scheduleBundleId: form.scheduleBundleId,
-            schedulingPriority: form.schedulingPriority,
-            cronScheduleOffset: form.cronScheduleOffset,
-            globalQueueEnabled: form.queue.enabled,
-          }}
-          scheduleMode={scheduleMode}
-          selectedTemplateId={selectedTemplateId}
-          onFieldChange={(field, value) => {
-            if (field === 'globalQueueEnabled') {
-              updateField('queue', { ...form.queue, enabled: value as boolean });
-            } else {
-              updateField(field as keyof ConfigForm, value as ConfigForm[keyof ConfigForm]);
-            }
-          }}
-          onSwitchToTemplate={switchToTemplateMode}
-          onSwitchToCustom={switchToCustomMode}
-          onApplyTemplate={applyTemplate}
-          allProjectConfigs={allProjectConfigs}
-          currentProjectId={selectedProjectId}
-          onEditJob={handleEditJob}
-        />
-      ),
-    },
-    {
-      id: 'notifications',
-      label: 'Notifications',
-      content: (
-        <Card className="p-6">
-          <h3 className="text-lg font-medium text-slate-200 mb-2">Notification Webhooks</h3>
-          <WebhookEditor
-            notifications={form.notifications}
-            onChange={(notifications) => updateField('notifications', notifications)}
-            globalWebhook={globalWebhook}
-            onSetGlobal={handleSetGlobal}
-            onUnsetGlobal={handleUnsetGlobal}
-          />
-        </Card>
-      ),
-    },
-    {
       id: 'integrations',
       label: 'Integrations',
       content: (
         <IntegrationsTab
           form={form}
-          updateField={updateField as <K extends 'boardProvider' | 'notifications'>(key: K, value: ConfigForm[K]) => void}
-        />
-      ),
-    },
-    {
-      id: 'advanced',
-      label: 'Advanced',
-      content: (
-        <AdvancedTab
-          form={form}
-          updateField={updateField as <K extends 'templatesDir' | 'maxRetries' | 'prdPriority'>(key: K, value: ConfigForm[K]) => void}
+          updateField={updateField as <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => void}
+          globalWebhook={globalWebhook}
+          onSetGlobal={handleSetGlobal}
+          onUnsetGlobal={handleUnsetGlobal}
         />
       ),
     },
   ];
 
   return (
-    <div className="max-w-4xl mx-auto pb-10">
-      <h2 className="text-2xl font-bold text-slate-100 mb-6">Settings</h2>
+    <div className="max-w-4xl mx-auto pb-32">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-100">Settings</h2>
+          <p className="text-sm text-slate-500 mt-1">Configure project automation, providers, and integrations</p>
+        </div>
+        {isDirty && (
+          <Badge variant="warning" className="animate-pulse">
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            Unsaved Changes
+          </Badge>
+        )}
+      </div>
 
       <Tabs tabs={tabs} activeTab={activeSettingsTab} onChange={setActiveSettingsTab} />
 
-      <div className="flex items-center justify-end space-x-4 pt-6 mt-6 border-t border-slate-800">
-        <Button variant="ghost" className="text-slate-400 hover:text-slate-300" onClick={handleReset}>
-          <RotateCcw className="h-4 w-4 mr-2" />
-          Reset
-        </Button>
-        <Button onClick={handleSave} loading={saving}>
-          <Save className="h-4 w-4 mr-2" />
-          Save Changes
-        </Button>
-      </div>
+      {/* Sticky Save Banner */}
+      {isDirty && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="bg-slate-900/90 backdrop-blur-md border border-indigo-500/30 rounded-2xl p-4 shadow-2xl flex items-center justify-between shadow-indigo-500/10">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-indigo-500/20 text-indigo-400">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-slate-200">You have unsaved changes</div>
+                <div className="text-[11px] text-slate-400">Save your configuration to apply changes</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-300" onClick={handleReset}>
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Discard
+              </Button>
+              <Button size="sm" className="bg-indigo-600 hover:bg-indigo-500 shadow-lg shadow-indigo-500/20" onClick={handleSave} loading={saving}>
+                <Save className="h-4 w-4 mr-2" />
+                Save Changes
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Danger Zone (global mode only) */}
       {isGlobalMode && selectedProjectId && (

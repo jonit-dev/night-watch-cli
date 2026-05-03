@@ -36,12 +36,14 @@ import {
   shouldSendReviewNotification,
   shouldSendReviewCompletionNotification,
 } from '@/cli/commands/review.js';
+import { getDefaultConfig } from '@night-watch/core';
 import { INightWatchConfig } from '@night-watch/core/types.js';
 import { sendNotifications } from '@night-watch/core/utils/notify.js';
 
 // Helper to create a valid config without budget fields
 function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConfig {
   return {
+    ...getDefaultConfig(),
     prdDir: 'docs/PRDs/night-watch',
     maxRuntime: 7200,
     reviewerMaxRuntime: 3600,
@@ -152,6 +154,20 @@ describe('review command', () => {
       expect(env.NW_DEFAULT_BRANCH).toBe('main');
     });
 
+    it('should pass the configured ready label to the reviewer script', () => {
+      const config = createTestConfig({
+        prResolver: {
+          ...getDefaultConfig().prResolver,
+          readyLabel: 'merge-ready',
+        },
+      });
+      const options: IReviewOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_PR_RESOLVER_READY_LABEL).toBe('merge-ready');
+    });
+
     it('should set NW_DRY_RUN when dryRun is true', () => {
       const config = createTestConfig();
       const options: IReviewOptions = { dryRun: true };
@@ -238,7 +254,6 @@ describe('review command', () => {
       // jobProviders should remain unchanged
       expect(overridden.jobProviders.reviewer).toBe('claude');
     });
-
   });
 
   describe('notification integration', () => {
@@ -255,6 +270,7 @@ describe('review command', () => {
     it('should suppress notifications for skip statuses', () => {
       expect(shouldSendReviewNotification('skip_no_open_prs')).toBe(false);
       expect(shouldSendReviewNotification('skip_all_passing')).toBe(false);
+      expect(shouldSendReviewNotification('skip_no_actionable_prs')).toBe(false);
     });
 
     it('should suppress notifications when job is queued', () => {
@@ -276,6 +292,7 @@ describe('review command', () => {
 
     it('should suppress completion notifications for no-op outcomes', () => {
       expect(shouldSendReviewCompletionNotification(0, 'skip_no_open_prs')).toBe(false);
+      expect(shouldSendReviewCompletionNotification(0, 'skip_no_actionable_prs')).toBe(false);
       expect(shouldSendReviewCompletionNotification(0, 'queued')).toBe(false);
     });
 

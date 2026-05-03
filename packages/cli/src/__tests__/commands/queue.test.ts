@@ -131,7 +131,7 @@ describe('queue command', () => {
         }),
       }),
     );
-    expect(markJobRunning).toHaveBeenCalledWith(42);
+    expect(markJobRunning).toHaveBeenCalledWith(42, 4321);
   });
 
   it('dispatch resolves the merger cron script for merger jobs', async () => {
@@ -263,6 +263,7 @@ describe('queue command', () => {
       'pr-resolver',
       undefined,
       queueConfig,
+      undefined,
     );
     expect(writeSpy).toHaveBeenCalledWith('88\n');
     expect(exitSpy).toHaveBeenCalledWith(0);

@@ -8,6 +8,9 @@ import {
   PRIORITY_LABELS,
   CATEGORY_LABELS,
   HORIZON_LABELS,
+  EXECUTOR_PARTIAL_LABEL,
+  EXECUTOR_RESUMABLE_LABEL,
+  EXECUTOR_READY_REVIEW_LABEL,
   isValidPriority,
   isValidCategory,
   isValidHorizon,
@@ -17,6 +20,13 @@ describe('NIGHT_WATCH_LABELS', () => {
   it('includes e2e-validated label', () => {
     const names = NIGHT_WATCH_LABELS.map((l) => l.name);
     expect(names).toContain('e2e-validated');
+  });
+
+  it('includes executor lifecycle status labels', () => {
+    const names = NIGHT_WATCH_LABELS.map((l) => l.name);
+    expect(names).toContain(EXECUTOR_PARTIAL_LABEL);
+    expect(names).toContain(EXECUTOR_RESUMABLE_LABEL);
+    expect(names).toContain(EXECUTOR_READY_REVIEW_LABEL);
   });
 
   it('e2e-validated has correct description and green color', () => {
