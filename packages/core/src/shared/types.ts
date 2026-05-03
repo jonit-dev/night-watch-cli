@@ -128,6 +128,31 @@ export interface INotificationConfig {
   webhooks: IWebhookConfig[];
 }
 
+// ==================== Inbound Webhook Triggers ====================
+
+export interface IWebhookTriggerGithubRule {
+  event: string;
+  action?: string;
+  jobId: JobType;
+  branchPatterns?: string[];
+  onlyOnFailure?: boolean;
+}
+
+export interface IWebhookTriggerGithubConfig {
+  enabled: boolean;
+  events: string[];
+  rules: IWebhookTriggerGithubRule[];
+}
+
+export interface IWebhookTriggerConfig {
+  enabled: boolean;
+  secretEnv: string;
+  allowedJobIds: JobType[];
+  requireTimestamp: boolean;
+  maxSkewSeconds: number;
+  github: IWebhookTriggerGithubConfig;
+}
+
 // ==================== Roadmap Scanner Config ====================
 
 export interface IRoadmapScannerConfig {
@@ -281,6 +306,8 @@ export interface INightWatchConfig {
   prResolver?: IPrResolverConfig;
   merger?: IMergerConfig;
   queue: IQueueConfig;
+  /** Authenticated inbound job webhook trigger configuration */
+  webhookTriggers?: IWebhookTriggerConfig;
   /** Time-based provider schedule overrides */
   providerScheduleOverrides?: IProviderScheduleOverride[];
 }
