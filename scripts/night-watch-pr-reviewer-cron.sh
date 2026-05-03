@@ -67,11 +67,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
 
-# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
-if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
-  echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
-  exit 127
-fi
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 PROVIDER_MODEL_DISPLAY=$(resolve_provider_model_display "${PROVIDER_CMD}" "${PROVIDER_LABEL}")
 GLOBAL_LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_RUNTIME_KEY}.lock"
@@ -145,24 +140,14 @@ get_pr_latest_review_body() {
 }
 
 # ── Global Job Queue Gate ────────────────────────────────────────────────────
-# Acquire global gate before per-project lock to serialize jobs across projects.
-# When gate is busy, enqueue the job and exit cleanly.
+# Atomically claim a DB slot or enqueue for later dispatch.
 if [ "${NW_QUEUE_ENABLED:-0}" = "1" ]; then
-  if [ "${NW_QUEUE_DISPATCHED:-0}" = "1" ]; then
+  if [ "${NW_QUEUE_INHERITED_SLOT:-0}" = "1" ]; then
+    :
+  elif [ "${NW_QUEUE_DISPATCHED:-0}" = "1" ]; then
     arm_global_queue_cleanup
-  elif acquire_global_gate; then
-    if queue_can_start_now; then
-      arm_global_queue_cleanup
-    else
-      release_global_gate
-      enqueue_job "${SCRIPT_TYPE}" "${PROJECT_DIR}"
-      emit_result "queued"
-      exit 0
-    fi
   else
-    enqueue_job "${SCRIPT_TYPE}" "${PROJECT_DIR}"
-    emit_result "queued"
-    exit 0
+    claim_or_enqueue "${SCRIPT_TYPE}" "${PROJECT_DIR}"
   fi
 fi
 # ──────────────────────────────────────────────────────────────────────────────
@@ -862,6 +847,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
       NW_TARGET_PR="${pr_number}" \
       NW_REVIEWER_WORKER_MODE="1" \
       NW_REVIEWER_PARALLEL="0" \
+      NW_QUEUE_INHERITED_SLOT="1" \
       bash "${SCRIPT_DIR}/night-watch-pr-reviewer-cron.sh" "${PROJECT_DIR}" > "${worker_output}" 2>&1
     ) &
 
@@ -977,6 +963,14 @@ if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   fi
   echo "Timeout: ${MAX_RUNTIME}s"
   exit 0
+fi
+
+# Ensure provider CLI is on PATH only after the scan determines there is work
+# that requires invoking the provider. Pure skip paths should not fail just
+# because the runner lacks an AI CLI.
+if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
+  echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
+  exit 127
 fi
 
 if ! prepare_detached_worktree "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
