@@ -144,6 +144,7 @@ function buildWindowSummary(projectPath: string, days: number): IFeedbackWindowS
             timeoutCount: summary.timeoutCount,
             rateLimitedCount: summary.rateLimitedCount,
             skippedCount: summary.skippedCount,
+            successRate: null,
           }),
         ] as const;
       })
