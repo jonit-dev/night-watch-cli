@@ -9,9 +9,11 @@ import { inject, injectable } from 'tsyringe';
 import type {
   FeedbackPatternStatus,
   IFeedbackPattern,
+  IFeedbackPatternQueryInput,
   IFeedbackPatternUpsertInput,
   IPromptAugmentation,
   IPromptAugmentationInsertInput,
+  IPromptAugmentationQueryInput,
   ISessionOutcome,
   ISessionOutcomeInsertInput,
   ISessionOutcomeQueryInput,
@@ -400,6 +402,33 @@ export class SqliteSessionOutcomeRepository implements ISessionOutcomeRepository
     return this.getPattern(input.projectPath, input.patternKey, input.jobType)!;
   }
 
+  listPatterns(input: IFeedbackPatternQueryInput): IFeedbackPattern[] {
+    const clauses = ['project_path = ?'];
+    const params: Array<number | string> = [input.projectPath];
+
+    if (input.jobType) {
+      clauses.push('job_type = ?');
+      params.push(input.jobType);
+    }
+    if (input.status) {
+      clauses.push('status = ?');
+      params.push(input.status);
+    }
+
+    const limit = Math.min(Math.max(input.limit ?? 25, 1), 100);
+    const rows = this.db
+      .prepare(
+        `SELECT *
+         FROM feedback_patterns
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY sample_count DESC, confidence DESC, last_seen_at DESC, id DESC
+         LIMIT ?`,
+      )
+      .all(...params, limit) as IFeedbackPatternRow[];
+
+    return rows.map(rowToPattern);
+  }
+
   createAugmentation(input: IPromptAugmentationInsertInput): IPromptAugmentation {
     const now = Date.now();
     const createdAt = input.createdAt ?? now;
@@ -424,6 +453,37 @@ export class SqliteSessionOutcomeRepository implements ISessionOutcomeRepository
     return this.getAugmentationById(Number(result.lastInsertRowid))!;
   }
 
+  listAugmentations(input: IPromptAugmentationQueryInput): IPromptAugmentation[] {
+    const clauses = ['project_path = ?'];
+    const params: Array<number | string> = [input.projectPath];
+
+    if (input.jobType) {
+      clauses.push('job_type = ?');
+      params.push(input.jobType);
+    }
+    if (input.status) {
+      clauses.push('status = ?');
+      params.push(input.status);
+    }
+    if (!input.includeExpired) {
+      clauses.push('(expires_at IS NULL OR expires_at > ?)');
+      params.push(input.now ?? Date.now());
+    }
+
+    const limit = Math.min(Math.max(input.limit ?? 100, 1), 250);
+    const rows = this.db
+      .prepare(
+        `SELECT *
+         FROM prompt_augmentations
+         WHERE ${clauses.join(' AND ')}
+         ORDER BY created_at ASC, id ASC
+         LIMIT ?`,
+      )
+      .all(...params, limit) as IPromptAugmentationRow[];
+
+    return rows.map(rowToAugmentation);
+  }
+
   listActiveAugmentations(
     projectPath: string,
     jobType: JobType,
@@ -444,10 +504,25 @@ export class SqliteSessionOutcomeRepository implements ISessionOutcomeRepository
     return rows.map(rowToAugmentation);
   }
 
-  updateAugmentationStatus(id: number, status: PromptAugmentationStatus): void {
-    this.db
-      .prepare('UPDATE prompt_augmentations SET status = ?, updated_at = ? WHERE id = ?')
-      .run(status, Date.now(), id);
+  updateAugmentationStatus(
+    id: number,
+    status: PromptAugmentationStatus,
+    projectPath?: string,
+  ): IPromptAugmentation | null {
+    const result =
+      projectPath === undefined
+        ? this.db
+            .prepare('UPDATE prompt_augmentations SET status = ?, updated_at = ? WHERE id = ?')
+            .run(status, Date.now(), id)
+        : this.db
+            .prepare(
+              `UPDATE prompt_augmentations
+               SET status = ?, updated_at = ?
+               WHERE id = ? AND project_path = ?`,
+            )
+            .run(status, Date.now(), id, projectPath);
+
+    return result.changes > 0 ? this.getAugmentationById(id) : null;
   }
 
   incrementAugmentationCounts(id: number, success = false): void {

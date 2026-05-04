@@ -31,11 +31,17 @@ import {
   scanPrdDirectory,
   getRateLimitFallbackTelegramWebhooks,
   isRateLimitFallbackTriggered,
+  recordRunSessionOutcome,
   resolveRunNotificationEvent,
   shouldAttemptCrossProjectFallback,
 } from '@/cli/commands/run.js';
 import { applyScheduleOffset, buildCronPathPrefix } from '@/cli/commands/install.js';
 import { INightWatchConfig } from '@night-watch/core/types.js';
+import { closeDb } from '@night-watch/core/storage/sqlite/client.js';
+import {
+  getRepositories,
+  resetRepositories,
+} from '@night-watch/core/storage/repositories/index.js';
 import { sendNotifications } from '@night-watch/core/utils/notify.js';
 
 // Helper to create a valid config without budget fields
@@ -62,6 +68,7 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
 describe('run command', () => {
   let tempDir: string;
   let originalEnv: NodeJS.ProcessEnv;
+  let originalNightWatchHome: string | undefined;
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'night-watch-test-'));
@@ -69,6 +76,7 @@ describe('run command', () => {
 
     // Save original environment
     originalEnv = { ...process.env };
+    originalNightWatchHome = process.env.NIGHT_WATCH_HOME;
 
     // Clear NW_* environment variables
     for (const key of Object.keys(process.env)) {
@@ -81,7 +89,15 @@ describe('run command', () => {
   });
 
   afterEach(() => {
+    closeDb();
+    resetRepositories();
     fs.rmSync(tempDir, { recursive: true, force: true });
+
+    if (originalNightWatchHome === undefined) {
+      delete process.env.NIGHT_WATCH_HOME;
+    } else {
+      process.env.NIGHT_WATCH_HOME = originalNightWatchHome;
+    }
 
     // Restore original environment
     for (const key of Object.keys(process.env)) {
@@ -477,6 +493,49 @@ describe('run command', () => {
       expect(isRateLimitFallbackTriggered({ rate_limit_fallback: '1' })).toBe(true);
       expect(isRateLimitFallbackTriggered({ rate_limit_fallback: '0' })).toBe(false);
       expect(isRateLimitFallbackTriggered(undefined)).toBe(false);
+    });
+  });
+
+  describe('outcome recording', () => {
+    it('should record executor outcome after script exits', () => {
+      process.env.NIGHT_WATCH_HOME = path.join(tempDir, '.night-watch-home');
+      closeDb();
+      resetRepositories();
+
+      const config = createTestConfig();
+      const startedAt = 1_700_000_000_000;
+      const finishedAt = 1_700_000_003_000;
+
+      recordRunSessionOutcome({
+        projectDir: tempDir,
+        config,
+        envVars: {
+          NW_PROVIDER_KEY: 'claude-native',
+          NW_PROVIDER_CMD: 'claude',
+          NW_PROVIDER_LABEL: 'Claude',
+        },
+        startedAt,
+        finishedAt,
+        exitCode: 1,
+        stderr: "packages/core/src/index.ts:1:1 - error TS2305: Module has no exported member 'x'.",
+        scriptResult: {
+          status: 'failure',
+          data: { prd: '97-feedback.md', branch: 'night-watch/nw-97' },
+        },
+      });
+
+      const outcomes = getRepositories().sessionOutcomes.queryOutcomes({
+        projectPath: tempDir,
+        jobType: 'executor',
+      });
+
+      expect(outcomes).toHaveLength(1);
+      expect(outcomes[0].providerKey).toBe('claude-native');
+      expect(outcomes[0].durationSeconds).toBe(3);
+      expect(outcomes[0].outcome).toBe('failure');
+      expect(outcomes[0].failureCategory).toBe('typescript');
+      expect(outcomes[0].prdFile).toBe('97-feedback.md');
+      expect(outcomes[0].branchName).toBe('night-watch/nw-97');
     });
   });
 

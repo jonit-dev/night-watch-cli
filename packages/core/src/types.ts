@@ -618,6 +618,13 @@ export interface ISessionOutcomeSummary {
   byFailureCategory: Record<string, number>;
 }
 
+export interface IFeedbackPatternQueryInput {
+  projectPath: string;
+  jobType?: JobType;
+  status?: FeedbackPatternStatus;
+  limit?: number;
+}
+
 export interface IFeedbackPattern {
   id: number;
   projectPath: string;
@@ -672,6 +679,15 @@ export interface IPromptAugmentationInsertInput {
   createdAt?: number;
   updatedAt?: number;
   expiresAt?: number | null;
+}
+
+export interface IPromptAugmentationQueryInput {
+  projectPath: string;
+  jobType?: JobType;
+  status?: PromptAugmentationStatus;
+  includeExpired?: boolean;
+  now?: number;
+  limit?: number;
 }
 
 /**

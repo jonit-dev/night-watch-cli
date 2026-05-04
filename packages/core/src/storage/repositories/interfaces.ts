@@ -6,9 +6,11 @@
 import { BoardColumnName } from '@/board/types.js';
 import type {
   IFeedbackPattern,
+  IFeedbackPatternQueryInput,
   IFeedbackPatternUpsertInput,
   IPromptAugmentation,
   IPromptAugmentationInsertInput,
+  IPromptAugmentationQueryInput,
   ISessionOutcome,
   ISessionOutcomeInsertInput,
   ISessionOutcomeQueryInput,
@@ -84,12 +86,18 @@ export interface ISessionOutcomeRepository {
   queryOutcomes(input: ISessionOutcomeQueryInput): ISessionOutcome[];
   querySummary(input: ISessionOutcomeSummaryInput): ISessionOutcomeSummary;
   upsertPattern(input: IFeedbackPatternUpsertInput): IFeedbackPattern;
+  listPatterns(input: IFeedbackPatternQueryInput): IFeedbackPattern[];
   createAugmentation(input: IPromptAugmentationInsertInput): IPromptAugmentation;
+  listAugmentations(input: IPromptAugmentationQueryInput): IPromptAugmentation[];
   listActiveAugmentations(
     projectPath: string,
     jobType: JobType,
     now?: number,
   ): IPromptAugmentation[];
-  updateAugmentationStatus(id: number, status: PromptAugmentationStatus): void;
+  updateAugmentationStatus(
+    id: number,
+    status: PromptAugmentationStatus,
+    projectPath?: string,
+  ): IPromptAugmentation | null;
   incrementAugmentationCounts(id: number, success?: boolean): void;
 }

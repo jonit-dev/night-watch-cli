@@ -7,12 +7,14 @@ import {
   CLAUDE_MODEL_IDS,
   INightWatchConfig,
   PROVIDER_COMMANDS,
+  buildSessionOutcomeInput,
   createSpinner,
   createTable,
   dim,
   executeScriptWithOutput,
   fetchPrDetailsByNumber,
   fetchReviewedPrDetails,
+  getRepositories,
   getScriptPath,
   header,
   info,
@@ -431,12 +433,14 @@ export function reviewCommand(program: Command): void {
       spinner.start();
 
       try {
+        const startedAt = Date.now();
         await maybeApplyCronSchedulingDelay(config, 'reviewer', projectDir);
         const { exitCode, stdout, stderr } = await executeScriptWithOutput(
           scriptPath,
           [projectDir],
           envVars,
         );
+        const finishedAt = Date.now();
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
 
         if (exitCode === 0) {
@@ -453,6 +457,29 @@ export function reviewCommand(program: Command): void {
 
         // Send notifications (fire-and-forget, failures do not affect exit code)
         if (!options.dryRun) {
+          try {
+            getRepositories().sessionOutcomes.insertOutcome(
+              buildSessionOutcomeInput({
+                projectPath: projectDir,
+                jobType: 'reviewer',
+                providerKey: envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'reviewer'),
+                startedAt,
+                finishedAt,
+                exitCode,
+                stdout,
+                stderr,
+                scriptResult,
+                minReviewScore: config.minReviewScore,
+                metadata: {
+                  providerCommand: envVars.NW_PROVIDER_CMD,
+                  providerLabel: envVars.NW_PROVIDER_LABEL,
+                },
+              }),
+            );
+          } catch {
+            // Outcome persistence must not change command exit behavior.
+          }
+
           const shouldNotifyCompletion = shouldSendReviewCompletionNotification(
             exitCode,
             scriptResult?.status,

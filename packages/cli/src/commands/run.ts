@@ -10,6 +10,7 @@ import {
   IWebhookConfig,
   NotificationEvent,
   PROVIDER_COMMANDS,
+  buildSessionOutcomeInput,
   createBoardProvider,
   createSpinner,
   createTable,
@@ -17,6 +18,7 @@ import {
   executeScriptWithOutput,
   fetchPrDetails,
   fetchPrDetailsForBranch,
+  getRepositories,
   getScriptPath,
   header,
   info,
@@ -42,6 +44,19 @@ export interface IRunOptions {
   timeout?: string;
   provider?: string;
   crossProjectFallback?: boolean;
+}
+
+export interface IRunOutcomeRecordInput {
+  projectDir: string;
+  config: INightWatchConfig;
+  envVars: Record<string, string>;
+  startedAt: number;
+  finishedAt: number;
+  exitCode: number;
+  stdout?: string;
+  stderr?: string;
+  scriptResult?: ReturnType<typeof parseScriptResult>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -206,13 +221,32 @@ async function runCrossProjectFallback(
     envVars.NW_CROSS_PROJECT_FALLBACK_ACTIVE = '1';
 
     try {
+      const startedAt = Date.now();
       const { exitCode, stdout, stderr } = await executeScriptWithOutput(
         scriptPath,
         [candidate.path],
         envVars,
         { cwd: candidate.path },
       );
+      const finishedAt = Date.now();
       const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
+
+      try {
+        recordRunSessionOutcome({
+          projectDir: candidate.path,
+          config: candidateConfig,
+          envVars,
+          startedAt,
+          finishedAt,
+          exitCode,
+          stdout,
+          stderr,
+          scriptResult,
+          metadata: { crossProjectFallback: true },
+        });
+      } catch {
+        // Outcome persistence must not change fallback execution behavior.
+      }
 
       if (!options.dryRun) {
         await sendRunCompletionNotifications(
@@ -274,6 +308,27 @@ export function getRateLimitFallbackTelegramWebhooks(
  */
 export function isRateLimitFallbackTriggered(resultData?: Record<string, string>): boolean {
   return resultData?.rate_limit_fallback === '1';
+}
+
+export function recordRunSessionOutcome(input: IRunOutcomeRecordInput): void {
+  const outcome = buildSessionOutcomeInput({
+    projectPath: input.projectDir,
+    jobType: 'executor',
+    providerKey: input.envVars.NW_PROVIDER_KEY ?? resolveJobProvider(input.config, 'executor'),
+    startedAt: input.startedAt,
+    finishedAt: input.finishedAt,
+    exitCode: input.exitCode,
+    stdout: input.stdout,
+    stderr: input.stderr,
+    scriptResult: input.scriptResult,
+    metadata: {
+      providerCommand: input.envVars.NW_PROVIDER_CMD,
+      providerLabel: input.envVars.NW_PROVIDER_LABEL,
+      ...(input.metadata ?? {}),
+    },
+  });
+
+  getRepositories().sessionOutcomes.insertOutcome(outcome);
 }
 
 /**
@@ -620,6 +675,7 @@ export function runCommand(program: Command): void {
       spinner.start();
 
       try {
+        const startedAt = Date.now();
         await maybeApplyCronSchedulingDelay(config, 'executor', projectDir);
         const { exitCode, stdout, stderr } = await executeScriptWithOutput(
           scriptPath,
@@ -627,6 +683,7 @@ export function runCommand(program: Command): void {
           envVars,
           { cwd: projectDir },
         );
+        const finishedAt = Date.now();
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
 
         if (exitCode === 0) {
@@ -645,6 +702,22 @@ export function runCommand(program: Command): void {
 
         // Send completion notifications (fire-and-forget, failures do not affect exit code)
         if (!options.dryRun) {
+          try {
+            recordRunSessionOutcome({
+              projectDir,
+              config,
+              envVars,
+              startedAt,
+              finishedAt,
+              exitCode,
+              stdout,
+              stderr,
+              scriptResult,
+            });
+          } catch {
+            // Outcome persistence must not change command exit behavior.
+          }
+
           await sendRunCompletionNotifications(config, projectDir, options, exitCode, scriptResult);
         }
 
