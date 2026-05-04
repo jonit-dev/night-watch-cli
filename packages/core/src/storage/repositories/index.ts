@@ -16,17 +16,20 @@ import {
   IPrdStateRepository,
   IProjectRegistryRepository,
   IRoadmapStateRepository,
+  ISessionOutcomeRepository,
 } from './interfaces.js';
 import { SqliteProjectRegistryRepository } from './sqlite/project-registry.repository.js';
 import { SqliteExecutionHistoryRepository } from './sqlite/execution-history.repository.js';
 import { SqlitePrdStateRepository } from './sqlite/prd-state.repository.js';
 import { SqliteRoadmapStateRepository } from './sqlite/roadmap-state.repository.js';
+import { SqliteSessionOutcomeRepository } from './sqlite/session-outcome.repository.js';
 
 export interface IRepositories {
   projectRegistry: IProjectRegistryRepository;
   executionHistory: IExecutionHistoryRepository;
   prdState: IPrdStateRepository;
   roadmapState: IRoadmapStateRepository;
+  sessionOutcomes: ISessionOutcomeRepository;
 }
 
 let _initialized = false;
@@ -46,6 +49,7 @@ export function getRepositories(): IRepositories {
       executionHistory: container.resolve(SqliteExecutionHistoryRepository),
       prdState: container.resolve(SqlitePrdStateRepository),
       roadmapState: container.resolve(SqliteRoadmapStateRepository),
+      sessionOutcomes: container.resolve(SqliteSessionOutcomeRepository),
     };
   }
 
@@ -62,6 +66,7 @@ export function getRepositories(): IRepositories {
     executionHistory: new SqliteExecutionHistoryRepository(db),
     prdState: new SqlitePrdStateRepository(db),
     roadmapState: new SqliteRoadmapStateRepository(db),
+    sessionOutcomes: new SqliteSessionOutcomeRepository(db),
   };
 }
 
@@ -72,3 +77,5 @@ export function getRepositories(): IRepositories {
 export function resetRepositories(): void {
   _initialized = false;
 }
+
+export { SqliteSessionOutcomeRepository } from './sqlite/session-outcome.repository.js';

@@ -16,6 +16,7 @@ import { SqliteKanbanIssueRepository } from '@/storage/repositories/sqlite/kanba
 import { SqlitePrdStateRepository } from '@/storage/repositories/sqlite/prd-state.repository.js';
 import { SqliteProjectRegistryRepository } from '@/storage/repositories/sqlite/project-registry.repository.js';
 import { SqliteRoadmapStateRepository } from '@/storage/repositories/sqlite/roadmap-state.repository.js';
+import { SqliteSessionOutcomeRepository } from '@/storage/repositories/sqlite/session-outcome.repository.js';
 import { createDbForDir } from '@/storage/sqlite/client.js';
 import { runMigrations } from '@/storage/sqlite/migrations.js';
 
@@ -53,6 +54,7 @@ export function initContainer(projectDir: string): void {
   container.registerSingleton(SqlitePrdStateRepository);
   container.registerSingleton(SqliteProjectRegistryRepository);
   container.registerSingleton(SqliteRoadmapStateRepository);
+  container.registerSingleton(SqliteSessionOutcomeRepository);
 }
 
 /**
