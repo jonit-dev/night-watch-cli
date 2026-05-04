@@ -73,6 +73,13 @@ describe('config', () => {
       expect(config.reviewerSchedule).toBe('25 */3 * * *');
       expect(config.reviewerMaxPrsPerRun).toBe(0);
       expect(config.scheduleBundleId).toBe('always-on');
+      expect(config.feedback).toEqual({
+        enabled: true,
+        confidenceThreshold: 0.75,
+        augmentationTtlDays: 14,
+        maxActiveAugmentations: 3,
+        successStreakToExpire: 3,
+      });
     });
 
     it('should return defaults with provider and reviewerEnabled', () => {
@@ -437,6 +444,34 @@ describe('config', () => {
       const config = loadConfig(tempDir);
 
       expect(config.reviewerMaxPrsPerRun).toBe(4);
+    });
+
+    it('should handle feedback config and env overrides', () => {
+      fs.writeFileSync(
+        path.join(tempDir, 'night-watch.config.json'),
+        JSON.stringify({
+          feedback: {
+            enabled: false,
+            confidenceThreshold: 0.5,
+            augmentationTtlDays: 7,
+            maxActiveAugmentations: 2,
+            successStreakToExpire: 4,
+          },
+        }),
+      );
+      process.env.NW_FEEDBACK_ENABLED = 'true';
+      process.env.NW_FEEDBACK_CONFIDENCE_THRESHOLD = '0.9';
+      process.env.NW_FEEDBACK_MAX_ACTIVE_AUGMENTATIONS = '5';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.feedback).toEqual({
+        enabled: true,
+        confidenceThreshold: 0.9,
+        augmentationTtlDays: 7,
+        maxActiveAugmentations: 5,
+        successStreakToExpire: 4,
+      });
     });
 
     it('should handle NW_REVIEWER_MAX_RETRIES=0 env var', () => {

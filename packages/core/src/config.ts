@@ -31,6 +31,7 @@ import {
   DEFAULT_DEFAULT_BRANCH,
   DEFAULT_EXECUTOR_ENABLED,
   DEFAULT_FALLBACK_ON_RATE_LIMIT,
+  DEFAULT_FEEDBACK,
   DEFAULT_JOB_PROVIDERS,
   DEFAULT_MAX_LOG_SIZE,
   DEFAULT_MAX_RETRIES,
@@ -104,6 +105,7 @@ export function getDefaultConfig(): INightWatchConfig {
     qa: { ...DEFAULT_QA },
     audit: { ...DEFAULT_AUDIT },
     analytics: { ...DEFAULT_ANALYTICS },
+    feedback: { ...DEFAULT_FEEDBACK },
     prResolver: { ...DEFAULT_PR_RESOLVER },
     merger: { ...DEFAULT_MERGER },
     jobProviders: { ...DEFAULT_JOB_PROVIDERS },
@@ -185,6 +187,7 @@ function mergeConfigLayer(base: INightWatchConfig, layer: Partial<INightWatchCon
       _key === 'qa' ||
       _key === 'audit' ||
       _key === 'analytics' ||
+      _key === 'feedback' ||
       _key === 'prResolver' ||
       _key === 'merger'
     ) {
@@ -240,6 +243,22 @@ function mergeConfigs(
     merged.reviewerMaxPrsPerRun,
     DEFAULT_REVIEWER_MAX_PRS_PER_RUN,
   );
+  merged.feedback = {
+    enabled: merged.feedback.enabled !== false,
+    confidenceThreshold: Math.max(0, Math.min(1, merged.feedback.confidenceThreshold)),
+    augmentationTtlDays: Math.max(
+      1,
+      Math.min(365, Math.floor(merged.feedback.augmentationTtlDays)),
+    ),
+    maxActiveAugmentations: Math.max(
+      0,
+      Math.min(10, Math.floor(merged.feedback.maxActiveAugmentations)),
+    ),
+    successStreakToExpire: Math.max(
+      0,
+      Math.min(20, Math.floor(merged.feedback.successStreakToExpire)),
+    ),
+  };
   if (merged.secondaryFallbackModel === undefined) {
     merged.secondaryFallbackModel =
       merged.primaryFallbackModel === undefined

@@ -7,14 +7,12 @@ import {
   CLAUDE_MODEL_IDS,
   INightWatchConfig,
   PROVIDER_COMMANDS,
-  buildSessionOutcomeInput,
   createSpinner,
   createTable,
   dim,
   executeScriptWithOutput,
   fetchPrDetailsByNumber,
   fetchQaScreenshotUrlsForPr,
-  getRepositories,
   getScriptPath,
   header,
   info,
@@ -30,6 +28,7 @@ import {
   getTelegramStatusWebhooks,
   maybeApplyCronSchedulingDelay,
 } from './shared/env-builder.js';
+import { recordJobOutcome } from './shared/feedback.js';
 import * as path from 'path';
 
 /**
@@ -247,23 +246,22 @@ export function qaCommand(program: Command): void {
         // Send notifications (fire-and-forget, failures do not affect exit code)
         if (!options.dryRun) {
           try {
-            getRepositories().sessionOutcomes.insertOutcome(
-              buildSessionOutcomeInput({
-                projectPath: projectDir,
-                jobType: 'qa',
-                providerKey: envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'qa'),
-                startedAt,
-                finishedAt,
-                exitCode,
-                stdout,
-                stderr,
-                scriptResult,
-                metadata: {
-                  providerCommand: envVars.NW_PROVIDER_CMD,
-                  providerLabel: envVars.NW_PROVIDER_LABEL,
-                },
-              }),
-            );
+            recordJobOutcome({
+              config,
+              exitCode,
+              finishedAt,
+              jobType: 'qa',
+              metadata: {
+                providerCommand: envVars.NW_PROVIDER_CMD,
+                providerLabel: envVars.NW_PROVIDER_LABEL,
+              },
+              projectDir,
+              providerKey: envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'qa'),
+              scriptResult,
+              startedAt,
+              stderr,
+              stdout,
+            });
           } catch {
             // Outcome persistence must not change command exit behavior.
           }

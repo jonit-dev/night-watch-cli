@@ -18,6 +18,7 @@ import {
   resolveJobProvider,
 } from '@night-watch/core';
 import { buildBaseEnvVars } from './shared/env-builder.js';
+import { recordJobOutcome } from './shared/feedback.js';
 import * as path from 'path';
 
 export interface IPlanOptions {
@@ -85,9 +86,13 @@ export function planCommand(program: Command): void {
 
         header('Provider Invocation');
         if (plannerProvider === 'claude') {
-          dim(`  ${PROVIDER_COMMANDS[plannerProvider]} -p "<prd-creator instructions + task>" --dangerously-skip-permissions`);
+          dim(
+            `  ${PROVIDER_COMMANDS[plannerProvider]} -p "<prd-creator instructions + task>" --dangerously-skip-permissions`,
+          );
         } else {
-          dim(`  ${PROVIDER_COMMANDS[plannerProvider]} exec --yolo "<prd-creator instructions + task>"`);
+          dim(
+            `  ${PROVIDER_COMMANDS[plannerProvider]} exec --yolo "<prd-creator instructions + task>"`,
+          );
         }
 
         header('Command');
@@ -100,6 +105,7 @@ export function planCommand(program: Command): void {
       const label = resolvedTask ? `Planning: ${resolvedTask}` : 'Running PRD planner...';
       const spinner = createSpinner(label);
       spinner.start();
+      const startedAt = Date.now();
 
       try {
         const { exitCode, stdout, stderr } = await executeScriptWithOutput(
@@ -108,10 +114,35 @@ export function planCommand(program: Command): void {
           envVars,
           { cwd: projectDir },
         );
+        const finishedAt = Date.now();
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
 
+        try {
+          recordJobOutcome({
+            config,
+            exitCode,
+            finishedAt,
+            jobType: 'planner',
+            metadata: {
+              providerCommand: envVars.NW_PROVIDER_CMD,
+              providerLabel: envVars.NW_PROVIDER_LABEL,
+              task: resolvedTask,
+            },
+            projectDir,
+            providerKey: envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'planner'),
+            scriptResult,
+            startedAt,
+            stderr,
+            stdout,
+          });
+        } catch {
+          // Outcome persistence must not change command exit behavior.
+        }
+
         if (exitCode === 0) {
-          spinner.succeed(`PRD planner complete — PRD written to ${path.join(projectDir, config.prdDir)}/`);
+          spinner.succeed(
+            `PRD planner complete — PRD written to ${path.join(projectDir, config.prdDir)}/`,
+          );
         } else if (exitCode === 124) {
           spinner.fail('PRD planner timed out');
           process.exit(1);
@@ -121,6 +152,25 @@ export function planCommand(program: Command): void {
           process.exit(exitCode || 1);
         }
       } catch (err) {
+        try {
+          recordJobOutcome({
+            config,
+            exitCode: 1,
+            finishedAt: Date.now(),
+            jobType: 'planner',
+            metadata: {
+              providerCommand: envVars.NW_PROVIDER_CMD,
+              providerLabel: envVars.NW_PROVIDER_LABEL,
+              task: resolvedTask,
+            },
+            projectDir,
+            providerKey: envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'planner'),
+            startedAt,
+            stderr: err instanceof Error ? err.message : String(err),
+          });
+        } catch {
+          // Outcome persistence must not change command exit behavior.
+        }
         spinner.fail(`PRD planner failed: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
       }

@@ -5,12 +5,10 @@
 import { Command } from 'commander';
 import {
   INightWatchConfig,
-  buildSessionOutcomeInput,
   createSpinner,
   createTable,
   dim,
   executeScriptWithOutput,
-  getRepositories,
   getScriptPath,
   header,
   info,
@@ -25,6 +23,7 @@ import {
   formatProviderDisplay,
   maybeApplyCronSchedulingDelay,
 } from './shared/env-builder.js';
+import { recordJobOutcome } from './shared/feedback.js';
 import * as path from 'path';
 
 /**
@@ -216,26 +215,25 @@ export function mergeCommand(program: Command): void {
 
         if (!options.dryRun) {
           try {
-            getRepositories().sessionOutcomes.insertOutcome(
-              buildSessionOutcomeInput({
-                projectPath: projectDir,
-                jobType: 'merger',
-                providerKey: envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'merger'),
-                startedAt,
-                finishedAt,
-                exitCode,
-                stdout,
-                stderr,
-                scriptResult,
-                minReviewScore: config.merger.minReviewScore,
-                metadata: {
-                  providerCommand: envVars.NW_PROVIDER_CMD,
-                  providerLabel: envVars.NW_PROVIDER_LABEL,
-                  mergedCount,
-                  failedCount,
-                },
-              }),
-            );
+            recordJobOutcome({
+              config,
+              exitCode,
+              finishedAt,
+              jobType: 'merger',
+              metadata: {
+                failedCount,
+                mergedCount,
+                providerCommand: envVars.NW_PROVIDER_CMD,
+                providerLabel: envVars.NW_PROVIDER_LABEL,
+              },
+              minReviewScore: config.merger.minReviewScore,
+              projectDir,
+              providerKey: envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'merger'),
+              scriptResult,
+              startedAt,
+              stderr,
+              stdout,
+            });
           } catch {
             // Outcome persistence must not change command exit behavior.
           }

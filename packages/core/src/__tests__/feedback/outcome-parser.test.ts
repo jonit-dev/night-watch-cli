@@ -23,6 +23,30 @@ packages/core/src/feedback/outcome-parser.ts:42:7 - error TS2322: Type 'string' 
     expect(result.failureSignature).toContain('ts2322');
   });
 
+  it.each([
+    ['test', 'FAIL src/example.test.ts > expected true to be false'],
+    ['ci', 'GitHub Actions required check failed with action_required'],
+    ['review-score', 'review score below threshold: final_score=72'],
+    ['rate-limit', '429 rate limit exceeded by provider'],
+    ['timeout', 'operation timed out with exit code 124'],
+    ['conflict', 'Automatic merge failed; fix conflicts and then commit the result.'],
+    ['unknown', 'provider exited without a recognized failure marker'],
+  ] as const)('should classify %s failures', (expectedCategory, stderr) => {
+    const result = classifyFailure({
+      projectPath: '/tmp/night-watch',
+      stderr,
+      exitCode: expectedCategory === 'timeout' ? 124 : 1,
+      minReviewScore: expectedCategory === 'review-score' ? 80 : undefined,
+      scriptResult:
+        expectedCategory === 'review-score'
+          ? parseScriptResult('NIGHT_WATCH_RESULT:failure|final_score=72')
+          : null,
+    });
+
+    expect(result.category).toBe(expectedCategory);
+    expect(result.failureSignature).toContain(`${expectedCategory}|`);
+  });
+
   it('should classify ESLint errors', () => {
     const stdout = `
 /tmp/night-watch/packages/cli/src/commands/run.ts

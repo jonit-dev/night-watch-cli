@@ -296,6 +296,9 @@ export interface INightWatchConfig {
   /** Analytics job configuration (Amplitude integration) */
   analytics: IAnalyticsConfig;
 
+  /** Self-improving feedback loop configuration */
+  feedback: IFeedbackConfig;
+
   /** PR conflict resolver configuration */
   prResolver: IPrResolverConfig;
 
@@ -369,6 +372,19 @@ export interface IAnalyticsConfig {
   targetColumn: BoardColumnName;
   /** Custom prompt for the AI analysis (optional override) */
   analysisPrompt: string;
+}
+
+export interface IFeedbackConfig {
+  /** Whether structured feedback analysis and prompt augmentation are enabled */
+  enabled: boolean;
+  /** Minimum confidence required before a pattern activates */
+  confidenceThreshold: number;
+  /** Number of days before active prompt augmentations expire */
+  augmentationTtlDays: number;
+  /** Maximum active prompt augmentation snippets per job type */
+  maxActiveAugmentations: number;
+  /** Consecutive successful runs before active augmentations expire */
+  successStreakToExpire: number;
 }
 
 export interface IPrResolverConfig {

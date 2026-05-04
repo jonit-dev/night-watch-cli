@@ -31,6 +31,13 @@ function getSortedEntries(values: Record<string, number>, limit: number): Array<
     .slice(0, limit);
 }
 
+function getBreakdownEntries(values: IFeedbackSummary['windows']['last30Days']['byJobType']): Array<[string, string]> {
+  return Object.entries(values)
+    .sort(([, a], [, b]) => b.totalCount - a.totalCount)
+    .slice(0, 5)
+    .map(([key, summary]) => [key, `${formatPercent(summary.successRate)} · ${summary.totalCount} runs`]);
+}
+
 function getTrendLabel(last7Rate: number | null, last30Rate: number | null): string {
   if (last7Rate === null || last30Rate === null) return 'Waiting for comparable data';
   const delta = Math.round((last7Rate - last30Rate) * 100);
@@ -230,6 +237,50 @@ const PerformanceDashboard: React.FC = () => {
                             style={{ width: `${Math.max(8, Math.round((count / maxCategoryCount) * 100))}%` }}
                           />
                         </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-slate-200">Job Breakdown</h3>
+                  <Badge variant="neutral">{Object.keys(last30?.byJobType ?? {}).length}</Badge>
+                </div>
+                {getBreakdownEntries(last30?.byJobType ?? {}).length === 0 ? (
+                  <p className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-4 text-sm text-slate-500">
+                    No job-specific outcomes in the last 30 days.
+                  </p>
+                ) : (
+                  <div className="divide-y divide-slate-800/70 rounded-lg border border-slate-800">
+                    {getBreakdownEntries(last30?.byJobType ?? {}).map(([jobType, detail]) => (
+                      <div key={jobType} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                        <span className="capitalize text-slate-300">{jobType}</span>
+                        <span className="text-xs text-slate-500">{detail}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-slate-200">Provider Breakdown</h3>
+                  <Badge variant="neutral">{Object.keys(last30?.byProvider ?? {}).length}</Badge>
+                </div>
+                {getBreakdownEntries(last30?.byProvider ?? {}).length === 0 ? (
+                  <p className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-4 text-sm text-slate-500">
+                    No provider-specific outcomes in the last 30 days.
+                  </p>
+                ) : (
+                  <div className="divide-y divide-slate-800/70 rounded-lg border border-slate-800">
+                    {getBreakdownEntries(last30?.byProvider ?? {}).map(([provider, detail]) => (
+                      <div key={provider} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                        <span className="font-mono text-slate-300">{provider}</span>
+                        <span className="text-xs text-slate-500">{detail}</span>
                       </div>
                     ))}
                   </div>

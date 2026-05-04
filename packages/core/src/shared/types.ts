@@ -229,6 +229,14 @@ export interface IAnalyticsConfig {
   analysisPrompt: string;
 }
 
+export interface IFeedbackConfig {
+  enabled: boolean;
+  confidenceThreshold: number;
+  augmentationTtlDays: number;
+  maxActiveAugmentations: number;
+  successStreakToExpire: number;
+}
+
 // ==================== Night Watch Config ====================
 
 /**
@@ -278,6 +286,7 @@ export interface INightWatchConfig {
   qa: IQaConfig;
   audit: IAuditConfig;
   analytics: IAnalyticsConfig;
+  feedback: IFeedbackConfig;
   prResolver?: IPrResolverConfig;
   merger?: IMergerConfig;
   queue: IQueueConfig;

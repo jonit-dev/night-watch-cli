@@ -22,8 +22,28 @@ const summary = {
       averageDurationSeconds: 90,
       byOutcome: { success: 3, failure: 1 },
       byFailureCategory: { tests: 1 },
-      byJobType: {},
-      byProvider: {},
+      byJobType: {
+        executor: {
+          totalCount: 4,
+          successCount: 3,
+          failureCount: 1,
+          timeoutCount: 0,
+          rateLimitedCount: 0,
+          skippedCount: 0,
+          successRate: 0.75,
+        },
+      },
+      byProvider: {
+        codex: {
+          totalCount: 4,
+          successCount: 3,
+          failureCount: 1,
+          timeoutCount: 0,
+          rateLimitedCount: 0,
+          skippedCount: 0,
+          successRate: 0.75,
+        },
+      },
     },
     last30Days: {
       days: 30,
@@ -39,8 +59,46 @@ const summary = {
       averageDurationSeconds: 125,
       byOutcome: { success: 6, failure: 3, timeout: 1 },
       byFailureCategory: { tests: 2, lint: 1 },
-      byJobType: {},
-      byProvider: {},
+      byJobType: {
+        executor: {
+          totalCount: 6,
+          successCount: 4,
+          failureCount: 2,
+          timeoutCount: 0,
+          rateLimitedCount: 0,
+          skippedCount: 0,
+          successRate: 0.67,
+        },
+        reviewer: {
+          totalCount: 4,
+          successCount: 2,
+          failureCount: 1,
+          timeoutCount: 1,
+          rateLimitedCount: 0,
+          skippedCount: 0,
+          successRate: 0.5,
+        },
+      },
+      byProvider: {
+        codex: {
+          totalCount: 7,
+          successCount: 5,
+          failureCount: 2,
+          timeoutCount: 0,
+          rateLimitedCount: 0,
+          skippedCount: 0,
+          successRate: 0.71,
+        },
+        claude: {
+          totalCount: 3,
+          successCount: 1,
+          failureCount: 1,
+          timeoutCount: 1,
+          rateLimitedCount: 0,
+          skippedCount: 0,
+          successRate: 0.33,
+        },
+      },
     },
   },
   activeAugmentations: [
@@ -128,6 +186,10 @@ describe('PerformanceDashboard', () => {
     expect(screen.getByText('Feedback Performance')).toBeInTheDocument();
     expect(screen.getByText('Success-Rate Trend')).toBeInTheDocument();
     expect(screen.getByText('Failure Categories')).toBeInTheDocument();
+    expect(screen.getByText('Job Breakdown')).toBeInTheDocument();
+    expect(screen.getByText('Provider Breakdown')).toBeInTheDocument();
+    expect(screen.getByText('reviewer')).toBeInTheDocument();
+    expect(screen.getAllByText('codex').length).toBeGreaterThan(0);
     expect(screen.getByText('Repeated test failures')).toBeInTheDocument();
     expect(screen.getByText('Check flaky test setup before editing.')).toBeInTheDocument();
   });

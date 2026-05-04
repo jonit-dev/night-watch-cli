@@ -35,6 +35,7 @@ import {
   warn,
 } from '@night-watch/core';
 import { buildBaseEnvVars, maybeApplyCronSchedulingDelay } from './shared/env-builder.js';
+import { getFeedbackAnalysisOptions, isFeedbackEnabled } from './shared/feedback.js';
 import type { IPrDetails, JobType } from '@night-watch/core';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -334,8 +335,8 @@ export function recordRunSessionOutcome(input: IRunOutcomeRecordInput): void {
 
   const repository = getRepositories().sessionOutcomes;
   const storedOutcome = repository.insertOutcome(outcome);
-  if (isFeedbackPromptEnabled()) {
-    analyzeFeedbackOutcome(repository, storedOutcome);
+  if (isFeedbackEnabled(input.config)) {
+    analyzeFeedbackOutcome(repository, storedOutcome, getFeedbackAnalysisOptions(input.config));
   }
 }
 
@@ -346,7 +347,8 @@ export function applyProjectFeedbackPromptEnv(
   markApplied = true,
 ): void {
   delete envVars.NW_PROJECT_FEEDBACK_PROMPT;
-  if (!isFeedbackPromptEnabled()) {
+  const config = loadConfig(projectDir);
+  if (!isFeedbackPromptEnabled() || config.feedback?.enabled === false) {
     return;
   }
 
@@ -355,7 +357,7 @@ export function applyProjectFeedbackPromptEnv(
       getRepositories().sessionOutcomes,
       projectDir,
       jobType,
-      { markApplied },
+      { markApplied, maxActiveAugmentations: config.feedback?.maxActiveAugmentations },
     );
     if (promptBlock.length > 0) {
       envVars.NW_PROJECT_FEEDBACK_PROMPT = promptBlock;

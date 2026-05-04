@@ -9,6 +9,7 @@ import {
   IAnalyticsConfig,
   IAuditConfig,
   IBoardProviderConfig,
+  IFeedbackConfig,
   IJobProviders,
   IMergerConfig,
   INightWatchConfig,
@@ -100,6 +101,7 @@ type ConfigForm = {
   qa: IQaConfig;
   audit: IAuditConfig;
   analytics: IAnalyticsConfig;
+  feedback: IFeedbackConfig;
   prResolver: IPrResolverConfig;
   merger: IMergerConfig;
   queue: INightWatchConfig['queue'];
@@ -158,6 +160,13 @@ const toFormState = (config: INightWatchConfig): ConfigForm => {
     qa: config.qa || getDefaultQaConfig(),
     audit: config.audit || getDefaultAuditConfig(),
     analytics: config.analytics || getDefaultAnalyticsConfig(),
+    feedback: config.feedback ?? {
+      enabled: true,
+      confidenceThreshold: 0.75,
+      augmentationTtlDays: 14,
+      maxActiveAugmentations: 3,
+      successStreakToExpire: 3,
+    },
     prResolver: config.prResolver ?? getDefaultPrResolverConfig(),
     merger: config.merger ?? getDefaultMergerConfig(),
     queue: config.queue || {
@@ -374,6 +383,7 @@ const Settings: React.FC = () => {
         qa: form.qa,
         audit: form.audit,
         analytics: form.analytics,
+        feedback: form.feedback,
         prResolver: form.prResolver,
         merger: form.merger,
         queue: form.queue,

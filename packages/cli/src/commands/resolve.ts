@@ -5,12 +5,10 @@
 import { Command } from 'commander';
 import {
   INightWatchConfig,
-  buildSessionOutcomeInput,
   createSpinner,
   createTable,
   dim,
   executeScriptWithOutput,
-  getRepositories,
   getScriptPath,
   header,
   info,
@@ -25,6 +23,7 @@ import {
   formatProviderDisplay,
   maybeApplyCronSchedulingDelay,
 } from './shared/env-builder.js';
+import { recordJobOutcome } from './shared/feedback.js';
 import { execFileSync } from 'child_process';
 import * as path from 'path';
 
@@ -240,23 +239,22 @@ export function resolveCommand(program: Command): void {
 
         if (!options.dryRun) {
           try {
-            getRepositories().sessionOutcomes.insertOutcome(
-              buildSessionOutcomeInput({
-                projectPath: projectDir,
-                jobType: 'pr-resolver',
-                providerKey: envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'pr-resolver'),
-                startedAt,
-                finishedAt,
-                exitCode,
-                stdout,
-                stderr,
-                scriptResult,
-                metadata: {
-                  providerCommand: envVars.NW_PROVIDER_CMD,
-                  providerLabel: envVars.NW_PROVIDER_LABEL,
-                },
-              }),
-            );
+            recordJobOutcome({
+              config,
+              exitCode,
+              finishedAt,
+              jobType: 'pr-resolver',
+              metadata: {
+                providerCommand: envVars.NW_PROVIDER_CMD,
+                providerLabel: envVars.NW_PROVIDER_LABEL,
+              },
+              projectDir,
+              providerKey: envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'pr-resolver'),
+              scriptResult,
+              startedAt,
+              stderr,
+              stdout,
+            });
           } catch {
             // Outcome persistence must not change command exit behavior.
           }

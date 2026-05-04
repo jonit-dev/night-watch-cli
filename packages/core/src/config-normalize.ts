@@ -94,6 +94,16 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
   normalized.reviewerMaxRetries = readNumber(rawConfig.reviewerMaxRetries);
   normalized.reviewerRetryDelay = readNumber(rawConfig.reviewerRetryDelay);
   normalized.reviewerMaxPrsPerRun = readNumber(rawConfig.reviewerMaxPrsPerRun);
+  const rawFeedback = readObject(rawConfig.feedback);
+  if (rawFeedback) {
+    normalized.feedback = {
+      enabled: readBoolean(rawFeedback.enabled) ?? true,
+      confidenceThreshold: readNumber(rawFeedback.confidenceThreshold) ?? 0.75,
+      augmentationTtlDays: readNumber(rawFeedback.augmentationTtlDays) ?? 14,
+      maxActiveAugmentations: readNumber(rawFeedback.maxActiveAugmentations) ?? 3,
+      successStreakToExpire: readNumber(rawFeedback.successStreakToExpire) ?? 3,
+    };
+  }
   normalized.provider = validateProvider(String(rawConfig.provider ?? '')) ?? undefined;
   normalized.executorEnabled = readBoolean(rawConfig.executorEnabled);
   normalized.reviewerEnabled = readBoolean(rawConfig.reviewerEnabled);

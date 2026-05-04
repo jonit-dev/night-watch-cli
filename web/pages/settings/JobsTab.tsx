@@ -18,6 +18,7 @@ import {
   IPrResolverConfig,
   IRoadmapScannerConfig,
   IJobProviders,
+  IFeedbackConfig,
   MergeMethod,
   QaArtifacts,
   INightWatchConfig,
@@ -56,6 +57,7 @@ interface IConfigFormJobs {
   qa: IQaConfig;
   audit: IAuditConfig;
   analytics: IAnalyticsConfig;
+  feedback: IFeedbackConfig;
   prResolver: IPrResolverConfig;
   merger: IMergerConfig;
   roadmapScanner: IRoadmapScannerConfig;
@@ -121,25 +123,24 @@ const JobsTab: React.FC<IJobsTabProps> = ({
           <div>
             <h3 className="text-lg font-medium text-slate-200">Prompt Augmentation</h3>
             <p className="text-sm text-slate-400 mt-1">
-              Tune how feedback patterns become prompt snippets once the config schema supports these fields.
+              Tune how repeated feedback patterns become prompt snippets.
             </p>
           </div>
           <div className="hidden rounded-lg bg-amber-500/10 p-2 text-amber-400 sm:block">
             <Sparkles className="h-5 w-5" />
           </div>
         </div>
-        <div className="rounded-xl border border-amber-900/40 bg-amber-950/10 p-4">
-          <div className="mb-4 text-sm text-amber-300">
-            Prompt augmentation controls are read-only because the Night Watch config schema does not expose persistent
-            augmentation settings yet.
-          </div>
+        <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div className="flex items-center justify-between rounded-md border border-slate-800 bg-slate-950/40 p-3">
               <div>
                 <span className="text-sm font-medium text-slate-200">Enable prompt augmentation</span>
-                <p className="mt-0.5 text-xs text-slate-500">Requires schema support before it can be saved.</p>
+                <p className="mt-0.5 text-xs text-slate-500">Adds capped feedback snippets to future job prompts.</p>
               </div>
-              <Switch checked={false} disabled />
+              <Switch
+                checked={form.feedback.enabled}
+                onChange={(checked) => updateField('feedback', { ...form.feedback, enabled: checked })}
+              />
             </div>
             <Input
               label="Activation Threshold"
@@ -147,26 +148,54 @@ const JobsTab: React.FC<IJobsTabProps> = ({
               min="0"
               max="1"
               step="0.05"
-              value="0.75"
-              disabled
+              value={String(form.feedback.confidenceThreshold)}
+              onChange={(e) =>
+                updateField('feedback', {
+                  ...form.feedback,
+                  confidenceThreshold: Math.max(0, Math.min(1, Number(e.target.value || 0))),
+                })
+              }
               helperText="Minimum confidence required before a snippet can activate."
             />
             <Input
               label="TTL"
               type="number"
               min="1"
-              value="14"
-              disabled
+              value={String(form.feedback.augmentationTtlDays)}
+              onChange={(e) =>
+                updateField('feedback', {
+                  ...form.feedback,
+                  augmentationTtlDays: Math.max(1, Number(e.target.value || 1)),
+                })
+              }
               rightIcon={<span className="text-xs">days</span>}
               helperText="How long an augmentation remains active before expiry."
             />
             <Input
               label="Max Snippets Per Job"
               type="number"
-              min="1"
-              value="3"
-              disabled
+              min="0"
+              value={String(form.feedback.maxActiveAugmentations)}
+              onChange={(e) =>
+                updateField('feedback', {
+                  ...form.feedback,
+                  maxActiveAugmentations: Math.max(0, Number(e.target.value || 0)),
+                })
+              }
               helperText="Maximum active augmentation snippets applied to each job prompt."
+            />
+            <Input
+              label="Success Streak Expiry"
+              type="number"
+              min="0"
+              value={String(form.feedback.successStreakToExpire)}
+              onChange={(e) =>
+                updateField('feedback', {
+                  ...form.feedback,
+                  successStreakToExpire: Math.max(0, Number(e.target.value || 0)),
+                })
+              }
+              helperText="Consecutive successes before active snippets expire."
             />
           </div>
         </div>
