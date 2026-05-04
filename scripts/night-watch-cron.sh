@@ -724,6 +724,11 @@ Follow all CLAUDE.md conventions (if present).
 - Do NOT process any other PRDs — only ${ELIGIBLE_PRD}"
 fi
 
+if [ -n "${NW_PROJECT_FEEDBACK_PROMPT:-}" ]; then
+  PROMPT="${PROMPT}"$'\n\n'"${NW_PROJECT_FEEDBACK_PROMPT}"
+  log "INFO: Added project feedback prompt context"
+fi
+
 # Dry-run mode: print diagnostics and exit
 if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   log "DRY-RUN: Would process ${ELIGIBLE_PRD}"

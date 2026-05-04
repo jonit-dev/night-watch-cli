@@ -2,19 +2,19 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Activity,
-  CheckCircle,
-  Clock,
   ArrowRight,
   Calendar,
+  CheckCircle,
+  Clock,
   Play,
   Pause,
   RefreshCw,
 } from 'lucide-react';
 import Card from '../components/ui/Card';
-import Button from '../components/ui/Button';
 import { useApi, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClearLock, triggerJob, triggerInstallCron, triggerUninstallCron, BOARD_COLUMNS, IBoardStatus, BoardColumnName } from '../api';
 import { useStore } from '../store/useStore';
 import AgentStatusBar from '../components/dashboard/AgentStatusBar';
+import PerformanceDashboard from '../components/feedback/PerformanceDashboard.js';
 
 const BOARD_COLUMN_COLORS: Record<BoardColumnName, string> = {
   'Draft':       'text-slate-400  bg-slate-500/10  ring-slate-500/20',
@@ -71,13 +71,6 @@ const Dashboard: React.FC = () => {
   // Board-derived stats
   const boardReadyCount = boardStatus?.columns['Ready']?.length ?? 0;
   const boardInProgressCount = boardStatus?.columns['In Progress']?.length ?? 0;
-
-  const executorProcess = currentStatus.processes.find(p => p.name === 'executor');
-  const reviewerProcess = currentStatus.processes.find(p => p.name === 'reviewer');
-  const qaProcess = currentStatus.processes.find(p => p.name === 'qa');
-  const auditProcess = currentStatus.processes.find(p => p.name === 'audit');
-  const plannerProcess = currentStatus.processes.find(p => p.name === 'planner');
-  const analyticsProcess = currentStatus.processes.find(p => p.name === 'analytics');
 
   const handleCancelProcess = async (type: 'run' | 'review') => {
     setCancellingProcess(type);
@@ -342,6 +335,8 @@ const Dashboard: React.FC = () => {
           </button>
         </div>
       ) : null}
+
+      <PerformanceDashboard />
 
       {/* Board Widget */}
       <div className="mt-6">

@@ -8,6 +8,7 @@ import {
   Layout,
   Play,
   Search,
+  Sparkles,
 } from 'lucide-react';
 import {
   IAnalyticsConfig,
@@ -115,6 +116,62 @@ const JobsTab: React.FC<IJobsTabProps> = ({
 
   return (
     <div className="space-y-8">
+      <section className="space-y-4">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-800/50">
+          <div>
+            <h3 className="text-lg font-medium text-slate-200">Prompt Augmentation</h3>
+            <p className="text-sm text-slate-400 mt-1">
+              Tune how feedback patterns become prompt snippets once the config schema supports these fields.
+            </p>
+          </div>
+          <div className="hidden rounded-lg bg-amber-500/10 p-2 text-amber-400 sm:block">
+            <Sparkles className="h-5 w-5" />
+          </div>
+        </div>
+        <div className="rounded-xl border border-amber-900/40 bg-amber-950/10 p-4">
+          <div className="mb-4 text-sm text-amber-300">
+            Prompt augmentation controls are read-only because the Night Watch config schema does not expose persistent
+            augmentation settings yet.
+          </div>
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div className="flex items-center justify-between rounded-md border border-slate-800 bg-slate-950/40 p-3">
+              <div>
+                <span className="text-sm font-medium text-slate-200">Enable prompt augmentation</span>
+                <p className="mt-0.5 text-xs text-slate-500">Requires schema support before it can be saved.</p>
+              </div>
+              <Switch checked={false} disabled />
+            </div>
+            <Input
+              label="Activation Threshold"
+              type="number"
+              min="0"
+              max="1"
+              step="0.05"
+              value="0.75"
+              disabled
+              helperText="Minimum confidence required before a snippet can activate."
+            />
+            <Input
+              label="TTL"
+              type="number"
+              min="1"
+              value="14"
+              disabled
+              rightIcon={<span className="text-xs">days</span>}
+              helperText="How long an augmentation remains active before expiry."
+            />
+            <Input
+              label="Max Snippets Per Job"
+              type="number"
+              min="1"
+              value="3"
+              disabled
+              helperText="Maximum active augmentation snippets applied to each job prompt."
+            />
+          </div>
+        </div>
+      </section>
+
       <section className="space-y-4">
         <div className="flex items-center justify-between pb-2 border-b border-slate-800/50">
           <div>

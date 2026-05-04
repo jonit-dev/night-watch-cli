@@ -10,6 +10,8 @@ import {
   IWebhookConfig,
   NotificationEvent,
   PROVIDER_COMMANDS,
+  analyzeFeedbackOutcome,
+  buildProjectFeedbackPromptBlock,
   buildSessionOutcomeInput,
   createBoardProvider,
   createSpinner,
@@ -22,6 +24,7 @@ import {
   getScriptPath,
   header,
   info,
+  isFeedbackPromptEnabled,
   loadConfig,
   parseScriptResult,
   resolveJobProvider,
@@ -32,7 +35,7 @@ import {
   warn,
 } from '@night-watch/core';
 import { buildBaseEnvVars, maybeApplyCronSchedulingDelay } from './shared/env-builder.js';
-import type { IPrDetails } from '@night-watch/core';
+import type { IPrDetails, JobType } from '@night-watch/core';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -218,6 +221,7 @@ async function runCrossProjectFallback(
     let candidateConfig = loadConfig(candidate.path);
     candidateConfig = applyCliOverrides(candidateConfig, options);
     const envVars = buildEnvVars(candidateConfig, options);
+    applyProjectFeedbackPromptEnv(envVars, candidate.path, 'executor');
     envVars.NW_CROSS_PROJECT_FALLBACK_ACTIVE = '1';
 
     try {
@@ -328,7 +332,37 @@ export function recordRunSessionOutcome(input: IRunOutcomeRecordInput): void {
     },
   });
 
-  getRepositories().sessionOutcomes.insertOutcome(outcome);
+  const repository = getRepositories().sessionOutcomes;
+  const storedOutcome = repository.insertOutcome(outcome);
+  if (isFeedbackPromptEnabled()) {
+    analyzeFeedbackOutcome(repository, storedOutcome);
+  }
+}
+
+export function applyProjectFeedbackPromptEnv(
+  envVars: Record<string, string>,
+  projectDir: string,
+  jobType: JobType,
+  markApplied = true,
+): void {
+  delete envVars.NW_PROJECT_FEEDBACK_PROMPT;
+  if (!isFeedbackPromptEnabled()) {
+    return;
+  }
+
+  try {
+    const { promptBlock } = buildProjectFeedbackPromptBlock(
+      getRepositories().sessionOutcomes,
+      projectDir,
+      jobType,
+      { markApplied },
+    );
+    if (promptBlock.length > 0) {
+      envVars.NW_PROJECT_FEEDBACK_PROMPT = promptBlock;
+    }
+  } catch {
+    // Feedback prompt context must never block the primary executor path.
+  }
 }
 
 /**
@@ -562,6 +596,7 @@ export function runCommand(program: Command): void {
 
       // Build environment variables
       const envVars = buildEnvVars(config, options);
+      applyProjectFeedbackPromptEnv(envVars, projectDir, 'executor', !options.dryRun);
 
       // Get the script path
       const scriptPath = getScriptPath('night-watch-cron.sh');

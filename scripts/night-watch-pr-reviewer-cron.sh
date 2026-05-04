@@ -1226,6 +1226,10 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
   LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
   REVIEWER_ATTEMPT_START=$(date +%s)
   REVIEWER_PROMPT="${REVIEWER_PROMPT_BASE}${TARGET_SCOPE_PROMPT}${PRD_CONTEXT_PROMPT}"
+  if [ -n "${NW_PROJECT_FEEDBACK_PROMPT:-}" ]; then
+    REVIEWER_PROMPT="${REVIEWER_PROMPT}"$'\n\n'"${NW_PROJECT_FEEDBACK_PROMPT}"
+    log "INFO: Added project feedback prompt context"
+  fi
 
   # Build provider command array using generic helper
   mapfile -d '' -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${REVIEW_WORKTREE_DIR}" "${REVIEWER_PROMPT}")
