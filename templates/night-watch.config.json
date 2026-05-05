@@ -55,6 +55,27 @@
       "audit": 10
     }
   },
+  "webhookTriggers": {
+    "enabled": false,
+    "secretEnv": "NIGHT_WATCH_WEBHOOK_SECRET",
+    "allowedJobIds": [
+      "executor",
+      "reviewer",
+      "pr-resolver",
+      "slicer",
+      "qa",
+      "audit",
+      "analytics",
+      "merger"
+    ],
+    "requireTimestamp": false,
+    "maxSkewSeconds": 300,
+    "github": {
+      "enabled": false,
+      "events": [],
+      "rules": []
+    }
+  },
   "jobProviders": {},
   "autoMerge": false,
   "autoMergeMethod": "squash",

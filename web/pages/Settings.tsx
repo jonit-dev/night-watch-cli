@@ -19,16 +19,16 @@ import {
   IQaConfig,
   IRoadmapScannerConfig,
   IWebhookConfig,
+  IWebhookTriggerConfig,
+  JobType,
   removeProject,
   triggerInstallCron,
   updateConfig,
   updateGlobalNotifications,
   useApi,
 } from '../api';
-import WebhookEditor from '../components/settings/WebhookEditor.js';
 import PresetFormModal from '../components/providers/PresetFormModal.js';
 import Button from '../components/ui/Button';
-import Card from '../components/ui/Card';
 import Badge from '../components/ui/Badge.js';
 import Tabs from '../components/ui/Tabs';
 import { useStore } from '../store/useStore';
@@ -58,6 +58,30 @@ const JOB_PROVIDER_KEYS: Array<keyof IJobProviders> = [
   'pr-resolver',
   'merger',
 ];
+
+const WEBHOOK_TRIGGER_JOB_IDS: JobType[] = [
+  'executor',
+  'reviewer',
+  'qa',
+  'audit',
+  'slicer',
+  'analytics',
+  'pr-resolver',
+  'merger',
+];
+
+const DEFAULT_WEBHOOK_TRIGGERS: IWebhookTriggerConfig = {
+  enabled: false,
+  secretEnv: 'NIGHT_WATCH_WEBHOOK_SECRET',
+  allowedJobIds: WEBHOOK_TRIGGER_JOB_IDS,
+  requireTimestamp: false,
+  maxSkewSeconds: 300,
+  github: {
+    enabled: false,
+    events: [],
+    rules: [],
+  },
+};
 
 type ConfigForm = {
   provider: INightWatchConfig['provider'];
@@ -103,6 +127,7 @@ type ConfigForm = {
   prResolver: IPrResolverConfig;
   merger: IMergerConfig;
   queue: INightWatchConfig['queue'];
+  webhookTriggers: IWebhookTriggerConfig;
 };
 
 const toFormState = (config: INightWatchConfig): ConfigForm => {
@@ -174,6 +199,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => {
       },
       providerBuckets: {},
     },
+    webhookTriggers: config.webhookTriggers ?? DEFAULT_WEBHOOK_TRIGGERS,
   };
 };
 
@@ -377,6 +403,7 @@ const Settings: React.FC = () => {
         prResolver: form.prResolver,
         merger: form.merger,
         queue: form.queue,
+        webhookTriggers: form.webhookTriggers,
       });
 
       // Update form directly from server response to ensure it reflects persisted values
@@ -555,8 +582,10 @@ const Settings: React.FC = () => {
           form={form}
           updateField={updateField as <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => void}
           globalWebhook={globalWebhook}
+          isGlobalMode={isGlobalMode}
           onSetGlobal={handleSetGlobal}
           onUnsetGlobal={handleUnsetGlobal}
+          selectedProjectId={selectedProjectId}
         />
       ),
     },
