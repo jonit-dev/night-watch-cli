@@ -50,6 +50,7 @@ PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 # NOTE: Lock file path must match executorLockPath() in src/utils/status-data.ts
 LOCK_FILE="/tmp/night-watch-${PROJECT_RUNTIME_KEY}.lock"
 SCRIPT_TYPE="executor"
+skip_if_job_paused "${SCRIPT_TYPE}" "${PROJECT_DIR}"
 
 emit_result() {
   local status="${1:?status required}"

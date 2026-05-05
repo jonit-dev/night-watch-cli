@@ -20,6 +20,7 @@ const PARTIAL_MERGE_KEYS = new Set([
   'roadmapScanner',
   'queue',
   'providerPresets',
+  'pausedJobs',
 ]);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

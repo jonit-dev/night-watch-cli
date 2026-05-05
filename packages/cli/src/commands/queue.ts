@@ -70,6 +70,14 @@ function printQueueEntry(entry: IQueueEntry, indent = ''): void {
   }
 }
 
+function isJobPaused(projectDir: string, jobType: JobType): boolean {
+  try {
+    return loadConfig(projectDir).pausedJobs?.[jobType] === true;
+  } catch {
+    return false;
+  }
+}
+
 export function createQueueCommand(): Command {
   const queue = new Command('queue');
   queue.description('Manage the global job queue');
@@ -203,6 +211,10 @@ export function createQueueCommand(): Command {
 
       const projectName = path.basename(projectDir);
       const queueConfig = loadConfig(projectDir).queue;
+      if (isJobPaused(projectDir, jobType as JobType)) {
+        logger.info(`Skipping enqueue for paused job: ${jobType}`);
+        return;
+      }
       const id = enqueueJob(
         projectDir,
         projectName,
@@ -253,6 +265,12 @@ export function createQueueCommand(): Command {
 
       if (!entry) {
         logger.info('No pending jobs to dispatch');
+        return;
+      }
+
+      if (isJobPaused(entry.projectPath, entry.jobType)) {
+        logger.info(`Skipping paused queued job: ${entry.jobType} for ${entry.projectName}`);
+        removeJob(entry.id);
         return;
       }
 
@@ -331,6 +349,9 @@ export function createQueueCommand(): Command {
       }
 
       const queueConfig = loadConfig(projectDir).queue;
+      if (isJobPaused(projectDir, jobType as JobType)) {
+        process.exit(2);
+      }
       const projectName = path.basename(projectDir);
       const callerPid = opts.pid ? parseInt(opts.pid, 10) : undefined;
       const result = claimJobSlot(

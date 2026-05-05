@@ -74,6 +74,7 @@ else
 fi
 
 SCRIPT_TYPE="reviewer"
+skip_if_job_paused "${SCRIPT_TYPE}" "${PROJECT_DIR}"
 READY_FOR_REVIEW_LABEL="${NW_READY_FOR_REVIEW_LABEL:-ready-for-review}"
 READY_FOR_REVIEW_MARKER_NAME="night-watch-ready-for-review"
 READY_TO_MERGE_LABEL="${NW_PR_RESOLVER_READY_LABEL:-ready-to-merge}"

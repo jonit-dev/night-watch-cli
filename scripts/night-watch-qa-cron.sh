@@ -46,6 +46,7 @@ PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 # NOTE: Lock file path must match qaLockPath() in src/utils/status-data.ts
 LOCK_FILE="/tmp/night-watch-qa-${PROJECT_RUNTIME_KEY}.lock"
 SCRIPT_TYPE="qa"
+skip_if_job_paused "${SCRIPT_TYPE}" "${PROJECT_DIR}"
 
 emit_result() {
   local status="${1:?status required}"

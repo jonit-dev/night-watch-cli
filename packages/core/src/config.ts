@@ -113,6 +113,7 @@ export function getDefaultConfig(): INightWatchConfig {
     jobProviders: { ...DEFAULT_JOB_PROVIDERS },
     providerScheduleOverrides: [...DEFAULT_PROVIDER_SCHEDULE_OVERRIDES],
     queue: { ...DEFAULT_QUEUE },
+    pausedJobs: {},
     webhookTriggers: cloneWebhookTriggers(DEFAULT_WEBHOOK_TRIGGERS),
   };
 }
