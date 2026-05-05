@@ -34,6 +34,7 @@ import { notifyCommand } from './commands/notify.js';
 import { summaryCommand } from './commands/summary.js';
 import { resolveCommand } from './commands/resolve.js';
 import { mergeCommand } from './commands/merge.js';
+import { agentCommand, configCommand, healthCommand, jobCommand } from './commands/agent.js';
 
 // Find the package root (works from both src/ in dev and dist/src/ in production)
 const __filename = fileURLToPath(import.meta.url);
@@ -136,5 +137,11 @@ resolveCommand(program);
 
 // Register merge command (merger orchestrator)
 mergeCommand(program);
+
+// Register machine-readable agent manageability commands
+agentCommand(program);
+configCommand(program);
+healthCommand(program);
+jobCommand(program);
 
 program.parse();

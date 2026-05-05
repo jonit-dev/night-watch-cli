@@ -35,6 +35,7 @@ source "${SCRIPT_DIR}/night-watch-helpers.sh"
 ensure_provider_on_path "${PROVIDER_CMD}" || true
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 LOCK_FILE="/tmp/night-watch-slicer-${PROJECT_RUNTIME_KEY}.lock"
+SCRIPT_TYPE="slicer"
 PROVIDER_MODEL_DISPLAY=$(resolve_provider_model_display "${PROVIDER_CMD}" "${PROVIDER_LABEL}")
 
 emit_result() {
@@ -52,6 +53,8 @@ if ! validate_provider "${PROVIDER_CMD}"; then
   echo "ERROR: Unknown provider: ${PROVIDER_CMD}" >&2
   exit 1
 fi
+
+skip_if_job_paused "${SCRIPT_TYPE}" "${PROJECT_DIR}"
 
 rotate_log
 log_separator

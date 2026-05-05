@@ -1338,6 +1338,22 @@ arm_global_queue_cleanup() {
   append_exit_trap "__night_watch_queue_cleanup \$?"
 }
 
+skip_if_job_paused() {
+  local script_type="${1:?script_type required}"
+  local project_dir="${2:?project_dir required}"
+
+  local cli_bin
+  cli_bin=$(resolve_night_watch_cli) || return 0
+
+  if (cd "${project_dir}" && "${cli_bin}" job is-paused "${script_type}" >/dev/null 2>&1); then
+    log "SKIP: ${script_type} is paused in night-watch.config.json"
+    if command -v emit_result >/dev/null 2>&1; then
+      emit_result "skip_paused"
+    fi
+    exit 0
+  fi
+}
+
 # Atomically claim a queue slot or enqueue for later dispatch.
 # Uses DB transaction (via `queue claim` CLI) for atomicity — no flock needed.
 # Sets NW_QUEUE_ENTRY_ID on success and arms the cleanup trap.
@@ -1345,6 +1361,8 @@ arm_global_queue_cleanup() {
 claim_or_enqueue() {
   local script_type="${1:?script_type required}"
   local project_dir="${2:?project_dir required}"
+  skip_if_job_paused "${script_type}" "${project_dir}"
+
   local provider_key
   provider_key=$(resolve_provider_key "${project_dir}" "${script_type}")
 

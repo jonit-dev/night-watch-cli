@@ -170,6 +170,63 @@ night-watch status --json    # Output as JSON
 
 ---
 
+## Agent / Machine-Readable CLI
+
+These commands are intended for external agents, shell automation, and dashboards that need stable JSON contracts. In JSON mode, successful commands write a single JSON document to stdout. Human-oriented progress text is suppressed; errors are written to stderr and use non-zero exit codes.
+
+`night-watch status --json` remains backward compatible. Use `night-watch agent status --json` for the expanded schema:
+
+```bash
+night-watch agent status --json
+```
+
+Top-level fields:
+
+- `schemaVersion` — current schema version, currently `1`
+- `generatedAt` — ISO timestamp for the snapshot
+- `project` — project name, directory, and provider
+- `status` — legacy status data from `night-watch status --json`
+- `paused` — per-job pause state from config
+- `queue` — global queue status, matching `night-watch queue status --json`
+- `board` — board columns/items when a board is configured, otherwise empty arrays
+- `health` — lightweight automation readiness checks
+- `lastRuns` — recent success/failure timestamps when job run telemetry is available
+
+Config inspection and edits:
+
+```bash
+night-watch config list --json
+night-watch config get reviewerEnabled --json
+night-watch config get queue.enabled --json
+night-watch config set reviewerEnabled false --json
+night-watch config set queue.maxConcurrency 2 --json
+night-watch config set providerEnv '{"ANTHROPIC_BASE_URL":"https://example.test"}' --json
+```
+
+Config paths are dot paths into the resolved Night Watch config. `set` parses `true`, `false`, `null`, numbers, JSON objects/arrays/quoted strings, and otherwise stores the input as a string. Unknown paths fail predictably without mutating config.
+
+Health checks:
+
+```bash
+night-watch health --json
+```
+
+The health payload contains `schemaVersion`, `ok`, and `checks[]`. It currently checks config load, cron installation, queue configuration, provider configuration, and stale lock indicators.
+
+Pause/resume:
+
+```bash
+night-watch job pause executor --json
+night-watch job resume executor --json
+night-watch job pause reviewer --json
+```
+
+Pause state is stored in `night-watch.config.json` under `pausedJobs`. Cron scripts call `night-watch job is-paused <job>` before starting work, and queue claim/dispatch skips paused jobs. This prevents new cron/queue-dispatched runs; it does not kill an already running process.
+
+Supported job names are `executor`, `reviewer`, `qa`, `audit`, `slicer`, `planner`, `analytics`, `pr-resolver`, and `merger`.
+
+---
+
 ## `night-watch logs`
 
 View log output from executor and reviewer.

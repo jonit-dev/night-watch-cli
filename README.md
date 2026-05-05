@@ -83,6 +83,26 @@ night-watch run
 
 ---
 
+## Agent / Machine-Readable CLI
+
+External agents and automation should use the JSON-first manageability commands instead of scraping human output:
+
+```bash
+night-watch agent status --json
+night-watch health --json
+night-watch config list --json
+night-watch config get reviewerEnabled --json
+night-watch config set reviewerEnabled false --json
+night-watch job pause reviewer --json
+night-watch job resume reviewer --json
+```
+
+JSON modes write one JSON document to stdout on success and reserve stderr for errors. `night-watch status --json` keeps its legacy shape for backward compatibility; `night-watch agent status --json` adds a stable wrapper with `schemaVersion`, `status`, `paused`, `queue`, `board`, `health`, and `lastRuns`.
+
+Paused jobs are stored in `night-watch.config.json` under `pausedJobs`. Cron scripts and queue claim/dispatch paths read this state before starting work, so `night-watch job pause <job> --json` prevents new cron/queue-dispatched runs for that job until resumed.
+
+---
+
 ## Who It's For
 
 Night Watch is strongest when:

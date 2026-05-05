@@ -339,6 +339,9 @@ export interface INightWatchConfig {
   /** Global job queue configuration */
   queue: IQueueConfig;
 
+  /** Jobs paused from cron/queue dispatch by `night-watch job pause` */
+  pausedJobs?: Partial<Record<JobType, boolean>>;
+
   /** Authenticated inbound job webhook trigger configuration */
   webhookTriggers: IWebhookTriggerConfig;
 
