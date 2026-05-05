@@ -519,28 +519,43 @@ checkpoint_timeout_progress() {
   local worktree_dir="${1:?worktree_dir required}"
   local branch_name="${2:?branch_name required}"
   local prd_file="${3:?prd_file required}"
+  CHECKPOINT_STATUS="none"
 
   if [ ! -d "${worktree_dir}" ]; then
-    return 0
+    return 1
   fi
 
   if ! git -C "${worktree_dir}" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    return 0
+    return 1
   fi
 
   if [ -z "$(git -C "${worktree_dir}" status --porcelain 2>/dev/null)" ]; then
     log "TIMEOUT: No local changes to checkpoint for ${prd_file}"
-    return 0
+    if executor_branch_has_commits_ahead_of_base; then
+      CHECKPOINT_STATUS="available"
+      return 0
+    fi
+    return 1
   fi
 
   log "TIMEOUT: Checkpointing local progress for ${prd_file} on ${branch_name}"
   if git -C "${worktree_dir}" add -A >/dev/null 2>&1; then
     if ! git -C "${worktree_dir}" diff --cached --quiet >/dev/null 2>&1; then
-      git -C "${worktree_dir}" commit --no-verify \
+      if git -C "${worktree_dir}" commit --no-verify \
         -m "chore: checkpoint timed-out progress for ${prd_file}" \
-        >> "${LOG_FILE}" 2>&1 || true
+        >> "${LOG_FILE}" 2>&1; then
+        CHECKPOINT_STATUS="created"
+        return 0
+      fi
     fi
   fi
+
+  if executor_branch_has_commits_ahead_of_base; then
+    CHECKPOINT_STATUS="available"
+    return 0
+  fi
+
+  return 1
 }
 
 extract_timeout_phase_titles() {
@@ -570,15 +585,29 @@ build_timeout_followup_comment() {
   local prd_label="${2:?prd_label required}"
   local branch_name="${3:?branch_name required}"
   local issue_body="${4:-}"
+  local checkpoint_status="${5:-none}"
   local phase_titles=""
   local comment=""
+  local resume_note=""
 
   phase_titles=$(extract_timeout_phase_titles "${issue_body}" || true)
+
+  case "${checkpoint_status}" in
+    created)
+      resume_note="Progress was checkpointed on branch ${branch_name}, so the next run will resume from the latest checkpoint."
+      ;;
+    available)
+      resume_note="Existing branch progress is available on ${branch_name}, so the next run can resume from that branch state."
+      ;;
+    *)
+      resume_note="No checkpoint was created because the run produced no local changes or branch commits. The next run will start this issue from the current base branch."
+      ;;
+  esac
 
   comment="Timeout follow-up:
 
 Execution hit the ${max_runtime}s runtime limit while processing ${prd_label}.
-Progress was checkpointed on branch ${branch_name}, so the next run will resume from the latest checkpoint.
+${resume_note}
 
 Suggested slices for the next runs:"
 
@@ -662,8 +691,90 @@ if [ -z "${EXECUTOR_PROMPT_PATH}" ]; then
 fi
 EXECUTOR_PROMPT_REF=$(instruction_ref_for_prompt "${PROJECT_DIR}" "${EXECUTOR_PROMPT_PATH}")
 PROGRESS_PUSH_CMD=$(project_git_push_command "${BRANCH_NAME}")
+AUDIT_TRIAGE_RESULT_FILE=".night-watch-audit-triage-result"
+AUDIT_TRIAGE_RESULT_PATH="${WORKTREE_DIR}/${AUDIT_TRIAGE_RESULT_FILE}"
 
-if [ -n "${ISSUE_NUMBER}" ]; then
+is_audit_board_issue() {
+  if [ -z "${ISSUE_NUMBER}" ]; then
+    return 1
+  fi
+
+  if printf '%s\n%s\n' "${ISSUE_TITLE_RAW}" "${ISSUE_BODY}" \
+    | grep -Eiq '(^|[[:space:]])Audit:|Night Watch audit detected|Report:[[:space:]]+`?logs/audit-report\.md`?|Finding:[[:space:]]+[0-9]+'; then
+    return 0
+  fi
+
+  return 1
+}
+
+is_tiny_audit_board_issue() {
+  if ! is_audit_board_issue; then
+    return 1
+  fi
+
+  local line_count
+  line_count=$(printf '%s\n' "${ISSUE_BODY}" | wc -l | tr -d '[:space:]')
+  if [ "${line_count:-0}" -gt 160 ]; then
+    return 1
+  fi
+
+  if printf '%s\n' "${ISSUE_BODY}" \
+    | grep -Eiq '^[[:space:]]*#{1,4}[[:space:]]*(Phase|Implementation Plan|Acceptance Criteria|Requirements)\b'; then
+    return 1
+  fi
+
+  return 0
+}
+
+build_audit_triage_prompt() {
+  cat <<EOF
+Audit triage/fix for GitHub issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}
+
+${ISSUE_BODY}
+
+## Setup
+- You are already inside an isolated worktree at: ${WORKTREE_DIR}
+- Current branch is already checked out: ${BRANCH_NAME}
+- Do NOT run git checkout/switch in ${PROJECT_DIR}
+- Do NOT create or remove worktrees; the cron script manages that
+
+## Lean Audit Workflow
+This is an audit finding, not a full PRD. First validate the claim against the current code.
+
+If the finding is false positive or the code is already safe:
+1. Make no code changes and do not commit.
+2. Write this marker file in the worktree:
+   ${AUDIT_TRIAGE_RESULT_FILE}
+3. Put "false_positive" on the first line and a concise reason on the following line(s).
+4. Stop immediately after writing the marker.
+
+If the finding is actionable:
+1. Make the smallest correct fix.
+2. Add or update focused tests only when they materially protect the behavior.
+3. Run the relevant verification command(s).
+4. Commit and push the fix to the existing branch:
+   ${PROGRESS_PUSH_CMD}
+5. Stop immediately after the final push.
+
+Do NOT read the full PRD executor workflow. Do NOT use PRD phase planning or parallelize this tiny triage task.
+Do NOT process any other issues.
+EOF
+}
+
+read_audit_triage_result() {
+  if [ ! -f "${AUDIT_TRIAGE_RESULT_PATH}" ]; then
+    return 1
+  fi
+
+  head -n 1 "${AUDIT_TRIAGE_RESULT_PATH}" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
+}
+
+if is_tiny_audit_board_issue; then
+  log "PROMPT: Using lean audit triage workflow for issue #${ISSUE_NUMBER}"
+  PROMPT="$(build_audit_triage_prompt)"
+elif [ -n "${ISSUE_NUMBER}" ]; then
   PROMPT="Implement the following PRD (GitHub issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}):
 
 ${ISSUE_BODY}
@@ -870,14 +981,20 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
       break
     fi
     log "CONTEXT-EXHAUSTED: Session ${ATTEMPT_NUM} hit context limit — checkpointing and resuming (${ATTEMPT}/${MAX_RETRIES})"
-    checkpoint_timeout_progress "${WORKTREE_DIR}" "${BRANCH_NAME}" "${ELIGIBLE_PRD}"
-    push_executor_branch "update" >> "${LOG_FILE}" 2>&1 || true
-    ensure_executor_pr >> "${LOG_FILE}" 2>&1 || true
+    CHECKPOINT_STATUS="none"
+    checkpoint_timeout_progress "${WORKTREE_DIR}" "${BRANCH_NAME}" "${ELIGIBLE_PRD}" || true
+    if [ "${CHECKPOINT_STATUS}" != "none" ]; then
+      push_executor_branch "update" >> "${LOG_FILE}" 2>&1 || true
+      ensure_executor_pr >> "${LOG_FILE}" 2>&1 || true
+      RESUME_PROGRESS_NOTE="Progress is available on branch ${BRANCH_NAME}."
+    else
+      RESUME_PROGRESS_NOTE="No checkpoint was created because there were no local changes or branch commits."
+    fi
     # Switch prompt to "continue" mode for the next attempt (fresh context)
     if [ -n "${ISSUE_NUMBER}" ]; then
       PROMPT="Continue implementing PRD (GitHub issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}).
 
-The previous session ran out of context window. Progress has been committed on branch ${BRANCH_NAME}.
+The previous session ran out of context window. ${RESUME_PROGRESS_NOTE}
 
 ## Your task
 1. Review the current state: check git log, existing code changes, and any task list
@@ -907,7 +1024,7 @@ Follow all CLAUDE.md conventions (if present).
     else
       PROMPT="Continue implementing the PRD at ${PRD_DIR_REL}/${ELIGIBLE_PRD}
 
-The previous session ran out of context window. Progress has been committed on branch ${BRANCH_NAME}.
+The previous session ran out of context window. ${RESUME_PROGRESS_NOTE}
 
 ## Your task
 1. Review the current state: check git log, existing code changes, and any task list
@@ -1097,6 +1214,29 @@ if [ "${EXIT_CODE}" -eq 0 ] && grep -qiF 'Exceeded USD budget' "${LOG_FILE}" 2>/
   EXIT_CODE=1
 fi
 
+if [ ${EXIT_CODE} -eq 0 ] && is_tiny_audit_board_issue; then
+  AUDIT_TRIAGE_RESULT=$(read_audit_triage_result || true)
+  if [ "${AUDIT_TRIAGE_RESULT}" = "false_positive" ]; then
+    AUDIT_TRIAGE_REASON=$(tail -n +2 "${AUDIT_TRIAGE_RESULT_PATH}" 2>/dev/null | sed -E '/^[[:space:]]*$/d' | head -n 5 || true)
+    if [ -z "${AUDIT_TRIAGE_REASON}" ]; then
+      AUDIT_TRIAGE_REASON="Audit finding was validated as a false positive or already safe."
+    fi
+    log "AUDIT-TRIAGE: Issue #${ISSUE_NUMBER} marked false positive; closing without PR"
+    if [ -n "${NW_CLI}" ]; then
+      "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
+        --body "Audit triage found this is a false positive / already safe (via ${EFFECTIVE_PROVIDER_LABEL}).
+
+${AUDIT_TRIAGE_REASON}" 2>>"${LOG_FILE}" || true
+      "${NW_CLI}" board close-issue "${ISSUE_NUMBER}" 2>>"${LOG_FILE}" || \
+        "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Done" 2>>"${LOG_FILE}" || true
+    fi
+    night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" success --exit-code 0 2>/dev/null || true
+    emit_result "success_audit_false_positive" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=audit_false_positive|detail=$(sanitize_result_value "${AUDIT_TRIAGE_REASON}")"
+    cleanup_worktrees "${PROJECT_DIR}"
+    exit 0
+  fi
+fi
+
 if [ ${EXIT_CODE} -eq 0 ]; then
   if ! ensure_executor_pr; then
     log "FAIL: Unable to create or reuse executor PR for ${BRANCH_NAME} after provider completion"
@@ -1165,14 +1305,22 @@ if [ ${EXIT_CODE} -eq 0 ]; then
   fi
 elif [ ${EXIT_CODE} -eq 124 ]; then
   log "TIMEOUT: Session limit hit after ${SESSION_MAX_RUNTIME}s while processing ${ELIGIBLE_PRD}"
-  checkpoint_timeout_progress "${WORKTREE_DIR}" "${BRANCH_NAME}" "${ELIGIBLE_PRD}"
-  push_executor_branch "update" >> "${LOG_FILE}" 2>&1 || true
-  ensure_executor_pr >> "${LOG_FILE}" 2>&1 || true
+  CHECKPOINT_STATUS="none"
+  checkpoint_timeout_progress "${WORKTREE_DIR}" "${BRANCH_NAME}" "${ELIGIBLE_PRD}" || true
+  if [ "${CHECKPOINT_STATUS}" != "none" ]; then
+    push_executor_branch "update" >> "${LOG_FILE}" 2>&1 || true
+    ensure_executor_pr >> "${LOG_FILE}" 2>&1 || true
+  fi
   if [ -n "${ISSUE_NUMBER}" ]; then
     "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
     if [ "${SESSION_MAX_RUNTIME}" != "${MAX_RUNTIME}" ]; then
+      if [ "${CHECKPOINT_STATUS}" = "none" ]; then
+        SESSION_TIMEOUT_BODY="Session paused after ${SESSION_MAX_RUNTIME}s (via ${EFFECTIVE_PROVIDER_LABEL}). No checkpoint was created because there were no local changes or branch commits. Will retry from the current base branch on the next run."
+      else
+        SESSION_TIMEOUT_BODY="Session paused after ${SESSION_MAX_RUNTIME}s (via ${EFFECTIVE_PROVIDER_LABEL}). Progress is available on branch \`${BRANCH_NAME}\`. Will resume automatically on the next run."
+      fi
       "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
-        --body "Session paused after ${SESSION_MAX_RUNTIME}s (via ${EFFECTIVE_PROVIDER_LABEL}). Progress checkpointed on branch \`${BRANCH_NAME}\`. Will resume automatically on the next run." 2>>"${LOG_FILE}" || true
+        --body "${SESSION_TIMEOUT_BODY}" 2>>"${LOG_FILE}" || true
     else
       "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
         --body "Execution timed out after ${SESSION_MAX_RUNTIME}s (via ${EFFECTIVE_PROVIDER_LABEL}). Moved back to Ready for retry." 2>>"${LOG_FILE}" || true
@@ -1180,12 +1328,13 @@ elif [ ${EXIT_CODE} -eq 124 ]; then
         "${SESSION_MAX_RUNTIME}" \
         "${ELIGIBLE_PRD}" \
         "${BRANCH_NAME}" \
-        "${ISSUE_BODY}")
+        "${ISSUE_BODY}" \
+        "${CHECKPOINT_STATUS}")
       "${NW_CLI}" board comment "${ISSUE_NUMBER}" --body "${TIMEOUT_FOLLOWUP_COMMENT}" 2>>"${LOG_FILE}" || true
     fi
   fi
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" timeout --exit-code 124 2>/dev/null || true
-  emit_result "timeout" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
+  emit_result "timeout" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|checkpoint=${CHECKPOINT_STATUS}"
 elif [ "${DOUBLE_RATE_LIMITED}" = "1" ]; then
   if [ -n "${ISSUE_NUMBER}" ]; then
     "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
@@ -1197,16 +1346,24 @@ elif [ "${DOUBLE_RATE_LIMITED}" = "1" ]; then
 elif check_context_exhausted "${LOG_FILE}" "${LOG_LINE_BEFORE}"; then
   # All resume attempts for context exhaustion were used up
   log "FAIL: Context window exhausted after ${MAX_RETRIES} resume attempts for ${ELIGIBLE_PRD}"
-  checkpoint_timeout_progress "${WORKTREE_DIR}" "${BRANCH_NAME}" "${ELIGIBLE_PRD}"
-  push_executor_branch "update" >> "${LOG_FILE}" 2>&1 || true
-  ensure_executor_pr >> "${LOG_FILE}" 2>&1 || true
+  CHECKPOINT_STATUS="none"
+  checkpoint_timeout_progress "${WORKTREE_DIR}" "${BRANCH_NAME}" "${ELIGIBLE_PRD}" || true
+  if [ "${CHECKPOINT_STATUS}" != "none" ]; then
+    push_executor_branch "update" >> "${LOG_FILE}" 2>&1 || true
+    ensure_executor_pr >> "${LOG_FILE}" 2>&1 || true
+  fi
   if [ -n "${ISSUE_NUMBER}" ]; then
     "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Ready" 2>>"${LOG_FILE}" || true
+    if [ "${CHECKPOINT_STATUS}" = "none" ]; then
+      CONTEXT_COMMENT="Context window exhausted after ${MAX_RETRIES} resume attempts (${TOTAL_ELAPSED}s total, via ${EFFECTIVE_PROVIDER_LABEL}). No checkpoint was created because there were no local changes or branch commits. Will retry from the current base branch."
+    else
+      CONTEXT_COMMENT="Context window exhausted after ${MAX_RETRIES} resume attempts (${TOTAL_ELAPSED}s total, via ${EFFECTIVE_PROVIDER_LABEL}). Progress is available on branch \`${BRANCH_NAME}\`. Will resume on next run."
+    fi
     "${NW_CLI}" board comment "${ISSUE_NUMBER}" \
-      --body "Context window exhausted after ${MAX_RETRIES} resume attempts (${TOTAL_ELAPSED}s total, via ${EFFECTIVE_PROVIDER_LABEL}). Progress checkpointed on branch \`${BRANCH_NAME}\`. Will resume on next run." 2>>"${LOG_FILE}" || true
+      --body "${CONTEXT_COMMENT}" 2>>"${LOG_FILE}" || true
   fi
   night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" context_exhausted --exit-code "${EXIT_CODE}" 2>/dev/null || true
-  emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=context_exhausted|exit_code=${EXIT_CODE}"
+  emit_result "failure" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=context_exhausted|exit_code=${EXIT_CODE}|checkpoint=${CHECKPOINT_STATUS}"
 else
   PROVIDER_ERROR_DETAIL=$(latest_failure_detail "${LOG_FILE}" "${LOG_LINE_BEFORE}")
   log "FAIL: Night watch exited with code ${EXIT_CODE} while processing ${ELIGIBLE_PRD}"

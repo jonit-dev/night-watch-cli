@@ -178,6 +178,11 @@ async function sendRunCompletionNotifications(
 
   if (event) {
     const timeoutDuration = event === 'run_timeout' ? config.maxRuntime : undefined;
+    const checkpointValue = scriptResult?.data.checkpoint;
+    const checkpointStatus: 'created' | 'available' | 'none' | undefined =
+      checkpointValue === 'created' || checkpointValue === 'available' || checkpointValue === 'none'
+        ? checkpointValue
+        : undefined;
     const _ctx = {
       event,
       projectName: path.basename(projectDir),
@@ -189,6 +194,7 @@ async function sendRunCompletionNotifications(
       scriptStatus: scriptResult?.status,
       failureReason: scriptResult?.data.reason,
       failureDetail: scriptResult?.data.detail,
+      checkpointStatus,
       prUrl: prDetails?.url,
       prTitle: prDetails?.title,
       prBody: prDetails?.body,

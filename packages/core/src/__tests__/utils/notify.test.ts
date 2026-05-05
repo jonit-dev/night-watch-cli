@@ -256,11 +256,37 @@ describe('notification utilities', () => {
       expect(text).toContain('Duration: 7200s');
       expect(text).toContain('Cause: Execution hit the max runtime limit and was terminated.');
       expect(text).toContain(
-        'Resume: Progress is checkpointed on timeout, and the next run resumes from that branch state.',
+        'Resume: Progress was checkpointed on timeout, and the next run resumes from that branch state.',
       );
       expect(text).toContain(
         'Recommendation: Avoid huge PRDs; slice large work into smaller PRDs/phases.',
       );
+    });
+
+    it('should state when a timeout has no checkpoint to resume', () => {
+      const text = buildDescription({
+        ...baseCtx,
+        event: 'run_timeout',
+        exitCode: 124,
+        checkpointStatus: 'none',
+      });
+
+      expect(text).toContain(
+        'Resume: No checkpoint was created because the run produced no local changes or branch commits.',
+      );
+      expect(text).not.toContain('Progress was checkpointed');
+    });
+
+    it('should not show exit code for run_started events', () => {
+      const text = buildDescription({
+        ...baseCtx,
+        event: 'run_started',
+        exitCode: 0,
+      });
+
+      expect(text).toContain('Project: my-project');
+      expect(text).toContain('Provider: claude');
+      expect(text).not.toContain('Exit code:');
     });
 
     it('should include failure reason and detail for failed runs', () => {

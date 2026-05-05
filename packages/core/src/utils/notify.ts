@@ -22,6 +22,7 @@ export interface INotificationContext {
   provider: string;
   failureReason?: string;
   failureDetail?: string;
+  checkpointStatus?: 'created' | 'available' | 'none';
   scriptStatus?: string;
   // Enriched PR details (optional — populated when gh CLI is available)
   prUrl?: string;
@@ -160,7 +161,9 @@ export function buildDescription(ctx: INotificationContext): string {
   const lines: string[] = [];
   lines.push(`Project: ${ctx.projectName}`);
   lines.push(`Provider: ${ctx.provider}`);
-  lines.push(`Exit code: ${ctx.exitCode}`);
+  if (ctx.event !== 'run_started') {
+    lines.push(`Exit code: ${ctx.exitCode}`);
+  }
   if (ctx.prdName) {
     lines.push(`PRD: ${ctx.prdName}`);
   }
@@ -184,9 +187,17 @@ export function buildDescription(ctx: INotificationContext): string {
   }
   if (ctx.event === 'run_timeout') {
     lines.push('Cause: Execution hit the max runtime limit and was terminated.');
-    lines.push(
-      'Resume: Progress is checkpointed on timeout, and the next run resumes from that branch state.',
-    );
+    if (ctx.checkpointStatus === 'none') {
+      lines.push(
+        'Resume: No checkpoint was created because the run produced no local changes or branch commits.',
+      );
+    } else if (ctx.checkpointStatus === 'available') {
+      lines.push('Resume: Existing branch progress is available for the next run.');
+    } else {
+      lines.push(
+        'Resume: Progress was checkpointed on timeout, and the next run resumes from that branch state.',
+      );
+    }
     lines.push('Recommendation: Avoid huge PRDs; slice large work into smaller PRDs/phases.');
   }
   // Include retry info for review events when attempts > 1

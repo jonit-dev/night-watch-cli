@@ -3112,13 +3112,92 @@ describe('core flow smoke tests (bash scripts)', () => {
 
     const comments = fs.readFileSync(commentLog, 'utf-8');
     expect(comments).toContain('Timeout follow-up:');
-    expect(comments).toContain('will resume from the latest checkpoint');
+    expect(comments).toContain('No checkpoint was created');
+    expect(comments).toContain('start this issue from the current base branch');
     expect(comments).toContain('Suggested slices for the next runs:');
     expect(comments).toContain('Phase 1: Git Utilities');
     expect(comments).toContain('Phase 2: Worktree Management');
     expect(comments).toContain('Phase 3: Lock and Claim Management');
     expect(comments).toContain('avoid huge PRDs');
     expect(comments).toContain('Slice large work into smaller PRDs/phases');
+  });
+
+  it('executor should use lean audit triage prompt and close false-positive audit issues without PR', () => {
+    const projectDir = mkTempDir('nw-smoke-executor-audit-false-positive-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-bin-audit-false-positive-');
+    const issueNumber = '16';
+    const promptLog = path.join(projectDir, '.smoke-provider-prompt');
+    const boardLog = path.join(projectDir, '.smoke-board-calls');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' +
+        'printf \'%s\\n\' "$*" > "$NW_SMOKE_PROMPT_LOG"\n' +
+        "printf 'false_positive\\nwebhook catch keeps delivered false\\n' > .night-watch-audit-triage-result\n" +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "issue" && "$2" == "view" ]]; then\n' +
+        '  echo \'{"number":16,"title":"Audit: medium reliability in webhook-dispatch.service.ts","body":"## Summary\\n\\nNight Watch audit detected a **medium** finding in `webhook-dispatch.service.ts`.\\n\\n## Description\\n\\nAudit claims catch reports success=true after webhook failure.\\n\\n## Suggested Fix\\n\\nEnsure delivered remains false.\\n\\n## Source\\n\\n- Report: `logs/audit-report.md`\\n- Finding: 1"}\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  echo "[]"\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const nwCli = path.join(fakeBin, 'night-watch');
+    fs.writeFileSync(
+      nwCli,
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "job" && "$2" == "is-paused" ]]; then\n' +
+        '  exit 1\n' +
+        'fi\n' +
+        'if [[ "$1" == "board" ]]; then\n' +
+        '  echo "$*" >> "$NW_SMOKE_BOARD_LOG"\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "notify" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(executorScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BOARD_ENABLED: 'true',
+      NW_TARGET_ISSUE: issueNumber,
+      NW_CLI_BIN: nwCli,
+      NW_SMOKE_PROMPT_LOG: promptLog,
+      NW_SMOKE_BOARD_LOG: boardLog,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success_audit_false_positive');
+    expect(result.stdout).toContain('reason=audit_false_positive');
+
+    const prompt = fs.readFileSync(promptLog, 'utf-8');
+    expect(prompt).toContain('Lean Audit Workflow');
+    expect(prompt).toContain('false_positive');
+    expect(prompt).not.toContain('FULL execution pipeline');
+    expect(prompt).not.toContain('agent swarms');
+
+    const boardCalls = fs.readFileSync(boardLog, 'utf-8');
+    expect(boardCalls).toContain(`board close-issue ${issueNumber}`);
+    expect(boardCalls).toContain('Audit triage found this is a false positive');
   });
 
   it('executor should trigger native Claude fallback and include rate_limit_fallback marker when proxy returns 429', () => {
