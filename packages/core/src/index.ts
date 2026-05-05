@@ -19,6 +19,7 @@ export * from './utils/logger.js';
 export * from './utils/cancel.js';
 export * from './utils/checks.js';
 export * from './utils/config-writer.js';
+export * from './utils/config-path.js';
 export * from './utils/crontab.js';
 export * from './utils/execution-history.js';
 export * from './utils/git-utils.js';

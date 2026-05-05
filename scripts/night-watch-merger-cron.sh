@@ -56,6 +56,7 @@ PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 # NOTE: Lock file path must match mergerLockPath() in src/utils/status-data.ts
 LOCK_FILE="/tmp/night-watch-merger-${PROJECT_RUNTIME_KEY}.lock"
 SCRIPT_TYPE="merger"
+skip_if_job_paused "${SCRIPT_TYPE}" "${PROJECT_DIR}"
 
 MERGED_PRS=0
 FAILED_PRS=0

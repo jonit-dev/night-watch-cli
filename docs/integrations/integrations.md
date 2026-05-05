@@ -4,6 +4,83 @@
 
 Night Watch CLI integrates with several third-party services to enable notifications, avatar generation, analytics, and project management.
 
+## Inbound Webhook Triggers
+
+Configure inbound triggers from Settings -> Integrations -> Inbound Webhook
+Triggers. The same values are stored in the `webhookTriggers` config block for
+users who manage configuration as code.
+
+The endpoint format is `/api/jobs/:id/run` in single-project mode and
+`/api/projects/:projectId/jobs/:id/run` in global mode. For GitHub webhooks,
+the matched rule's `jobId` is dispatched. If the signature is valid but no rule
+matches, Night Watch returns `202` with `accepted: false` and does not start a
+job.
+
+### Signed curl
+
+Use the Night Watch signature header for generic webhook clients:
+
+```bash
+payload='{"source":"manual"}'
+signature=$(printf '%s' "$payload" | openssl dgst -sha256 -hmac "$NIGHT_WATCH_WEBHOOK_SECRET" | awk '{print $2}')
+
+curl -X POST 'https://YOUR_NIGHT_WATCH_HOST/api/jobs/reviewer/run' \
+  -H 'Content-Type: application/json' \
+  -H "X-Night-Watch-Signature: sha256=$signature" \
+  --data "$payload"
+```
+
+### GitHub Webhooks
+
+GitHub repository webhooks can start a Night Watch job when a configured event rule matches.
+Night Watch verifies GitHub's `X-Hub-Signature-256` HMAC signature before it evaluates the event.
+
+**Setup:**
+
+1. Create a strong shared secret and expose it to the Night Watch server:
+
+```bash
+export NIGHT_WATCH_WEBHOOK_SECRET="your-random-webhook-secret"
+```
+
+2. In Settings -> Integrations, enable Inbound Webhook Triggers:
+   - Secret Environment Variable: `NIGHT_WATCH_WEBHOOK_SECRET`
+   - Allowed Jobs: choose each job that external callers may dispatch
+   - GitHub Events: enable GitHub and select the events used by your rules
+   - GitHub Rules: map event/action/branch/failure filters to a Night Watch job
+
+3. In GitHub, go to Repository Settings -> Webhooks -> Add webhook:
+   - Payload URL: `https://YOUR_NIGHT_WATCH_HOST/api/jobs/reviewer/run`
+   - Content type: `application/json`
+   - Secret: the same value as `NIGHT_WATCH_WEBHOOK_SECRET`
+   - SSL verification: enabled
+   - Selected events: choose the events used by your rules, such as `workflow_run`, `check_suite`, `pull_request`, or `repository_dispatch`
+
+4. Optional config-file equivalent:
+
+```json
+{
+  "webhookTriggers": {
+    "enabled": true,
+    "secretEnv": "NIGHT_WATCH_WEBHOOK_SECRET",
+    "allowedJobIds": ["reviewer", "qa"],
+    "github": {
+      "enabled": true,
+      "events": ["workflow_run"],
+      "rules": [
+        {
+          "event": "workflow_run",
+          "action": "completed",
+          "jobId": "qa",
+          "branchPatterns": ["main", "release/*"],
+          "onlyOnFailure": true
+        }
+      ]
+    }
+  }
+}
+```
+
 ## Notification Integrations
 
 ### Slack

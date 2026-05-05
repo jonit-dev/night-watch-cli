@@ -37,6 +37,7 @@ import {
 } from './routes/config.routes.js';
 import { createDoctorRoutes, createProjectDoctorRoutes } from './routes/doctor.routes.js';
 import { createFeedbackRoutes, createProjectFeedbackRoutes } from './routes/feedback.routes.js';
+import { createJobRoutes, createProjectJobRoutes } from './routes/job.routes.js';
 import { createLogRoutes, createProjectLogRoutes } from './routes/log.routes.js';
 import { createPrdRoutes, createProjectPrdRoutes } from './routes/prd.routes.js';
 import { createProjectRoadmapRoutes, createRoadmapRoutes } from './routes/roadmap.routes.js';
@@ -49,6 +50,12 @@ import { createGlobalQueueRoutes, createQueueRoutes } from './routes/queue.route
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const JOB_RAW_BODY_LIMIT = '1mb';
+
+function setupJobRawBodyParsing(app: Express): void {
+  app.use('/api/jobs', express.raw({ type: '*/*', limit: JOB_RAW_BODY_LIMIT }));
+  app.use('/api/projects/:projectId/jobs', express.raw({ type: '*/*', limit: JOB_RAW_BODY_LIMIT }));
+}
 
 function resolveWebDistPath(): string {
   // 1. Bundled/published mode: web assets copied into dist/web/ by build.mjs
@@ -104,6 +111,7 @@ function setupStaticFiles(app: Express): void {
 export function createApp(projectDir: string): Express {
   const app = express();
   app.use(cors());
+  setupJobRawBodyParsing(app);
   app.use(express.json());
 
   let config = loadConfig(projectDir);
@@ -124,6 +132,7 @@ export function createApp(projectDir: string): Express {
   app.use('/api/config', createConfigRoutes({ projectDir, getConfig: () => config, reloadConfig }));
   app.use('/api/board', createBoardRoutes({ projectDir, getConfig: () => config }));
   app.use('/api/actions', createActionRoutes({ projectDir, getConfig: () => config, sseClients }));
+  app.use('/api/jobs', createJobRoutes({ projectDir, getConfig: () => config }));
   app.use(
     '/api/roadmap',
     createRoadmapRoutes({ projectDir, getConfig: () => config, reloadConfig }),
@@ -182,6 +191,7 @@ function createProjectRouter() {
   router.use(createProjectLogRoutes());
   router.use(createProjectBoardRoutes());
   router.use(createProjectActionRoutes({ projectSseClients }));
+  router.use(createProjectJobRoutes());
   router.use(createProjectRoadmapRoutes());
   router.use(createProjectFeedbackRoutes());
 
@@ -199,6 +209,7 @@ function createProjectRouter() {
 export function createGlobalApp(): Express {
   const app = express();
   app.use(cors());
+  setupJobRawBodyParsing(app);
   app.use(express.json());
 
   app.get('/api/mode', (_req: Request, res: Response): void => {

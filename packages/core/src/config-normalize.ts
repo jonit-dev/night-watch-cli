@@ -331,6 +331,20 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
     }
   }
 
+  const rawPausedJobs = readObject(rawConfig.pausedJobs);
+  if (rawPausedJobs) {
+    const pausedJobs: Partial<Record<JobType, boolean>> = {};
+    for (const jobType of VALID_JOB_TYPES) {
+      const paused = readBoolean(rawPausedJobs[jobType]);
+      if (paused !== undefined) {
+        pausedJobs[jobType] = paused;
+      }
+    }
+    if (Object.keys(pausedJobs).length > 0) {
+      normalized.pausedJobs = pausedJobs;
+    }
+  }
+
   // Parse provider schedule overrides
   const rawScheduleOverrides = readObject(rawConfig.providerScheduleOverrides);
   if (rawScheduleOverrides) {

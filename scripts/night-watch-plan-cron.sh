@@ -61,6 +61,8 @@ PROVIDER_MODEL_DISPLAY=$(resolve_provider_model_display "${PROVIDER_CMD}" "${PRO
 PRD_DIR="${NW_PRD_DIR:-docs/PRDs}"
 PLAN_TASK="${NW_PLAN_TASK:-}"
 
+skip_if_job_paused "${SCRIPT_TYPE}" "${PROJECT_DIR}"
+
 rotate_log
 log_separator
 log "RUN-START: planner invoked project=${PROJECT_DIR} provider=${PROVIDER_CMD} dry_run=${NW_DRY_RUN:-0}"

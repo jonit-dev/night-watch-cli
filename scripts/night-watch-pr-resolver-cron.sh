@@ -63,6 +63,7 @@ PROVIDER_MODEL_DISPLAY=$(resolve_provider_model_display "${PROVIDER_CMD}" "${PRO
 # NOTE: Lock file path must match resolverLockPath() in src/utils/status-data.ts
 LOCK_FILE="/tmp/night-watch-pr-resolver-${PROJECT_RUNTIME_KEY}.lock"
 SCRIPT_TYPE="pr-resolver"
+skip_if_job_paused "${SCRIPT_TYPE}" "${PROJECT_DIR}"
 
 emit_result() {
   local status="${1:?status required}"

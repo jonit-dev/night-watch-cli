@@ -386,6 +386,18 @@ export function buildInitConfig(params: {
       ...defaults.queue,
       priority: { ...defaults.queue.priority },
     },
+    webhookTriggers: {
+      ...defaults.webhookTriggers,
+      allowedJobIds: [...defaults.webhookTriggers.allowedJobIds],
+      github: {
+        ...defaults.webhookTriggers.github,
+        events: [...defaults.webhookTriggers.github.events],
+        rules: defaults.webhookTriggers.github.rules.map((rule) => ({
+          ...rule,
+          branchPatterns: rule.branchPatterns ? [...rule.branchPatterns] : undefined,
+        })),
+      },
+    },
   };
 }
 

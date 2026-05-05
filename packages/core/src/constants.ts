@@ -17,6 +17,7 @@ import {
   IQaConfig,
   IQueueConfig,
   IRoadmapScannerConfig,
+  IWebhookTriggerConfig,
   JobType,
   MergeMethod,
   Provider,
@@ -246,6 +247,22 @@ export const DEFAULT_JOB_PROVIDERS: IJobProviders = {};
 
 // Default provider schedule overrides (empty = no time-based overrides)
 export const DEFAULT_PROVIDER_SCHEDULE_OVERRIDES: IProviderScheduleOverride[] = [];
+
+// Webhook Trigger Configuration
+export const DEFAULT_WEBHOOK_TRIGGER_SECRET_ENV = 'NIGHT_WATCH_WEBHOOK_SECRET';
+export const DEFAULT_WEBHOOK_TRIGGER_MAX_SKEW_SECONDS = 300;
+export const DEFAULT_WEBHOOK_TRIGGERS: IWebhookTriggerConfig = {
+  enabled: false,
+  secretEnv: DEFAULT_WEBHOOK_TRIGGER_SECRET_ENV,
+  allowedJobIds: getValidJobTypes(),
+  requireTimestamp: false,
+  maxSkewSeconds: DEFAULT_WEBHOOK_TRIGGER_MAX_SKEW_SECONDS,
+  github: {
+    enabled: false,
+    events: [],
+    rules: [],
+  },
+};
 
 /**
  * Built-in provider presets. These are the default configurations for known providers.

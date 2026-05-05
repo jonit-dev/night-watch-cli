@@ -30,6 +30,9 @@ import type {
     IRoadmapStatus,
     IStatusSnapshot,
     IWebhookConfig,
+    IWebhookTriggerConfig,
+    IWebhookTriggerGithubConfig,
+    IWebhookTriggerGithubRule,
     JobType,
     MergeMethod,
     QaArtifacts,
@@ -42,7 +45,8 @@ import { getWebJobDef } from './utils/jobs';
 export type {
     ClaudeModel, DayOfWeek, IAnalyticsConfig, IAuditConfig, IBoardProviderConfig, IJobProviders, ILogInfo, IMergerConfig, INightWatchConfig,
     INotificationConfig, IFeedbackConfig, IPrdInfo, IProviderBucketConfig, IProviderPreset, IProviderScheduleOverride, IPrInfo, IProcessInfo, IQaConfig,
-    IPrResolverConfig, IQueueConfig, IRoadmapItem, IRoadmapScannerConfig, IRoadmapStatus, IStatusSnapshot, IWebhookConfig,
+    IPrResolverConfig, IQueueConfig, IRoadmapItem, IRoadmapScannerConfig, IRoadmapStatus, IStatusSnapshot, IWebhookConfig, IWebhookTriggerConfig,
+    IWebhookTriggerGithubConfig, IWebhookTriggerGithubRule,
     JobType, MergeMethod, QaArtifacts, QueueMode
 };
 

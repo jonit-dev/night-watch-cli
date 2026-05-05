@@ -13,6 +13,8 @@ import {
   IProviderPreset,
   IProviderScheduleOverride,
   IQueueConfig,
+  IWebhookTriggerConfig,
+  IWebhookTriggerGithubRule,
   JobType,
 } from './types.js';
 import {
@@ -58,9 +60,11 @@ import {
   DEFAULT_SCHEDULING_PRIORITY,
   DEFAULT_SECONDARY_FALLBACK_MODEL,
   DEFAULT_TEMPLATES_DIR,
+  DEFAULT_WEBHOOK_TRIGGERS,
 } from './constants.js';
 import { normalizeConfig } from './config-normalize.js';
 import { buildEnvOverrideConfig } from './config-env.js';
+import { getJobDef } from './jobs/job-registry.js';
 
 export { validateProvider } from './config-normalize.js';
 
@@ -111,7 +115,127 @@ export function getDefaultConfig(): INightWatchConfig {
     jobProviders: { ...DEFAULT_JOB_PROVIDERS },
     providerScheduleOverrides: [...DEFAULT_PROVIDER_SCHEDULE_OVERRIDES],
     queue: { ...DEFAULT_QUEUE },
+    pausedJobs: {},
+    webhookTriggers: cloneWebhookTriggers(DEFAULT_WEBHOOK_TRIGGERS),
   };
+}
+
+function cloneWebhookTriggers(config: IWebhookTriggerConfig): IWebhookTriggerConfig {
+  return {
+    ...config,
+    allowedJobIds: [...config.allowedJobIds],
+    github: {
+      ...config.github,
+      events: [...config.github.events],
+      rules: config.github.rules.map((rule) => {
+        const cloned = { ...rule };
+        if (rule.branchPatterns) {
+          cloned.branchPatterns = [...rule.branchPatterns];
+        }
+        return cloned;
+      }),
+    },
+  };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isValidJobType(value: unknown): value is JobType {
+  return typeof value === 'string' && getJobDef(value as JobType) !== undefined;
+}
+
+function readStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const strings = value.filter((item): item is string => typeof item === 'string');
+  return strings.length > 0 ? strings : [];
+}
+
+function normalizeWebhookGithubRules(value: unknown): IWebhookTriggerGithubRule[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  const rules: IWebhookTriggerGithubRule[] = [];
+  for (const item of value) {
+    if (!isPlainObject(item)) continue;
+
+    const event = typeof item.event === 'string' ? item.event.trim() : '';
+    if (!event || !isValidJobType(item.jobId)) continue;
+
+    const rule: IWebhookTriggerGithubRule = {
+      event,
+      jobId: item.jobId,
+    };
+
+    if (typeof item.action === 'string' && item.action.trim()) {
+      rule.action = item.action.trim();
+    }
+    const branchPatterns = readStringArray(item.branchPatterns);
+    if (branchPatterns !== undefined) {
+      rule.branchPatterns = branchPatterns;
+    }
+    if (typeof item.onlyOnFailure === 'boolean') {
+      rule.onlyOnFailure = item.onlyOnFailure;
+    }
+
+    rules.push(rule);
+  }
+
+  return rules;
+}
+
+function normalizeWebhookTriggersConfig(value: unknown): IWebhookTriggerConfig | undefined {
+  if (!isPlainObject(value)) return undefined;
+
+  const config = cloneWebhookTriggers(DEFAULT_WEBHOOK_TRIGGERS);
+
+  if (typeof value.enabled === 'boolean') {
+    config.enabled = value.enabled;
+  }
+  if (typeof value.secretEnv === 'string') {
+    config.secretEnv = value.secretEnv.trim();
+  }
+  const allowedJobIds = readStringArray(value.allowedJobIds);
+  if (allowedJobIds !== undefined) {
+    config.allowedJobIds = allowedJobIds.filter(isValidJobType);
+  }
+  if (typeof value.requireTimestamp === 'boolean') {
+    config.requireTimestamp = value.requireTimestamp;
+  }
+  if (typeof value.maxSkewSeconds === 'number' && Number.isFinite(value.maxSkewSeconds)) {
+    const n = Math.floor(value.maxSkewSeconds);
+    config.maxSkewSeconds = n > 0 ? n : DEFAULT_WEBHOOK_TRIGGERS.maxSkewSeconds;
+  }
+
+  if (isPlainObject(value.github)) {
+    if (typeof value.github.enabled === 'boolean') {
+      config.github.enabled = value.github.enabled;
+    }
+    const events = readStringArray(value.github.events);
+    if (events !== undefined) {
+      config.github.events = events.map((event) => event.trim()).filter(Boolean);
+    }
+    const rules = normalizeWebhookGithubRules(value.github.rules);
+    if (rules !== undefined) {
+      config.github.rules = rules;
+    }
+  }
+
+  return config;
+}
+
+function validateWebhookTriggers(config: IWebhookTriggerConfig): IWebhookTriggerConfig {
+  const validated = cloneWebhookTriggers(config);
+  validated.allowedJobIds = validated.allowedJobIds.filter(isValidJobType);
+  validated.github.rules = validated.github.rules.filter((rule) => isValidJobType(rule.jobId));
+
+  if (validated.enabled && validated.secretEnv.trim().length === 0) {
+    throw new Error(
+      'webhookTriggers.secretEnv must be non-empty when webhook triggers are enabled',
+    );
+  }
+
+  return validated;
 }
 
 /**
@@ -124,7 +248,12 @@ function loadConfigFile(configPath: string): Partial<INightWatchConfig> | null {
     }
     const content = fs.readFileSync(configPath, 'utf-8');
     const rawConfig = JSON.parse(content) as Record<string, unknown>;
-    return normalizeConfig(rawConfig);
+    const normalized = normalizeConfig(rawConfig);
+    const webhookTriggers = normalizeWebhookTriggersConfig(rawConfig.webhookTriggers);
+    if (webhookTriggers) {
+      normalized.webhookTriggers = webhookTriggers;
+    }
+    return normalized;
   } catch (error) {
     console.warn(
       `Warning: Could not parse config file at ${configPath}: ${
@@ -180,6 +309,26 @@ function mergeConfigLayer(base: INightWatchConfig, layer: Partial<INightWatchCon
         ...baseQueue,
         ...layerQueue,
         providerBuckets: { ...baseQueue.providerBuckets, ...layerQueue.providerBuckets },
+      };
+    } else if (_key === 'webhookTriggers') {
+      const baseWebhook = base[_key] as IWebhookTriggerConfig;
+      const layerWebhook = value as IWebhookTriggerConfig;
+      (base as unknown as Record<string, unknown>)[_key] = {
+        ...baseWebhook,
+        ...layerWebhook,
+        allowedJobIds: [...layerWebhook.allowedJobIds],
+        github: {
+          ...baseWebhook.github,
+          ...layerWebhook.github,
+          events: [...layerWebhook.github.events],
+          rules: layerWebhook.github.rules.map((rule) => {
+            const cloned = { ...rule };
+            if (rule.branchPatterns) {
+              cloned.branchPatterns = [...rule.branchPatterns];
+            }
+            return cloned;
+          }),
+        },
       };
     } else if (
       _key === 'providerEnv' ||
@@ -272,6 +421,8 @@ function mergeConfigs(
         ? DEFAULT_CLAUDE_MODEL
         : merged.primaryFallbackModel;
   }
+
+  merged.webhookTriggers = validateWebhookTriggers(merged.webhookTriggers);
 
   return merged;
 }

@@ -111,20 +111,24 @@ export function analyticsCommand(program: Command): void {
       try {
         await maybeApplyCronSchedulingDelay(config, 'analytics', projectDir);
         const result = await runAnalytics(config, projectDir);
-        recordJobOutcome({
-          config,
-          exitCode: 0,
-          finishedAt: Date.now(),
-          jobType: 'analytics',
-          metadata: {
-            lookbackDays: config.analytics.lookbackDays,
-            summary: result.summary,
-          },
-          projectDir,
-          providerKey: resolveJobProvider(config, 'analytics'),
-          startedAt,
-          stdout: result.summary,
-        });
+        try {
+          recordJobOutcome({
+            config,
+            exitCode: 0,
+            finishedAt: Date.now(),
+            jobType: 'analytics',
+            metadata: {
+              lookbackDays: config.analytics.lookbackDays,
+              summary: result.summary,
+            },
+            projectDir,
+            providerKey: resolveJobProvider(config, 'analytics'),
+            startedAt,
+            stdout: result.summary,
+          });
+        } catch {
+          // Outcome persistence must not change command exit behavior.
+        }
 
         spinner.succeed(`Analytics complete — ${result.summary}`);
       } catch (err) {

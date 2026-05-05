@@ -63,11 +63,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
 
-# Ensure provider CLI is on PATH (nvm, fnm, volta, common bin dirs)
-if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
-  echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
-  exit 127
-fi
 PROJECT_RUNTIME_KEY=$(project_runtime_key "${PROJECT_DIR}")
 PROVIDER_MODEL_DISPLAY=$(resolve_provider_model_display "${PROVIDER_CMD}" "${PROVIDER_LABEL}")
 GLOBAL_LOCK_FILE="/tmp/night-watch-pr-reviewer-${PROJECT_RUNTIME_KEY}.lock"
@@ -79,6 +74,7 @@ else
 fi
 
 SCRIPT_TYPE="reviewer"
+skip_if_job_paused "${SCRIPT_TYPE}" "${PROJECT_DIR}"
 READY_FOR_REVIEW_LABEL="${NW_READY_FOR_REVIEW_LABEL:-ready-for-review}"
 READY_FOR_REVIEW_MARKER_NAME="night-watch-ready-for-review"
 READY_TO_MERGE_LABEL="${NW_PR_RESOLVER_READY_LABEL:-ready-to-merge}"
@@ -90,6 +86,13 @@ emit_result() {
     echo "NIGHT_WATCH_RESULT:${status}|${details}"
   else
     echo "NIGHT_WATCH_RESULT:${status}"
+  fi
+}
+
+require_provider_on_path() {
+  if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
+    echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
+    exit 127
   fi
 }
 
@@ -853,6 +856,8 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
     exit 0
   fi
 
+  require_provider_on_path
+
   log "PARALLEL: Launching ${#PR_NUMBER_ARRAY[@]} reviewer worker(s)"
 
   declare -a WORKER_PIDS=()
@@ -1021,6 +1026,8 @@ if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   echo "Timeout: ${MAX_RUNTIME}s"
   exit 0
 fi
+
+require_provider_on_path
 
 if ! prepare_detached_worktree "${PROJECT_DIR}" "${REVIEW_WORKTREE_DIR}" "${DEFAULT_BRANCH}" "${LOG_FILE}"; then
   log "FAIL: Unable to create isolated reviewer worktree ${REVIEW_WORKTREE_DIR}"

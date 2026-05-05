@@ -28,6 +28,7 @@ mkdir -p "${LOG_DIR}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=night-watch-helpers.sh
 source "${SCRIPT_DIR}/night-watch-helpers.sh"
+skip_if_job_paused "${SCRIPT_TYPE}" "${PROJECT_DIR}"
 
 # emit_result helper - must be defined before use
 emit_result() {

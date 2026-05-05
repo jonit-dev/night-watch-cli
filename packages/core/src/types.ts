@@ -109,6 +109,29 @@ export interface IJobProviders {
   merger?: Provider;
 }
 
+export interface IWebhookTriggerGithubRule {
+  event: string;
+  action?: string;
+  jobId: JobType;
+  branchPatterns?: string[];
+  onlyOnFailure?: boolean;
+}
+
+export interface IWebhookTriggerGithubConfig {
+  enabled: boolean;
+  events: string[];
+  rules: IWebhookTriggerGithubRule[];
+}
+
+export interface IWebhookTriggerConfig {
+  enabled: boolean;
+  secretEnv: string;
+  allowedJobIds: JobType[];
+  requireTimestamp: boolean;
+  maxSkewSeconds: number;
+  github: IWebhookTriggerGithubConfig;
+}
+
 /**
  * Claude model to use for native (non-proxy) execution
  */
@@ -318,6 +341,12 @@ export interface INightWatchConfig {
 
   /** Global job queue configuration */
   queue: IQueueConfig;
+
+  /** Jobs paused from cron/queue dispatch by `night-watch job pause` */
+  pausedJobs?: Partial<Record<JobType, boolean>>;
+
+  /** Authenticated inbound job webhook trigger configuration */
+  webhookTriggers: IWebhookTriggerConfig;
 
   /**
    * Internal: CLI override for provider (--provider flag).

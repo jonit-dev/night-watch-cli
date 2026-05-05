@@ -471,6 +471,9 @@ describe('core flow smoke tests (bash scripts)', () => {
     fs.writeFileSync(
       nwCli,
       '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "job" && "$2" == "is-paused" ]]; then\n' +
+        '  exit 1\n' +
+        'fi\n' +
         'printf \'%s\\n\' "$*" >> "$NW_SMOKE_QUEUE_CALL_LOG"\n' +
         'if [[ "$1" == "queue" && ( "$2" == "complete" || "$2" == "dispatch" ) ]]; then\n' +
         '  exit 0\n' +
@@ -533,6 +536,9 @@ describe('core flow smoke tests (bash scripts)', () => {
     fs.writeFileSync(
       nwCli,
       '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "job" && "$2" == "is-paused" ]]; then\n' +
+        '  exit 1\n' +
+        'fi\n' +
         'printf \'%s\\n\' "$*" >> "$NW_SMOKE_QUEUE_CALL_LOG"\n' +
         'if [[ "$1" == "queue" && ( "$2" == "complete" || "$2" == "dispatch" ) ]]; then\n' +
         '  exit 0\n' +
@@ -2757,6 +2763,9 @@ describe('core flow smoke tests (bash scripts)', () => {
     fs.writeFileSync(
       nwCli,
       '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "job" && "$2" == "is-paused" ]]; then\n' +
+        '  exit 1\n' +
+        'fi\n' +
         'if [[ "$1" == "board" && "$2" == "close-issue" ]]; then\n' +
         '  exit 0\n' +
         'fi\n' +
@@ -2874,6 +2883,9 @@ describe('core flow smoke tests (bash scripts)', () => {
     fs.writeFileSync(
       nwCli,
       '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "job" && "$2" == "is-paused" ]]; then\n' +
+        '  exit 1\n' +
+        'fi\n' +
         'if [[ "$1" == "board" && "$2" == "next-issue" ]]; then\n' +
         "  echo '[]'\n" +
         '  exit 0\n' +
@@ -2913,6 +2925,9 @@ describe('core flow smoke tests (bash scripts)', () => {
     fs.writeFileSync(
       nwCli,
       '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "job" && "$2" == "is-paused" ]]; then\n' +
+        '  exit 1\n' +
+        'fi\n' +
         'if [[ "$1" == "board" && "$2" == "next-issue" ]]; then\n' +
         '  echo \'[{"number":53,"title":"PRD: Backlink Exchange System","body":"Cooldown repro"}]\'\n' +
         '  exit 0\n' +
@@ -2981,6 +2996,9 @@ describe('core flow smoke tests (bash scripts)', () => {
     fs.writeFileSync(
       nwCli,
       '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "job" && "$2" == "is-paused" ]]; then\n' +
+        '  exit 1\n' +
+        'fi\n' +
         'if [[ "$1" == "board" && "$2" == "move-issue" ]]; then\n' +
         '  # Log the move-issue call for verification\n' +
         '  echo "$*" >> "$NW_SMOKE_MOVE_LOG"\n' +
@@ -3049,6 +3067,9 @@ describe('core flow smoke tests (bash scripts)', () => {
     fs.writeFileSync(
       nwCli,
       '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "job" && "$2" == "is-paused" ]]; then\n' +
+        '  exit 1\n' +
+        'fi\n' +
         'if [[ "$1" == "board" && "$2" == "move-issue" ]]; then\n' +
         '  exit 0\n' +
         'fi\n' +
