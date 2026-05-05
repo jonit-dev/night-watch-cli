@@ -23,6 +23,7 @@ import {
   formatProviderDisplay,
   maybeApplyCronSchedulingDelay,
 } from './shared/env-builder.js';
+import { recordJobOutcome } from './shared/feedback.js';
 import * as path from 'path';
 
 /**
@@ -49,9 +50,7 @@ export function buildEnvVars(
   env.NW_MERGER_MERGE_METHOD = config.merger.mergeMethod;
   env.NW_MERGER_MIN_REVIEW_SCORE = String(config.merger.minReviewScore);
   env.NW_MERGER_BRANCH_PATTERNS = (
-    config.merger.branchPatterns.length > 0
-      ? config.merger.branchPatterns
-      : config.branchPatterns
+    config.merger.branchPatterns.length > 0 ? config.merger.branchPatterns : config.branchPatterns
   ).join(',');
   env.NW_MERGER_REBASE_BEFORE_MERGE = config.merger.rebaseBeforeMerge ? '1' : '0';
   env.NW_MERGER_MAX_PRS_PER_RUN = String(config.merger.maxPrsPerRun);
@@ -186,12 +185,14 @@ export function mergeCommand(program: Command): void {
       spinner.start();
 
       try {
+        const startedAt = Date.now();
         await maybeApplyCronSchedulingDelay(config, 'merger', projectDir);
         const { exitCode, stdout, stderr } = await executeScriptWithOutput(
           scriptPath,
           [projectDir],
           envVars,
         );
+        const finishedAt = Date.now();
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
 
         if (exitCode === 0) {
@@ -211,6 +212,32 @@ export function mergeCommand(program: Command): void {
         const failedCount = parseInt(scriptResult?.data?.failed ?? '0', 10);
 
         const notificationEvent = resolveMergeNotificationEvent(exitCode, mergedCount, failedCount);
+
+        if (!options.dryRun) {
+          try {
+            recordJobOutcome({
+              config,
+              exitCode,
+              finishedAt,
+              jobType: 'merger',
+              metadata: {
+                failedCount,
+                mergedCount,
+                providerCommand: envVars.NW_PROVIDER_CMD,
+                providerLabel: envVars.NW_PROVIDER_LABEL,
+              },
+              minReviewScore: config.merger.minReviewScore,
+              projectDir,
+              providerKey: envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'merger'),
+              scriptResult,
+              startedAt,
+              stderr,
+              stdout,
+            });
+          } catch {
+            // Outcome persistence must not change command exit behavior.
+          }
+        }
 
         if (notificationEvent) {
           await sendNotifications(config, {

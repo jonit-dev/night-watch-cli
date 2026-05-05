@@ -319,6 +319,9 @@ export interface INightWatchConfig {
   /** Analytics job configuration (Amplitude integration) */
   analytics: IAnalyticsConfig;
 
+  /** Self-improving feedback loop configuration */
+  feedback: IFeedbackConfig;
+
   /** PR conflict resolver configuration */
   prResolver: IPrResolverConfig;
 
@@ -398,6 +401,19 @@ export interface IAnalyticsConfig {
   targetColumn: BoardColumnName;
   /** Custom prompt for the AI analysis (optional override) */
   analysisPrompt: string;
+}
+
+export interface IFeedbackConfig {
+  /** Whether structured feedback analysis and prompt augmentation are enabled */
+  enabled: boolean;
+  /** Minimum confidence required before a pattern activates */
+  confidenceThreshold: number;
+  /** Number of days before active prompt augmentations expire */
+  augmentationTtlDays: number;
+  /** Maximum active prompt augmentation snippets per job type */
+  maxActiveAugmentations: number;
+  /** Consecutive successful runs before active augmentations expire */
+  successStreakToExpire: number;
 }
 
 export interface IPrResolverConfig {
@@ -566,6 +582,158 @@ export type JobRunStatus =
   | 'timeout'
   | 'rate_limited'
   | 'skipped';
+
+export type SessionOutcomeStatus = 'success' | 'failure' | 'timeout' | 'rate_limited' | 'skipped';
+
+export type FeedbackPatternStatus = 'observing' | 'active' | 'dismissed' | 'resolved';
+
+export type PromptAugmentationStatus = 'active' | 'paused' | 'expired' | 'archived';
+
+/**
+ * Structured outcome for a completed Night Watch job session.
+ */
+export interface ISessionOutcome {
+  id: number;
+  projectPath: string;
+  jobType: JobType;
+  providerKey: string;
+  prdFile: string | null;
+  prNumber: number | null;
+  branchName: string | null;
+  startedAt: number;
+  finishedAt: number;
+  durationSeconds: number | null;
+  outcome: SessionOutcomeStatus;
+  exitCode: number | null;
+  attempt: number;
+  retryCount: number;
+  reviewScore: number | null;
+  ciStatus: string | null;
+  failureCategory: string | null;
+  failureSignature: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface ISessionOutcomeInsertInput {
+  projectPath: string;
+  jobType: JobType;
+  providerKey: string;
+  prdFile?: string | null;
+  prNumber?: number | null;
+  branchName?: string | null;
+  startedAt: number;
+  finishedAt: number;
+  durationSeconds?: number | null;
+  outcome: SessionOutcomeStatus;
+  exitCode?: number | null;
+  attempt?: number;
+  retryCount?: number;
+  reviewScore?: number | null;
+  ciStatus?: string | null;
+  failureCategory?: string | null;
+  failureSignature?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ISessionOutcomeQueryInput {
+  projectPath: string;
+  jobType?: JobType;
+  outcome?: SessionOutcomeStatus;
+  fromFinishedAt?: number;
+  toFinishedAt?: number;
+  limit?: number;
+}
+
+export interface ISessionOutcomeSummaryInput {
+  projectPath: string;
+  jobType?: JobType;
+  fromFinishedAt?: number;
+  toFinishedAt?: number;
+}
+
+export interface ISessionOutcomeSummary {
+  totalCount: number;
+  successCount: number;
+  failureCount: number;
+  timeoutCount: number;
+  rateLimitedCount: number;
+  skippedCount: number;
+  averageDurationSeconds: number | null;
+  byOutcome: Record<string, number>;
+  byFailureCategory: Record<string, number>;
+}
+
+export interface IFeedbackPatternQueryInput {
+  projectPath: string;
+  jobType?: JobType;
+  status?: FeedbackPatternStatus;
+  limit?: number;
+}
+
+export interface IFeedbackPattern {
+  id: number;
+  projectPath: string;
+  patternKey: string;
+  jobType: JobType;
+  category: string;
+  title: string;
+  description: string;
+  sampleCount: number;
+  confidence: number;
+  firstSeenAt: number;
+  lastSeenAt: number;
+  status: FeedbackPatternStatus;
+  metadata: Record<string, unknown>;
+}
+
+export interface IFeedbackPatternUpsertInput {
+  projectPath: string;
+  patternKey: string;
+  jobType: JobType;
+  category: string;
+  title: string;
+  description: string;
+  sampleCount?: number;
+  confidence?: number;
+  firstSeenAt?: number;
+  lastSeenAt?: number;
+  status?: FeedbackPatternStatus;
+  metadata?: Record<string, unknown>;
+}
+
+export interface IPromptAugmentation {
+  id: number;
+  projectPath: string;
+  patternId: number | null;
+  jobType: JobType;
+  promptText: string;
+  status: PromptAugmentationStatus;
+  createdAt: number;
+  updatedAt: number;
+  expiresAt: number | null;
+  appliedCount: number;
+  successCount: number;
+}
+
+export interface IPromptAugmentationInsertInput {
+  projectPath: string;
+  patternId?: number | null;
+  jobType: JobType;
+  promptText: string;
+  status?: PromptAugmentationStatus;
+  createdAt?: number;
+  updatedAt?: number;
+  expiresAt?: number | null;
+}
+
+export interface IPromptAugmentationQueryInput {
+  projectPath: string;
+  jobType?: JobType;
+  status?: PromptAugmentationStatus;
+  includeExpired?: boolean;
+  now?: number;
+  limit?: number;
+}
 
 /**
  * A record of a single job execution stored in the job_runs table

@@ -7,6 +7,7 @@ import {
   ClaudeModel,
   IAnalyticsConfig,
   IAuditConfig,
+  IFeedbackConfig,
   IJobProviders,
   IMergerConfig,
   INotificationConfig,
@@ -52,6 +53,15 @@ export const DEFAULT_MAX_RETRIES = 3;
 export const DEFAULT_REVIEWER_MAX_RETRIES = 2;
 export const DEFAULT_REVIEWER_RETRY_DELAY = 30; // seconds
 export const DEFAULT_REVIEWER_MAX_PRS_PER_RUN = 0; // 0 = unlimited
+
+// Self-improving feedback loop
+export const DEFAULT_FEEDBACK: IFeedbackConfig = {
+  enabled: true,
+  confidenceThreshold: 0.75,
+  augmentationTtlDays: 14,
+  maxActiveAugmentations: 3,
+  successStreakToExpire: 3,
+};
 
 // Branch Configuration
 export const DEFAULT_BRANCH_PREFIX = 'night-watch';

@@ -103,6 +103,38 @@ export function buildEnvOverrideConfig(
     const v = parseInt(process.env.NW_REVIEWER_MAX_PRS_PER_RUN, 10);
     if (!isNaN(v) && v >= 0) env.reviewerMaxPrsPerRun = v;
   }
+  if (
+    process.env.NW_FEEDBACK_ENABLED !== undefined ||
+    process.env.NW_FEEDBACK_CONFIDENCE_THRESHOLD !== undefined ||
+    process.env.NW_FEEDBACK_AUGMENTATION_TTL_DAYS !== undefined ||
+    process.env.NW_FEEDBACK_MAX_ACTIVE_AUGMENTATIONS !== undefined ||
+    process.env.NW_FEEDBACK_SUCCESS_STREAK_TO_EXPIRE !== undefined
+  ) {
+    const feedback = { ...(fileConfig?.feedback ?? {}) };
+    const enabled = process.env.NW_FEEDBACK_ENABLED
+      ? parseBoolean(process.env.NW_FEEDBACK_ENABLED)
+      : null;
+    if (enabled !== null) feedback.enabled = enabled;
+    const confidenceThreshold = parseFloat(process.env.NW_FEEDBACK_CONFIDENCE_THRESHOLD ?? '');
+    if (!Number.isNaN(confidenceThreshold)) feedback.confidenceThreshold = confidenceThreshold;
+    const augmentationTtlDays = parseInt(process.env.NW_FEEDBACK_AUGMENTATION_TTL_DAYS ?? '', 10);
+    if (!Number.isNaN(augmentationTtlDays)) feedback.augmentationTtlDays = augmentationTtlDays;
+    const maxActiveAugmentations = parseInt(
+      process.env.NW_FEEDBACK_MAX_ACTIVE_AUGMENTATIONS ?? '',
+      10,
+    );
+    if (!Number.isNaN(maxActiveAugmentations)) {
+      feedback.maxActiveAugmentations = maxActiveAugmentations;
+    }
+    const successStreakToExpire = parseInt(
+      process.env.NW_FEEDBACK_SUCCESS_STREAK_TO_EXPIRE ?? '',
+      10,
+    );
+    if (!Number.isNaN(successStreakToExpire)) {
+      feedback.successStreakToExpire = successStreakToExpire;
+    }
+    env.feedback = feedback as INightWatchConfig['feedback'];
+  }
 
   if (process.env.NW_PROVIDER) {
     const p = validateProvider(process.env.NW_PROVIDER);

@@ -123,6 +123,65 @@ export function runMigrations(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_job_runs_lookup
       ON job_runs(project_path, started_at DESC, job_type, provider_key);
+
+    CREATE TABLE IF NOT EXISTS session_outcomes (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_path       TEXT    NOT NULL,
+      job_type           TEXT    NOT NULL,
+      provider_key       TEXT    NOT NULL,
+      prd_file           TEXT,
+      pr_number          INTEGER,
+      branch_name        TEXT,
+      started_at         INTEGER NOT NULL,
+      finished_at        INTEGER NOT NULL,
+      duration_seconds   INTEGER,
+      outcome            TEXT    NOT NULL,
+      exit_code          INTEGER,
+      attempt            INTEGER NOT NULL DEFAULT 1,
+      retry_count        INTEGER NOT NULL DEFAULT 0,
+      review_score       INTEGER,
+      ci_status          TEXT,
+      failure_category   TEXT,
+      failure_signature  TEXT,
+      metadata_json      TEXT    NOT NULL DEFAULT '{}'
+    );
+    CREATE INDEX IF NOT EXISTS idx_session_outcomes_lookup
+      ON session_outcomes(project_path, finished_at DESC, job_type, outcome);
+
+    CREATE TABLE IF NOT EXISTS feedback_patterns (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_path       TEXT    NOT NULL,
+      pattern_key        TEXT    NOT NULL,
+      job_type           TEXT    NOT NULL,
+      category           TEXT    NOT NULL,
+      title              TEXT    NOT NULL,
+      description        TEXT    NOT NULL,
+      sample_count       INTEGER NOT NULL DEFAULT 0,
+      confidence         REAL    NOT NULL DEFAULT 0,
+      first_seen_at      INTEGER NOT NULL,
+      last_seen_at       INTEGER NOT NULL,
+      status             TEXT    NOT NULL DEFAULT 'observing',
+      metadata_json      TEXT    NOT NULL DEFAULT '{}',
+      UNIQUE(project_path, pattern_key, job_type)
+    );
+    CREATE INDEX IF NOT EXISTS idx_feedback_patterns_lookup
+      ON feedback_patterns(project_path, job_type, status, confidence DESC);
+
+    CREATE TABLE IF NOT EXISTS prompt_augmentations (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_path       TEXT    NOT NULL,
+      pattern_id         INTEGER REFERENCES feedback_patterns(id),
+      job_type           TEXT    NOT NULL,
+      prompt_text        TEXT    NOT NULL,
+      status             TEXT    NOT NULL DEFAULT 'active',
+      created_at         INTEGER NOT NULL,
+      updated_at         INTEGER NOT NULL,
+      expires_at         INTEGER,
+      applied_count      INTEGER NOT NULL DEFAULT 0,
+      success_count      INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_prompt_augmentations_active
+      ON prompt_augmentations(project_path, job_type, status, expires_at);
   `);
 
   // Phase 2 cleanup: drop slack_discussions table (multi-agent deliberation removed)

@@ -26,6 +26,7 @@ import {
   getTelegramStatusWebhooks,
   maybeApplyCronSchedulingDelay,
 } from './shared/env-builder.js';
+import { recordJobOutcome } from './shared/feedback.js';
 
 export interface IAuditOptions {
   dryRun: boolean;
@@ -130,6 +131,7 @@ export function auditCommand(program: Command): void {
 
       const spinner = createSpinner('Running code audit...');
       spinner.start();
+      const startedAt = Date.now();
 
       try {
         await maybeApplyCronSchedulingDelay(config, 'audit', projectDir);
@@ -138,7 +140,31 @@ export function auditCommand(program: Command): void {
           [projectDir],
           envVars,
         );
+        const finishedAt = Date.now();
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
+
+        if (!options.dryRun) {
+          try {
+            recordJobOutcome({
+              config,
+              exitCode,
+              finishedAt,
+              jobType: 'audit',
+              metadata: {
+                providerCommand: envVars.NW_PROVIDER_CMD,
+                providerLabel: envVars.NW_PROVIDER_LABEL,
+              },
+              projectDir,
+              providerKey: envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'audit'),
+              scriptResult,
+              startedAt,
+              stderr,
+              stdout,
+            });
+          } catch {
+            // Outcome persistence must not change command exit behavior.
+          }
+        }
 
         if (exitCode === 0) {
           if (scriptResult?.status === 'queued') {
@@ -186,6 +212,24 @@ export function auditCommand(program: Command): void {
           process.exit(exitCode || 1);
         }
       } catch (err) {
+        try {
+          recordJobOutcome({
+            config,
+            exitCode: 1,
+            finishedAt: Date.now(),
+            jobType: 'audit',
+            metadata: {
+              providerCommand: envVars.NW_PROVIDER_CMD,
+              providerLabel: envVars.NW_PROVIDER_LABEL,
+            },
+            projectDir,
+            providerKey: envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'audit'),
+            startedAt,
+            stderr: err instanceof Error ? err.message : String(err),
+          });
+        } catch {
+          // Outcome persistence must not change command exit behavior.
+        }
         spinner.fail(`Code audit failed: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
       }

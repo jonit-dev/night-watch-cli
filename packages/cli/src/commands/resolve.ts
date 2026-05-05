@@ -23,6 +23,7 @@ import {
   formatProviderDisplay,
   maybeApplyCronSchedulingDelay,
 } from './shared/env-builder.js';
+import { recordJobOutcome } from './shared/feedback.js';
 import { execFileSync } from 'child_process';
 import * as path from 'path';
 
@@ -210,12 +211,14 @@ export function resolveCommand(program: Command): void {
       spinner.start();
 
       try {
+        const startedAt = Date.now();
         await maybeApplyCronSchedulingDelay(config, 'pr-resolver', projectDir);
         const { exitCode, stdout, stderr } = await executeScriptWithOutput(
           scriptPath,
           [projectDir],
           envVars,
         );
+        const finishedAt = Date.now();
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
 
         if (exitCode === 0) {
@@ -233,6 +236,29 @@ export function resolveCommand(program: Command): void {
         // Send notifications (fire-and-forget, failures do not affect exit code)
         const notificationEvent =
           exitCode === 0 ? ('pr_resolver_completed' as const) : ('pr_resolver_failed' as const);
+
+        if (!options.dryRun) {
+          try {
+            recordJobOutcome({
+              config,
+              exitCode,
+              finishedAt,
+              jobType: 'pr-resolver',
+              metadata: {
+                providerCommand: envVars.NW_PROVIDER_CMD,
+                providerLabel: envVars.NW_PROVIDER_LABEL,
+              },
+              projectDir,
+              providerKey: envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'pr-resolver'),
+              scriptResult,
+              startedAt,
+              stderr,
+              stdout,
+            });
+          } catch {
+            // Outcome persistence must not change command exit behavior.
+          }
+        }
 
         await sendNotifications(config, {
           event: notificationEvent,

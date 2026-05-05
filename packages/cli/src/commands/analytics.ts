@@ -14,6 +14,7 @@ import {
   runAnalytics,
 } from '@night-watch/core';
 import { maybeApplyCronSchedulingDelay } from './shared/env-builder.js';
+import { recordJobOutcome } from './shared/feedback.js';
 
 export interface IAnalyticsOptions {
   dryRun: boolean;
@@ -58,6 +59,27 @@ export function analyticsCommand(program: Command): void {
       const apiKey = config.providerEnv?.AMPLITUDE_API_KEY;
       const secretKey = config.providerEnv?.AMPLITUDE_SECRET_KEY;
       if (!apiKey || !secretKey) {
+        const now = Date.now();
+        if (!options.dryRun) {
+          try {
+            recordJobOutcome({
+              config,
+              exitCode: 1,
+              finishedAt: now,
+              jobType: 'analytics',
+              metadata: {
+                missingAmplitudeCredentials: true,
+              },
+              projectDir,
+              providerKey: resolveJobProvider(config, 'analytics'),
+              startedAt: now,
+              stderr:
+                'AMPLITUDE_API_KEY and AMPLITUDE_SECRET_KEY must be set in providerEnv to run analytics.',
+            });
+          } catch {
+            // Outcome persistence must not change command exit behavior.
+          }
+        }
         info(
           'AMPLITUDE_API_KEY and AMPLITUDE_SECRET_KEY must be set in providerEnv to run analytics.',
         );
@@ -84,13 +106,49 @@ export function analyticsCommand(program: Command): void {
 
       const spinner = createSpinner('Running analytics job...');
       spinner.start();
+      const startedAt = Date.now();
 
       try {
         await maybeApplyCronSchedulingDelay(config, 'analytics', projectDir);
         const result = await runAnalytics(config, projectDir);
+        try {
+          recordJobOutcome({
+            config,
+            exitCode: 0,
+            finishedAt: Date.now(),
+            jobType: 'analytics',
+            metadata: {
+              lookbackDays: config.analytics.lookbackDays,
+              summary: result.summary,
+            },
+            projectDir,
+            providerKey: resolveJobProvider(config, 'analytics'),
+            startedAt,
+            stdout: result.summary,
+          });
+        } catch {
+          // Outcome persistence must not change command exit behavior.
+        }
 
         spinner.succeed(`Analytics complete — ${result.summary}`);
       } catch (err) {
+        try {
+          recordJobOutcome({
+            config,
+            exitCode: 1,
+            finishedAt: Date.now(),
+            jobType: 'analytics',
+            metadata: {
+              lookbackDays: config.analytics.lookbackDays,
+            },
+            projectDir,
+            providerKey: resolveJobProvider(config, 'analytics'),
+            startedAt,
+            stderr: err instanceof Error ? err.message : String(err),
+          });
+        } catch {
+          // Outcome persistence must not change command exit behavior.
+        }
         spinner.fail(`Analytics failed: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
       }

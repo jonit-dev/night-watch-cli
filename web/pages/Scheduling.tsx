@@ -32,6 +32,7 @@ import { useStore } from '../store/useStore';
 import type {
   IAnalyticsConfig,
   IAuditConfig,
+  IFeedbackConfig,
   IJobProviders,
   IMergerConfig,
   INightWatchConfig,
@@ -97,6 +98,7 @@ type AutomationForm = {
   qa: IQaConfig;
   audit: IAuditConfig;
   analytics: IAnalyticsConfig;
+  feedback: IFeedbackConfig;
   prResolver: IPrResolverConfig;
   merger: IMergerConfig;
   roadmapScanner: IRoadmapScannerConfig;
@@ -155,6 +157,13 @@ const toAutomationForm = (config: INightWatchConfig): AutomationForm => ({
   qa: config.qa || getDefaultQaConfig(),
   audit: config.audit || getDefaultAuditConfig(),
   analytics: config.analytics || getDefaultAnalyticsConfig(),
+  feedback: config.feedback ?? {
+    enabled: true,
+    confidenceThreshold: 0.75,
+    augmentationTtlDays: 14,
+    maxActiveAugmentations: 3,
+    successStreakToExpire: 3,
+  },
   prResolver: config.prResolver ?? getDefaultPrResolverConfig(),
   merger: config.merger ?? getDefaultMergerConfig(),
   roadmapScanner: config.roadmapScanner || getDefaultRoadmapScannerConfig(),
@@ -369,6 +378,7 @@ const Scheduling: React.FC = () => {
         qa: form.qa,
         audit: form.audit,
         analytics: form.analytics,
+        feedback: form.feedback,
         prResolver: form.prResolver,
         merger: form.merger,
         roadmapScanner: form.roadmapScanner,

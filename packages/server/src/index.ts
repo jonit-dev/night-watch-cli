@@ -36,6 +36,7 @@ import {
   createProjectConfigRoutes,
 } from './routes/config.routes.js';
 import { createDoctorRoutes, createProjectDoctorRoutes } from './routes/doctor.routes.js';
+import { createFeedbackRoutes, createProjectFeedbackRoutes } from './routes/feedback.routes.js';
 import { createJobRoutes, createProjectJobRoutes } from './routes/job.routes.js';
 import { createLogRoutes, createProjectLogRoutes } from './routes/log.routes.js';
 import { createPrdRoutes, createProjectPrdRoutes } from './routes/prd.routes.js';
@@ -139,6 +140,7 @@ export function createApp(projectDir: string): Express {
   app.use('/api/logs', createLogRoutes({ projectDir }));
   app.use('/api/doctor', createDoctorRoutes({ projectDir, getConfig: () => config }));
   app.use('/api/queue', createQueueRoutes({ getConfig: () => config }));
+  app.use('/api/feedback', createFeedbackRoutes({ projectDir }));
   app.use('/api/global-notifications', createGlobalNotificationsRoutes());
 
   app.get('/api/prs', async (_req: Request, res: Response): Promise<void> => {
@@ -191,6 +193,7 @@ function createProjectRouter() {
   router.use(createProjectActionRoutes({ projectSseClients }));
   router.use(createProjectJobRoutes());
   router.use(createProjectRoadmapRoutes());
+  router.use(createProjectFeedbackRoutes());
 
   router.get('/prs', async (req: Request, res: Response): Promise<void> => {
     try {

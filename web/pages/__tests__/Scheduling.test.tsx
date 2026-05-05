@@ -113,6 +113,13 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
       targetColumn: 'Draft',
       analysisPrompt: '',
     },
+    feedback: {
+      enabled: true,
+      confidenceThreshold: 0.75,
+      augmentationTtlDays: 14,
+      maxActiveAugmentations: 3,
+      successStreakToExpire: 3,
+    },
     merger: {
       enabled: true,
       schedule: '55 */4 * * *',
@@ -143,6 +150,10 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     analytics: {
       ...base.analytics,
       ...(overrides.analytics ?? {}),
+    },
+    feedback: {
+      ...base.feedback,
+      ...(overrides.feedback ?? {}),
     },
   };
 }

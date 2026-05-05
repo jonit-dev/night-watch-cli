@@ -30,6 +30,7 @@ import {
   getTelegramStatusWebhooks,
   maybeApplyCronSchedulingDelay,
 } from './shared/env-builder.js';
+import { recordJobOutcome } from './shared/feedback.js';
 import type { ISliceResult } from '@night-watch/core';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -152,7 +153,11 @@ export async function createPlannerIssue(
   }
 
   const issueTitle = `PRD: ${result.item.title}`;
-  const normalizeTitle = (t: string) => t.replace(/^PRD:\s*/i, '').trim().toLowerCase();
+  const normalizeTitle = (t: string) =>
+    t
+      .replace(/^PRD:\s*/i, '')
+      .trim()
+      .toLowerCase();
 
   const existingIssues = await provider.getAllIssues();
   const existing = existingIssues.find(
@@ -358,6 +363,7 @@ export function sliceCommand(program: Command): void {
       // Execute planner with spinner
       const spinner = createSpinner('Running Planner...');
       spinner.start();
+      const startedAt = Date.now();
 
       try {
         await maybeApplyCronSchedulingDelay(config, 'slicer', projectDir);
@@ -395,6 +401,30 @@ export function sliceCommand(program: Command): void {
         const nothingPending = result.error === 'No pending items to process';
         const exitCode = result.sliced || nothingPending ? 0 : 1;
 
+        if (!options.dryRun) {
+          try {
+            recordJobOutcome({
+              config,
+              exitCode,
+              finishedAt: Date.now(),
+              jobType: 'planner',
+              metadata: {
+                error: result.error ?? null,
+                file: result.file ?? null,
+                itemTitle: result.item?.title ?? null,
+                sliced: result.sliced,
+              },
+              projectDir,
+              providerKey: resolveJobProvider(config, 'slicer'),
+              startedAt,
+              stderr: result.error,
+              stdout: result.file ? `Created ${result.file}` : undefined,
+            });
+          } catch {
+            // Outcome persistence must not change command exit behavior.
+          }
+        }
+
         if (!options.dryRun && result.sliced) {
           await sendNotifications(config, {
             event: 'run_succeeded',
@@ -414,6 +444,23 @@ export function sliceCommand(program: Command): void {
 
         process.exit(exitCode);
       } catch (err) {
+        try {
+          recordJobOutcome({
+            config,
+            exitCode: 1,
+            finishedAt: Date.now(),
+            jobType: 'planner',
+            metadata: {
+              error: err instanceof Error ? err.message : String(err),
+            },
+            projectDir,
+            providerKey: resolveJobProvider(config, 'slicer'),
+            startedAt,
+            stderr: err instanceof Error ? err.message : String(err),
+          });
+        } catch {
+          // Outcome persistence must not change command exit behavior.
+        }
         spinner.fail('Failed to execute planner command');
         uiError(`${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);

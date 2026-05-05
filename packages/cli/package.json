@@ -71,6 +71,8 @@
     "tsyringe": "^4.10.0"
   },
   "devDependencies": {
+    "@night-watch/core": "*",
+    "@night-watch/server": "*",
     "@types/blessed": "^0.1.27",
     "@types/node": "^22.0.0",
     "esbuild": "^0.25.0",

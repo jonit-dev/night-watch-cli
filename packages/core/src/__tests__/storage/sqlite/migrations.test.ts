@@ -13,14 +13,17 @@ import { runMigrations } from '../../../storage/sqlite/migrations.js';
 const EXPECTED_TABLES = [
   'agent_personas',
   'execution_history',
+  'feedback_patterns',
   'job_queue',
   'job_runs',
   'kanban_comments',
   'kanban_issues',
   'prd_states',
   'projects',
+  'prompt_augmentations',
   'roadmap_states',
   'schema_meta',
+  'session_outcomes',
 ];
 
 let tmpDir: string;
@@ -97,9 +100,12 @@ describe('runMigrations', () => {
   it('creates job_runs table with correct columns', () => {
     runMigrations(db);
 
-    const columns = db
-      .prepare(`PRAGMA table_info(job_runs)`)
-      .all() as Array<{ name: string; type: string; notnull: number; dflt_value: string | null }>;
+    const columns = db.prepare(`PRAGMA table_info(job_runs)`).all() as Array<{
+      name: string;
+      type: string;
+      notnull: number;
+      dflt_value: string | null;
+    }>;
 
     const colNames = columns.map((c) => c.name);
     expect(colNames).toEqual(
@@ -130,9 +136,7 @@ describe('runMigrations', () => {
   it('creates job_queue table without pressure columns', () => {
     runMigrations(db);
 
-    const columns = db
-      .prepare(`PRAGMA table_info(job_queue)`)
-      .all() as Array<{ name: string }>;
+    const columns = db.prepare(`PRAGMA table_info(job_queue)`).all() as Array<{ name: string }>;
 
     const colNames = columns.map((c) => c.name);
 
@@ -152,5 +156,54 @@ describe('runMigrations', () => {
       .all() as Array<{ name: string }>;
 
     expect(indexes.map((i) => i.name)).toContain('idx_job_runs_lookup');
+  });
+
+  it('creates feedback-loop tables and lookup indexes', () => {
+    runMigrations(db);
+
+    const outcomeColumns = db.prepare(`PRAGMA table_info(session_outcomes)`).all() as Array<{
+      name: string;
+      dflt_value: string | null;
+    }>;
+    const outcomeIndexes = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='session_outcomes'`)
+      .all() as Array<{ name: string }>;
+    const patternIndexes = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='feedback_patterns'`)
+      .all() as Array<{ name: string }>;
+    const augmentationIndexes = db
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='prompt_augmentations'`,
+      )
+      .all() as Array<{ name: string }>;
+
+    expect(outcomeColumns.map((c) => c.name)).toEqual(
+      expect.arrayContaining([
+        'id',
+        'project_path',
+        'job_type',
+        'provider_key',
+        'prd_file',
+        'pr_number',
+        'branch_name',
+        'started_at',
+        'finished_at',
+        'duration_seconds',
+        'outcome',
+        'exit_code',
+        'attempt',
+        'retry_count',
+        'review_score',
+        'ci_status',
+        'failure_category',
+        'failure_signature',
+        'metadata_json',
+      ]),
+    );
+    expect(outcomeColumns.find((c) => c.name === 'attempt')?.dflt_value).toBe('1');
+    expect(outcomeColumns.find((c) => c.name === 'retry_count')?.dflt_value).toBe('0');
+    expect(outcomeIndexes.map((i) => i.name)).toContain('idx_session_outcomes_lookup');
+    expect(patternIndexes.map((i) => i.name)).toContain('idx_feedback_patterns_lookup');
+    expect(augmentationIndexes.map((i) => i.name)).toContain('idx_prompt_augmentations_active');
   });
 });

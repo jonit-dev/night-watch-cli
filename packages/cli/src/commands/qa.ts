@@ -28,6 +28,7 @@ import {
   getTelegramStatusWebhooks,
   maybeApplyCronSchedulingDelay,
 } from './shared/env-builder.js';
+import { recordJobOutcome } from './shared/feedback.js';
 import * as path from 'path';
 
 /**
@@ -218,12 +219,14 @@ export function qaCommand(program: Command): void {
       spinner.start();
 
       try {
+        const startedAt = Date.now();
         await maybeApplyCronSchedulingDelay(config, 'qa', projectDir);
         const { exitCode, stdout, stderr } = await executeScriptWithOutput(
           scriptPath,
           [projectDir],
           envVars,
         );
+        const finishedAt = Date.now();
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
 
         if (exitCode === 0) {
@@ -242,6 +245,27 @@ export function qaCommand(program: Command): void {
 
         // Send notifications (fire-and-forget, failures do not affect exit code)
         if (!options.dryRun) {
+          try {
+            recordJobOutcome({
+              config,
+              exitCode,
+              finishedAt,
+              jobType: 'qa',
+              metadata: {
+                providerCommand: envVars.NW_PROVIDER_CMD,
+                providerLabel: envVars.NW_PROVIDER_LABEL,
+              },
+              projectDir,
+              providerKey: envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'qa'),
+              scriptResult,
+              startedAt,
+              stderr,
+              stdout,
+            });
+          } catch {
+            // Outcome persistence must not change command exit behavior.
+          }
+
           const skipNotification = !shouldSendQaNotification(scriptResult?.status);
 
           if (skipNotification) {

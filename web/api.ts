@@ -10,6 +10,7 @@ import type {
     IAnalyticsConfig,
     IAuditConfig,
     IBoardProviderConfig,
+    IFeedbackConfig,
     IJobProviders,
     ILogInfo,
     IMergerConfig,
@@ -43,7 +44,7 @@ import { getWebJobDef } from './utils/jobs';
 // Re-export shared types so consumers can import from either place
 export type {
     ClaudeModel, DayOfWeek, IAnalyticsConfig, IAuditConfig, IBoardProviderConfig, IJobProviders, ILogInfo, IMergerConfig, INightWatchConfig,
-    INotificationConfig, IPrdInfo, IProviderBucketConfig, IProviderPreset, IProviderScheduleOverride, IPrInfo, IProcessInfo, IQaConfig,
+    INotificationConfig, IFeedbackConfig, IPrdInfo, IProviderBucketConfig, IProviderPreset, IProviderScheduleOverride, IPrInfo, IProcessInfo, IQaConfig,
     IPrResolverConfig, IQueueConfig, IRoadmapItem, IRoadmapScannerConfig, IRoadmapStatus, IStatusSnapshot, IWebhookConfig, IWebhookTriggerConfig,
     IWebhookTriggerGithubConfig, IWebhookTriggerGithubRule,
     JobType, MergeMethod, QaArtifacts, QueueMode
@@ -259,10 +260,118 @@ export interface ActionResult {
   error?: string;
 }
 
+// ==================== Feedback Dashboard ====================
+
+export type PromptAugmentationStatus = 'active' | 'paused' | 'expired' | 'archived';
+
+export interface IFeedbackBreakdownSummary {
+  totalCount: number;
+  successCount: number;
+  failureCount: number;
+  timeoutCount: number;
+  rateLimitedCount: number;
+  skippedCount: number;
+  successRate: number | null;
+}
+
+export interface IFeedbackWindowSummary extends IFeedbackBreakdownSummary {
+  days: number;
+  fromFinishedAt: number;
+  toFinishedAt: number;
+  averageDurationSeconds: number | null;
+  byOutcome: Record<string, number>;
+  byFailureCategory: Record<string, number>;
+  byJobType: Record<string, IFeedbackBreakdownSummary>;
+  byProvider: Record<string, IFeedbackBreakdownSummary>;
+}
+
+export interface IPromptAugmentation {
+  id: number;
+  projectPath: string;
+  patternId: number | null;
+  jobType: JobType;
+  promptText: string;
+  status: PromptAugmentationStatus;
+  createdAt: number;
+  updatedAt: number;
+  expiresAt: number | null;
+  appliedCount: number;
+  successCount: number;
+}
+
+export interface IFeedbackSummary {
+  projectPath: string;
+  windows: {
+    last7Days: IFeedbackWindowSummary;
+    last30Days: IFeedbackWindowSummary;
+  };
+  activeAugmentations: IPromptAugmentation[];
+}
+
+export interface IFeedbackPattern {
+  id: number;
+  projectPath: string;
+  patternKey: string;
+  jobType: JobType;
+  category: string;
+  title: string;
+  description: string;
+  sampleCount: number;
+  confidence: number;
+  firstSeenAt: number;
+  lastSeenAt: number;
+  status: 'observing' | 'active' | 'dismissed' | 'resolved';
+  metadata: Record<string, unknown>;
+}
+
+export interface ITopFailurePattern {
+  key: string;
+  jobType: JobType;
+  providerKey: string;
+  category: string | null;
+  signature: string | null;
+  sampleCount: number;
+  lastSeenAt: number;
+}
+
+export interface IFeedbackPatterns {
+  projectPath: string;
+  patterns: IFeedbackPattern[];
+  topFailurePatterns: ITopFailurePattern[];
+}
+
+export interface IAugmentationUpdate {
+  action?: 'enable' | 'disable' | 'expire';
+  enabled?: boolean;
+  status?: PromptAugmentationStatus;
+}
+
+export interface IAugmentationUpdateResult {
+  augmentation: IPromptAugmentation;
+}
+
 // ==================== API Functions ====================
 
 export function fetchStatus(): Promise<IStatusSnapshot> {
   return apiFetch<IStatusSnapshot>(apiPath('/api/status'));
+}
+
+export function fetchFeedbackSummary(): Promise<IFeedbackSummary> {
+  return apiFetch<IFeedbackSummary>(apiPath('/api/feedback/summary'));
+}
+
+export function fetchFeedbackPatterns(): Promise<IFeedbackPatterns> {
+  return apiFetch<IFeedbackPatterns>(apiPath('/api/feedback/patterns'));
+}
+
+export function updateFeedbackAugmentation(
+  id: number,
+  update: IAugmentationUpdate,
+): Promise<IAugmentationUpdateResult> {
+  return apiFetch<IAugmentationUpdateResult>(apiPath(`/api/feedback/augmentations/${id}`), {
+    method: 'PATCH',
+    body: JSON.stringify(update),
+  });
 }
 
 export function fetchPrs(): Promise<IPrInfo[]> {

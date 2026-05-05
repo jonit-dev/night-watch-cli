@@ -105,6 +105,13 @@ function commitAll(projectDir: string, message: string): void {
   });
 }
 
+function writeFakeClaude(fakeBin: string): void {
+  fs.writeFileSync(path.join(fakeBin, 'claude'), '#!/usr/bin/env bash\nexit 0\n', {
+    encoding: 'utf-8',
+    mode: 0o755,
+  });
+}
+
 afterEach(() => {
   for (const dir of tempDirs) {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -1932,6 +1939,7 @@ describe('core flow smoke tests (bash scripts)', () => {
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
 
     const fakeBin = mkTempDir('nw-smoke-reviewer-score-threshold-bin-');
+    writeFakeClaude(fakeBin);
 
     fs.writeFileSync(
       path.join(fakeBin, 'gh'),
@@ -2070,6 +2078,7 @@ describe('core flow smoke tests (bash scripts)', () => {
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
 
     const fakeBin = mkTempDir('nw-smoke-reviewer-needs-human-review-bin-');
+    writeFakeClaude(fakeBin);
 
     fs.writeFileSync(
       path.join(fakeBin, 'gh'),
@@ -2339,6 +2348,7 @@ describe('core flow smoke tests (bash scripts)', () => {
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
 
     const fakeBin = mkTempDir('nw-smoke-reviewer-max-prs-per-run-bin-');
+    writeFakeClaude(fakeBin);
 
     fs.writeFileSync(
       path.join(fakeBin, 'gh'),

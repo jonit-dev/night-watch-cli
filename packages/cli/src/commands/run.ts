@@ -10,6 +10,9 @@ import {
   IWebhookConfig,
   NotificationEvent,
   PROVIDER_COMMANDS,
+  analyzeFeedbackOutcome,
+  buildProjectFeedbackPromptBlock,
+  buildSessionOutcomeInput,
   createBoardProvider,
   createSpinner,
   createTable,
@@ -17,9 +20,11 @@ import {
   executeScriptWithOutput,
   fetchPrDetails,
   fetchPrDetailsForBranch,
+  getRepositories,
   getScriptPath,
   header,
   info,
+  isFeedbackPromptEnabled,
   loadConfig,
   parseScriptResult,
   resolveJobProvider,
@@ -30,7 +35,8 @@ import {
   warn,
 } from '@night-watch/core';
 import { buildBaseEnvVars, maybeApplyCronSchedulingDelay } from './shared/env-builder.js';
-import type { IPrDetails } from '@night-watch/core';
+import { getFeedbackAnalysisOptions, isFeedbackEnabled } from './shared/feedback.js';
+import type { IPrDetails, JobType } from '@night-watch/core';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -42,6 +48,19 @@ export interface IRunOptions {
   timeout?: string;
   provider?: string;
   crossProjectFallback?: boolean;
+}
+
+export interface IRunOutcomeRecordInput {
+  projectDir: string;
+  config: INightWatchConfig;
+  envVars: Record<string, string>;
+  startedAt: number;
+  finishedAt: number;
+  exitCode: number;
+  stdout?: string;
+  stderr?: string;
+  scriptResult?: ReturnType<typeof parseScriptResult>;
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -203,16 +222,36 @@ async function runCrossProjectFallback(
     let candidateConfig = loadConfig(candidate.path);
     candidateConfig = applyCliOverrides(candidateConfig, options);
     const envVars = buildEnvVars(candidateConfig, options);
+    applyProjectFeedbackPromptEnv(envVars, candidate.path, 'executor');
     envVars.NW_CROSS_PROJECT_FALLBACK_ACTIVE = '1';
 
     try {
+      const startedAt = Date.now();
       const { exitCode, stdout, stderr } = await executeScriptWithOutput(
         scriptPath,
         [candidate.path],
         envVars,
         { cwd: candidate.path },
       );
+      const finishedAt = Date.now();
       const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
+
+      try {
+        recordRunSessionOutcome({
+          projectDir: candidate.path,
+          config: candidateConfig,
+          envVars,
+          startedAt,
+          finishedAt,
+          exitCode,
+          stdout,
+          stderr,
+          scriptResult,
+          metadata: { crossProjectFallback: true },
+        });
+      } catch {
+        // Outcome persistence must not change fallback execution behavior.
+      }
 
       if (!options.dryRun) {
         await sendRunCompletionNotifications(
@@ -274,6 +313,58 @@ export function getRateLimitFallbackTelegramWebhooks(
  */
 export function isRateLimitFallbackTriggered(resultData?: Record<string, string>): boolean {
   return resultData?.rate_limit_fallback === '1';
+}
+
+export function recordRunSessionOutcome(input: IRunOutcomeRecordInput): void {
+  const outcome = buildSessionOutcomeInput({
+    projectPath: input.projectDir,
+    jobType: 'executor',
+    providerKey: input.envVars.NW_PROVIDER_KEY ?? resolveJobProvider(input.config, 'executor'),
+    startedAt: input.startedAt,
+    finishedAt: input.finishedAt,
+    exitCode: input.exitCode,
+    stdout: input.stdout,
+    stderr: input.stderr,
+    scriptResult: input.scriptResult,
+    metadata: {
+      providerCommand: input.envVars.NW_PROVIDER_CMD,
+      providerLabel: input.envVars.NW_PROVIDER_LABEL,
+      ...(input.metadata ?? {}),
+    },
+  });
+
+  const repository = getRepositories().sessionOutcomes;
+  const storedOutcome = repository.insertOutcome(outcome);
+  if (isFeedbackEnabled(input.config)) {
+    analyzeFeedbackOutcome(repository, storedOutcome, getFeedbackAnalysisOptions(input.config));
+  }
+}
+
+export function applyProjectFeedbackPromptEnv(
+  envVars: Record<string, string>,
+  projectDir: string,
+  jobType: JobType,
+  markApplied = true,
+): void {
+  delete envVars.NW_PROJECT_FEEDBACK_PROMPT;
+  const config = loadConfig(projectDir);
+  if (!isFeedbackPromptEnabled() || config.feedback?.enabled === false) {
+    return;
+  }
+
+  try {
+    const { promptBlock } = buildProjectFeedbackPromptBlock(
+      getRepositories().sessionOutcomes,
+      projectDir,
+      jobType,
+      { markApplied, maxActiveAugmentations: config.feedback?.maxActiveAugmentations },
+    );
+    if (promptBlock.length > 0) {
+      envVars.NW_PROJECT_FEEDBACK_PROMPT = promptBlock;
+    }
+  } catch {
+    // Feedback prompt context must never block the primary executor path.
+  }
 }
 
 /**
@@ -507,6 +598,7 @@ export function runCommand(program: Command): void {
 
       // Build environment variables
       const envVars = buildEnvVars(config, options);
+      applyProjectFeedbackPromptEnv(envVars, projectDir, 'executor', !options.dryRun);
 
       // Get the script path
       const scriptPath = getScriptPath('night-watch-cron.sh');
@@ -620,6 +712,7 @@ export function runCommand(program: Command): void {
       spinner.start();
 
       try {
+        const startedAt = Date.now();
         await maybeApplyCronSchedulingDelay(config, 'executor', projectDir);
         const { exitCode, stdout, stderr } = await executeScriptWithOutput(
           scriptPath,
@@ -627,6 +720,7 @@ export function runCommand(program: Command): void {
           envVars,
           { cwd: projectDir },
         );
+        const finishedAt = Date.now();
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
 
         if (exitCode === 0) {
@@ -645,6 +739,22 @@ export function runCommand(program: Command): void {
 
         // Send completion notifications (fire-and-forget, failures do not affect exit code)
         if (!options.dryRun) {
+          try {
+            recordRunSessionOutcome({
+              projectDir,
+              config,
+              envVars,
+              startedAt,
+              finishedAt,
+              exitCode,
+              stdout,
+              stderr,
+              scriptResult,
+            });
+          } catch {
+            // Outcome persistence must not change command exit behavior.
+          }
+
           await sendRunCompletionNotifications(config, projectDir, options, exitCode, scriptResult);
         }
 

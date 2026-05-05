@@ -7,15 +7,20 @@ import {
   CLAUDE_MODEL_IDS,
   INightWatchConfig,
   PROVIDER_COMMANDS,
+  analyzeFeedbackOutcome,
+  buildProjectFeedbackPromptBlock,
+  buildSessionOutcomeInput,
   createSpinner,
   createTable,
   dim,
   executeScriptWithOutput,
   fetchPrDetailsByNumber,
   fetchReviewedPrDetails,
+  getRepositories,
   getScriptPath,
   header,
   info,
+  isFeedbackPromptEnabled,
   loadConfig,
   parseScriptResult,
   resolveJobProvider,
@@ -27,7 +32,8 @@ import {
   formatProviderDisplay,
   maybeApplyCronSchedulingDelay,
 } from './shared/env-builder.js';
-import type { IPrDetails } from '@night-watch/core';
+import { getFeedbackAnalysisOptions, isFeedbackEnabled } from './shared/feedback.js';
+import type { IPrDetails, JobType } from '@night-watch/core';
 import { execFileSync } from 'child_process';
 import * as path from 'path';
 
@@ -128,6 +134,33 @@ export function buildReviewNotificationTargets(
     prNumber,
     noChangesNeeded: noChangesSet.has(prNumber),
   }));
+}
+
+export function applyProjectFeedbackPromptEnv(
+  envVars: Record<string, string>,
+  projectDir: string,
+  jobType: JobType,
+  markApplied = true,
+): void {
+  delete envVars.NW_PROJECT_FEEDBACK_PROMPT;
+  const config = loadConfig(projectDir);
+  if (!isFeedbackPromptEnabled() || config.feedback?.enabled === false) {
+    return;
+  }
+
+  try {
+    const { promptBlock } = buildProjectFeedbackPromptBlock(
+      getRepositories().sessionOutcomes,
+      projectDir,
+      jobType,
+      { markApplied, maxActiveAugmentations: config.feedback?.maxActiveAugmentations },
+    );
+    if (promptBlock.length > 0) {
+      envVars.NW_PROJECT_FEEDBACK_PROMPT = promptBlock;
+    }
+  } catch {
+    // Feedback prompt context must never block the primary reviewer path.
+  }
 }
 
 /**
@@ -342,6 +375,7 @@ export function reviewCommand(program: Command): void {
 
       // Build environment variables
       const envVars = buildEnvVars(config, options);
+      applyProjectFeedbackPromptEnv(envVars, projectDir, 'reviewer', !options.dryRun);
 
       // Get the script path
       const scriptPath = getScriptPath('night-watch-pr-reviewer-cron.sh');
@@ -431,12 +465,14 @@ export function reviewCommand(program: Command): void {
       spinner.start();
 
       try {
+        const startedAt = Date.now();
         await maybeApplyCronSchedulingDelay(config, 'reviewer', projectDir);
         const { exitCode, stdout, stderr } = await executeScriptWithOutput(
           scriptPath,
           [projectDir],
           envVars,
         );
+        const finishedAt = Date.now();
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
 
         if (exitCode === 0) {
@@ -453,6 +489,33 @@ export function reviewCommand(program: Command): void {
 
         // Send notifications (fire-and-forget, failures do not affect exit code)
         if (!options.dryRun) {
+          try {
+            const repository = getRepositories().sessionOutcomes;
+            const storedOutcome = repository.insertOutcome(
+              buildSessionOutcomeInput({
+                exitCode,
+                finishedAt,
+                jobType: 'reviewer',
+                metadata: {
+                  providerCommand: envVars.NW_PROVIDER_CMD,
+                  providerLabel: envVars.NW_PROVIDER_LABEL,
+                },
+                minReviewScore: config.minReviewScore,
+                projectPath: projectDir,
+                providerKey: envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'reviewer'),
+                scriptResult,
+                startedAt,
+                stderr,
+                stdout,
+              }),
+            );
+            if (isFeedbackEnabled(config)) {
+              analyzeFeedbackOutcome(repository, storedOutcome, getFeedbackAnalysisOptions(config));
+            }
+          } catch {
+            // Outcome persistence must not change command exit behavior.
+          }
+
           const shouldNotifyCompletion = shouldSendReviewCompletionNotification(
             exitCode,
             scriptResult?.status,
