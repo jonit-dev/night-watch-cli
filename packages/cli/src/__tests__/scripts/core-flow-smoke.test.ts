@@ -159,6 +159,70 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_no_open_prs');
   });
 
+  it('merger should merge an eligible PR after a successful rebase', () => {
+    const projectDir = mkTempDir('nw-smoke-merger-success-');
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-bin-merger-success-');
+    const ghCallLog = path.join(projectDir, '.smoke-gh-calls');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'sleep'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "${1:-}" == "15" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exec /usr/bin/sleep "$@"\n',
+      {
+        encoding: 'utf-8',
+        mode: 0o755,
+      },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'printf \'%s\\n\' "$*" >> "$NW_SMOKE_GH_CALL_LOG"\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  if [[ "$*" == *"headRefName"* ]]; then\n' +
+        '    echo \'[{"number":123,"headRefName":"night-watch/smoke","createdAt":"2026-01-01T00:00:00Z","isDraft":false,"labels":[]}]\'\n' +
+        '  else\n' +
+        "    echo '[]'\n" +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "checks" ]]; then\n' +
+        "  echo '[]'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        "  echo '100'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "update-branch" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "merge" ]]; then\n' +
+        "  echo 'merged'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(mergerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_SMOKE_GH_CALL_LOG: ghCallLog,
+      NW_MERGER_MAX_PRS_PER_RUN: '1',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success|merged=1|failed=0|prs=123');
+    const ghCalls = fs.readFileSync(ghCallLog, 'utf-8');
+    expect(ghCalls).toContain('pr update-branch --rebase 123');
+    expect(ghCalls).toContain('pr merge 123 --squash --delete-branch');
+  });
+
   it('executor should emit success_open_pr and move PRD to done when PR is detected after provider run', () => {
     const projectDir = mkTempDir('nw-smoke-executor-success-');
     initGitRepo(projectDir);
