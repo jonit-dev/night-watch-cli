@@ -281,9 +281,9 @@ while IFS= read -r pr_json; do
     log "INFO: PR #${pr_number}: Rebase successful"
 
     # Poll CI until all checks complete after rebase (up to 5 minutes)
-    local ci_max_wait=300
-    local ci_waited=0
-    local ci_poll=15
+    ci_max_wait=300
+    ci_waited=0
+    ci_poll=15
     while [ "${ci_waited}" -lt "${ci_max_wait}" ]; do
       sleep "${ci_poll}"
       ci_waited=$((ci_waited + ci_poll))
