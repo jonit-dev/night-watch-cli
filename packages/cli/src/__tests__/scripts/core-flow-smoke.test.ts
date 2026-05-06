@@ -3186,6 +3186,82 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(comments).toContain('Slice large work into smaller PRDs/phases');
   });
 
+  it('executor board discovery should skip Ready audit issues when audit job is paused', () => {
+    const projectDir = mkTempDir('nw-smoke-executor-skip-paused-audit-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-bin-skip-paused-audit-');
+    const providerLog = path.join(projectDir, '.smoke-provider-called');
+    const boardLog = path.join(projectDir, '.smoke-board-calls');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' + 'echo called >> "$NW_SMOKE_PROVIDER_LOG"\n' + 'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  echo "[]"\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const nwCli = path.join(fakeBin, 'night-watch');
+    fs.writeFileSync(
+      nwCli,
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "job" && "$2" == "is-paused" && "$3" == "audit" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "job" && "$2" == "is-paused" ]]; then\n' +
+        '  exit 1\n' +
+        'fi\n' +
+        'if [[ "$1" == "config" && "$2" == "get" && "$3" == "audit.enabled" ]]; then\n' +
+        '  echo false\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "board" && "$2" == "next-issue" ]]; then\n' +
+        '  echo \'[{"number":18,"title":"Audit: medium unsafe assertion in src/pages/api/v1/keys/index.ts:18-24","body":"## Summary\\n\\nNight Watch audit detected a medium finding.\\n\\n## Source\\n\\n- Report: `logs/audit-report.md`\\n- Finding: 4"}]\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "board" ]]; then\n' +
+        '  echo "$*" >> "$NW_SMOKE_BOARD_LOG"\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "notify" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 1\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(executorScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BOARD_ENABLED: 'true',
+      NW_CLI_BIN: nwCli,
+      NW_SMOKE_PROVIDER_LOG: providerLog,
+      NW_SMOKE_BOARD_LOG: boardLog,
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_no_eligible_prd');
+
+    const executorLog = fs.readFileSync(path.join(projectDir, 'logs', 'executor.log'), 'utf-8');
+    expect(executorLog).toContain(
+      'SKIP-BOARD: Issue #18 — audit issue skipped because audit is paused or disabled',
+    );
+    expect(fs.existsSync(providerLog)).toBe(false);
+    expect(fs.existsSync(boardLog)).toBe(false);
+  });
+
   it('executor should use lean audit triage prompt and close false-positive audit issues without PR', () => {
     const projectDir = mkTempDir('nw-smoke-executor-audit-false-positive-');
     initGitRepo(projectDir);

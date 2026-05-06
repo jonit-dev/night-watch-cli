@@ -1246,8 +1246,40 @@ or set primaryFallbackPreset / primaryFallbackModel in night-watch.config.json."
 
 # ── Board mode issue discovery ────────────────────────────────────────────────
 
+is_audit_board_issue_json() {
+  local issue_json="${1:?issue_json required}"
+
+  printf '%s' "${issue_json}" \
+    | jq -r '[.title // "", .body // ""] | join("\n")' 2>/dev/null \
+    | grep -Eiq '(^|[[:space:]])Audit:|Night Watch audit detected|Report:[[:space:]]+`?logs/audit-report\.md`?|Finding:[[:space:]]+[0-9]+'
+}
+
+is_audit_paused_or_disabled() {
+  local cli_bin="${1:?cli_bin required}"
+  local project_dir="${2:?project_dir required}"
+
+  if (cd "${project_dir}" && "${cli_bin}" job is-paused audit >/dev/null 2>&1); then
+    return 0
+  fi
+
+  local audit_enabled
+  audit_enabled=$(
+    cd "${project_dir}" \
+      && "${cli_bin}" config get audit.enabled 2>/dev/null \
+      | tr '[:upper:]' '[:lower:]' \
+      | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
+  ) || true
+
+  if [ "${audit_enabled}" = "false" ]; then
+    return 0
+  fi
+
+  return 1
+}
+
 # Get the next eligible issue from the board provider.
-# Iterates through Ready issues sorted by priority, skipping any in cooldown.
+# Iterates through Ready issues sorted by priority, skipping audit findings when
+# audit is disabled/paused and skipping any in cooldown.
 # Prints the JSON of the first eligible issue to stdout, or nothing if none found.
 # Returns 0 on success, 1 if no Ready issues were returned, 2 if Ready issues
 # were found but every candidate was skipped due to cooldown.
@@ -1294,6 +1326,16 @@ find_eligible_board_issue() {
     local number title prd_name
     number=$(printf '%s' "${issue}" | jq -r '.number' 2>/dev/null)
     title=$(printf '%s' "${issue}" | jq -r '.title // empty' 2>/dev/null)
+
+    # Skip stale audit findings while the audit job is paused/disabled. Audit
+    # cron/config gates stop new scans, but Ready board issues can outlive them.
+    if [ -n "${project_dir}" ] \
+      && is_audit_board_issue_json "${issue}" \
+      && is_audit_paused_or_disabled "${cli_bin}" "${project_dir}"; then
+      log "SKIP-BOARD: Issue #${number} — audit issue skipped because audit is paused or disabled"
+      i=$((i + 1))
+      continue
+    fi
 
     # Derive PRD name (same slug format used by the cron script for history keys)
     prd_name="${number}-$(printf '%s' "${title}" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-\|-$//g')"
