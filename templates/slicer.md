@@ -32,6 +32,8 @@ The PRD directory is: `{{PRD_DIR}}`
 
 3. **Write a Complete PRD** — Follow the exact template structure below. Every section must be filled with concrete information. No placeholder text.
 
+   The PRD MUST include these sections: Context (with Problem, Files Analyzed, Current Behavior, Integration Points), Solution (with Approach, Key Decisions), Execution Phases (with Files, Implementation steps, Tests), and Acceptance Criteria.
+
 4. **Write the PRD File** — Use the Write tool to create the PRD file at `{{OUTPUT_FILE_PATH}}`.
 
 ---
@@ -146,6 +148,7 @@ sequenceDiagram
 ## 4. Execution Phases
 
 Critical rules:
+
 1. Each phase = ONE user-testable vertical slice
 2. Max 5 files per phase (split if larger)
 3. Each phase MUST include concrete tests
