@@ -57,9 +57,19 @@ The PRD directory is: \`{{PRD_DIR}}\`
 
 ## Your Task
 
-1. **Explore the Codebase** — Read relevant existing files to understand structure, patterns, and conventions.
+1. **Explore the Codebase** — Read relevant existing files to understand structure, patterns, and conventions. Look for:
+   - \`CLAUDE.md\` or similar AI assistant documentation
+   - Existing code in the area you'll be modifying
+   - Related features or modules this feature interacts with
+   - Test patterns and verification commands
+   - \`.env\` files or env-loading utilities (use those patterns, never hardcode values)
+
 2. **Assess Complexity** — Score using the rubric below and determine LOW / MEDIUM / HIGH.
-3. **Write a Complete PRD** — Follow the exact template structure below. Every section must be filled with concrete information.
+
+3. **Write a Complete PRD** — Follow the exact template structure below. Every section must be filled with concrete information. No placeholder text.
+
+   The PRD MUST include these sections: Context (with Problem, Files Analyzed, Current Behavior, Integration Points), Solution (with Approach, Key Decisions), Execution Phases (with Files, Implementation steps, Tests), and Acceptance Criteria.
+
 4. **Write the PRD File** — Use the Write tool to create the PRD file at \`{{OUTPUT_FILE_PATH}}\`.
 
 ---
@@ -67,6 +77,7 @@ The PRD directory is: \`{{PRD_DIR}}\`
 ## Complexity Scoring
 
 \`\`\`
+COMPLEXITY SCORE (sum all that apply):
 +1  Touches 1-5 files
 +2  Touches 6-10 files
 +3  Touches 10+ files
@@ -87,79 +98,168 @@ The PRD directory is: \`{{PRD_DIR}}\`
 
 ## PRD Template Structure
 
-Your PRD MUST use this structure. Replace every [bracketed placeholder] with real content.
+Your PRD MUST follow this exact structure. Replace every \`[bracketed placeholder]\` with real content.
 
-# PRD: [Title]
+\`\`\`\`markdown
+# PRD: [Title from roadmap item]
 
 **Complexity: [SCORE] → [LEVEL] mode**
 
+- [Complexity breakdown as bullet list]
+
+---
+
 ## 1. Context
 
-**Problem:** [1-2 sentences]
+**Problem:** [1-2 sentences describing the issue being solved]
 
 **Files Analyzed:**
-- \`path/to/file.ts\` — [what you found]
+
+- \`path/to/file.ts\` — [what the file does / what you looked for]
+- [List every file you read before writing this PRD]
 
 **Current Behavior:**
-- [3-5 bullets]
+
+- [3-5 bullets describing what happens today]
 
 ### Integration Points
-- Entry point: [cron / CLI / event / route]
-- Caller file: [file invoking new code]
-- User flow: User does X → triggers Y → result Z
+
+**How will this feature be reached?**
+
+- [ ] Entry point: [cron job / CLI command / event / API route]
+- [ ] Caller file: [file that will invoke this new code]
+- [ ] Registration/wiring: [anything that must be connected]
+
+**Is this user-facing?**
+
+- [ ] YES → UI components required: [list them]
+- [ ] NO → Internal/background (explain how it is triggered)
+
+**Full user flow:**
+
+1. User does: [action]
+2. Triggers: [code path]
+3. Reaches new feature via: [specific connection point]
+4. Result: [what the user sees]
+
+---
 
 ## 2. Solution
 
 **Approach:**
-- [3-5 bullets]
 
-**Key Decisions:** [library choices, error handling, reused utilities]
+- [3-5 bullets explaining the chosen solution]
 
-**Data Changes:** [schema changes, or "None"]
+**Architecture Diagram** (MEDIUM/HIGH):
 
-## 3. Sequence Flow (MEDIUM/HIGH only)
+\`\`\`mermaid
+flowchart LR
+    A[Component A] --> B[Component B] --> C[Result]
+\`\`\`
 
-[mermaid sequenceDiagram]
+**Key Decisions:**
+
+- [Library/framework choices, error-handling strategy, reused utilities]
+
+**Data Changes:** [New schemas/migrations, or "None"]
+
+---
+
+## 3. Sequence Flow (MEDIUM/HIGH)
+
+\`\`\`mermaid
+sequenceDiagram
+    participant A as ComponentA
+    participant B as ComponentB
+    A->>B: methodName(args)
+    alt Error
+        B-->>A: ErrorType
+    else Success
+        B-->>A: Response
+    end
+\`\`\`
+
+---
 
 ## 4. Execution Phases
 
-### Phase N: [Name] — [User-visible outcome]
+Critical rules:
+1. Each phase = ONE user-testable vertical slice
+2. Max 5 files per phase (split if larger)
+3. Each phase MUST include concrete tests
+4. Checkpoint after each phase
+
+### Phase 1: [Name] — [User-visible outcome in 1 sentence]
 
 **Files (max 5):**
+
 - \`src/path/file.ts\` — [what changes]
 
 **Implementation:**
+
 - [ ] Step 1
+- [ ] Step 2
 
 **Tests Required:**
 | Test File | Test Name | Assertion |
 |-----------|-----------|-----------|
-| \`src/__tests__/feature.test.ts\` | \`should X when Y\` | \`expect(r).toBe(Z)\` |
+| \`src/__tests__/feature.test.ts\` | \`should do X when Y\` | \`expect(result).toBe(Z)\` |
+
+**Verification Plan:**
+
+1. **Unit Tests:** [file and test names]
+2. **User Verification:**
+   - Action: [what to do]
+   - Expected: [what should happen]
 
 **Checkpoint:** Run \`yarn verify\` and related tests after this phase.
+
+---
+
+[Repeat Phase block for each additional phase]
+
+---
 
 ## 5. Acceptance Criteria
 
 - [ ] All phases complete
-- [ ] All tests pass
+- [ ] All specified tests pass
 - [ ] \`yarn verify\` passes
-- [ ] Feature is reachable (not orphaned code)
+- [ ] Feature is reachable (entry point connected, not orphaned code)
+- [ ] [Feature-specific criterion]
+- [ ] [Feature-specific criterion]
+\`\`\`\`
 
 ---
 
 ## Critical Instructions
 
-1. Read all relevant files BEFORE writing the PRD
-2. Follow existing patterns — use \`@/*\` path aliases, match naming conventions
-3. Include concrete file paths and implementation steps
-4. Include specific test names and assertions
-5. Use the Write tool to create the file at \`{{OUTPUT_FILE_PATH}}\`
-6. No placeholder text in the final PRD
-7. The PRD is the GitHub issue body — make it self-contained
+1. **Read all relevant files BEFORE writing the PRD** — never guess at file paths or API shapes
+2. **Follow existing patterns** — reuse utilities, match naming conventions, use path aliases (\`@/*\`)
+3. **Concrete file paths and implementation details** — no vague steps
+4. **Specific test names and assertions** — not "write tests"
+5. **Use the Write tool** to create the file at \`{{OUTPUT_FILE_PATH}}\`
+6. **No placeholder text** in the final PRD — every section must have real content
+7. **Self-contained** — the PRD will be read as a GitHub issue; it must make sense without context
 
-DO NOT leave [bracketed placeholder] text in the output.
+DO NOT leave \`[bracketed placeholder]\` text in the output.
 DO NOT skip any sections.
 DO NOT forget to write the file.
+
+---
+
+## Output
+
+After writing the PRD file, report:
+
+\`\`\`
+PRD Creation Complete
+File: {{OUTPUT_FILE_PATH}}
+Title: [PRD title]
+Complexity: [score] → [level]
+Phases: [count]
+Summary: [1-2 sentences]
+\`\`\`
 `;
 
 // Cache for the loaded template
