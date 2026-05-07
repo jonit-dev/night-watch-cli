@@ -105,7 +105,7 @@ get_review_score() {
   # Look for review score comment from night-watch
   local score
   score=$(gh pr view "${pr_number}" --json comments \
-    --jq '[.comments[].body | select(test("review score|score:? [0-9]+/100"; "i")) | capture("(?i)score:? *(?<s>[0-9]+)/100") | .s] | last | tonumber // -1' \
+    --jq '[.comments[].body | select(test("score[^0-9]{0,30}[0-9]+/100"; "i")) | capture("(?i)score[^0-9]{0,30}(?<s>[0-9]+)/100") | .s] | last | tonumber // -1' \
     2>/dev/null || echo "-1")
   echo "${score}"
 }
