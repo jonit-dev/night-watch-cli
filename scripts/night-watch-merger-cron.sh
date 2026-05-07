@@ -14,6 +14,8 @@ set -euo pipefail
 #   NW_MERGER_BRANCH_PATTERNS=               - Comma-separated branch prefixes (empty = all)
 #   NW_MERGER_REBASE_BEFORE_MERGE=1          - Set to 1 to rebase before merging
 #   NW_MERGER_MAX_PRS_PER_RUN=0             - Max PRs to merge per run (0 = unlimited)
+#   NW_MERGER_CI_MAX_WAIT=300                - Max seconds to wait for checks after rebase
+#   NW_MERGER_CI_POLL_INTERVAL=15            - Seconds between check polls after rebase
 #   NW_DRY_RUN=0                             - Set to 1 for dry-run mode
 
 PROJECT_DIR="${1:?Usage: $0 /path/to/project}"
@@ -26,6 +28,8 @@ MERGE_METHOD="${NW_MERGER_MERGE_METHOD:-squash}"
 MIN_REVIEW_SCORE="${NW_MERGER_MIN_REVIEW_SCORE:-80}"
 REBASE_BEFORE_MERGE="${NW_MERGER_REBASE_BEFORE_MERGE:-1}"
 MAX_PRS_PER_RUN="${NW_MERGER_MAX_PRS_PER_RUN:-0}"
+CI_MAX_WAIT="${NW_MERGER_CI_MAX_WAIT:-300}"
+CI_POLL_INTERVAL="${NW_MERGER_CI_POLL_INTERVAL:-15}"
 BRANCH_PATTERNS_RAW="${NW_MERGER_BRANCH_PATTERNS:-}"
 READY_TO_MERGE_LABEL="${NW_PR_RESOLVER_READY_LABEL:-ready-to-merge}"
 SCRIPT_START_TIME=$(date +%s)
@@ -39,6 +43,12 @@ if ! [[ "${MAX_PRS_PER_RUN}" =~ ^[0-9]+$ ]]; then
 fi
 if ! [[ "${MIN_REVIEW_SCORE}" =~ ^[0-9]+$ ]]; then
   MIN_REVIEW_SCORE="80"
+fi
+if ! [[ "${CI_MAX_WAIT}" =~ ^[0-9]+$ ]]; then
+  CI_MAX_WAIT="300"
+fi
+if ! [[ "${CI_POLL_INTERVAL}" =~ ^[0-9]+$ ]] || [ "${CI_POLL_INTERVAL}" = "0" ]; then
+  CI_POLL_INTERVAL="15"
 fi
 # Clamp merge method to valid values
 case "${MERGE_METHOD}" in
@@ -110,24 +120,78 @@ get_review_score() {
   echo "${score}"
 }
 
-# Check if CI is passing for a PR (all checks must be complete and none failing)
-ci_passing() {
+# Get the current head OID for a PR.
+get_pr_head_oid() {
   local pr_number="${1}"
-  local checks_json
-  checks_json=$(gh pr checks "${pr_number}" --json name,state,conclusion 2>/dev/null || echo "[]")
-  # Fail if any checks have explicit failures
-  local fail_count
-  fail_count=$(echo "${checks_json}" | jq '[.[] | select(.conclusion == "FAILURE" or .conclusion == "TIMED_OUT" or .conclusion == "CANCELLED" or .state == "FAILURE")] | length' 2>/dev/null || echo "999")
-  if [ "${fail_count}" != "0" ]; then
-    return 1
+  gh pr view "${pr_number}" --json headRefOid --jq '.headRefOid // ""' 2>/dev/null || echo ""
+}
+
+# Return the CI state for the PR's status rollup on the expected head OID.
+ci_status_for_head() {
+  local pr_number="${1}"
+  local expected_head="${2:-}"
+  local status_json
+
+  status_json=$(gh pr view "${pr_number}" --json headRefOid,statusCheckRollup 2>/dev/null || echo "")
+  if [ -z "${status_json}" ]; then
+    echo "unknown"
+    return 0
   fi
-  # Fail if any checks are still pending/in-progress (not yet concluded)
-  local pending_count
-  pending_count=$(echo "${checks_json}" | jq '[.[] | select(.state == "PENDING" or .state == "IN_PROGRESS" or (.conclusion == null and .state != "SUCCESS"))] | length' 2>/dev/null || echo "999")
-  if [ "${pending_count}" != "0" ]; then
-    return 1
-  fi
-  return 0
+
+  echo "${status_json}" | jq -r --arg expected_head "${expected_head}" '
+    def in_list($values): . as $value | $values | index($value);
+    def check_run_failure:
+      .__typename == "CheckRun"
+      and ((.conclusion // "") | in_list(["FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STALE", "STARTUP_FAILURE"]));
+    def status_context_failure:
+      .__typename == "StatusContext"
+      and ((.state // "") | in_list(["FAILURE", "ERROR"]));
+    def check_run_pending:
+      .__typename == "CheckRun"
+      and ((.status // "") != "COMPLETED" or .conclusion == null);
+    def status_context_pending:
+      .__typename == "StatusContext"
+      and ((.state // "") | in_list(["PENDING", "EXPECTED"]));
+    def check_run_nonpassing:
+      .__typename == "CheckRun"
+      and ((.conclusion // "") | in_list(["SUCCESS", "NEUTRAL", "SKIPPED"]) | not);
+    def status_context_nonpassing:
+      .__typename == "StatusContext"
+      and (.state // "") != "SUCCESS";
+    if ($expected_head != "" and (.headRefOid // "") != $expected_head) then
+      "head_mismatch"
+    elif ((.statusCheckRollup // []) | length) == 0 then
+      "absent"
+    elif any((.statusCheckRollup // [])[]; check_run_failure or status_context_failure) then
+      "failed"
+    elif any((.statusCheckRollup // [])[]; check_run_pending or status_context_pending) then
+      "pending"
+    elif any((.statusCheckRollup // [])[]; check_run_nonpassing or status_context_nonpassing) then
+      "failed"
+    else
+      "passing"
+    end
+  ' 2>/dev/null || echo "unknown"
+}
+
+wait_for_ci_passing_on_head() {
+  local pr_number="${1}"
+  local expected_head="${2}"
+  local ci_waited=0
+  LAST_CI_STATUS="unknown"
+
+  while [ "${ci_waited}" -lt "${CI_MAX_WAIT}" ]; do
+    LAST_CI_STATUS=$(ci_status_for_head "${pr_number}" "${expected_head}")
+    if [ "${LAST_CI_STATUS}" = "passing" ]; then
+      return 0
+    fi
+    log "INFO: PR #${pr_number}: Waiting for fresh CI on head ${expected_head} (${LAST_CI_STATUS}, ${ci_waited}s/${CI_MAX_WAIT}s)..."
+    sleep "${CI_POLL_INTERVAL}"
+    ci_waited=$((ci_waited + CI_POLL_INTERVAL))
+  done
+
+  LAST_CI_STATUS=$(ci_status_for_head "${pr_number}" "${expected_head}")
+  [ "${LAST_CI_STATUS}" = "passing" ]
 }
 
 # Rebase a PR against its base branch
@@ -254,9 +318,16 @@ while IFS= read -r pr_json; do
     continue
   fi
 
+  pr_head_oid=$(get_pr_head_oid "${pr_number}")
+  if [ -z "${pr_head_oid}" ]; then
+    log "INFO: PR #${pr_number} (${pr_branch}): Unable to determine PR head, skipping"
+    continue
+  fi
+
   # Check CI status
-  if ! ci_passing "${pr_number}"; then
-    log "INFO: PR #${pr_number} (${pr_branch}): CI not passing, skipping"
+  ci_status=$(ci_status_for_head "${pr_number}" "${pr_head_oid}")
+  if [ "${ci_status}" != "passing" ]; then
+    log "INFO: PR #${pr_number} (${pr_branch}): CI not passing on head ${pr_head_oid} (${ci_status}), skipping"
     continue
   fi
 
@@ -273,6 +344,7 @@ while IFS= read -r pr_json; do
 
   # Rebase before merge if configured
   if [ "${REBASE_BEFORE_MERGE}" = "1" ]; then
+    pr_head_before_rebase="${pr_head_oid}"
     if ! rebase_pr "${pr_number}"; then
       log "WARN: PR #${pr_number}: Rebase failed, skipping"
       FAILED_PRS=$((FAILED_PRS + 1))
@@ -280,20 +352,20 @@ while IFS= read -r pr_json; do
     fi
     log "INFO: PR #${pr_number}: Rebase successful"
 
-    # Poll CI until all checks complete after rebase (up to 5 minutes)
-    ci_max_wait=300
-    ci_waited=0
-    ci_poll=15
-    while [ "${ci_waited}" -lt "${ci_max_wait}" ]; do
-      sleep "${ci_poll}"
-      ci_waited=$((ci_waited + ci_poll))
-      if ci_passing "${pr_number}"; then
-        break
-      fi
-      log "INFO: PR #${pr_number}: Waiting for CI after rebase (${ci_waited}s/${ci_max_wait}s)..."
-    done
-    if ! ci_passing "${pr_number}"; then
-      log "INFO: PR #${pr_number}: CI not passing after rebase (waited ${ci_waited}s), skipping"
+    pr_head_after_rebase=$(get_pr_head_oid "${pr_number}")
+    if [ -z "${pr_head_after_rebase}" ]; then
+      log "INFO: PR #${pr_number}: Unable to determine PR head after rebase, skipping"
+      continue
+    fi
+    if [ "${pr_head_after_rebase}" != "${pr_head_before_rebase}" ]; then
+      log "INFO: PR #${pr_number}: Head changed after rebase ${pr_head_before_rebase} -> ${pr_head_after_rebase}; waiting for fresh CI"
+    else
+      log "INFO: PR #${pr_number}: Head unchanged after rebase (${pr_head_after_rebase}); confirming CI"
+    fi
+
+    # Poll CI until all checks attached to the post-rebase head are complete and passing.
+    if ! wait_for_ci_passing_on_head "${pr_number}" "${pr_head_after_rebase}"; then
+      log "INFO: PR #${pr_number}: Fresh CI not passing on head ${pr_head_after_rebase} after rebase (${LAST_CI_STATUS}, waited ${CI_MAX_WAIT}s), skipping"
       continue
     fi
   fi

@@ -191,11 +191,19 @@ describe('core flow smoke tests (bash scripts)', () => {
         '  fi\n' +
         '  exit 0\n' +
         'fi\n' +
-        'if [[ "$1" == "pr" && "$2" == "checks" ]]; then\n' +
-        "  echo '[]'\n" +
-        '  exit 0\n' +
-        'fi\n' +
         'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ "$*" == *"comments"* ]]; then\n' +
+        "    echo '100'\n" +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$*" == *"headRefOid,statusCheckRollup"* ]]; then\n' +
+        '    echo \'{"headRefOid":"abc123","statusCheckRollup":[{"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS"}]}\'\n' +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$*" == *"headRefOid"* ]]; then\n' +
+        "    echo 'abc123'\n" +
+        '    exit 0\n' +
+        '  fi\n' +
         "  echo '100'\n" +
         '  exit 0\n' +
         'fi\n' +
@@ -221,6 +229,178 @@ describe('core flow smoke tests (bash scripts)', () => {
     const ghCalls = fs.readFileSync(ghCallLog, 'utf-8');
     expect(ghCalls).toContain('pr update-branch --rebase 123');
     expect(ghCalls).toContain('pr merge 123 --squash --delete-branch');
+  });
+
+  it('merger should not merge when rebase changes head and fresh checks are absent', () => {
+    const projectDir = mkTempDir('nw-smoke-merger-fresh-ci-absent-');
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-bin-merger-fresh-ci-absent-');
+    const ghCallLog = path.join(projectDir, '.smoke-gh-calls');
+    const headFile = path.join(projectDir, '.smoke-head');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'sleep'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "${1:-}" == "1" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exec /usr/bin/sleep "$@"\n',
+      {
+        encoding: 'utf-8',
+        mode: 0o755,
+      },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'set -euo pipefail\n' +
+        'printf \'%s\\n\' "$*" >> "$NW_SMOKE_GH_CALL_LOG"\n' +
+        'head="$(cat "$NW_SMOKE_HEAD_FILE" 2>/dev/null || echo oldhead)"\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  echo \'[{"number":123,"headRefName":"night-watch/fresh-ci","createdAt":"2026-01-01T00:00:00Z","isDraft":false,"labels":[]}]\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ "$*" == *"comments"* ]]; then\n' +
+        "    echo '100'\n" +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$*" == *"headRefOid,statusCheckRollup"* ]]; then\n' +
+        '    if [[ "$head" == "newhead" ]]; then\n' +
+        '      echo \'{"headRefOid":"newhead","statusCheckRollup":[]}\'\n' +
+        '    else\n' +
+        '      echo \'{"headRefOid":"oldhead","statusCheckRollup":[{"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS"}]}\'\n' +
+        '    fi\n' +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$*" == *"headRefOid"* ]]; then\n' +
+        '    echo "$head"\n' +
+        '    exit 0\n' +
+        '  fi\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "update-branch" ]]; then\n' +
+        '  echo newhead > "$NW_SMOKE_HEAD_FILE"\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "merge" ]]; then\n' +
+        "  echo 'merge should not be called' >&2\n" +
+        '  exit 1\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(headFile, 'oldhead\n', 'utf-8');
+
+    const result = runScript(mergerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_SMOKE_GH_CALL_LOG: ghCallLog,
+      NW_SMOKE_HEAD_FILE: headFile,
+      NW_MERGER_MAX_PRS_PER_RUN: '1',
+      NW_MERGER_CI_MAX_WAIT: '1',
+      NW_MERGER_CI_POLL_INTERVAL: '1',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success|merged=0|failed=0|prs=');
+    const ghCalls = fs.readFileSync(ghCallLog, 'utf-8');
+    expect(ghCalls).toContain('pr update-branch --rebase 123');
+    expect(ghCalls).not.toContain('pr merge 123 --squash --delete-branch');
+    const mergerLog = fs.readFileSync(path.join(projectDir, 'logs', 'merger.log'), 'utf-8');
+    expect(mergerLog).toContain('Head changed after rebase oldhead -> newhead');
+    expect(mergerLog).toContain('Fresh CI not passing on head newhead after rebase (absent');
+  });
+
+  it('merger should merge after rebase changes head and fresh checks pass', () => {
+    const projectDir = mkTempDir('nw-smoke-merger-fresh-ci-success-');
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-bin-merger-fresh-ci-success-');
+    const ghCallLog = path.join(projectDir, '.smoke-gh-calls');
+    const headFile = path.join(projectDir, '.smoke-head');
+    const newHeadPollsFile = path.join(projectDir, '.smoke-new-head-polls');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'sleep'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "${1:-}" == "1" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exec /usr/bin/sleep "$@"\n',
+      {
+        encoding: 'utf-8',
+        mode: 0o755,
+      },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'set -euo pipefail\n' +
+        'printf \'%s\\n\' "$*" >> "$NW_SMOKE_GH_CALL_LOG"\n' +
+        'head="$(cat "$NW_SMOKE_HEAD_FILE" 2>/dev/null || echo oldhead)"\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  echo \'[{"number":123,"headRefName":"night-watch/fresh-ci","createdAt":"2026-01-01T00:00:00Z","isDraft":false,"labels":[]}]\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ "$*" == *"comments"* ]]; then\n' +
+        "    echo '100'\n" +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$*" == *"headRefOid,statusCheckRollup"* ]]; then\n' +
+        '    if [[ "$head" == "newhead" ]]; then\n' +
+        '      polls="$(cat "$NW_SMOKE_NEW_HEAD_POLLS_FILE" 2>/dev/null || echo 0)"\n' +
+        '      polls=$((polls + 1))\n' +
+        '      echo "$polls" > "$NW_SMOKE_NEW_HEAD_POLLS_FILE"\n' +
+        '      if [[ "$polls" -lt 2 ]]; then\n' +
+        '        echo \'{"headRefOid":"newhead","statusCheckRollup":[{"__typename":"CheckRun","name":"ci","status":"IN_PROGRESS","conclusion":null}]}\'\n' +
+        '      else\n' +
+        '        echo \'{"headRefOid":"newhead","statusCheckRollup":[{"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS"}]}\'\n' +
+        '      fi\n' +
+        '    else\n' +
+        '      echo \'{"headRefOid":"oldhead","statusCheckRollup":[{"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS"}]}\'\n' +
+        '    fi\n' +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$*" == *"headRefOid"* ]]; then\n' +
+        '    echo "$head"\n' +
+        '    exit 0\n' +
+        '  fi\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "update-branch" ]]; then\n' +
+        '  echo newhead > "$NW_SMOKE_HEAD_FILE"\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "merge" ]]; then\n' +
+        "  echo 'merged'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(headFile, 'oldhead\n', 'utf-8');
+
+    const result = runScript(mergerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_SMOKE_GH_CALL_LOG: ghCallLog,
+      NW_SMOKE_HEAD_FILE: headFile,
+      NW_SMOKE_NEW_HEAD_POLLS_FILE: newHeadPollsFile,
+      NW_MERGER_MAX_PRS_PER_RUN: '1',
+      NW_MERGER_CI_MAX_WAIT: '2',
+      NW_MERGER_CI_POLL_INTERVAL: '1',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success|merged=1|failed=0|prs=123');
+    const ghCalls = fs.readFileSync(ghCallLog, 'utf-8');
+    expect(ghCalls).toContain('pr update-branch --rebase 123');
+    expect(ghCalls).toContain('pr merge 123 --squash --delete-branch');
+    const mergerLog = fs.readFileSync(path.join(projectDir, 'logs', 'merger.log'), 'utf-8');
+    expect(mergerLog).toContain('Waiting for fresh CI on head newhead (pending');
   });
 
   it('executor should emit success_open_pr and move PRD to done when PR is detected after provider run', () => {
