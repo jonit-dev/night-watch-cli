@@ -231,6 +231,128 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(ghCalls).toContain('pr merge 123 --squash --delete-branch');
   });
 
+  it('merger should not merge when review score is below threshold', () => {
+    const projectDir = mkTempDir('nw-smoke-merger-low-score-');
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-bin-merger-low-score-');
+    const ghCallLog = path.join(projectDir, '.smoke-gh-calls');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'printf \'%s\\n\' "$*" >> "$NW_SMOKE_GH_CALL_LOG"\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  echo \'[{"number":123,"headRefName":"night-watch/low-score","createdAt":"2026-01-01T00:00:00Z","isDraft":false,"labels":[]}]\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ "$*" == *"comments"* ]]; then\n' +
+        "    echo '79'\n" +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$*" == *"headRefOid,statusCheckRollup"* ]]; then\n' +
+        '    echo \'{"headRefOid":"abc123","statusCheckRollup":[{"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS"}]}\'\n' +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$*" == *"headRefOid"* ]]; then\n' +
+        "    echo 'abc123'\n" +
+        '    exit 0\n' +
+        '  fi\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "merge" ]]; then\n' +
+        "  echo 'merge should not be called' >&2\n" +
+        '  exit 1\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(mergerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_SMOKE_GH_CALL_LOG: ghCallLog,
+      NW_MERGER_MAX_PRS_PER_RUN: '1',
+      NW_MERGER_MIN_REVIEW_SCORE: '80',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success|merged=0|failed=0|prs=');
+    const ghCalls = fs.readFileSync(ghCallLog, 'utf-8');
+    expect(ghCalls).not.toContain('pr merge 123 --squash --delete-branch');
+    const mergerLog = fs.readFileSync(path.join(projectDir, 'logs', 'merger.log'), 'utf-8');
+    expect(mergerLog).toContain('Review score 79 < 80');
+    expect(mergerLog).toContain('reviewer job required before merge');
+  });
+
+  it('merger should not merge when unresolved review feedback exists', () => {
+    const projectDir = mkTempDir('nw-smoke-merger-pending-review-');
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-bin-merger-pending-review-');
+    const ghCallLog = path.join(projectDir, '.smoke-gh-calls');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'printf \'%s\\n\' "$*" >> "$NW_SMOKE_GH_CALL_LOG"\n' +
+        'if [[ "$1" == "repo" && "$2" == "view" ]]; then\n' +
+        "  echo 'owner/repo'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "api" && "$2" == "graphql" ]]; then\n' +
+        "  echo '1'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "api" ]]; then\n' +
+        "  echo '0'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  echo \'[{"number":123,"headRefName":"night-watch/pending-review","createdAt":"2026-01-01T00:00:00Z","isDraft":false,"labels":[]}]\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ "$*" == *"reviewDecision"* ]]; then\n' +
+        "    echo 'REVIEW_REQUIRED'\n" +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$*" == *"comments"* ]]; then\n' +
+        "    echo '100'\n" +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$*" == *"headRefOid,statusCheckRollup"* ]]; then\n' +
+        '    echo \'{"headRefOid":"abc123","statusCheckRollup":[{"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"SUCCESS"}]}\'\n' +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$*" == *"headRefOid"* ]]; then\n' +
+        "    echo 'abc123'\n" +
+        '    exit 0\n' +
+        '  fi\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "merge" ]]; then\n' +
+        "  echo 'merge should not be called' >&2\n" +
+        '  exit 1\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(mergerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_SMOKE_GH_CALL_LOG: ghCallLog,
+      NW_MERGER_MAX_PRS_PER_RUN: '1',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success|merged=0|failed=0|prs=');
+    const ghCalls = fs.readFileSync(ghCallLog, 'utf-8');
+    expect(ghCalls).toContain('api graphql');
+    expect(ghCalls).not.toContain('pr merge 123 --squash --delete-branch');
+    const mergerLog = fs.readFileSync(path.join(projectDir, 'logs', 'merger.log'), 'utf-8');
+    expect(mergerLog).toContain('1 pending review feedback item(s)');
+    expect(mergerLog).toContain('reviewer job required before merge');
+  });
+
   it('merger should not merge when rebase changes head and fresh checks are absent', () => {
     const projectDir = mkTempDir('nw-smoke-merger-fresh-ci-absent-');
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
@@ -2175,6 +2297,72 @@ describe('core flow smoke tests (bash scripts)', () => {
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_all_passing');
+  });
+
+  it('reviewer should treat unresolved review feedback as needing work even with passing score', () => {
+    const projectDir = mkTempDir('nw-smoke-reviewer-pending-feedback-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-reviewer-pending-feedback-bin-');
+    writeFakeClaude(fakeBin);
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'args="$*"\n' +
+        'if [[ "$1" == "repo" && "$2" == "view" ]]; then\n' +
+        "  echo 'owner/repo'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "api" && "$2" == "graphql" ]]; then\n' +
+        "  echo '1'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "api" ]]; then\n' +
+        "  echo '0'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ "$args" == *"mergeStateStatus"* ]]; then\n' +
+        "    echo 'CLEAN'\n" +
+        '  elif [[ "$args" == *"comments"* ]]; then\n' +
+        "    echo 'Overall Score: 85/100'\n" +
+        '  elif [[ "$args" == *"reviewDecision"* ]]; then\n' +
+        "    echo 'REVIEW_REQUIRED'\n" +
+        '  else\n' +
+        '    echo \'{"number":1}\'\n' +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  if [[ "$args" == *"number,headRefName"* ]]; then\n' +
+        "    printf '1\\tnight-watch/pending-feedback\\t\\n'\n" +
+        '  else\n' +
+        "    echo 'night-watch/pending-feedback'\n" +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "checks" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(reviewerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BRANCH_PATTERNS: 'night-watch/',
+      NW_MIN_REVIEW_SCORE: '80',
+      NW_DRY_RUN: '1',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Open PRs needing work:#1');
+    const reviewerLog = fs.readFileSync(path.join(projectDir, 'logs', 'reviewer.log'), 'utf-8');
+    expect(reviewerLog).toContain('1 pending review feedback item(s)');
   });
 
   it('reviewer should accept plain Score comments when applying min review score threshold', () => {

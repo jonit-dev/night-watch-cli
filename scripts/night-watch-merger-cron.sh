@@ -120,6 +120,73 @@ get_review_score() {
   echo "${score}"
 }
 
+# Count pending review feedback that should send the PR back through reviewer
+# instead of allowing the merger to land it. We combine GitHub's review decision
+# with unresolved review threads because some providers leave actionable feedback
+# as thread comments without lowering the score.
+get_pending_review_feedback_count() {
+  local pr_number="${1}"
+  local review_decision=""
+  local change_request_count="0"
+  local unresolved_thread_count="0"
+  local repo=""
+  local owner=""
+  local name=""
+
+  review_decision=$(gh pr view "${pr_number}" --json reviewDecision --jq '.reviewDecision // ""' 2>/dev/null || echo "")
+
+  change_request_count=$(gh api "repos/{owner}/{repo}/pulls/${pr_number}/reviews" \
+    --jq '[.[] | select(.state == "CHANGES_REQUESTED")] | length' 2>/dev/null || echo "0")
+  if ! [[ "${change_request_count}" =~ ^[0-9]+$ ]]; then
+    change_request_count="0"
+  fi
+
+  repo=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || echo "")
+  if [[ "${repo}" == */* ]]; then
+    owner="${repo%%/*}"
+    name="${repo#*/}"
+    unresolved_thread_count=$(gh api graphql \
+      -F owner="${owner}" \
+      -F name="${name}" \
+      -F number="${pr_number}" \
+      -f query='
+        query($owner: String!, $name: String!, $number: Int!) {
+          repository(owner: $owner, name: $name) {
+            pullRequest(number: $number) {
+              reviewThreads(first: 100) {
+                nodes {
+                  isResolved
+                }
+              }
+            }
+          }
+        }
+      ' \
+      --jq '[.data.repository.pullRequest.reviewThreads.nodes[]? | select(.isResolved == false)] | length' \
+      2>/dev/null || echo "0")
+    if ! [[ "${unresolved_thread_count}" =~ ^[0-9]+$ ]]; then
+      unresolved_thread_count="0"
+    fi
+  fi
+
+  if [ "${unresolved_thread_count}" -gt 0 ]; then
+    echo "${unresolved_thread_count}"
+    return 0
+  fi
+
+  if [ "${change_request_count}" -gt 0 ]; then
+    echo "${change_request_count}"
+    return 0
+  fi
+
+  if [ "${review_decision}" = "CHANGES_REQUESTED" ]; then
+    echo "1"
+    return 0
+  fi
+
+  echo "0"
+}
+
 # Get the current head OID for a PR.
 get_pr_head_oid() {
   local pr_number="${1}"
@@ -335,9 +402,15 @@ while IFS= read -r pr_json; do
   if [ "${MIN_REVIEW_SCORE}" -gt "0" ]; then
     score=$(get_review_score "${pr_number}")
     if [ "${score}" -lt "0" ] || [ "${score}" -lt "${MIN_REVIEW_SCORE}" ]; then
-      log "INFO: PR #${pr_number} (${pr_branch}): Review score ${score} < ${MIN_REVIEW_SCORE} (or no score found), skipping"
+      log "INFO: PR #${pr_number} (${pr_branch}): Review score ${score} < ${MIN_REVIEW_SCORE} (or no score found), reviewer job required before merge"
       continue
     fi
+  fi
+
+  pending_review_feedback_count=$(get_pending_review_feedback_count "${pr_number}")
+  if [ "${pending_review_feedback_count}" -gt "0" ]; then
+    log "INFO: PR #${pr_number} (${pr_branch}): ${pending_review_feedback_count} pending review feedback item(s), reviewer job required before merge"
+    continue
   fi
 
   log "INFO: PR #${pr_number} (${pr_branch}): Eligible for merge"

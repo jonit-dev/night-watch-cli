@@ -132,6 +132,72 @@ get_pr_comments() {
   } | awk '!seen[$0]++'
 }
 
+get_pr_pending_review_feedback_count() {
+  local pr_number="${1:?PR number required}"
+  local review_decision=""
+  local change_request_count="0"
+  local unresolved_thread_count="0"
+  local repo="${REPO:-}"
+  local owner=""
+  local name=""
+
+  review_decision=$(gh pr view "${pr_number}" --json reviewDecision --jq '.reviewDecision // ""' 2>/dev/null || echo "")
+
+  change_request_count=$(gh api "repos/{owner}/{repo}/pulls/${pr_number}/reviews" \
+    --jq '[.[] | select(.state == "CHANGES_REQUESTED")] | length' 2>/dev/null || echo "0")
+  if ! [[ "${change_request_count}" =~ ^[0-9]+$ ]]; then
+    change_request_count="0"
+  fi
+
+  if [ -z "${repo}" ]; then
+    repo=$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || echo "")
+  fi
+
+  if [[ "${repo}" == */* ]]; then
+    owner="${repo%%/*}"
+    name="${repo#*/}"
+    unresolved_thread_count=$(gh api graphql \
+      -F owner="${owner}" \
+      -F name="${name}" \
+      -F number="${pr_number}" \
+      -f query='
+        query($owner: String!, $name: String!, $number: Int!) {
+          repository(owner: $owner, name: $name) {
+            pullRequest(number: $number) {
+              reviewThreads(first: 100) {
+                nodes {
+                  isResolved
+                }
+              }
+            }
+          }
+        }
+      ' \
+      --jq '[.data.repository.pullRequest.reviewThreads.nodes[]? | select(.isResolved == false)] | length' \
+      2>/dev/null || echo "0")
+    if ! [[ "${unresolved_thread_count}" =~ ^[0-9]+$ ]]; then
+      unresolved_thread_count="0"
+    fi
+  fi
+
+  if [ "${unresolved_thread_count}" -gt 0 ]; then
+    echo "${unresolved_thread_count}"
+    return 0
+  fi
+
+  if [ "${change_request_count}" -gt 0 ]; then
+    echo "${change_request_count}"
+    return 0
+  fi
+
+  if [ "${review_decision}" = "CHANGES_REQUESTED" ]; then
+    echo "1"
+    return 0
+  fi
+
+  echo "0"
+}
+
 get_pr_head_ref_oid() {
   local pr_number="${1:?PR number required}"
   gh pr view "${pr_number}" --json headRefOid --jq '.headRefOid' 2>/dev/null || echo ""
@@ -760,6 +826,18 @@ while IFS=$'\t' read -r pr_number pr_branch pr_labels; do
     continue
   fi
 
+  PENDING_REVIEW_FEEDBACK_COUNT=$(get_pr_pending_review_feedback_count "${pr_number}")
+  if [ "${PENDING_REVIEW_FEEDBACK_COUNT}" -gt 0 ]; then
+    if [ "${local_ready_for_review_label_present}" -eq 1 ]; then
+      log "INFO: PR #${pr_number} (${pr_branch}) has pending review feedback; removing stale ${READY_FOR_REVIEW_LABEL} label"
+      clear_ready_for_human_review_label "${pr_number}"
+    fi
+    log "INFO: PR #${pr_number} (${pr_branch}) has ${PENDING_REVIEW_FEEDBACK_COUNT} pending review feedback item(s)"
+    NEEDS_WORK=1
+    PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
+    continue
+  fi
+
   if has_ready_for_human_review_marker "${all_comments}" "${current_head_sha}"; then
     SKIPPED_ALREADY_REVIEWED_CURRENT_HEAD=1
     log "INFO: PR #${pr_number} (${pr_branch}) is already marked ready for human review at head ${current_head_sha:0:12}; skipping repeat automated review"
@@ -1077,6 +1155,7 @@ if [ -n "${TARGET_PR}" ]; then
   TARGET_MERGE_STATE=$(gh pr view "${TARGET_PR}" --json mergeStateStatus --jq '.mergeStateStatus' 2>/dev/null || echo "UNKNOWN")
   TARGET_FAILED_CHECKS=$(get_pr_failed_ci_summary "${TARGET_PR}")
   TARGET_SCORE=$(get_pr_score "${TARGET_PR}")
+  TARGET_PENDING_REVIEW_FEEDBACK=$(get_pr_pending_review_feedback_count "${TARGET_PR}")
 
   TARGET_SCOPE_PROMPT+=$'\n## Preflight Data (from CLI)\n- mergeStateStatus: '"${TARGET_MERGE_STATE}"$'\n'
   if [ -n "${TARGET_FAILED_CHECKS}" ]; then
@@ -1084,6 +1163,7 @@ if [ -n "${TARGET_PR}" ]; then
   else
     TARGET_SCOPE_PROMPT+=$'- failing checks: none detected\n'
   fi
+  TARGET_SCOPE_PROMPT+=$'- pending review feedback: '"${TARGET_PENDING_REVIEW_FEEDBACK}"$' item(s)\n'
   if [ -n "${TARGET_SCORE}" ]; then
     TARGET_SCOPE_PROMPT+=$'- latest review score: '"${TARGET_SCORE}"$'/100\n'
     TARGET_SCOPE_PROMPT+=$'- action: fix\n'
