@@ -25,16 +25,20 @@ const mockCwd = vi.spyOn(process, 'cwd');
 
 // Import after setting up mocks
 import {
-  buildEnvVars,
   applyCliOverrides,
+  buildEnvVars,
+  buildRunNotificationContext,
+  extractPrUrlFromOutput,
   IRunOptions,
-  scanPrdDirectory,
   getRateLimitFallbackTelegramWebhooks,
   isRateLimitFallbackTriggered,
+  parsePrNumberFromUrl,
   recordRunSessionOutcome,
   resolveRunNotificationEvent,
+  scanPrdDirectory,
   shouldAttemptCrossProjectFallback,
 } from '@/cli/commands/run.js';
+import { parseScriptResult } from '@night-watch/core/utils/script-result.js';
 import { applyScheduleOffset, buildCronPathPrefix } from '@/cli/commands/install.js';
 import { INightWatchConfig } from '@night-watch/core/types.js';
 import { closeDb } from '@night-watch/core/storage/sqlite/client.js';
@@ -410,6 +414,114 @@ describe('run command', () => {
   describe('notification integration', () => {
     it('sendNotifications should be importable', () => {
       expect(typeof sendNotifications).toBe('function');
+    });
+
+    it('preserves script PR metadata when gh enrichment is unavailable', () => {
+      const scriptResult = parseScriptResult(
+        'NIGHT_WATCH_RESULT:success_open_pr|prd=01-feature.md|branch=night-watch/01-feature|pr_url=https://github.com/acme/pdf-generation-api/pull/123',
+      );
+
+      const ctx = buildRunNotificationContext(
+        createTestConfig({ provider: 'codex' }),
+        path.join(tempDir, 'pdf-generation-api'),
+        'run_succeeded',
+        0,
+        scriptResult,
+        null,
+      );
+
+      expect(ctx).toMatchObject({
+        event: 'run_succeeded',
+        projectName: 'pdf-generation-api',
+        provider: 'codex',
+        exitCode: 0,
+        prdName: '01-feature.md',
+        branchName: 'night-watch/01-feature',
+        prUrl: 'https://github.com/acme/pdf-generation-api/pull/123',
+        prNumber: 123,
+      });
+    });
+
+    it('prefers gh-enriched PR details when available', () => {
+      const scriptResult = parseScriptResult(
+        'NIGHT_WATCH_RESULT:success_open_pr|prd=01-feature.md|branch=night-watch/01-feature|pr_url=https://github.com/acme/pdf-generation-api/pull/123',
+      );
+
+      const ctx = buildRunNotificationContext(
+        createTestConfig({ provider: 'codex' }),
+        path.join(tempDir, 'pdf-generation-api'),
+        'run_succeeded',
+        0,
+        scriptResult,
+        {
+          additions: 42,
+          body: 'Implemented PDF generation endpoint.',
+          changedFiles: 5,
+          deletions: 7,
+          headRefName: 'night-watch/01-feature',
+          number: 124,
+          title: 'feat: add PDF generation',
+          url: 'https://github.com/acme/pdf-generation-api/pull/124',
+        },
+      );
+
+      expect(ctx).toMatchObject({
+        prUrl: 'https://github.com/acme/pdf-generation-api/pull/124',
+        prTitle: 'feat: add PDF generation',
+        prBody: 'Implemented PDF generation endpoint.',
+        prNumber: 124,
+        filesChanged: 5,
+        additions: 42,
+        deletions: 7,
+      });
+    });
+
+    it('recovers PR metadata from raw output when the result marker is absent', () => {
+      const rawOutput = [
+        'CONFIG: prd=01-feature.md branch=night-watch/01-feature',
+        'SUCCESS: PR opened and ready for review — https://github.com/acme/pdf-generation-api/pull/123',
+      ].join('\n');
+
+      const ctx = buildRunNotificationContext(
+        createTestConfig({ provider: 'codex' }),
+        path.join(tempDir, 'pdf-generation-api'),
+        'run_succeeded',
+        0,
+        null,
+        null,
+        rawOutput,
+      );
+
+      expect(ctx).toMatchObject({
+        projectName: 'pdf-generation-api',
+        prdName: '01-feature.md',
+        branchName: 'night-watch/01-feature',
+        prUrl: 'https://github.com/acme/pdf-generation-api/pull/123',
+        prNumber: 123,
+      });
+    });
+  });
+
+  describe('parsePrNumberFromUrl', () => {
+    it('extracts PR numbers from GitHub pull request URLs', () => {
+      expect(parsePrNumberFromUrl('https://github.com/acme/repo/pull/123')).toBe(123);
+      expect(parsePrNumberFromUrl('https://github.com/acme/repo/pull/123/files')).toBe(123);
+    });
+
+    it('returns undefined for non-PR URLs', () => {
+      expect(parsePrNumberFromUrl('https://github.com/acme/repo/issues/123')).toBeUndefined();
+      expect(parsePrNumberFromUrl(undefined)).toBeUndefined();
+    });
+  });
+
+  describe('extractPrUrlFromOutput', () => {
+    it('returns the most recent GitHub PR URL from output', () => {
+      const output = [
+        'old https://github.com/acme/repo/pull/1',
+        'new https://github.com/acme/repo/pull/2',
+      ].join('\n');
+
+      expect(extractPrUrlFromOutput(output)).toBe('https://github.com/acme/repo/pull/2');
     });
   });
 

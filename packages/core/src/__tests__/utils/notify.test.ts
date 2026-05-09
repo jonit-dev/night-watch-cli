@@ -144,6 +144,27 @@ describe('notification utilities', () => {
       expect(payload.text).not.toContain('Summary');
     });
 
+    it('should use structured PR template with partial PR metadata', () => {
+      const payload = formatTelegramPayload({
+        ...baseCtx,
+        provider: 'codex',
+        projectName: 'pdf-generation-api',
+        prdName: '01-pdf-generation.md',
+        branchName: 'night-watch/01-pdf-generation',
+        prUrl: 'https://github.com/acme/pdf-generation-api/pull/123',
+        prNumber: 123,
+      });
+
+      expect(payload.text).toContain('PR Opened');
+      expect(payload.text).toContain('PR \\#123');
+      expect(payload.text).toContain('github\\.com');
+      expect(payload.text).toContain('Meta');
+      expect(payload.text).toContain('Project: pdf\\-generation\\-api');
+      expect(payload.text).toContain('Provider: codex');
+      expect(payload.text).toContain('PRD: 01\\-pdf\\-generation\\.md');
+      expect(payload.text).toContain('Branch: night\\-watch/01\\-pdf\\-generation');
+    });
+
     it('should truncate long PR body', () => {
       const longBody = 'A'.repeat(1000);
       const enrichedCtx: NotificationContext = {

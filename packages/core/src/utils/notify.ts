@@ -305,16 +305,26 @@ export function formatTelegramPayload(ctx: INotificationContext): {
   const emoji = getEventEmoji(ctx.event);
   const title = ctx.event === 'run_succeeded' ? 'PR Opened' : getEventTitle(ctx.event);
 
-  // If PR details are present, use the rich structured template
-  if (ctx.prUrl && ctx.prTitle) {
+  // If any PR details are present, use the rich structured template.  In the
+  // common happy path we have a full gh-enriched payload, but keeping the URL
+  // path rich prevents successful PR-open notifications from degrading to the
+  // generic three-line message when gh metadata lookup is transiently partial.
+  if (ctx.prUrl || ctx.prTitle || ctx.prNumber !== undefined) {
     const lines: string[] = [];
+    const prLabelParts = ['PR'];
+    if (ctx.prNumber !== undefined) {
+      prLabelParts.push(`#${ctx.prNumber}`);
+    }
+    const prLabel = ctx.prTitle
+      ? `${prLabelParts.join(' ')}: ${ctx.prTitle}`
+      : prLabelParts.join(' ');
 
     lines.push(`*${escapeMarkdownV2(emoji + ' ' + title)}*`);
     lines.push('');
-    lines.push(
-      `${escapeMarkdownV2('📋')} *${escapeMarkdownV2('PR #' + (ctx.prNumber ?? '') + ': ' + ctx.prTitle)}*`,
-    );
-    lines.push(`${escapeMarkdownV2('🔗')} ${escapeMarkdownV2(ctx.prUrl)}`);
+    lines.push(`${escapeMarkdownV2('📋')} *${escapeMarkdownV2(prLabel)}*`);
+    if (ctx.prUrl) {
+      lines.push(`${escapeMarkdownV2('🔗')} ${escapeMarkdownV2(ctx.prUrl)}`);
+    }
 
     // Summary from PR body
     if (ctx.prBody && ctx.prBody.trim().length > 0) {
@@ -375,9 +385,18 @@ export function formatTelegramPayload(ctx: INotificationContext): {
       }
     }
 
-    // Footer
+    // Metadata footer
     lines.push('');
-    lines.push(escapeMarkdownV2(`⚙️ Project: ${ctx.projectName} | Provider: ${ctx.provider}`));
+    lines.push(escapeMarkdownV2('⚙️ Meta'));
+    lines.push(escapeMarkdownV2(`Project: ${ctx.projectName}`));
+    lines.push(escapeMarkdownV2(`Provider: ${ctx.provider}`));
+    lines.push(escapeMarkdownV2(`Exit code: ${ctx.exitCode}`));
+    if (ctx.prdName) {
+      lines.push(escapeMarkdownV2(`PRD: ${ctx.prdName}`));
+    }
+    if (ctx.branchName) {
+      lines.push(escapeMarkdownV2(`Branch: ${ctx.branchName}`));
+    }
 
     return {
       text: lines.join('\n'),

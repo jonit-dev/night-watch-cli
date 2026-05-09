@@ -19,6 +19,7 @@ import {
   dim,
   executeScriptWithOutput,
   fetchPrDetails,
+  fetchPrDetailsByNumber,
   fetchPrDetailsForBranch,
   getRepositories,
   getScriptPath,
@@ -36,7 +37,7 @@ import {
 } from '@night-watch/core';
 import { buildBaseEnvVars, maybeApplyCronSchedulingDelay } from './shared/env-builder.js';
 import { getFeedbackAnalysisOptions, isFeedbackEnabled } from './shared/feedback.js';
-import type { IPrDetails, JobType } from '@night-watch/core';
+import type { INotificationContext, IPrDetails, JobType } from '@night-watch/core';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -63,6 +64,12 @@ export interface IRunOutcomeRecordInput {
   metadata?: Record<string, unknown>;
 }
 
+export interface IRunPrMetadata {
+  prUrl?: string;
+  branchName?: string;
+  prNumber?: number;
+}
+
 /**
  * Map executor exit/result state to a notification event.
  * Returns null when the run completed with no actionable work (skip/no-op).
@@ -87,6 +94,36 @@ export function resolveRunNotificationEvent(
 }
 
 /**
+ * Extract the most recent GitHub PR URL from raw executor output.
+ * This is a safety net for older/custom scripts that open a PR successfully
+ * but do not emit complete NIGHT_WATCH_RESULT metadata.
+ */
+export function extractPrUrlFromOutput(output?: string): string | undefined {
+  if (!output) {
+    return undefined;
+  }
+
+  const matches = Array.from(
+    output.matchAll(/https:\/\/github\.com\/[^\s)]+\/pull\/\d+/g),
+    (match) => match[0],
+  );
+  return matches.at(-1);
+}
+
+function extractResultValueFromOutput(output: string | undefined, key: string): string | undefined {
+  if (!output) {
+    return undefined;
+  }
+
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`\\b${escapedKey}=([^\\s|]+)`, 'g');
+  const matches = Array.from(output.matchAll(regex), (match) => match[1]).filter(
+    (value): value is string => value !== undefined && value.length > 0,
+  );
+  return matches.at(-1);
+}
+
+/**
  * Determine if cross-project fallback should run for this executor result.
  */
 export function shouldAttemptCrossProjectFallback(
@@ -107,6 +144,102 @@ export function shouldAttemptCrossProjectFallback(
     return false;
   }
   return scriptStatus === 'skip_no_eligible_prd';
+}
+
+export function parsePrNumberFromUrl(prUrl?: string): number | undefined {
+  const match = prUrl?.match(/\/pull\/(\d+)(?:\b|[/?#])/);
+  if (!match?.[1]) {
+    return undefined;
+  }
+  const parsed = parseInt(match[1], 10);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function getRunPrMetadata(
+  scriptResult: ReturnType<typeof parseScriptResult>,
+  rawOutput?: string,
+): IRunPrMetadata {
+  const prUrl = scriptResult?.data.pr_url ?? extractPrUrlFromOutput(rawOutput);
+  const branchName = scriptResult?.data.branch ?? extractResultValueFromOutput(rawOutput, 'branch');
+  const prNumber =
+    parsePrNumberFromUrl(prUrl) ??
+    (scriptResult?.data.pr_number ? parseInt(scriptResult.data.pr_number, 10) : undefined);
+
+  return {
+    prUrl,
+    branchName,
+    prNumber: prNumber !== undefined && !Number.isNaN(prNumber) ? prNumber : undefined,
+  };
+}
+
+function fetchRunPrDetails(
+  config: INightWatchConfig,
+  projectDir: string,
+  metadata: IRunPrMetadata,
+): IPrDetails | null {
+  // Prefer number lookup. Some gh versions are less reliable with URL selectors,
+  // while PR numbers are unambiguous once parsed from the emitted PR URL.
+  if (metadata.prNumber !== undefined) {
+    const details = fetchPrDetailsByNumber(metadata.prNumber, projectDir);
+    if (details) {
+      return details;
+    }
+  }
+
+  if (metadata.prUrl) {
+    const details = fetchPrDetailsForBranch(metadata.prUrl, projectDir);
+    if (details) {
+      return details;
+    }
+  }
+
+  if (metadata.branchName) {
+    const details = fetchPrDetailsForBranch(metadata.branchName, projectDir);
+    if (details) {
+      return details;
+    }
+  }
+
+  return fetchPrDetails(config.branchPrefix, projectDir);
+}
+
+export function buildRunNotificationContext(
+  config: INightWatchConfig,
+  projectDir: string,
+  event: NotificationEvent,
+  exitCode: number,
+  scriptResult: ReturnType<typeof parseScriptResult>,
+  prDetails: IPrDetails | null,
+  rawOutput?: string,
+): INotificationContext {
+  const metadata = getRunPrMetadata(scriptResult, rawOutput);
+  const timeoutDuration = event === 'run_timeout' ? config.maxRuntime : undefined;
+  const checkpointValue = scriptResult?.data.checkpoint;
+  const checkpointStatus: 'created' | 'available' | 'none' | undefined =
+    checkpointValue === 'created' || checkpointValue === 'available' || checkpointValue === 'none'
+      ? checkpointValue
+      : undefined;
+
+  return {
+    event,
+    projectName: path.basename(projectDir),
+    exitCode,
+    provider: config.provider,
+    prdName: scriptResult?.data.prd ?? extractResultValueFromOutput(rawOutput, 'prd'),
+    branchName: metadata.branchName,
+    duration: timeoutDuration,
+    scriptStatus: scriptResult?.status,
+    failureReason: scriptResult?.data.reason,
+    failureDetail: scriptResult?.data.detail,
+    checkpointStatus,
+    prUrl: prDetails?.url || metadata.prUrl,
+    prTitle: prDetails?.title,
+    prBody: prDetails?.body,
+    prNumber: prDetails?.number ?? metadata.prNumber,
+    filesChanged: prDetails?.changedFiles,
+    additions: prDetails?.additions,
+    deletions: prDetails?.deletions,
+  };
 }
 
 /**
@@ -133,6 +266,7 @@ async function sendRunCompletionNotifications(
   options: IRunOptions,
   exitCode: number,
   scriptResult: ReturnType<typeof parseScriptResult>,
+  rawOutput?: string,
 ): Promise<void> {
   // Rate-limit fallback notifications are sent immediately to Telegram in bash.
   // Send this event only to non-Telegram webhooks to avoid duplicate alerts.
@@ -163,46 +297,19 @@ async function sendRunCompletionNotifications(
   // Enrich with PR details on success (graceful — null if gh fails)
   let prDetails: IPrDetails | null = null;
   if (event === 'run_succeeded') {
-    const prUrl = scriptResult?.data.pr_url;
-    const branch = scriptResult?.data.branch;
-    if (prUrl) {
-      prDetails = fetchPrDetailsForBranch(prUrl, projectDir);
-    }
-    if (!prDetails && branch) {
-      prDetails = fetchPrDetailsForBranch(branch, projectDir);
-    }
-    if (!prDetails) {
-      prDetails = fetchPrDetails(config.branchPrefix, projectDir);
-    }
+    prDetails = fetchRunPrDetails(config, projectDir, getRunPrMetadata(scriptResult, rawOutput));
   }
 
   if (event) {
-    const timeoutDuration = event === 'run_timeout' ? config.maxRuntime : undefined;
-    const checkpointValue = scriptResult?.data.checkpoint;
-    const checkpointStatus: 'created' | 'available' | 'none' | undefined =
-      checkpointValue === 'created' || checkpointValue === 'available' || checkpointValue === 'none'
-        ? checkpointValue
-        : undefined;
-    const _ctx = {
+    const _ctx = buildRunNotificationContext(
+      config,
+      projectDir,
       event,
-      projectName: path.basename(projectDir),
       exitCode,
-      provider: config.provider,
-      prdName: scriptResult?.data.prd,
-      branchName: scriptResult?.data.branch,
-      duration: timeoutDuration,
-      scriptStatus: scriptResult?.status,
-      failureReason: scriptResult?.data.reason,
-      failureDetail: scriptResult?.data.detail,
-      checkpointStatus,
-      prUrl: prDetails?.url,
-      prTitle: prDetails?.title,
-      prBody: prDetails?.body,
-      prNumber: prDetails?.number,
-      filesChanged: prDetails?.changedFiles,
-      additions: prDetails?.additions,
-      deletions: prDetails?.deletions,
-    };
+      scriptResult,
+      prDetails,
+      rawOutput,
+    );
     await sendNotifications(config, _ctx);
   } else if (!options.dryRun) {
     info('Skipping completion notification (no actionable run result)');
@@ -266,6 +373,7 @@ async function runCrossProjectFallback(
           options,
           exitCode,
           scriptResult,
+          `${stdout}\n${stderr}`,
         );
       }
 
@@ -761,7 +869,14 @@ export function runCommand(program: Command): void {
             // Outcome persistence must not change command exit behavior.
           }
 
-          await sendRunCompletionNotifications(config, projectDir, options, exitCode, scriptResult);
+          await sendRunCompletionNotifications(
+            config,
+            projectDir,
+            options,
+            exitCode,
+            scriptResult,
+            `${stdout}\n${stderr}`,
+          );
         }
 
         // Opportunistic cross-project balancing:
