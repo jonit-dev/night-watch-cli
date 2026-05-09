@@ -134,6 +134,17 @@ describe('Package Files', () => {
     expect(fs.existsSync(path.join(templatesDir, 'night-watch.config.json'))).toBe(true);
   });
 
+  it('should default audit template to consolidated report mode', () => {
+    const templatePath = path.join(packageRoot, 'templates', 'audit.md');
+    const content = fs.readFileSync(templatePath, 'utf-8');
+
+    expect(content).toContain('Priority Matrix');
+    expect(content).toContain('Findings by Theme');
+    expect(content).toContain('Full Violation List');
+    expect(content).toContain('Do not use `### Finding N` headings in default report mode.');
+    expect(content).not.toContain('### Finding 1');
+  });
+
   it('should have prd-executor template with required sections', () => {
     const templatePath = path.join(packageRoot, 'templates', 'prd-executor.md');
     const content = fs.readFileSync(templatePath, 'utf-8');

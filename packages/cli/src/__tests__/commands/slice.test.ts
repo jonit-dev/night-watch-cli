@@ -85,6 +85,7 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
       enabled: true,
       schedule: '0 3 * * *',
       maxRuntime: 1800,
+      createIssues: false,
       targetColumn: 'Draft',
     },
     roadmapScanner: defaultRoadmapScanner,

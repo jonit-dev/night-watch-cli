@@ -31,9 +31,10 @@ export const DEFAULT_QA_CONFIG: IQaConfig = {
 };
 
 export const DEFAULT_AUDIT_CONFIG: IAuditConfig = {
-  enabled: true,
+  enabled: false,
   schedule: '50 3 * * 1',
   maxRuntime: 1800,
+  createIssues: false,
   targetColumn: 'Draft',
 };
 

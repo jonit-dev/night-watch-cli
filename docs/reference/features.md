@@ -83,8 +83,8 @@ The QA process runs end-to-end tests using Playwright:
 The auditor performs automated code quality and security reviews:
 
 - Scans codebase for quality issues
-- Generates findings in `logs/audit-report.md`
-- Creates board issues for actionable items
+- Generates a consolidated audit report in `logs/audit-report.md`
+- Creates board issues only when `audit.createIssues` is enabled
 - Runs on configurable schedule (default: weekly Monday 03:50)
 
 **Related:** [Configuration: Audit Settings](configuration.md#code-audit-audit)

@@ -183,7 +183,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => {
     claudeModel: primaryFallbackModel,
     providerScheduleOverrides: config.providerScheduleOverrides ?? [],
     qa: config.qa || getDefaultQaConfig(),
-    audit: config.audit || getDefaultAuditConfig(),
+    audit: { ...getDefaultAuditConfig(), ...(config.audit ?? {}) },
     analytics: config.analytics || getDefaultAnalyticsConfig(),
     feedback: config.feedback ?? {
       enabled: true,
@@ -338,7 +338,7 @@ const Settings: React.FC = () => {
       form.queue.enabled !== (config?.queue?.enabled ?? true) ||
       form.qa.enabled !== (config?.qa.enabled ?? true) ||
       form.qa.schedule !== config?.qa.schedule ||
-      form.audit.enabled !== (config?.audit.enabled ?? true) ||
+      form.audit.enabled !== (config?.audit.enabled ?? false) ||
       form.audit.schedule !== config?.audit.schedule ||
       form.analytics.enabled !== (config?.analytics?.enabled ?? false) ||
       form.analytics.schedule !== (config?.analytics?.schedule ?? getDefaultAnalyticsConfig().schedule) ||

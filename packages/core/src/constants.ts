@@ -154,15 +154,17 @@ export const DEFAULT_QA: IQaConfig = {
 export const QA_LOG_NAME = 'night-watch-qa';
 
 // Audit Configuration
-export const DEFAULT_AUDIT_ENABLED = true;
+export const DEFAULT_AUDIT_ENABLED = false;
 export const DEFAULT_AUDIT_SCHEDULE = '50 3 * * 1'; // weekly Monday 03:50
 export const DEFAULT_AUDIT_MAX_RUNTIME = 1800; // 30 minutes
+export const DEFAULT_AUDIT_CREATE_ISSUES = false;
 export const DEFAULT_AUDIT_TARGET_COLUMN = 'Draft' as const;
 
 export const DEFAULT_AUDIT: IAuditConfig = {
   enabled: DEFAULT_AUDIT_ENABLED,
   schedule: DEFAULT_AUDIT_SCHEDULE,
   maxRuntime: DEFAULT_AUDIT_MAX_RUNTIME,
+  createIssues: DEFAULT_AUDIT_CREATE_ISSUES,
   targetColumn: DEFAULT_AUDIT_TARGET_COLUMN,
 };
 

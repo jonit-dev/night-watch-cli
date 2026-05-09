@@ -46,6 +46,7 @@ export function buildEnvVars(
 
   // Audit-specific settings
   env.NW_AUDIT_MAX_RUNTIME = String(config.audit.maxRuntime);
+  env.NW_AUDIT_CREATE_ISSUES = config.audit.createIssues ? '1' : '0';
   env.NW_CLAUDE_MODEL_ID =
     CLAUDE_MODEL_IDS[config.primaryFallbackModel ?? config.claudeModel ?? 'sonnet'];
 
@@ -108,7 +109,10 @@ export function auditCommand(program: Command): void {
         configTable.push(['Provider', auditProvider]);
         configTable.push(['Provider CLI', PROVIDER_COMMANDS[auditProvider]]);
         configTable.push(['Max Runtime', `${config.audit.maxRuntime}s`]);
-        configTable.push(['Target Column', config.audit.targetColumn]);
+        configTable.push(['Create Board Issues', config.audit.createIssues ? 'yes' : 'no']);
+        if (config.audit.createIssues) {
+          configTable.push(['Target Column', config.audit.targetColumn]);
+        }
         configTable.push(['Report File', path.join(projectDir, 'logs', 'audit-report.md')]);
         console.log(configTable.toString());
 

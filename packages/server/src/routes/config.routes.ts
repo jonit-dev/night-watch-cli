@@ -577,6 +577,10 @@ function validateConfigChanges(
       return 'audit.maxRuntime must be a number >= 60';
     }
 
+    if (audit.createIssues !== undefined && typeof audit.createIssues !== 'boolean') {
+      return 'audit.createIssues must be a boolean';
+    }
+
     if (audit.targetColumn !== undefined && !BOARD_COLUMNS.includes(audit.targetColumn)) {
       return `audit.targetColumn must be one of: ${BOARD_COLUMNS.join(', ')}`;
     }

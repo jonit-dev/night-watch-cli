@@ -187,13 +187,14 @@ export const JOB_REGISTRY: IJobDefinition[] = [
   {
     id: 'audit',
     name: 'Auditor',
-    description: 'Performs code audits and creates issues for findings',
+    description: 'Performs consolidated architecture and code quality audits',
     cliCommand: 'audit',
     logName: 'audit',
     lockSuffix: '-audit.lock',
     queuePriority: 10,
     envPrefix: 'NW_AUDIT',
     extraFields: [
+      { name: 'createIssues', type: 'boolean', defaultValue: false },
       {
         name: 'targetColumn',
         type: 'enum',
@@ -202,11 +203,12 @@ export const JOB_REGISTRY: IJobDefinition[] = [
       },
     ],
     defaultConfig: {
-      enabled: true,
+      enabled: false,
       schedule: '50 3 * * 1',
       maxRuntime: 1800,
+      createIssues: false,
       targetColumn: 'Draft',
-    } as IBaseJobConfig & { targetColumn: string },
+    } as IBaseJobConfig & { createIssues: boolean; targetColumn: string },
   },
   {
     id: 'analytics',

@@ -300,8 +300,18 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
     if (!jobDef) continue;
     const rawJob = readObject(rawConfig[jobId]);
     if (rawJob) {
+      const normalizedJob = normalizeJobConfig(rawJob, jobDef);
+      if (
+        jobId === 'audit' &&
+        rawJob.createIssues === undefined &&
+        rawJob.targetColumn !== undefined
+      ) {
+        // Legacy audit configs used targetColumn as the only opt-in to board issue creation.
+        // Keep those explicit configs working while new/default configs stay report-only.
+        normalizedJob.createIssues = true;
+      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (normalized as any)[jobId] = normalizeJobConfig(rawJob, jobDef);
+      (normalized as any)[jobId] = normalizedJob;
     }
   }
 

@@ -85,6 +85,7 @@ describe('roadmap-scanner', () => {
       enabled: true,
       schedule: '50 3 * * 1',
       maxRuntime: 1800,
+      createIssues: false,
       targetColumn: 'Draft',
     },
     jobProviders: {},

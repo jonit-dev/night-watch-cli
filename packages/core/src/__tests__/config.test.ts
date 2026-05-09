@@ -1340,9 +1340,10 @@ describe('config', () => {
       const config = loadConfig(tempDir);
 
       expect(config.audit).toBeDefined();
-      expect(config.audit.enabled).toBe(true);
+      expect(config.audit.enabled).toBe(false);
       expect(config.audit.schedule).toBe('50 3 * * 1');
       expect(config.audit.maxRuntime).toBe(1800);
+      expect(config.audit.createIssues).toBe(false);
       expect(config.audit.targetColumn).toBe('Draft');
     });
 
@@ -1355,6 +1356,7 @@ describe('config', () => {
             enabled: false,
             schedule: '0 2 * * *',
             maxRuntime: 900,
+            createIssues: true,
             targetColumn: 'Ready',
           },
         }),
@@ -1365,6 +1367,24 @@ describe('config', () => {
       expect(config.audit.enabled).toBe(false);
       expect(config.audit.schedule).toBe('0 2 * * *');
       expect(config.audit.maxRuntime).toBe(900);
+      expect(config.audit.createIssues).toBe(true);
+      expect(config.audit.targetColumn).toBe('Ready');
+    });
+
+    it('should treat legacy audit targetColumn as explicit issue creation opt-in', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          audit: {
+            targetColumn: 'Ready',
+          },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.audit.createIssues).toBe(true);
       expect(config.audit.targetColumn).toBe('Ready');
     });
 
@@ -1400,6 +1420,14 @@ describe('config', () => {
       expect(config.audit.targetColumn).toBe('Ready');
     });
 
+    it('should override audit issue creation from env var', () => {
+      process.env.NW_AUDIT_CREATE_ISSUES = 'true';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.audit.createIssues).toBe(true);
+    });
+
     it('should let env vars override audit config from file', () => {
       const configPath = path.join(tempDir, 'night-watch.config.json');
       fs.writeFileSync(
@@ -1409,6 +1437,7 @@ describe('config', () => {
             enabled: true,
             schedule: '0 2 * * *',
             maxRuntime: 900,
+            createIssues: false,
             targetColumn: 'Review',
           },
         }),
@@ -1421,6 +1450,7 @@ describe('config', () => {
       expect(config.audit.enabled).toBe(false);
       expect(config.audit.schedule).toBe('0 2 * * *');
       expect(config.audit.maxRuntime).toBe(900);
+      expect(config.audit.createIssues).toBe(false);
       expect(config.audit.targetColumn).toBe('Review');
     });
 
@@ -1433,6 +1463,7 @@ describe('config', () => {
             enabled: false,
             schedule: '5 * * * *',
             maxRuntime: 900,
+            createIssues: true,
             targetColumn: 'In Progress',
           },
         }),
@@ -1445,6 +1476,7 @@ describe('config', () => {
       expect(config.audit.enabled).toBe(false);
       expect(config.audit.schedule).toBe('0 */6 * * *');
       expect(config.audit.maxRuntime).toBe(900);
+      expect(config.audit.createIssues).toBe(true);
       expect(config.audit.targetColumn).toBe('In Progress');
     });
   });

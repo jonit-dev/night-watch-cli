@@ -384,6 +384,8 @@ export interface IAuditConfig {
   schedule: string;
   /** Maximum runtime in seconds for the audit */
   maxRuntime: number;
+  /** Whether audit findings should be expanded into board issues */
+  createIssues: boolean;
   /** Board column to place created issues in */
   targetColumn: BoardColumnName;
 }

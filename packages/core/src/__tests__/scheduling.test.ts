@@ -80,6 +80,7 @@ describe('scheduling', () => {
         enabled: true,
         schedule: '50 3 * * 1',
         maxRuntime: 1800,
+        createIssues: false,
         targetColumn: 'Draft',
       },
       analytics: {
@@ -222,6 +223,7 @@ describe('scheduling', () => {
         enabled: false,
         schedule: '50 3 * * 1',
         maxRuntime: 1800,
+        createIssues: false,
         targetColumn: 'Draft',
       },
       analytics: {

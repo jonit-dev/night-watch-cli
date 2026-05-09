@@ -8,6 +8,7 @@ set -euo pipefail
 # The Node.js CLI will inject config values via environment variables.
 # Required env vars (with defaults shown):
 #   NW_AUDIT_MAX_RUNTIME=1800    - Maximum runtime in seconds (30 minutes)
+#   NW_AUDIT_CREATE_ISSUES=0     - Set to 1 to request per-finding board issue sections
 #   NW_PROVIDER_CMD=claude       - AI provider CLI to use (claude, codex, etc.)
 #   NW_DRY_RUN=0                 - Set to 1 for dry-run mode (prints diagnostics only)
 
@@ -73,7 +74,7 @@ fi
 rotate_log
 log_separator
 log "RUN-START: audit invoked project=${PROJECT_DIR} provider=${PROVIDER_CMD} dry_run=${NW_DRY_RUN:-0}"
-log "CONFIG: max_runtime=${MAX_RUNTIME}s max_retries=${NW_AUDIT_MAX_RETRIES:-3} retry_delay=${NW_AUDIT_RETRY_DELAY:-120}s"
+log "CONFIG: max_runtime=${MAX_RUNTIME}s create_issues=${NW_AUDIT_CREATE_ISSUES:-0} max_retries=${NW_AUDIT_MAX_RETRIES:-3} retry_delay=${NW_AUDIT_RETRY_DELAY:-120}s"
 
 if ! acquire_lock "${LOCK_FILE}"; then
   emit_result "skip_locked"
@@ -107,6 +108,15 @@ ${AUDIT_PROMPT_TEMPLATE}"
 fi
 
 AUDIT_PROMPT="$(cat "${AUDIT_PROMPT_TEMPLATE}")"
+if [ "${NW_AUDIT_CREATE_ISSUES:-0}" = "1" ]; then
+  AUDIT_PROMPT="${AUDIT_PROMPT}
+
+## Explicit Board Issue Mode
+
+This project explicitly enabled audit board issue creation. Keep the consolidated report and priority matrix above, and also add a final section named \`## Board Issue Findings\`.
+
+In that final section only, include one \`### Finding N\` block for each issue that genuinely needs a separate board card. Use the legacy exact fields \`Location\`, \`Severity\`, \`Category\`, \`Description\`, \`Snippet\`, and \`Suggested Fix\` so Night Watch can sync those selected findings. Do not create a board issue block for every observation; only include independently executable work items."
+fi
 
 if [ -n "${NW_DEFAULT_BRANCH:-}" ]; then
   DEFAULT_BRANCH="${NW_DEFAULT_BRANCH}"

@@ -75,6 +75,7 @@ function createConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchCo
       enabled: true,
       schedule: '50 3 * * 1',
       maxRuntime: 1800,
+      createIssues: true,
       targetColumn: 'Draft',
     },
     analytics: {
@@ -181,6 +182,28 @@ describe('syncAuditFindingsToBoard', () => {
     expect(mockBoardProvider.createIssue).not.toHaveBeenCalled();
   });
 
+  it('skips board sync by default when audit issue creation is disabled', async () => {
+    fs.writeFileSync(path.join(tempDir, 'logs', 'audit-report.md'), SAMPLE_REPORT, 'utf-8');
+
+    const result = await syncAuditFindingsToBoard(
+      createConfig({
+        audit: {
+          enabled: true,
+          schedule: '50 3 * * 1',
+          maxRuntime: 1800,
+          createIssues: false,
+          targetColumn: 'Draft',
+        },
+      }),
+      tempDir,
+    );
+
+    expect(result.status).toBe('skipped');
+    expect(result.findingsCount).toBe(2);
+    expect(result.summary).toContain('issue creation is disabled');
+    expect(mockBoardProvider.createIssue).not.toHaveBeenCalled();
+  });
+
   it('creates board issues in the configured target column', async () => {
     fs.writeFileSync(path.join(tempDir, 'logs', 'audit-report.md'), SAMPLE_REPORT, 'utf-8');
 
@@ -190,6 +213,7 @@ describe('syncAuditFindingsToBoard', () => {
           enabled: true,
           schedule: '50 3 * * 1',
           maxRuntime: 1800,
+          createIssues: true,
           targetColumn: 'Review',
         },
       }),

@@ -90,7 +90,7 @@ export const WEB_JOB_REGISTRY: IWebJobDefinition[] = [
     color: { bg: 'bg-orange-500', border: 'border-orange-500/60' },
     triggerEndpoint: '/api/actions/audit',
     scheduleTemplateKey: 'audit',
-    getEnabled: (config) => config.audit?.enabled ?? true,
+    getEnabled: (config) => config.audit?.enabled ?? false,
     getSchedule: (config) => config.audit?.schedule ?? '50 3 * * 1',
     settingsSection: 'advanced',
     buildEnabledPatch: (enabled, config) => ({ audit: { ...(config.audit ?? {}), enabled } as IAuditConfig }),

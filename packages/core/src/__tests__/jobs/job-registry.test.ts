@@ -299,13 +299,30 @@ describe('normalizeJobConfig', () => {
   it('normalizes audit config including targetColumn', () => {
     const auditDef = getJobDef('audit')!;
     const result = normalizeJobConfig(
-      { enabled: false, schedule: '0 4 * * 0', maxRuntime: 900, targetColumn: 'Ready' },
+      {
+        enabled: false,
+        schedule: '0 4 * * 0',
+        maxRuntime: 900,
+        createIssues: true,
+        targetColumn: 'Ready',
+      },
       auditDef,
     );
     expect(result.enabled).toBe(false);
     expect(result.schedule).toBe('0 4 * * 0');
     expect(result.maxRuntime).toBe(900);
+    expect(result.createIssues).toBe(true);
     expect(result.targetColumn).toBe('Ready');
+  });
+
+  it('audit defaults to disabled report-only mode', () => {
+    const auditDef = getJobDef('audit')!;
+    const result = normalizeJobConfig({}, auditDef);
+
+    expect(result.enabled).toBe(false);
+    expect(result.schedule).toBe('50 3 * * 1');
+    expect(result.createIssues).toBe(false);
+    expect(result.targetColumn).toBe('Draft');
   });
 
   it('normalizes analytics extra fields', () => {

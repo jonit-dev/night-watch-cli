@@ -80,6 +80,7 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
       enabled: true,
       schedule: '0 2 * * *',
       maxRuntime: 1800,
+      createIssues: false,
       targetColumn: 'Draft',
     },
     queue: {
@@ -178,6 +179,23 @@ describe('audit command', () => {
       const env = buildEnvVars(config, options);
 
       expect(env.NW_AUDIT_MAX_RUNTIME).toBe('3600');
+    });
+
+    it('should set NW_AUDIT_CREATE_ISSUES from config', () => {
+      const config = createTestConfig({
+        audit: {
+          enabled: true,
+          schedule: '0 2 * * *',
+          maxRuntime: 1800,
+          createIssues: true,
+          targetColumn: 'Draft',
+        },
+      });
+      const options: IAuditOptions = { dryRun: false };
+
+      const env = buildEnvVars(config, options);
+
+      expect(env.NW_AUDIT_CREATE_ISSUES).toBe('1');
     });
 
     it('should set NW_CLAUDE_MODEL_ID from config.claudeModel', () => {

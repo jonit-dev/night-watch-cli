@@ -355,9 +355,10 @@ PRDs whose filename (without `.md` extension) matches an entry execute first.
 
 | Field                | Type    | Default        | Description                                       |
 | -------------------- | ------- | -------------- | ------------------------------------------------- |
-| `audit.enabled`      | boolean | `true`         | Enable the audit process                          |
+| `audit.enabled`      | boolean | `false`        | Enable the audit process                          |
 | `audit.schedule`     | string  | `"50 3 * * 1"` | Cron schedule for audit execution (weekly Monday) |
 | `audit.maxRuntime`   | number  | `1800`         | Maximum runtime in seconds for the audit          |
+| `audit.createIssues` | boolean | `false`        | Create board issues for selected audit findings   |
 | `audit.targetColumn` | string  | `"Draft"`      | Board column for created audit issues             |
 
 ### Analytics Job (analytics)
@@ -460,13 +461,14 @@ All Night Watch environment variables are prefixed with `NW_`:
 
 **Job-Specific Environment Variables:**
 
-| Variable               | Config Key          | Example |
-| ---------------------- | ------------------- | ------- |
-| `NW_EXECUTOR_ENABLED`  | `executorEnabled`   | `true`  |
-| `NW_REVIEWER_ENABLED`  | `reviewerEnabled`   | `true`  |
-| `NW_QA_ENABLED`        | `qa.enabled`        | `true`  |
-| `NW_AUDIT_ENABLED`     | `audit.enabled`     | `true`  |
-| `NW_ANALYTICS_ENABLED` | `analytics.enabled` | `false` |
+| Variable                 | Config Key           | Example |
+| ------------------------ | -------------------- | ------- |
+| `NW_EXECUTOR_ENABLED`    | `executorEnabled`    | `true`  |
+| `NW_REVIEWER_ENABLED`    | `reviewerEnabled`    | `true`  |
+| `NW_QA_ENABLED`          | `qa.enabled`         | `true`  |
+| `NW_AUDIT_ENABLED`       | `audit.enabled`      | `false` |
+| `NW_ANALYTICS_ENABLED`   | `analytics.enabled`  | `false` |
+| `NW_AUDIT_CREATE_ISSUES` | `audit.createIssues` | `false` |
 
 **Job-Specific Schedule Variables:**
 

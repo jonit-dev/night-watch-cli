@@ -1468,6 +1468,15 @@ describe('server API', () => {
       expect(response.body.error).toContain('audit.targetColumn');
     });
 
+    it('should validate audit.createIssues is boolean', async () => {
+      const response = await request(app)
+        .put('/api/config')
+        .send({ audit: { createIssues: 'yes' } });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('audit.createIssues');
+    });
+
     it('should accept valid audit config', async () => {
       const response = await request(app)
         .put('/api/config')
@@ -1476,6 +1485,7 @@ describe('server API', () => {
             enabled: false,
             schedule: '0 2 * * *',
             maxRuntime: 900,
+            createIssues: true,
             targetColumn: 'Ready',
           },
         });
@@ -1483,6 +1493,7 @@ describe('server API', () => {
       expect(response.status).toBe(200);
       expect(response.body.audit.enabled).toBe(false);
       expect(response.body.audit.maxRuntime).toBe(900);
+      expect(response.body.audit.createIssues).toBe(true);
       expect(response.body.audit.targetColumn).toBe('Ready');
     });
 

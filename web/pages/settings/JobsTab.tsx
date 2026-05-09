@@ -406,9 +406,16 @@ const JobsTab: React.FC<IJobsTabProps> = ({
                 onChange={(e) => updateField('audit', { ...form.audit, maxRuntime: Number(e.target.value || 0) })}
                 rightIcon={<span className="text-xs">sec</span>}
               />
+              <Switch
+                label="Create Board Issues"
+                checked={form.audit.createIssues}
+                onChange={(checked) => updateField('audit', { ...form.audit, createIssues: checked })}
+                className="self-end pb-2"
+              />
               <Select
                 label="Target Column"
                 value={form.audit.targetColumn}
+                disabled={!form.audit.createIssues}
                 onChange={(value) => updateField('audit', { ...form.audit, targetColumn: value as IAuditConfig['targetColumn'] })}
                 options={[
                   { value: 'Draft', label: 'Draft' },

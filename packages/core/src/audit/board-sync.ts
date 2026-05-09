@@ -85,6 +85,17 @@ export async function syncAuditFindingsToBoard(
   const findings = loadAuditFindings(projectDir);
   const targetColumn = config.audit.targetColumn;
 
+  if (!config.audit.createIssues) {
+    return {
+      status: 'skipped',
+      findingsCount: findings.length,
+      issuesCreated: 0,
+      issuesFailed: 0,
+      targetColumn: null,
+      summary: 'audit board issue creation is disabled',
+    };
+  }
+
   if (findings.length === 0) {
     return {
       status: 'skipped',
