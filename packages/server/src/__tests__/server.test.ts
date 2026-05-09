@@ -89,6 +89,9 @@ describe('server API', () => {
       defaultBranch: 'main',
       provider: 'claude',
       reviewerEnabled: true,
+      audit: {
+        enabled: true,
+      },
       prdDirectory: 'docs/PRDs/night-watch',
       maxRuntime: 7200,
       reviewerMaxRuntime: 3600,
