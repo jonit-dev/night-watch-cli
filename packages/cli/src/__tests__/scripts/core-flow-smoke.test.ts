@@ -1654,6 +1654,103 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(worker26.stdout).not.toContain('NIGHT_WATCH_RESULT:skip_locked');
   });
 
+  it('reviewer should not include a PR that merged before its worker starts in completed notification metadata', () => {
+    const projectDir = mkTempDir('nw-smoke-reviewer-merged-worker-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-reviewer-merged-worker-bin-');
+    writeFakeClaude(fakeBin);
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'args="$*"\n' +
+        'pr_number="${3:-}"\n' +
+        'if [[ "$1" == "repo" && "$2" == "view" ]]; then\n' +
+        "  echo 'owner/repo'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  if [[ "$args" == *"number,headRefName"* ]]; then\n' +
+        "    echo -e '61\\tnight-watch/merged\\t\\n62\\tnight-watch/open\\t'\n" +
+        '  else\n' +
+        "    echo -e 'night-watch/merged\\nnight-watch/open'\n" +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ "$args" == *"state"* ]]; then\n' +
+        '    if [[ "$pr_number" == "61" ]]; then echo "MERGED"; else echo "OPEN"; fi\n' +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$args" == *"mergeStateStatus"* ]]; then\n' +
+        "    echo 'DIRTY'\n" +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$args" == *"headRefOid"* ]]; then\n' +
+        "    echo 'abc123'\n" +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  echo \'{"number":\'"${pr_number:-62}"\'}\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "comment" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "api" ]]; then\n' +
+        "  echo '[]'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(reviewerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BRANCH_PATTERNS: 'night-watch/',
+      NW_AUTO_MERGE: '0',
+      NW_REVIEWER_PARALLEL: '1',
+      NW_REVIEWER_WORKER_STAGGER: '0',
+      NW_REVIEWER_MAX_RUNTIME: '20',
+      NW_QUEUE_ENABLED: '0',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success_reviewed|prs=#62');
+    expect(result.stdout).not.toContain('NIGHT_WATCH_RESULT:success_reviewed|prs=#61,#62');
+  });
+
+  it('reviewer target mode should treat a merged target PR as no longer open', () => {
+    const projectDir = mkTempDir('nw-smoke-reviewer-target-merged-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-reviewer-target-merged-bin-');
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" && "$*" == *"state"* ]]; then\n' +
+        "  echo 'MERGED'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 1\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(reviewerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_TARGET_PR: '61',
+      NW_QUEUE_ENABLED: '0',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:skip_no_open_prs');
+  });
+
   it('executor should emit success_already_merged when PR is already merged before execution', () => {
     const projectDir = mkTempDir('nw-smoke-executor-already-merged-');
     initGitRepo(projectDir);
