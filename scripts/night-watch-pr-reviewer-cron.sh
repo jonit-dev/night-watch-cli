@@ -89,6 +89,26 @@ emit_result() {
   fi
 }
 
+is_pr_open() {
+  local pr_number="${1:?PR number required}"
+  local pr_state=""
+
+  pr_state=$(gh pr view "${pr_number}" --json state --jq '.state // ""' 2>/dev/null || echo "")
+  case "${pr_state}" in
+    OPEN)
+      return 0
+      ;;
+    MERGED|CLOSED)
+      return 1
+      ;;
+  esac
+
+  # Backward-compatible fallback for older gh versions or tests that do not
+  # support the state field. Treat an unknown/empty state as open only when the
+  # PR is still viewable by number.
+  gh pr view "${pr_number}" --json number >/dev/null 2>&1
+}
+
 require_provider_on_path() {
   if ! ensure_provider_on_path "${PROVIDER_CMD}"; then
     echo "ERROR: Provider '${PROVIDER_CMD}' not found in PATH or common installation locations" >&2
@@ -720,7 +740,7 @@ fi
 
 if [ -n "${TARGET_PR}" ]; then
   OPEN_PRS=$(
-    if gh pr view "${TARGET_PR}" --json number >/dev/null 2>&1; then
+    if is_pr_open "${TARGET_PR}"; then
       echo "1"
     else
       echo "0"
@@ -971,6 +991,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
   EXIT_CODE=0
   AUTO_MERGED_PRS=""
   AUTO_MERGE_FAILED_PRS=""
+  ACTUAL_REVIEWED_PRS=""
   NO_CHANGES_PRS=""
   MAX_WORKER_ATTEMPTS=1
   MAX_WORKER_FINAL_SCORE=""
@@ -1015,6 +1036,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
     worker_status=$(printf '%s' "${worker_result}" | sed -n 's/^NIGHT_WATCH_RESULT:\([^|]*\).*$/\1/p')
     worker_auto_merged=$(printf '%s' "${worker_result}" | grep -oP '(?<=auto_merged=)[^|]+' || true)
     worker_auto_merge_failed=$(printf '%s' "${worker_result}" | grep -oP '(?<=auto_merge_failed=)[^|]+' || true)
+    worker_reviewed_prs=$(printf '%s' "${worker_result}" | grep -oP '(?<=prs=)[^|]+' || true)
     worker_attempts=$(printf '%s' "${worker_result}" | grep -oP '(?<=attempts=)[^|]+' || true)
     worker_final_score=$(printf '%s' "${worker_result}" | grep -oP '(?<=final_score=)[^|]+' || true)
     worker_no_changes=$(printf '%s' "${worker_result}" | grep -oP '(?<=no_changes_needed=)[^|]+' || true)
@@ -1022,6 +1044,9 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
 
     AUTO_MERGED_PRS=$(append_csv "${AUTO_MERGED_PRS}" "${worker_auto_merged}")
     AUTO_MERGE_FAILED_PRS=$(append_csv "${AUTO_MERGE_FAILED_PRS}" "${worker_auto_merge_failed}")
+    if [ "${worker_status}" = "success_reviewed" ]; then
+      ACTUAL_REVIEWED_PRS=$(append_csv "${ACTUAL_REVIEWED_PRS}" "${worker_reviewed_prs}")
+    fi
     NO_CHANGES_PRS=$(append_csv "${NO_CHANGES_PRS}" "${worker_no_changes_prs}")
     if [ -z "${worker_no_changes_prs}" ] && [ "${worker_no_changes}" = "1" ]; then
       NO_CHANGES_PRS=$(append_csv "${NO_CHANGES_PRS}" "#${worker_pr}")
@@ -1066,7 +1091,7 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
   # worker runs may have left behind.
   cleanup_reviewer_worktrees
 
-  emit_final_status "${EXIT_CODE}" "${PRS_NEEDING_WORK_CSV}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${MAX_WORKER_ATTEMPTS}" "${MAX_WORKER_FINAL_SCORE}" "0" "${NO_CHANGES_PRS}"
+  emit_final_status "${EXIT_CODE}" "${ACTUAL_REVIEWED_PRS}" "${AUTO_MERGED_PRS}" "${AUTO_MERGE_FAILED_PRS}" "${MAX_WORKER_ATTEMPTS}" "${MAX_WORKER_FINAL_SCORE}" "0" "${NO_CHANGES_PRS}"
   exit "${EXIT_CODE}"
 fi
 
