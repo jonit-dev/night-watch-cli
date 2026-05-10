@@ -1255,6 +1255,7 @@ if [ ${EXIT_CODE} -eq 0 ]; then
       # Board mode: comment with PR URL, then close issue and move to Done
       PR_URL=$(gh pr list --state open --json headRefName,url \
         --jq ".[] | select(.headRefName == \"${BRANCH_NAME}\") | .url" 2>/dev/null || true)
+      PR_URL=${PR_URL:-${EXECUTOR_PR_URL}}
       if [ -n "${PR_URL}" ]; then
         "${NW_CLI}" board comment "${ISSUE_NUMBER}" --body "PR opened: ${PR_URL} (via ${EFFECTIVE_PROVIDER_LABEL})" 2>>"${LOG_FILE}" || true
         gh pr comment "${PR_URL}" --body "> 🤖 Implemented by ${EFFECTIVE_PROVIDER_LABEL}" 2>>"${LOG_FILE}" || true
@@ -1262,16 +1263,17 @@ if [ ${EXIT_CODE} -eq 0 ]; then
       "${NW_CLI}" board close-issue "${ISSUE_NUMBER}" 2>>"${LOG_FILE}" || \
         "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Done" 2>>"${LOG_FILE}" || true
       log "SUCCESS: PR opened and ready for review — ${PR_URL}"
-      emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}${PR_URL:+|pr_url=${PR_URL}}"
+      emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}${PR_URL:+|pr_url=${PR_URL}}${EXECUTOR_PR_NUMBER:+|pr_number=${EXECUTOR_PR_NUMBER}}"
     elif finalize_prd_done "implemented, PR opened on ${BRANCH_NAME}"; then
       # Non-board mode: post attribution comment to the PR
       NON_BOARD_PR_URL=$(gh pr list --state open --json headRefName,url \
         --jq ".[] | select(.headRefName == \"${BRANCH_NAME}\") | .url" 2>/dev/null || true)
+      NON_BOARD_PR_URL=${NON_BOARD_PR_URL:-${EXECUTOR_PR_URL}}
       if [ -n "${NON_BOARD_PR_URL}" ]; then
         gh pr comment "${NON_BOARD_PR_URL}" --body "> 🤖 Implemented by ${EFFECTIVE_PROVIDER_LABEL}" 2>>"${LOG_FILE}" || true
       fi
       log "SUCCESS: PR opened and ready for review — ${NON_BOARD_PR_URL}"
-      emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}${NON_BOARD_PR_URL:+|pr_url=${NON_BOARD_PR_URL}}"
+      emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}${NON_BOARD_PR_URL:+|pr_url=${NON_BOARD_PR_URL}}${EXECUTOR_PR_NUMBER:+|pr_number=${EXECUTOR_PR_NUMBER}}"
     else
       night_watch_history record "${PROJECT_DIR}" "${ELIGIBLE_PRD}" failure --exit-code 1 2>/dev/null || true
       emit_result "failure_finalize" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}|reason=finalize_failed|detail=Failed_to_finalize_open_prd"
