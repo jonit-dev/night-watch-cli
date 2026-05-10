@@ -775,7 +775,8 @@ describe('core flow smoke tests (bash scripts)', () => {
         '  done\n' +
         '  if [[ -f "$NW_SMOKE_CREATED_FLAG" ]]; then\n' +
         '    if [[ "$jq_query" == *".url"* ]]; then\n' +
-        "      echo 'https://example.test/pull/123'\n" +
+        '      # Simulate a transient gh --jq lookup miss; final result should fall back to cached PR metadata.\n' +
+        '      exit 0\n' +
         '    elif [[ -n "$jq_query" ]]; then\n' +
         '      echo "$NW_SMOKE_BRANCH"\n' +
         '    else\n' +
@@ -815,6 +816,7 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success_open_pr');
     expect(result.stdout).toContain('pr_url=https://example.test/pull/123');
+    expect(result.stdout).toContain('pr_number=123');
     expect(fs.existsSync(createdFlag)).toBe(true);
   });
 
