@@ -76,7 +76,7 @@ function repoOwnerResponse(
 
 /** Build a user projects list response. */
 function listUserProjectsResponse(
-  nodes: Array<{ id: string; number: number; title: string; url: string }>,
+  nodes: Array<{ id: string; number: number; title: string; url: string; closed?: boolean }>,
 ): string {
   return gqlResponse({
     user: {
@@ -93,8 +93,9 @@ function projectV2Response(
   title = 'My Board',
   url = 'https://github.com/users/octocat/projects/1',
   number = 1,
+  closed = false,
 ): string {
-  return gqlResponse({ user: { projectV2: { id, number, title, url } } });
+  return gqlResponse({ user: { projectV2: { id, number, title, url, closed } } });
 }
 
 /** Build a Status field GraphQL response with the five lifecycle columns. */
@@ -771,6 +772,46 @@ describe('GitHubProjectsProvider', () => {
   // -------------------------------------------------------------------------
 
   describe('getAllIssues', () => {
+    it('refuses to read from a closed configured GitHub Project', async () => {
+      mockExecFileSync
+        .mockReturnValueOnce(viewerLoginResponse() as unknown as Buffer)
+        .mockReturnValueOnce(
+          projectV2Response(
+            'closed-project-node-id',
+            'Old Night Watch',
+            'https://github.com/orgs/owner/projects/1',
+            1,
+            true,
+          ) as unknown as Buffer,
+        );
+
+      const provider = new GitHubProjectsProvider(mockConfig, CWD);
+      await expect(provider.getAllIssues()).rejects.toThrow(
+        'Configured GitHub Project #1 is closed: "Old Night Watch"',
+      );
+    });
+
+    it('refuses to read from a configured GitHub Project with the wrong title', async () => {
+      mockExecFileSync
+        .mockReturnValueOnce(viewerLoginResponse() as unknown as Buffer)
+        .mockReturnValueOnce(
+          projectV2Response(
+            'wrong-project-node-id',
+            'Other Project Night Watch',
+            'https://github.com/orgs/owner/projects/1',
+            1,
+          ) as unknown as Buffer,
+        );
+
+      const provider = new GitHubProjectsProvider(
+        { ...mockConfig, projectTitle: 'Expected Project Night Watch' },
+        CWD,
+      );
+      await expect(provider.getAllIssues()).rejects.toThrow(
+        'Expected "Expected Project Night Watch", got "Other Project Night Watch"',
+      );
+    });
+
     it('returns all issues from project items', async () => {
       queueCachePrimingMocks();
 

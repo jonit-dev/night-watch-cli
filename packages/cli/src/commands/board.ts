@@ -98,6 +98,7 @@ async function ensureBoardConfigured(
       enabled: config.boardProvider?.enabled ?? true,
       provider: config.boardProvider?.provider ?? 'github',
       projectNumber: boardInfo.number,
+      projectTitle: boardInfo.title,
     },
   });
   if (!result.success) {
@@ -238,6 +239,7 @@ export function boardCommand(program: Command): void {
           boardProvider: {
             ...config.boardProvider,
             projectNumber: boardInfo.number,
+            projectTitle: boardInfo.title,
           },
         });
 

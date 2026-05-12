@@ -1,4 +1,9 @@
-import { BOARD_COLUMNS, BoardColumnName, IBoardIssue, IBoardProviderConfig } from '@/board/types.js';
+import {
+  BOARD_COLUMNS,
+  BoardColumnName,
+  IBoardIssue,
+  IBoardProviderConfig,
+} from '@/board/types.js';
 import { getRepoNwo, getViewerLogin, graphql } from './github-graphql.js';
 import type {
   IGetOrgProjectData,
@@ -70,12 +75,18 @@ export abstract class GitHubProjectsBase {
 
     const { owner, name } = await this.getRepoParts();
     const data = await graphql<IRepositoryOwnerData>(
-      `query ResolveRepoOwner($owner: String!, $name: String!) {
-        repository(owner: $owner, name: $name) {
-          id
-          owner { __typename id login }
+      `
+        query ResolveRepoOwner($owner: String!, $name: String!) {
+          repository(owner: $owner, name: $name) {
+            id
+            owner {
+              __typename
+              id
+              login
+            }
+          }
         }
-      }`,
+      `,
       { owner, name },
       this.cwd,
     );
@@ -83,7 +94,10 @@ export abstract class GitHubProjectsBase {
     if (!data.repository) throw new Error(`Repository ${owner}/${name} not found.`);
 
     const ownerNode = data.repository.owner;
-    if (!ownerNode || (ownerNode.__typename !== 'User' && ownerNode.__typename !== 'Organization')) {
+    if (
+      !ownerNode ||
+      (ownerNode.__typename !== 'User' && ownerNode.__typename !== 'Organization')
+    ) {
       throw new Error(`Failed to resolve repository owner for ${owner}/${name}.`);
     }
 
@@ -120,15 +134,44 @@ export abstract class GitHubProjectsBase {
     return null;
   }
 
+  private assertProjectUsable(projectNode: IProjectV2Node): void {
+    if (projectNode.closed === true) {
+      throw new Error(
+        `Configured GitHub Project #${projectNode.number} is closed: "${projectNode.title}". ` +
+          'Update boardProvider.projectNumber to an open Night Watch board or run `night-watch board setup`.',
+      );
+    }
+
+    const expectedTitle = this.config.projectTitle?.trim();
+    if (expectedTitle && projectNode.title !== expectedTitle) {
+      throw new Error(
+        `Configured GitHub Project #${projectNode.number} title mismatch. ` +
+          `Expected "${expectedTitle}", got "${projectNode.title}". ` +
+          'Update boardProvider.projectNumber/projectTitle or run `night-watch board setup`.',
+      );
+    }
+  }
+
   /** Try user query first, fall back to org query. */
-  private async fetchProjectNode(login: string, projectNumber: number): Promise<IProjectV2Node | null> {
+  private async fetchProjectNode(
+    login: string,
+    projectNumber: number,
+  ): Promise<IProjectV2Node | null> {
     try {
       const userData = await graphql<IGetUserProjectData>(
-        `query GetProject($login: String!, $number: Int!) {
-          user(login: $login) {
-            projectV2(number: $number) { id number title url }
+        `
+          query GetProject($login: String!, $number: Int!) {
+            user(login: $login) {
+              projectV2(number: $number) {
+                id
+                number
+                title
+                url
+                closed
+              }
+            }
           }
-        }`,
+        `,
         { login, number: projectNumber },
         this.cwd,
       );
@@ -139,11 +182,19 @@ export abstract class GitHubProjectsBase {
 
     try {
       const orgData = await graphql<IGetOrgProjectData>(
-        `query GetOrgProject($login: String!, $number: Int!) {
-          organization(login: $login) {
-            projectV2(number: $number) { id number title url }
+        `
+          query GetOrgProject($login: String!, $number: Int!) {
+            organization(login: $login) {
+              projectV2(number: $number) {
+                id
+                number
+                title
+                url
+                closed
+              }
+            }
           }
-        }`,
+        `,
         { login, number: projectNumber },
         this.cwd,
       );
@@ -160,15 +211,27 @@ export abstract class GitHubProjectsBase {
     fieldId: string;
     optionIds: Map<string, string>;
   }> {
-    if (this.cachedProjectId !== null && this.cachedFieldId !== null && this.cachedOptionIds.size > 0) {
-      return { projectId: this.cachedProjectId, fieldId: this.cachedFieldId, optionIds: this.cachedOptionIds };
+    if (
+      this.cachedProjectId !== null &&
+      this.cachedFieldId !== null &&
+      this.cachedOptionIds.size > 0
+    ) {
+      return {
+        projectId: this.cachedProjectId,
+        fieldId: this.cachedFieldId,
+        optionIds: this.cachedOptionIds,
+      };
     }
 
     if (this.cachedProjectId !== null) {
       const statusField = await this.fetchStatusField(this.cachedProjectId);
       this.cachedFieldId = statusField.fieldId;
       this.cachedOptionIds = statusField.optionIds;
-      return { projectId: this.cachedProjectId, fieldId: this.cachedFieldId, optionIds: this.cachedOptionIds };
+      return {
+        projectId: this.cachedProjectId,
+        fieldId: this.cachedFieldId,
+        optionIds: this.cachedOptionIds,
+      };
     }
 
     const projectNumber = this.config.projectNumber;
@@ -182,13 +245,18 @@ export abstract class GitHubProjectsBase {
         `GitHub Project #${projectNumber} not found for repository owner "${await this.getRepoOwnerLogin()}".`,
       );
     }
+    this.assertProjectUsable(projectNode);
 
     this.cachedProjectId = projectNode.id;
     const statusField = await this.fetchStatusField(projectNode.id);
     this.cachedFieldId = statusField.fieldId;
     this.cachedOptionIds = statusField.optionIds;
 
-    return { projectId: this.cachedProjectId, fieldId: this.cachedFieldId, optionIds: this.cachedOptionIds };
+    return {
+      projectId: this.cachedProjectId,
+      fieldId: this.cachedFieldId,
+      optionIds: this.cachedOptionIds,
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -200,18 +268,23 @@ export abstract class GitHubProjectsBase {
     optionIds: Map<string, string>;
   }> {
     const fieldData = await graphql<IStatusFieldData>(
-      `query GetStatusField($projectId: ID!) {
-        node(id: $projectId) {
-          ... on ProjectV2 {
-            field(name: "Status") {
-              ... on ProjectV2SingleSelectField {
-                id
-                options { id name }
+      `
+        query GetStatusField($projectId: ID!) {
+          node(id: $projectId) {
+            ... on ProjectV2 {
+              field(name: "Status") {
+                ... on ProjectV2SingleSelectField {
+                  id
+                  options {
+                    id
+                    name
+                  }
+                }
               }
             }
           }
         }
-      }`,
+      `,
       { projectId },
       this.cwd,
     );
@@ -228,18 +301,23 @@ export abstract class GitHubProjectsBase {
 
   protected async ensureStatusColumns(projectId: string): Promise<void> {
     const fieldData = await graphql<IStatusFieldData>(
-      `query GetStatusField($projectId: ID!) {
-        node(id: $projectId) {
-          ... on ProjectV2 {
-            field(name: "Status") {
-              ... on ProjectV2SingleSelectField {
-                id
-                options { id name }
+      `
+        query GetStatusField($projectId: ID!) {
+          node(id: $projectId) {
+            ... on ProjectV2 {
+              field(name: "Status") {
+                ... on ProjectV2SingleSelectField {
+                  id
+                  options {
+                    id
+                    name
+                  }
+                }
               }
             }
           }
         }
-      }`,
+      `,
       { projectId },
       this.cwd,
     );
@@ -252,22 +330,32 @@ export abstract class GitHubProjectsBase {
     if (required.every((n) => existing.has(n))) return;
 
     await graphql<IUpdateFieldData>(
-      `mutation UpdateField($fieldId: ID!) {
-        updateProjectV2Field(input: {
-          fieldId: $fieldId
-          singleSelectOptions: [
-            { name: "Draft",       color: GRAY,   description: "" }
-            { name: "Ready",       color: BLUE,   description: "" }
-            { name: "In Progress", color: YELLOW, description: "" }
-            { name: "Review",      color: ORANGE, description: "" }
-            { name: "Done",        color: GREEN,  description: "" }
-          ]
-        }) {
-          projectV2Field {
-            ... on ProjectV2SingleSelectField { id options { id name } }
+      `
+        mutation UpdateField($fieldId: ID!) {
+          updateProjectV2Field(
+            input: {
+              fieldId: $fieldId
+              singleSelectOptions: [
+                { name: "Draft", color: GRAY, description: "" }
+                { name: "Ready", color: BLUE, description: "" }
+                { name: "In Progress", color: YELLOW, description: "" }
+                { name: "Review", color: ORANGE, description: "" }
+                { name: "Done", color: GREEN, description: "" }
+              ]
+            }
+          ) {
+            projectV2Field {
+              ... on ProjectV2SingleSelectField {
+                id
+                options {
+                  id
+                  name
+                }
+              }
+            }
           }
         }
-      }`,
+      `,
       { fieldId: field.id },
       this.cwd,
     );
@@ -277,17 +365,24 @@ export abstract class GitHubProjectsBase {
     const repositoryId = await this.getRepositoryNodeId();
     try {
       await graphql<{ linkProjectV2ToRepository: { repository: { id: string } } }>(
-        `mutation LinkProjectToRepository($projectId: ID!, $repositoryId: ID!) {
-          linkProjectV2ToRepository(input: { projectId: $projectId, repositoryId: $repositoryId }) {
-            repository { id }
+        `
+          mutation LinkProjectToRepository($projectId: ID!, $repositoryId: ID!) {
+            linkProjectV2ToRepository(
+              input: { projectId: $projectId, repositoryId: $repositoryId }
+            ) {
+              repository {
+                id
+              }
+            }
           }
-        }`,
+        `,
         { projectId, repositoryId },
         this.cwd,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (message.toLowerCase().includes('already') && message.toLowerCase().includes('project')) return;
+      if (message.toLowerCase().includes('already') && message.toLowerCase().includes('project'))
+        return;
       throw err;
     }
   }
@@ -296,7 +391,10 @@ export abstract class GitHubProjectsBase {
   // Project items
   // -------------------------------------------------------------------------
 
-  private async paginateProjectItems(query: string, projectId: string): Promise<IProjectItemNode[]> {
+  private async paginateProjectItems(
+    query: string,
+    projectId: string,
+  ): Promise<IProjectItemNode[]> {
     const allNodes: IProjectItemNode[] = [];
     let cursor: string | null = null;
 
@@ -378,16 +476,22 @@ export abstract class GitHubProjectsBase {
     optionId: string,
   ): Promise<void> {
     await graphql<IUpdateItemFieldData>(
-      `mutation UpdateItemField($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
-        updateProjectV2ItemFieldValue(input: {
-          projectId: $projectId
-          itemId: $itemId
-          fieldId: $fieldId
-          value: { singleSelectOptionId: $optionId }
-        }) {
-          projectV2Item { id }
+      `
+        mutation UpdateItemField($projectId: ID!, $itemId: ID!, $fieldId: ID!, $optionId: String!) {
+          updateProjectV2ItemFieldValue(
+            input: {
+              projectId: $projectId
+              itemId: $itemId
+              fieldId: $fieldId
+              value: { singleSelectOptionId: $optionId }
+            }
+          ) {
+            projectV2Item {
+              id
+            }
+          }
         }
-      }`,
+      `,
       { projectId, itemId, fieldId, optionId },
       this.cwd,
     );
@@ -397,31 +501,59 @@ export abstract class GitHubProjectsBase {
   // Project listing
   // -------------------------------------------------------------------------
 
-  protected async findExistingProject(owner: IRepoOwnerInfo, title: string): Promise<IProjectV2Node | null> {
+  protected async findExistingProject(
+    owner: IRepoOwnerInfo,
+    title: string,
+  ): Promise<IProjectV2Node | null> {
     try {
       if (owner.type === 'User') {
         const data = await graphql<IListUserProjectsData>(
-          `query ListUserProjects($login: String!) {
-            user(login: $login) {
-              projectsV2(first: 50) { nodes { id number title url } }
+          `
+            query ListUserProjects($login: String!) {
+              user(login: $login) {
+                projectsV2(first: 50) {
+                  nodes {
+                    id
+                    number
+                    title
+                    url
+                    closed
+                  }
+                }
+              }
             }
-          }`,
+          `,
           { login: owner.login },
           this.cwd,
         );
-        return data.user?.projectsV2.nodes.find((p) => p.title === title) ?? null;
+        return (
+          data.user?.projectsV2.nodes.find((p) => p.title === title && p.closed !== true) ?? null
+        );
       }
 
       const data = await graphql<IListOrgProjectsData>(
-        `query ListOrgProjects($login: String!) {
-          organization(login: $login) {
-            projectsV2(first: 50) { nodes { id number title url } }
+        `
+          query ListOrgProjects($login: String!) {
+            organization(login: $login) {
+              projectsV2(first: 50) {
+                nodes {
+                  id
+                  number
+                  title
+                  url
+                  closed
+                }
+              }
+            }
           }
-        }`,
+        `,
         { login: owner.login },
         this.cwd,
       );
-      return data.organization?.projectsV2.nodes.find((p) => p.title === title) ?? null;
+      return (
+        data.organization?.projectsV2.nodes.find((p) => p.title === title && p.closed !== true) ??
+        null
+      );
     } catch {
       return null;
     }

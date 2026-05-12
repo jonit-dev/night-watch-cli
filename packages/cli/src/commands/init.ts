@@ -894,6 +894,7 @@ export function initCommand(program: Command): void {
               enabled: true,
               provider: 'github',
               projectNumber: board.number,
+              projectTitle: board.title,
             };
             fs.writeFileSync(configPath, JSON.stringify(rawConfig, null, 2) + '\n');
             boardSetupStatus = `Created (#${board.number})`;

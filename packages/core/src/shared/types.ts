@@ -347,6 +347,8 @@ export interface IBoardProviderConfig {
   provider: BoardProviderType;
   /** GitHub Projects V2 project number (set after `board setup`) */
   projectNumber?: number;
+  /** Expected GitHub Projects V2 title, used to catch stale or wrong project numbers. */
+  projectTitle?: string;
   /** Repository owner/name (auto-detected from git remote) */
   repo?: string;
 }

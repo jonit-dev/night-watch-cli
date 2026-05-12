@@ -237,6 +237,9 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
     if (typeof rawBoardProvider.projectNumber === 'number') {
       bp.projectNumber = rawBoardProvider.projectNumber;
     }
+    if (typeof rawBoardProvider.projectTitle === 'string') {
+      bp.projectTitle = rawBoardProvider.projectTitle;
+    }
     if (typeof rawBoardProvider.repo === 'string') {
       bp.repo = rawBoardProvider.repo;
     }

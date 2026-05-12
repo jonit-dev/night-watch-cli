@@ -38,7 +38,16 @@ export class GitHubProjectsProvider extends GitHubProjectsBase implements IBoard
   ): Promise<{ issueUrl: string; appliedLabels: string[] }> {
     const requestedLabels = input.labels ?? [];
     const buildIssueArgs = (labels: string[]): string[] => {
-      const args = ['issue', 'create', '--title', input.title, '--body', input.body, '--repo', repo];
+      const args = [
+        'issue',
+        'create',
+        '--title',
+        input.title,
+        '--body',
+        input.body,
+        '--repo',
+        repo,
+      ];
       if (labels.length > 0) {
         args.push('--label', labels.join(','));
       }
@@ -161,6 +170,10 @@ export class GitHubProjectsProvider extends GitHubProjectsBase implements IBoard
     try {
       const node = await this.resolveProjectNode(projectNumber);
       if (!node) return null;
+      if (node.closed === true) return null;
+      if (this.config.projectTitle?.trim() && node.title !== this.config.projectTitle.trim()) {
+        return null;
+      }
       return { id: node.id, number: node.number, title: node.title, url: node.url };
     } catch {
       return null;

@@ -698,6 +698,14 @@ function validateConfigChanges(
     }
 
     if (
+      changes.boardProvider.projectTitle !== undefined &&
+      (typeof changes.boardProvider.projectTitle !== 'string' ||
+        changes.boardProvider.projectTitle.trim().length === 0)
+    ) {
+      return 'boardProvider.projectTitle must be a non-empty string';
+    }
+
+    if (
       changes.boardProvider.repo !== undefined &&
       (typeof changes.boardProvider.repo !== 'string' ||
         changes.boardProvider.repo.trim().length === 0)

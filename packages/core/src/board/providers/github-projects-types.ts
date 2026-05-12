@@ -5,6 +5,7 @@ export interface IProjectV2Node {
   number: number;
   title: string;
   url: string;
+  closed?: boolean;
 }
 
 export interface IGetUserProjectData {
