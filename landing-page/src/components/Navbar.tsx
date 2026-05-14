@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Github, Menu, MoonStar, X } from 'lucide-react';
+import { Github, Menu, MessageCircle, MoonStar, X } from 'lucide-react';
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
@@ -41,6 +41,15 @@ export function Navbar() {
         </nav>
 
         <div className="hidden md:flex items-center gap-4">
+          <a
+            href="https://discord.gg/maCPEJzPXa"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
+          >
+            <MessageCircle className="w-5 h-5" />
+            <span>Discord</span>
+          </a>
           <a
             href="https://github.com/jonit-dev/night-watch-cli"
             target="_blank"
@@ -109,6 +118,15 @@ export function Navbar() {
               className="flex items-center gap-2 hover:text-white transition-colors px-2 py-1"
             >
               <Github className="w-5 h-5" /> GitHub
+            </a>
+            <a
+              href="https://discord.gg/maCPEJzPXa"
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center gap-2 hover:text-white transition-colors px-2 py-1"
+            >
+              <MessageCircle className="w-5 h-5" /> Discord
             </a>
             <a
               href="#quick-start"

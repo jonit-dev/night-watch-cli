@@ -1,4 +1,4 @@
-import { Github, MoonStar } from 'lucide-react';
+import { Github, MessageCircle, MoonStar } from 'lucide-react';
 
 export function Footer() {
   return (
@@ -22,6 +22,14 @@ export function Footer() {
             className="hover:text-white transition-colors flex items-center gap-1"
           >
             <Github className="w-4 h-4" /> GitHub
+          </a>
+          <a
+            href="https://discord.gg/maCPEJzPXa"
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-white transition-colors flex items-center gap-1"
+          >
+            <MessageCircle className="w-4 h-4" /> Discord
           </a>
           <a
             href="https://npmjs.com/package/@jonit-dev/night-watch-cli"
