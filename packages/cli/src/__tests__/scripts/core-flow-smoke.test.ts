@@ -2868,6 +2868,86 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(reviewerLog).toContain('already marked ready for human review at head abc123');
   });
 
+  it('reviewer targeted local repair should bypass ready-for-review marker for current head', () => {
+    const projectDir = mkTempDir('nw-smoke-reviewer-local-repair-ready-marker-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const fakeBin = mkTempDir('nw-smoke-reviewer-local-repair-ready-marker-bin-');
+    const providerTouched = path.join(projectDir, '.reviewer-provider-touched');
+    const ghCallLog = path.join(projectDir, '.gh-calls');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'claude'),
+      '#!/usr/bin/env bash\n' + 'touch "$NW_SMOKE_REVIEWER_PROVIDER_TOUCHED"\n' + 'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'printf \'%s\\n\' "$*" >> "$NW_SMOKE_GH_CALL_LOG"\n' +
+        'args="$*"\n' +
+        'if [[ "$1" == "repo" && "$2" == "view" ]]; then\n' +
+        "  echo 'owner/repo'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        "  printf '1\\tnight-watch/already-reviewed\\tready-for-review\\n'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ "$args" == *"mergeStateStatus"* ]]; then\n' +
+        "    echo 'CLEAN'\n" +
+        '  elif [[ "$args" == *"headRefOid"* ]]; then\n' +
+        "    echo 'abc123'\n" +
+        '  elif [[ "$args" == *"comments"* ]]; then\n' +
+        "    printf '<!-- night-watch-ready-for-review headRefOid:abc123 -->\\n\\n**Overall Score:** 85/100\\n'\n" +
+        '  else\n' +
+        '    echo \'{"number":1}\'\n' +
+        '  fi\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "checks" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "edit" ]]; then\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "api" ]]; then\n' +
+        "  printf '<!-- night-watch-ready-for-review headRefOid:abc123 -->\\n\\n**Overall Score:** 85/100\\n'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(reviewerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_PROVIDER_CMD: 'claude',
+      NW_DEFAULT_BRANCH: 'main',
+      NW_BRANCH_PATTERNS: 'night-watch/',
+      NW_MIN_REVIEW_SCORE: '80',
+      NW_AUTO_MERGE: '0',
+      NW_QUEUE_ENABLED: '0',
+      NW_TARGET_PR: '1',
+      NW_TARGET_LOCAL_CHECK_COMMAND: 'yarn verify',
+      NW_TARGET_LOCAL_CHECK_OUTPUT: 'lint failed',
+      NW_SMOKE_REVIEWER_PROVIDER_TOUCHED: providerTouched,
+      NW_SMOKE_GH_CALL_LOG: ghCallLog,
+    });
+
+    expect(result.status).toBe(0);
+    expect(fs.existsSync(providerTouched)).toBe(true);
+
+    const reviewerLog = fs.readFileSync(path.join(projectDir, 'logs', 'reviewer.log'), 'utf-8');
+    expect(reviewerLog).toContain('failed merge-gate local checks; targeted repair required');
+    expect(reviewerLog).not.toContain('skipping repeat automated review');
+
+    const ghCalls = fs.readFileSync(ghCallLog, 'utf-8');
+    expect(ghCalls).toContain('pr edit 1 --remove-label ready-for-review');
+  });
+
   it('reviewer should skip PRs labeled needs-human-review', () => {
     const projectDir = mkTempDir('nw-smoke-reviewer-needs-human-review-');
     initGitRepo(projectDir);

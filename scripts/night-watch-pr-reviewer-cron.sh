@@ -858,6 +858,17 @@ while IFS=$'\t' read -r pr_number pr_branch pr_labels; do
     continue
   fi
 
+  if [ -n "${TARGET_PR}" ] && [ "${pr_number}" = "${TARGET_PR}" ] && [ -n "${NW_TARGET_LOCAL_CHECK_COMMAND:-}" ]; then
+    if [ "${local_ready_for_review_label_present}" -eq 1 ]; then
+      log "INFO: PR #${pr_number} (${pr_branch}) failed merge-gate local checks; removing stale ${READY_FOR_REVIEW_LABEL} label"
+      clear_ready_for_human_review_label "${pr_number}"
+    fi
+    log "INFO: PR #${pr_number} (${pr_branch}) failed merge-gate local checks; targeted repair required"
+    NEEDS_WORK=1
+    PRS_NEEDING_WORK="${PRS_NEEDING_WORK} #${pr_number}"
+    continue
+  fi
+
   if has_ready_for_human_review_marker "${all_comments}" "${current_head_sha}"; then
     SKIPPED_ALREADY_REVIEWED_CURRENT_HEAD=1
     log "INFO: PR #${pr_number} (${pr_branch}) is already marked ready for human review at head ${current_head_sha:0:12}; skipping repeat automated review"
