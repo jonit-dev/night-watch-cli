@@ -269,17 +269,91 @@ wait_for_ci_passing_on_head() {
   [ "${LAST_CI_STATUS}" = "passing" ]
 }
 
-run_local_checks_for_head() {
+find_existing_worktree_for_head() {
+  local pr_branch="${1}"
+  local expected_head="${2}"
+  local project_real=""
+  local worktree_path=""
+  local branch=""
+  local head=""
+
+  project_real=$(cd "${PROJECT_DIR}" && pwd -P 2>/dev/null || echo "${PROJECT_DIR}")
+
+  while IFS= read -r line; do
+    if [[ "${line}" == worktree\ * ]]; then
+      worktree_path="${line#worktree }"
+      branch=""
+      head=""
+      continue
+    fi
+    if [[ "${line}" == HEAD\ * ]]; then
+      head="${line#HEAD }"
+      continue
+    fi
+    if [[ "${line}" == branch\ * ]]; then
+      branch="${line#branch refs/heads/}"
+      if [ -n "${worktree_path}" ] \
+        && [ "${branch}" = "${pr_branch}" ] \
+        && [ "${head}" = "${expected_head}" ] \
+        && [ -d "${worktree_path}" ]; then
+        local worktree_real=""
+        worktree_real=$(cd "${worktree_path}" && pwd -P 2>/dev/null || echo "${worktree_path}")
+        if [ "${worktree_real}" = "${project_real}" ]; then
+          continue
+        fi
+        if git -C "${worktree_path}" diff --quiet >/dev/null 2>&1 \
+          && git -C "${worktree_path}" diff --cached --quiet >/dev/null 2>&1; then
+          printf "%s" "${worktree_path}"
+          return 0
+        fi
+      fi
+    fi
+  done < <(git worktree list --porcelain 2>/dev/null || true)
+
+  return 1
+}
+
+run_local_check_command_in_dir() {
   local pr_number="${1}"
   local expected_head="${2}"
+  local check_dir="${3}"
+  local check_exit=1
+
+  set +e
+  (
+    cd "${check_dir}"
+    bash -lc "${LOCAL_CHECK_COMMAND}"
+  ) 2>&1 | tee -a "${LOG_FILE}"
+  check_exit=${PIPESTATUS[0]}
+  set -e
+
+  if [ "${check_exit}" -eq 0 ]; then
+    log "INFO: PR #${pr_number}: Local checks passed for head ${expected_head}"
+    return 0
+  fi
+
+  log "INFO: PR #${pr_number}: Local checks failed for head ${expected_head} (exit ${check_exit})"
+  return 1
+}
+
+run_local_checks_for_head() {
+  local pr_number="${1}"
+  local pr_branch="${2}"
+  local expected_head="${3}"
   local temp_parent=""
   local worktree_dir=""
+  local existing_worktree_dir=""
   local temp_ref=""
-  local check_exit=1
 
   if [ -z "${LOCAL_CHECK_COMMAND}" ]; then
     log "INFO: PR #${pr_number}: Local check command is empty, treating fallback as failed"
     return 1
+  fi
+
+  if existing_worktree_dir=$(find_existing_worktree_for_head "${pr_branch}" "${expected_head}"); then
+    log "INFO: PR #${pr_number}: Reusing existing worktree for local checks: ${existing_worktree_dir}"
+    run_local_check_command_in_dir "${pr_number}" "${expected_head}" "${existing_worktree_dir}"
+    return $?
   fi
 
   temp_parent=$(mktemp -d "${TMPDIR:-/tmp}/night-watch-merger-${pr_number}.XXXXXX")
@@ -311,23 +385,12 @@ run_local_checks_for_head() {
     fi
   fi
 
-  set +e
-  (
-    cd "${worktree_dir}"
-    bash -lc "${LOCAL_CHECK_COMMAND}"
-  ) 2>&1 | tee -a "${LOG_FILE}"
-  check_exit=${PIPESTATUS[0]}
-  set -e
+  run_local_check_command_in_dir "${pr_number}" "${expected_head}" "${worktree_dir}"
+  local check_result=$?
 
   cleanup_local_check_worktree
 
-  if [ "${check_exit}" -eq 0 ]; then
-    log "INFO: PR #${pr_number}: Local checks passed for head ${expected_head}"
-    return 0
-  fi
-
-  log "INFO: PR #${pr_number}: Local checks failed for head ${expected_head} (exit ${check_exit})"
-  return 1
+  return "${check_result}"
 }
 
 ci_gate_allows_head() {
@@ -349,7 +412,7 @@ ci_gate_allows_head() {
 
   if [ "${CI_POLICY}" = "fallback-local" ]; then
     log "INFO: PR #${pr_number} (${pr_branch}): ${context} not passing on head ${expected_head} (${ci_status}); trying local checks"
-    if run_local_checks_for_head "${pr_number}" "${expected_head}"; then
+    if run_local_checks_for_head "${pr_number}" "${pr_branch}" "${expected_head}"; then
       return 0
     fi
     log "INFO: PR #${pr_number} (${pr_branch}): Local check fallback failed, skipping"
@@ -540,7 +603,7 @@ while IFS= read -r pr_json; do
       if ! wait_for_ci_passing_on_head "${pr_number}" "${pr_head_after_rebase}"; then
         log "INFO: PR #${pr_number}: Fresh CI not passing on head ${pr_head_after_rebase} after rebase (${LAST_CI_STATUS}, waited ${CI_MAX_WAIT}s)"
         if [ "${CI_POLICY}" = "fallback-local" ]; then
-          if ! run_local_checks_for_head "${pr_number}" "${pr_head_after_rebase}"; then
+          if ! run_local_checks_for_head "${pr_number}" "${pr_branch}" "${pr_head_after_rebase}"; then
             log "INFO: PR #${pr_number}: Fresh local check fallback failed after rebase, skipping"
             continue
           fi

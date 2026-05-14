@@ -342,6 +342,76 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(mergerLog).toContain('Local checks passed');
   });
 
+  it('merger local fallback should reuse a clean existing PR branch worktree', () => {
+    const projectDir = mkTempDir('nw-smoke-merger-existing-worktree-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const branchName = 'night-watch/existing-worktree';
+    const existingWorktree = path.join(path.dirname(projectDir), 'nw-smoke-existing-pr-worktree');
+    execSync(`git worktree add -b ${branchName} ${existingWorktree} HEAD`, {
+      cwd: projectDir,
+      stdio: 'ignore',
+    });
+    tempDirs.push(existingWorktree);
+    const headOid = execSync('git rev-parse HEAD', {
+      cwd: existingWorktree,
+      encoding: 'utf-8',
+    }).trim();
+
+    const fakeBin = mkTempDir('nw-smoke-bin-merger-existing-worktree-');
+    const ghCallLog = path.join(projectDir, '.smoke-gh-calls');
+    const checkCwdFile = path.join(projectDir, '.smoke-check-cwd');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'printf \'%s\\n\' "$*" >> "$NW_SMOKE_GH_CALL_LOG"\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  echo \'[{"number":123,"headRefName":"night-watch/existing-worktree","createdAt":"2026-01-01T00:00:00Z","isDraft":false,"labels":[]}]\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ "$*" == *"comments"* ]]; then\n' +
+        "    echo '100'\n" +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$*" == *"headRefOid,statusCheckRollup"* ]]; then\n' +
+        '    printf \'{"headRefOid":"%s","statusCheckRollup":[{"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"FAILURE"}]}\\n\' "$NW_SMOKE_HEAD_OID"\n' +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$*" == *"headRefOid"* ]]; then\n' +
+        '    echo "$NW_SMOKE_HEAD_OID"\n' +
+        '    exit 0\n' +
+        '  fi\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "merge" ]]; then\n' +
+        "  echo 'merged'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(mergerScript, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_SMOKE_GH_CALL_LOG: ghCallLog,
+      NW_SMOKE_HEAD_OID: headOid,
+      NW_SMOKE_CHECK_CWD_FILE: checkCwdFile,
+      NW_MERGER_MAX_PRS_PER_RUN: '1',
+      NW_MERGER_REBASE_BEFORE_MERGE: '0',
+      NW_MERGER_CI_POLICY: 'fallback-local',
+      NW_MERGER_LOCAL_CHECK_COMMAND: 'pwd > "$NW_SMOKE_CHECK_CWD_FILE"',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success|merged=1|failed=0|prs=123');
+    expect(fs.readFileSync(checkCwdFile, 'utf-8').trim()).toBe(existingWorktree);
+    const mergerLog = fs.readFileSync(path.join(projectDir, 'logs', 'merger.log'), 'utf-8');
+    expect(mergerLog).toContain(`Reusing existing worktree for local checks: ${existingWorktree}`);
+    expect(mergerLog).not.toContain('Fetching PR head');
+  });
+
   it('merger should merge without checking CI when CI policy is ignore', () => {
     const projectDir = mkTempDir('nw-smoke-merger-ignore-ci-');
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
