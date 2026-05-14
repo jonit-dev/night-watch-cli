@@ -258,6 +258,17 @@ export const JOB_REGISTRY: IJobDefinition[] = [
       { name: 'branchPatterns', type: 'string[]', defaultValue: [] },
       { name: 'rebaseBeforeMerge', type: 'boolean', defaultValue: true },
       { name: 'maxPrsPerRun', type: 'number', defaultValue: 0 },
+      {
+        name: 'ciPolicy',
+        type: 'enum',
+        enumValues: ['ci-only', 'fallback-local', 'ignore'],
+        defaultValue: 'fallback-local',
+      },
+      {
+        name: 'localCheckCommand',
+        type: 'string',
+        defaultValue: 'yarn install --frozen-lockfile && yarn verify && yarn test',
+      },
     ],
     defaultConfig: {
       enabled: false,
@@ -268,12 +279,16 @@ export const JOB_REGISTRY: IJobDefinition[] = [
       branchPatterns: [],
       rebaseBeforeMerge: true,
       maxPrsPerRun: 0,
+      ciPolicy: 'fallback-local',
+      localCheckCommand: 'yarn install --frozen-lockfile && yarn verify && yarn test',
     } as IBaseJobConfig & {
       mergeMethod: string;
       minReviewScore: number;
       branchPatterns: string[];
       rebaseBeforeMerge: boolean;
       maxPrsPerRun: number;
+      ciPolicy: string;
+      localCheckCommand: string;
     },
   },
 ];

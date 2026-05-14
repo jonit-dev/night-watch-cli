@@ -219,6 +219,9 @@ export const DEFAULT_MERGER_MERGE_METHOD: MergeMethod = 'squash';
 export const DEFAULT_MERGER_MIN_REVIEW_SCORE = 80;
 export const DEFAULT_MERGER_REBASE_BEFORE_MERGE = true;
 export const DEFAULT_MERGER_MAX_PRS_PER_RUN = 0;
+export const DEFAULT_MERGER_CI_POLICY = 'fallback-local';
+export const DEFAULT_MERGER_LOCAL_CHECK_COMMAND =
+  'yarn install --frozen-lockfile && yarn verify && yarn test';
 
 export const DEFAULT_MERGER: IMergerConfig = {
   enabled: DEFAULT_MERGER_ENABLED,
@@ -229,6 +232,8 @@ export const DEFAULT_MERGER: IMergerConfig = {
   branchPatterns: [],
   rebaseBeforeMerge: DEFAULT_MERGER_REBASE_BEFORE_MERGE,
   maxPrsPerRun: DEFAULT_MERGER_MAX_PRS_PER_RUN,
+  ciPolicy: DEFAULT_MERGER_CI_POLICY,
+  localCheckCommand: DEFAULT_MERGER_LOCAL_CHECK_COMMAND,
 };
 
 export const MERGER_LOG_NAME = 'merger';

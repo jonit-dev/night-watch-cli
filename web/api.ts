@@ -34,6 +34,7 @@ import type {
     IWebhookTriggerGithubConfig,
     IWebhookTriggerGithubRule,
     JobType,
+    MergerCiPolicy,
     MergeMethod,
     QaArtifacts,
     QueueMode,
@@ -47,7 +48,7 @@ export type {
     INotificationConfig, IFeedbackConfig, IPrdInfo, IProviderBucketConfig, IProviderPreset, IProviderScheduleOverride, IPrInfo, IProcessInfo, IQaConfig,
     IPrResolverConfig, IQueueConfig, IRoadmapItem, IRoadmapScannerConfig, IRoadmapStatus, IStatusSnapshot, IWebhookConfig, IWebhookTriggerConfig,
     IWebhookTriggerGithubConfig, IWebhookTriggerGithubRule,
-    JobType, MergeMethod, QaArtifacts, QueueMode
+    JobType, MergerCiPolicy, MergeMethod, QaArtifacts, QueueMode
 };
 
 export type PrdWithContent = IPrdInfo & { content: string };

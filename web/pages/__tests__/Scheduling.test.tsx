@@ -130,6 +130,8 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
       branchPatterns: [],
       rebaseBeforeMerge: true,
       maxPrsPerRun: 0,
+      ciPolicy: 'fallback-local',
+      localCheckCommand: 'yarn install --frozen-lockfile && yarn verify && yarn test',
     },
   };
 

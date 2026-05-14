@@ -54,6 +54,8 @@ export function buildEnvVars(
   ).join(',');
   env.NW_MERGER_REBASE_BEFORE_MERGE = config.merger.rebaseBeforeMerge ? '1' : '0';
   env.NW_MERGER_MAX_PRS_PER_RUN = String(config.merger.maxPrsPerRun);
+  env.NW_MERGER_CI_POLICY = config.merger.ciPolicy;
+  env.NW_MERGER_LOCAL_CHECK_COMMAND = config.merger.localCheckCommand;
 
   return env;
 }
@@ -132,6 +134,8 @@ function printDryRun(
     'Max PRs Per Run',
     config.merger.maxPrsPerRun === 0 ? 'Unlimited' : String(config.merger.maxPrsPerRun),
   ]);
+  configTable.push(['CI Policy', config.merger.ciPolicy]);
+  configTable.push(['Local Check Command', config.merger.localCheckCommand]);
   console.log(configTable.toString());
 
   header('Environment Variables');

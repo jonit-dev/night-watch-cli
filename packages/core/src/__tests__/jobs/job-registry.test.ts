@@ -405,6 +405,10 @@ describe('normalizeJobConfig', () => {
     expect(result.branchPatterns).toEqual([]);
     expect(result.rebaseBeforeMerge).toBe(true);
     expect(result.maxPrsPerRun).toBe(0);
+    expect(result.ciPolicy).toBe('fallback-local');
+    expect(result.localCheckCommand).toBe(
+      'yarn install --frozen-lockfile && yarn verify && yarn test',
+    );
   });
 
   it('normalizeJobConfig handles merger extra fields with custom values', () => {
@@ -417,6 +421,8 @@ describe('normalizeJobConfig', () => {
         branchPatterns: ['feat/', 'fix/'],
         rebaseBeforeMerge: false,
         maxPrsPerRun: 3,
+        ciPolicy: 'ignore',
+        localCheckCommand: 'pnpm lint && pnpm test',
       },
       def,
     );
@@ -426,6 +432,8 @@ describe('normalizeJobConfig', () => {
     expect(result.branchPatterns).toEqual(['feat/', 'fix/']);
     expect(result.rebaseBeforeMerge).toBe(false);
     expect(result.maxPrsPerRun).toBe(3);
+    expect(result.ciPolicy).toBe('ignore');
+    expect(result.localCheckCommand).toBe('pnpm lint && pnpm test');
   });
 });
 

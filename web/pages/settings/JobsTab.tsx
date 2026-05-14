@@ -699,6 +699,22 @@ const JobsTab: React.FC<IJobsTabProps> = ({
                 value={String(form.merger.maxPrsPerRun)}
                 onChange={(e) => updateField('merger', { ...form.merger, maxPrsPerRun: Math.max(0, Number(e.target.value || 0)) })}
               />
+              <Select
+                label="CI Policy"
+                value={form.merger.ciPolicy}
+                onChange={(val) => updateField('merger', { ...form.merger, ciPolicy: val as IMergerConfig['ciPolicy'] })}
+                options={[
+                  { label: 'Fallback to Local Checks', value: 'fallback-local' },
+                  { label: 'Require GitHub CI', value: 'ci-only' },
+                  { label: 'Ignore CI', value: 'ignore' },
+                ]}
+              />
+              <Input
+                label="Local Check Command"
+                value={form.merger.localCheckCommand}
+                onChange={(e) => updateField('merger', { ...form.merger, localCheckCommand: e.target.value })}
+                helperText="Used only when CI policy falls back to local checks."
+              />
             </div>
             <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
               <div>

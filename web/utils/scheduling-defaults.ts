@@ -68,6 +68,8 @@ export const DEFAULT_MERGER_CONFIG: IMergerConfig = {
   branchPatterns: [],
   rebaseBeforeMerge: true,
   maxPrsPerRun: 0,
+  ciPolicy: 'fallback-local',
+  localCheckCommand: 'yarn install --frozen-lockfile && yarn verify && yarn test',
 };
 
 export function getDefaultRoadmapScannerConfig(): IRoadmapScannerConfig {

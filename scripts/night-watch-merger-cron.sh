@@ -14,6 +14,8 @@ set -euo pipefail
 #   NW_MERGER_BRANCH_PATTERNS=               - Comma-separated branch prefixes (empty = all)
 #   NW_MERGER_REBASE_BEFORE_MERGE=1          - Set to 1 to rebase before merging
 #   NW_MERGER_MAX_PRS_PER_RUN=0             - Max PRs to merge per run (0 = unlimited)
+#   NW_MERGER_CI_POLICY=fallback-local      - CI gate: ci-only|fallback-local|ignore
+#   NW_MERGER_LOCAL_CHECK_COMMAND=...       - Command run in temp PR worktree for local fallback
 #   NW_MERGER_CI_MAX_WAIT=300                - Max seconds to wait for checks after rebase
 #   NW_MERGER_CI_POLL_INTERVAL=15            - Seconds between check polls after rebase
 #   NW_DRY_RUN=0                             - Set to 1 for dry-run mode
@@ -30,6 +32,8 @@ REBASE_BEFORE_MERGE="${NW_MERGER_REBASE_BEFORE_MERGE:-1}"
 MAX_PRS_PER_RUN="${NW_MERGER_MAX_PRS_PER_RUN:-0}"
 CI_MAX_WAIT="${NW_MERGER_CI_MAX_WAIT:-300}"
 CI_POLL_INTERVAL="${NW_MERGER_CI_POLL_INTERVAL:-15}"
+CI_POLICY="${NW_MERGER_CI_POLICY:-fallback-local}"
+LOCAL_CHECK_COMMAND="${NW_MERGER_LOCAL_CHECK_COMMAND:-yarn install --frozen-lockfile && yarn verify && yarn test}"
 BRANCH_PATTERNS_RAW="${NW_MERGER_BRANCH_PATTERNS:-}"
 READY_TO_MERGE_LABEL="${NW_PR_RESOLVER_READY_LABEL:-ready-to-merge}"
 SCRIPT_START_TIME=$(date +%s)
@@ -54,6 +58,10 @@ fi
 case "${MERGE_METHOD}" in
   squash|merge|rebase) ;;
   *) MERGE_METHOD="squash" ;;
+esac
+case "${CI_POLICY}" in
+  ci-only|fallback-local|ignore) ;;
+  *) CI_POLICY="fallback-local" ;;
 esac
 
 mkdir -p "${LOG_DIR}"
@@ -261,6 +269,97 @@ wait_for_ci_passing_on_head() {
   [ "${LAST_CI_STATUS}" = "passing" ]
 }
 
+run_local_checks_for_head() {
+  local pr_number="${1}"
+  local expected_head="${2}"
+  local temp_parent=""
+  local worktree_dir=""
+  local temp_ref=""
+  local check_exit=1
+
+  if [ -z "${LOCAL_CHECK_COMMAND}" ]; then
+    log "INFO: PR #${pr_number}: Local check command is empty, treating fallback as failed"
+    return 1
+  fi
+
+  temp_parent=$(mktemp -d "${TMPDIR:-/tmp}/night-watch-merger-${pr_number}.XXXXXX")
+  worktree_dir="${temp_parent}/worktree"
+  temp_ref="refs/night-watch/merger/${pr_number}-${expected_head}"
+
+  cleanup_local_check_worktree() {
+    git worktree remove --force "${worktree_dir}" >/dev/null 2>&1 || true
+    git update-ref -d "${temp_ref}" >/dev/null 2>&1 || true
+    rm -rf "${temp_parent}" >/dev/null 2>&1 || true
+  }
+
+  log "INFO: PR #${pr_number}: Running local checks for head ${expected_head}: ${LOCAL_CHECK_COMMAND}"
+
+  if ! git cat-file -e "${expected_head}^{commit}" >/dev/null 2>&1; then
+    log "INFO: PR #${pr_number}: Fetching PR head ${expected_head} for local checks"
+    git fetch --quiet --force origin "pull/${pr_number}/head:${temp_ref}" >/dev/null 2>&1 || {
+      log "INFO: PR #${pr_number}: Unable to fetch PR head for local checks"
+      cleanup_local_check_worktree
+      return 1
+    }
+  fi
+
+  if ! git worktree add --detach --quiet "${worktree_dir}" "${expected_head}" >/dev/null 2>&1; then
+    if ! git worktree add --detach --quiet "${worktree_dir}" "${temp_ref}" >/dev/null 2>&1; then
+      log "INFO: PR #${pr_number}: Unable to create local check worktree"
+      cleanup_local_check_worktree
+      return 1
+    fi
+  fi
+
+  set +e
+  (
+    cd "${worktree_dir}"
+    bash -lc "${LOCAL_CHECK_COMMAND}"
+  ) 2>&1 | tee -a "${LOG_FILE}"
+  check_exit=${PIPESTATUS[0]}
+  set -e
+
+  cleanup_local_check_worktree
+
+  if [ "${check_exit}" -eq 0 ]; then
+    log "INFO: PR #${pr_number}: Local checks passed for head ${expected_head}"
+    return 0
+  fi
+
+  log "INFO: PR #${pr_number}: Local checks failed for head ${expected_head} (exit ${check_exit})"
+  return 1
+}
+
+ci_gate_allows_head() {
+  local pr_number="${1}"
+  local pr_branch="${2}"
+  local expected_head="${3}"
+  local context="${4:-CI}"
+  local ci_status
+
+  if [ "${CI_POLICY}" = "ignore" ]; then
+    log "INFO: PR #${pr_number} (${pr_branch}): CI policy is ignore; skipping ${context} gate for head ${expected_head}"
+    return 0
+  fi
+
+  ci_status=$(ci_status_for_head "${pr_number}" "${expected_head}")
+  if [ "${ci_status}" = "passing" ]; then
+    return 0
+  fi
+
+  if [ "${CI_POLICY}" = "fallback-local" ]; then
+    log "INFO: PR #${pr_number} (${pr_branch}): ${context} not passing on head ${expected_head} (${ci_status}); trying local checks"
+    if run_local_checks_for_head "${pr_number}" "${expected_head}"; then
+      return 0
+    fi
+    log "INFO: PR #${pr_number} (${pr_branch}): Local check fallback failed, skipping"
+    return 1
+  fi
+
+  log "INFO: PR #${pr_number} (${pr_branch}): ${context} not passing on head ${expected_head} (${ci_status}), skipping"
+  return 1
+}
+
 # Rebase a PR against its base branch
 rebase_pr() {
   local pr_number="${1}"
@@ -308,7 +407,7 @@ cd "${PROJECT_DIR}"
 
 log "========================================"
 log "RUN-START: merger invoked project=${PROJECT_DIR} dry_run=${DRY_RUN}"
-log "CONFIG: merge_method=${MERGE_METHOD} min_review_score=${MIN_REVIEW_SCORE} rebase_before_merge=${REBASE_BEFORE_MERGE} max_prs=${MAX_PRS_PER_RUN} max_runtime=${MAX_RUNTIME}s ready_label=${READY_TO_MERGE_LABEL} branch_patterns=${BRANCH_PATTERNS_RAW:-<all>}"
+log "CONFIG: merge_method=${MERGE_METHOD} min_review_score=${MIN_REVIEW_SCORE} rebase_before_merge=${REBASE_BEFORE_MERGE} max_prs=${MAX_PRS_PER_RUN} max_runtime=${MAX_RUNTIME}s ci_policy=${CI_POLICY} local_check_command=${LOCAL_CHECK_COMMAND} ready_label=${READY_TO_MERGE_LABEL} branch_patterns=${BRANCH_PATTERNS_RAW:-<all>}"
 log "========================================"
 
 if ! acquire_lock "${LOCK_FILE}"; then
@@ -391,10 +490,8 @@ while IFS= read -r pr_json; do
     continue
   fi
 
-  # Check CI status
-  ci_status=$(ci_status_for_head "${pr_number}" "${pr_head_oid}")
-  if [ "${ci_status}" != "passing" ]; then
-    log "INFO: PR #${pr_number} (${pr_branch}): CI not passing on head ${pr_head_oid} (${ci_status}), skipping"
+  # Check CI status, optionally falling back to local checks for provider/billing failures.
+  if ! ci_gate_allows_head "${pr_number}" "${pr_branch}" "${pr_head_oid}" "CI"; then
     continue
   fi
 
@@ -436,10 +533,22 @@ while IFS= read -r pr_json; do
       log "INFO: PR #${pr_number}: Head unchanged after rebase (${pr_head_after_rebase}); confirming CI"
     fi
 
-    # Poll CI until all checks attached to the post-rebase head are complete and passing.
-    if ! wait_for_ci_passing_on_head "${pr_number}" "${pr_head_after_rebase}"; then
-      log "INFO: PR #${pr_number}: Fresh CI not passing on head ${pr_head_after_rebase} after rebase (${LAST_CI_STATUS}, waited ${CI_MAX_WAIT}s), skipping"
-      continue
+    if [ "${CI_POLICY}" = "ignore" ]; then
+      log "INFO: PR #${pr_number}: CI policy is ignore; skipping fresh CI gate after rebase"
+    else
+      # Poll CI until all checks attached to the post-rebase head are complete and passing.
+      if ! wait_for_ci_passing_on_head "${pr_number}" "${pr_head_after_rebase}"; then
+        log "INFO: PR #${pr_number}: Fresh CI not passing on head ${pr_head_after_rebase} after rebase (${LAST_CI_STATUS}, waited ${CI_MAX_WAIT}s)"
+        if [ "${CI_POLICY}" = "fallback-local" ]; then
+          if ! run_local_checks_for_head "${pr_number}" "${pr_head_after_rebase}"; then
+            log "INFO: PR #${pr_number}: Fresh local check fallback failed after rebase, skipping"
+            continue
+          fi
+        else
+          log "INFO: PR #${pr_number}: Skipping because CI policy requires GitHub CI"
+          continue
+        fi
+      fi
     fi
   fi
 

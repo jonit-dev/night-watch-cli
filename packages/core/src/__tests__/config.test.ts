@@ -2616,6 +2616,10 @@ describe('config', () => {
       expect(config.merger.branchPatterns).toEqual([]);
       expect(config.merger.rebaseBeforeMerge).toBe(true);
       expect(config.merger.maxPrsPerRun).toBe(0);
+      expect(config.merger.ciPolicy).toBe('fallback-local');
+      expect(config.merger.localCheckCommand).toBe(
+        'yarn install --frozen-lockfile && yarn verify && yarn test',
+      );
     });
 
     it('should migrate autoMerge into merger config', () => {

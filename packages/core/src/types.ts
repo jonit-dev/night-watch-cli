@@ -456,6 +456,15 @@ export interface IMergerConfig {
   rebaseBeforeMerge: boolean;
   /** Maximum number of PRs to merge per run (0 = unlimited) */
   maxPrsPerRun: number;
+  /**
+   * How the merger treats GitHub CI status.
+   * - ci-only: require GitHub CI to pass.
+   * - fallback-local: when GitHub CI is non-passing, run localCheckCommand in a temporary PR worktree.
+   * - ignore: do not gate merges on GitHub CI.
+   */
+  ciPolicy: MergerCiPolicy;
+  /** Command run in a temporary PR worktree when ciPolicy is fallback-local */
+  localCheckCommand: string;
 }
 
 export type WebhookType = 'slack' | 'discord' | 'telegram';
@@ -483,6 +492,7 @@ export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
  * Git merge methods for auto-merge
  */
 export type MergeMethod = 'squash' | 'merge' | 'rebase';
+export type MergerCiPolicy = 'ci-only' | 'fallback-local' | 'ignore';
 
 export interface IWebhookConfig {
   type: WebhookType;
