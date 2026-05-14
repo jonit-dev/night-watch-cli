@@ -1202,6 +1202,15 @@ if [ -n "${TARGET_PR}" ]; then
     TARGET_SCOPE_PROMPT+=$'- latest review score: not found\n'
     TARGET_SCOPE_PROMPT+=$'- action: review\n'
   fi
+  if [ -n "${NW_TARGET_LOCAL_CHECK_COMMAND:-}" ]; then
+    TARGET_SCOPE_PROMPT+=$'\n## Local Check Failure From Merge Gate\n'
+    TARGET_SCOPE_PROMPT+=$'- command: '"${NW_TARGET_LOCAL_CHECK_COMMAND}"$'\n'
+    TARGET_SCOPE_PROMPT+=$'- action: fix the PR so this local command passes before the PR can merge\n'
+    if [ -n "${NW_TARGET_LOCAL_CHECK_OUTPUT:-}" ]; then
+      TRUNCATED_LOCAL_CHECK_OUTPUT=$(printf '%s' "${NW_TARGET_LOCAL_CHECK_OUTPUT}" | head -c 10000)
+      TARGET_SCOPE_PROMPT+=$'\n### Local Check Output\n```text\n'"${TRUNCATED_LOCAL_CHECK_OUTPUT}"$'\n```\n'
+    fi
+  fi
 fi
 
 PRD_CONTEXT_PROMPT=""

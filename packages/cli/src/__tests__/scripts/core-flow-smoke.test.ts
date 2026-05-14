@@ -412,6 +412,90 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(mergerLog).not.toContain('Fetching PR head');
   });
 
+  it('merger should run targeted reviewer repair when local fallback checks fail', () => {
+    const projectDir = mkTempDir('nw-smoke-merger-local-repair-');
+    initGitRepo(projectDir);
+    fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
+
+    const scriptDir = mkTempDir('nw-smoke-merger-script-dir-');
+    const mergerUnderTest = path.join(scriptDir, 'night-watch-merger-cron.sh');
+    fs.copyFileSync(mergerScript, mergerUnderTest);
+    fs.copyFileSync(
+      path.join(repoRoot, 'scripts', 'night-watch-helpers.sh'),
+      path.join(scriptDir, 'night-watch-helpers.sh'),
+    );
+    fs.chmodSync(mergerUnderTest, 0o755);
+
+    const fakeReviewerLog = path.join(projectDir, '.smoke-reviewer-env');
+    fs.writeFileSync(
+      path.join(scriptDir, 'night-watch-pr-reviewer-cron.sh'),
+      '#!/usr/bin/env bash\n' +
+        'set -euo pipefail\n' +
+        'printf "target=%s\\ncommand=%s\\noutput=%s\\n" "$NW_TARGET_PR" "$NW_TARGET_LOCAL_CHECK_COMMAND" "$NW_TARGET_LOCAL_CHECK_OUTPUT" > "$NW_SMOKE_REVIEWER_LOG"\n' +
+        'touch "$NW_SMOKE_REPAIR_MARKER"\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const headOid = execSync('git rev-parse HEAD', { cwd: projectDir, encoding: 'utf-8' }).trim();
+    const fakeBin = mkTempDir('nw-smoke-bin-merger-local-repair-');
+    const ghCallLog = path.join(projectDir, '.smoke-gh-calls');
+    const repairMarker = path.join(projectDir, '.smoke-repair-marker');
+
+    fs.writeFileSync(
+      path.join(fakeBin, 'gh'),
+      '#!/usr/bin/env bash\n' +
+        'printf \'%s\\n\' "$*" >> "$NW_SMOKE_GH_CALL_LOG"\n' +
+        'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+        '  echo \'[{"number":123,"headRefName":"night-watch/local-repair","createdAt":"2026-01-01T00:00:00Z","isDraft":false,"labels":[]}]\'\n' +
+        '  exit 0\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "view" ]]; then\n' +
+        '  if [[ "$*" == *"comments"* ]]; then\n' +
+        "    echo '100'\n" +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$*" == *"headRefOid,statusCheckRollup"* ]]; then\n' +
+        '    printf \'{"headRefOid":"%s","statusCheckRollup":[{"__typename":"CheckRun","name":"ci","status":"COMPLETED","conclusion":"FAILURE"}]}\\n\' "$NW_SMOKE_HEAD_OID"\n' +
+        '    exit 0\n' +
+        '  fi\n' +
+        '  if [[ "$*" == *"headRefOid"* ]]; then\n' +
+        '    echo "$NW_SMOKE_HEAD_OID"\n' +
+        '    exit 0\n' +
+        '  fi\n' +
+        'fi\n' +
+        'if [[ "$1" == "pr" && "$2" == "merge" ]]; then\n' +
+        "  echo 'merged'\n" +
+        '  exit 0\n' +
+        'fi\n' +
+        'exit 0\n',
+      { encoding: 'utf-8', mode: 0o755 },
+    );
+
+    const result = runScript(mergerUnderTest, projectDir, {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      NW_SMOKE_GH_CALL_LOG: ghCallLog,
+      NW_SMOKE_HEAD_OID: headOid,
+      NW_SMOKE_REPAIR_MARKER: repairMarker,
+      NW_SMOKE_REVIEWER_LOG: fakeReviewerLog,
+      NW_MERGER_MAX_RUNTIME: '300',
+      NW_MERGER_MAX_PRS_PER_RUN: '1',
+      NW_MERGER_REBASE_BEFORE_MERGE: '0',
+      NW_MERGER_CI_POLICY: 'fallback-local',
+      NW_MERGER_LOCAL_CHECK_COMMAND: 'test -f "$NW_SMOKE_REPAIR_MARKER"',
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('NIGHT_WATCH_RESULT:success|merged=1|failed=0|prs=123');
+    const reviewerEnv = fs.readFileSync(fakeReviewerLog, 'utf-8');
+    expect(reviewerEnv).toContain('target=123');
+    expect(reviewerEnv).toContain('command=test -f "$NW_SMOKE_REPAIR_MARKER"');
+    const mergerLog = fs.readFileSync(path.join(projectDir, 'logs', 'merger.log'), 'utf-8');
+    expect(mergerLog).toContain('Running targeted reviewer repair after local check failure');
+    expect(mergerLog).toContain('Re-checking local checks after targeted repair');
+    expect(mergerLog).toContain('Local checks passed');
+  });
+
   it('merger should merge without checking CI when CI policy is ignore', () => {
     const projectDir = mkTempDir('nw-smoke-merger-ignore-ci-');
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
@@ -601,6 +685,7 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_SMOKE_GH_CALL_LOG: ghCallLog,
       NW_SMOKE_HEAD_FILE: headFile,
       NW_MERGER_MAX_PRS_PER_RUN: '1',
+      NW_MERGER_CI_POLICY: 'ci-only',
       NW_MERGER_CI_MAX_WAIT: '1',
       NW_MERGER_CI_POLL_INTERVAL: '1',
     });

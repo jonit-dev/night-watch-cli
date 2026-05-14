@@ -79,6 +79,7 @@ skip_if_job_paused "${SCRIPT_TYPE}" "${PROJECT_DIR}"
 MERGED_PRS=0
 FAILED_PRS=0
 MERGED_PR_LIST=""
+LAST_LOCAL_CHECK_OUTPUT=""
 
 emit_result() {
   local status="${1:?status required}"
@@ -318,14 +319,21 @@ run_local_check_command_in_dir() {
   local expected_head="${2}"
   local check_dir="${3}"
   local check_exit=1
+  local output_file=""
+
+  output_file=$(mktemp "${TMPDIR:-/tmp}/night-watch-merger-local-check-${pr_number}.XXXXXX")
+  LAST_LOCAL_CHECK_OUTPUT=""
 
   set +e
   (
     cd "${check_dir}"
     bash -lc "${LOCAL_CHECK_COMMAND}"
-  ) 2>&1 | tee -a "${LOG_FILE}"
+  ) 2>&1 | tee "${output_file}" | tee -a "${LOG_FILE}"
   check_exit=${PIPESTATUS[0]}
   set -e
+
+  LAST_LOCAL_CHECK_OUTPUT=$(head -c 10000 "${output_file}" 2>/dev/null || true)
+  rm -f "${output_file}" 2>/dev/null || true
 
   if [ "${check_exit}" -eq 0 ]; then
     log "INFO: PR #${pr_number}: Local checks passed for head ${expected_head}"
@@ -393,6 +401,45 @@ run_local_checks_for_head() {
   return "${check_result}"
 }
 
+run_reviewer_repair_for_pr() {
+  local pr_number="${1}"
+  local pr_branch="${2}"
+  local expected_head="${3}"
+  local elapsed=0
+  local remaining=0
+  local reviewer_exit=1
+
+  elapsed=$(( $(date +%s) - SCRIPT_START_TIME ))
+  remaining=$(( MAX_RUNTIME - elapsed - 30 ))
+  if [ "${remaining}" -lt 120 ]; then
+    log "INFO: PR #${pr_number} (${pr_branch}): Not enough merger runtime left for targeted reviewer repair (${remaining}s), skipping repair"
+    return 1
+  fi
+
+  log "INFO: PR #${pr_number} (${pr_branch}): Running targeted reviewer repair after local check failure on head ${expected_head}"
+
+  set +e
+  (
+    NW_TARGET_PR="${pr_number}" \
+    NW_REVIEWER_WORKER_MODE="1" \
+    NW_REVIEWER_PARALLEL="0" \
+    NW_REVIEWER_MAX_RUNTIME="${remaining}" \
+    NW_TARGET_LOCAL_CHECK_COMMAND="${LOCAL_CHECK_COMMAND}" \
+    NW_TARGET_LOCAL_CHECK_OUTPUT="${LAST_LOCAL_CHECK_OUTPUT}" \
+    bash "${SCRIPT_DIR}/night-watch-pr-reviewer-cron.sh" "${PROJECT_DIR}"
+  ) 2>&1 | tee -a "${LOG_FILE}"
+  reviewer_exit=${PIPESTATUS[0]}
+  set -e
+
+  if [ "${reviewer_exit}" -eq 0 ]; then
+    log "INFO: PR #${pr_number} (${pr_branch}): Targeted reviewer repair completed"
+    return 0
+  fi
+
+  log "INFO: PR #${pr_number} (${pr_branch}): Targeted reviewer repair failed (exit ${reviewer_exit})"
+  return 1
+}
+
 ci_gate_allows_head() {
   local pr_number="${1}"
   local pr_branch="${2}"
@@ -415,7 +462,17 @@ ci_gate_allows_head() {
     if run_local_checks_for_head "${pr_number}" "${pr_branch}" "${expected_head}"; then
       return 0
     fi
-    log "INFO: PR #${pr_number} (${pr_branch}): Local check fallback failed, skipping"
+    if run_reviewer_repair_for_pr "${pr_number}" "${pr_branch}" "${expected_head}"; then
+      local repaired_head=""
+      repaired_head=$(get_pr_head_oid "${pr_number}")
+      if [ -n "${repaired_head}" ]; then
+        log "INFO: PR #${pr_number} (${pr_branch}): Re-checking local checks after targeted repair on head ${repaired_head}"
+        if run_local_checks_for_head "${pr_number}" "${pr_branch}" "${repaired_head}"; then
+          return 0
+        fi
+      fi
+    fi
+    log "INFO: PR #${pr_number} (${pr_branch}): Local check fallback failed after repair attempt, skipping"
     return 1
   fi
 
