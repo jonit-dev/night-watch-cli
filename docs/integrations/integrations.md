@@ -136,6 +136,11 @@ Slack notifications include:
 | `rate_limit_fallback` | Rate limit fallback triggered |
 | `pr_auto_merged` | PR was automatically merged |
 | `qa_completed` | QA process completed |
+| `pr_resolver_completed` | PR resolver completed successfully |
+| `pr_resolver_conflict_resolved` | PR resolver fixed a conflict |
+| `pr_resolver_failed` | PR resolver failed |
+| `merge_completed` | Merge job completed successfully |
+| `merge_failed` | Merge job failed |
 
 ### Discord
 

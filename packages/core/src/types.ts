@@ -459,22 +459,25 @@ export interface IMergerConfig {
 }
 
 export type WebhookType = 'slack' | 'discord' | 'telegram';
-export type NotificationEvent =
-  | 'run_started'
-  | 'run_succeeded'
-  | 'run_failed'
-  | 'run_timeout'
-  | 'run_no_work'
-  | 'review_completed'
-  | 'review_ready_for_human'
-  | 'pr_auto_merged'
-  | 'rate_limit_fallback'
-  | 'qa_completed'
-  | 'pr_resolver_completed'
-  | 'pr_resolver_conflict_resolved'
-  | 'pr_resolver_failed'
-  | 'merge_completed'
-  | 'merge_failed';
+export const NOTIFICATION_EVENTS = [
+  'run_started',
+  'run_succeeded',
+  'run_failed',
+  'run_timeout',
+  'run_no_work',
+  'review_completed',
+  'review_ready_for_human',
+  'pr_auto_merged',
+  'rate_limit_fallback',
+  'qa_completed',
+  'pr_resolver_completed',
+  'pr_resolver_conflict_resolved',
+  'pr_resolver_failed',
+  'merge_completed',
+  'merge_failed',
+] as const;
+
+export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];
 
 /**
  * Git merge methods for auto-merge

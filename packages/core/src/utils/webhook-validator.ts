@@ -3,7 +3,7 @@
  * Used by both the CLI doctor command and the server config routes.
  */
 
-import { IWebhookConfig, NotificationEvent } from '../types.js';
+import { IWebhookConfig, NOTIFICATION_EVENTS } from '../types.js';
 
 /**
  * Validate a single webhook configuration and return a list of issues.
@@ -16,18 +16,8 @@ export function validateWebhook(webhook: IWebhookConfig): string[] {
   if (!webhook.events || webhook.events.length === 0) {
     issues.push('No events configured');
   } else {
-    const validEvents: NotificationEvent[] = [
-      'run_started',
-      'run_succeeded',
-      'run_failed',
-      'run_timeout',
-      'review_completed',
-      'pr_auto_merged',
-      'rate_limit_fallback',
-      'qa_completed',
-    ];
     for (const event of webhook.events) {
-      if (!validEvents.includes(event)) {
+      if (!NOTIFICATION_EVENTS.includes(event)) {
         issues.push(`Invalid event: ${event}`);
       }
     }

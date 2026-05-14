@@ -5,19 +5,8 @@
 
 import { basename } from 'path';
 import { Command } from 'commander';
-import { loadConfig, sendNotifications } from '@night-watch/core';
+import { NOTIFICATION_EVENTS, loadConfig, sendNotifications } from '@night-watch/core';
 import type { NotificationEvent } from '@night-watch/core';
-
-const VALID_EVENTS: NotificationEvent[] = [
-  'run_started',
-  'run_succeeded',
-  'run_failed',
-  'run_timeout',
-  'review_completed',
-  'rate_limit_fallback',
-  'pr_auto_merged',
-  'qa_completed',
-];
 
 export function notifyCommand(program: Command): void {
   program
@@ -40,9 +29,9 @@ export function notifyCommand(program: Command): void {
           prNumber?: string;
         },
       ) => {
-        if (!VALID_EVENTS.includes(event as NotificationEvent)) {
+        if (!NOTIFICATION_EVENTS.includes(event as NotificationEvent)) {
           process.stderr.write(
-            `Invalid event: ${event}. Must be one of: ${VALID_EVENTS.join(', ')}\n`,
+            `Invalid event: ${event}. Must be one of: ${NOTIFICATION_EVENTS.join(', ')}\n`,
           );
           process.exit(2);
         }

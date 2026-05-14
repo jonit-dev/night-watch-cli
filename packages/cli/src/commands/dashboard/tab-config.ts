@@ -9,6 +9,7 @@ import {
   BUILT_IN_PRESET_IDS,
   INightWatchConfig,
   IWebhookConfig,
+  NOTIFICATION_EVENTS,
   NotificationEvent,
   WebhookType,
   saveConfig,
@@ -63,16 +64,6 @@ function promptTextbox(
 }
 
 const WEBHOOK_TYPES: WebhookType[] = ['slack', 'discord', 'telegram'];
-const NOTIFICATION_EVENTS: NotificationEvent[] = [
-  'run_started',
-  'run_succeeded',
-  'run_failed',
-  'run_timeout',
-  'review_completed',
-  'pr_auto_merged',
-  'rate_limit_fallback',
-  'qa_completed',
-];
 
 export const CONFIG_FIELDS: IConfigField[] = [
   { key: 'provider', label: 'Provider', type: 'enum', options: [...BUILT_IN_PRESET_IDS] },

@@ -260,18 +260,23 @@ If `endTime < startTime`, the window crosses midnight:
 
 **Events:**
 
-| Event                    | Fires When                           |
-| ------------------------ | ------------------------------------ |
-| `run_started`            | PRD executor started                 |
-| `run_succeeded`          | PRD execution completed successfully |
-| `run_failed`             | PRD execution failed                 |
-| `run_timeout`            | PRD execution exceeded max runtime   |
-| `run_no_work`            | No eligible PRDs to execute          |
-| `review_completed`       | PR review cycle completed            |
-| `review_ready_for_human` | PR ready for human review            |
-| `rate_limit_fallback`    | Rate limit fallback triggered        |
-| `pr_auto_merged`         | PR was automatically merged          |
-| `qa_completed`           | QA process completed                 |
+| Event                           | Fires When                           |
+| ------------------------------- | ------------------------------------ |
+| `run_started`                   | PRD executor started                 |
+| `run_succeeded`                 | PRD execution completed successfully |
+| `run_failed`                    | PRD execution failed                 |
+| `run_timeout`                   | PRD execution exceeded max runtime   |
+| `run_no_work`                   | No eligible PRDs to execute          |
+| `review_completed`              | PR review cycle completed            |
+| `review_ready_for_human`        | PR ready for human review            |
+| `rate_limit_fallback`           | Rate limit fallback triggered        |
+| `pr_auto_merged`                | PR was automatically merged          |
+| `qa_completed`                  | QA process completed                 |
+| `pr_resolver_completed`         | PR resolver completed successfully   |
+| `pr_resolver_conflict_resolved` | PR resolver fixed a conflict         |
+| `pr_resolver_failed`            | PR resolver failed                   |
+| `merge_completed`               | Merge job completed successfully     |
+| `merge_failed`                  | Merge job failed                     |
 
 **Global Notifications:**
 

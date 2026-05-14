@@ -311,6 +311,11 @@ Capacity limits per provider:
 - `pr_auto_merged`: PR auto-merged
 - `rate_limit_fallback`: Fallback triggered
 - `qa_completed`: QA testing completed
+- `pr_resolver_completed`: PR resolver completed successfully
+- `pr_resolver_conflict_resolved`: PR resolver fixed a conflict
+- `pr_resolver_failed`: PR resolver failed
+- `merge_completed`: Merge job completed successfully
+- `merge_failed`: Merge job failed
 
 ### Notification Context
 

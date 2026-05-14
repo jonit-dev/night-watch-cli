@@ -256,7 +256,7 @@ Injectable service that aggregates status data:
 
 ### NotificationService
 
-Formats and sends webhook notifications to Slack, Discord, and Telegram. Supports events: `run_started`, `run_succeeded`, `run_failed`, `run_timeout`, `review_completed`, `pr_auto_merged`, `qa_completed`.
+Formats and sends webhook notifications to Slack, Discord, and Telegram. Supports events: `run_started`, `run_succeeded`, `run_failed`, `run_timeout`, `run_no_work`, `review_completed`, `review_ready_for_human`, `pr_auto_merged`, `rate_limit_fallback`, `qa_completed`, `pr_resolver_completed`, `pr_resolver_conflict_resolved`, `pr_resolver_failed`, `merge_completed`, `merge_failed`.
 
 ### RoadmapService
 

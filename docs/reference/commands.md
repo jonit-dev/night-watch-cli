@@ -838,10 +838,17 @@ night-watch notify run_timeout . --provider codex --exit-code 124  # Full contex
 - `run_succeeded` — PRD executor completed successfully
 - `run_failed` — PRD executor failed
 - `run_timeout` — PRD executor timed out
+- `run_no_work` — No eligible PRDs to execute
 - `review_completed` — PR reviewer completed
+- `review_ready_for_human` — PR ready for human review
 - `rate_limit_fallback` — Rate limit fallback triggered
 - `pr_auto_merged` — PR was auto-merged
 - `qa_completed` — QA process completed
+- `pr_resolver_completed` — PR resolver completed successfully
+- `pr_resolver_conflict_resolved` — PR resolver fixed a conflict
+- `pr_resolver_failed` — PR resolver failed
+- `merge_completed` — Merge job completed successfully
+- `merge_failed` — Merge job failed
 
 **Options:**
 

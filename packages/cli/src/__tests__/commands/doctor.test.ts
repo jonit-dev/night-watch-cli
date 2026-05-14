@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { execSync } from 'child_process';
 import path from 'path';
 import { validateWebhook } from '@/cli/commands/doctor.js';
-import { IWebhookConfig } from '@night-watch/core/types.js';
+import { IWebhookConfig, NOTIFICATION_EVENTS } from '@night-watch/core/types.js';
 
 const CLI_PATH = path.resolve(__dirname, '..', '..', '..', 'dist', 'cli.js');
 const TSX_PATH = 'node';
@@ -205,16 +205,7 @@ describe('doctor command', () => {
       const webhook: IWebhookConfig = {
         type: 'slack',
         url: 'https://hooks.slack.com/services/T00/B00/xxx',
-        events: [
-          'run_started',
-          'run_succeeded',
-          'run_failed',
-          'run_timeout',
-          'review_completed',
-          'pr_auto_merged',
-          'rate_limit_fallback',
-          'qa_completed',
-        ],
+        events: [...NOTIFICATION_EVENTS],
       };
       expect(validateWebhook(webhook)).toEqual([]);
     });
