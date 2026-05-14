@@ -81,7 +81,7 @@ export const CONFIG_FIELDS: IConfigField[] = [
     type: 'number',
     validate: (v) => {
       const n = parseInt(v, 10);
-      return isNaN(n) || n <= 0 ? 'Must be a positive integer' : null;
+      return isNaN(n) || n < 0 ? 'Must be 0 (no timeout) or a positive integer' : null;
     },
   },
   {
@@ -90,7 +90,7 @@ export const CONFIG_FIELDS: IConfigField[] = [
     type: 'number',
     validate: (v) => {
       const n = parseInt(v, 10);
-      return isNaN(n) || n <= 0 ? 'Must be a positive integer' : null;
+      return isNaN(n) || n < 0 ? 'Must be 0 (no timeout) or a positive integer' : null;
     },
   },
   {

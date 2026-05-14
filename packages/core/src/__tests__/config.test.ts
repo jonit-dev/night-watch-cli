@@ -63,8 +63,8 @@ describe('config', () => {
 
       expect(config.defaultBranch).toBe('');
       expect(config.prdDir).toBe('docs/prds');
-      expect(config.maxRuntime).toBe(7200);
-      expect(config.reviewerMaxRuntime).toBe(3600);
+      expect(config.maxRuntime).toBe(0);
+      expect(config.reviewerMaxRuntime).toBe(0);
       expect(config.branchPrefix).toBe('night-watch');
       expect(config.branchPatterns).toEqual(['feat/', 'night-watch/']);
       expect(config.minReviewScore).toBe(80);
@@ -182,7 +182,7 @@ describe('config', () => {
       expect(config.branchPatterns).toEqual(['custom/', 'feature/']);
 
       // Check defaults preserved
-      expect(config.reviewerMaxRuntime).toBe(3600);
+      expect(config.reviewerMaxRuntime).toBe(0);
       expect(config.branchPrefix).toBe('night-watch');
       expect(config.minReviewScore).toBe(80);
       expect(config.maxLogSize).toBe(524288);
@@ -980,7 +980,7 @@ describe('config', () => {
     it('should use default slicerMaxRuntime', () => {
       const config = loadConfig(tempDir);
 
-      expect(config.roadmapScanner.slicerMaxRuntime).toBe(600);
+      expect(config.roadmapScanner.slicerMaxRuntime).toBe(0);
     });
 
     it('should default planner issueColumn to Ready', () => {
@@ -1180,7 +1180,7 @@ describe('config', () => {
       expect(config.qa).toBeDefined();
       expect(config.qa.enabled).toBe(true);
       expect(config.qa.schedule).toBe('45 2,10,18 * * *');
-      expect(config.qa.maxRuntime).toBe(3600);
+      expect(config.qa.maxRuntime).toBe(0);
       expect(config.qa.branchPatterns).toEqual([]);
       expect(config.qa.artifacts).toBe('both');
       expect(config.qa.skipLabel).toBe('skip-qa');
@@ -1342,7 +1342,7 @@ describe('config', () => {
       expect(config.audit).toBeDefined();
       expect(config.audit.enabled).toBe(false);
       expect(config.audit.schedule).toBe('50 3 * * 1');
-      expect(config.audit.maxRuntime).toBe(1800);
+      expect(config.audit.maxRuntime).toBe(0);
       expect(config.audit.createIssues).toBe(false);
       expect(config.audit.targetColumn).toBe('Draft');
     });
@@ -1488,7 +1488,7 @@ describe('config', () => {
       expect(config.analytics).toBeDefined();
       expect(config.analytics.enabled).toBe(false);
       expect(config.analytics.schedule).toBe('0 6 * * 1');
-      expect(config.analytics.maxRuntime).toBe(900);
+      expect(config.analytics.maxRuntime).toBe(0);
       expect(config.analytics.lookbackDays).toBe(7);
       expect(config.analytics.targetColumn).toBe('Draft');
     });
@@ -1534,7 +1534,7 @@ describe('config', () => {
 
       expect(config.analytics.enabled).toBe(false);
       expect(config.analytics.schedule).toBe('0 6 * * 1');
-      expect(config.analytics.maxRuntime).toBe(900);
+      expect(config.analytics.maxRuntime).toBe(0);
       expect(config.analytics.lookbackDays).toBe(30);
       expect(config.analytics.targetColumn).toBe('Draft');
     });
@@ -2610,7 +2610,7 @@ describe('config', () => {
       expect(config.merger).toBeDefined();
       expect(config.merger.enabled).toBe(false);
       expect(config.merger.schedule).toBe('55 */4 * * *');
-      expect(config.merger.maxRuntime).toBe(1800);
+      expect(config.merger.maxRuntime).toBe(0);
       expect(config.merger.mergeMethod).toBe('squash');
       expect(config.merger.minReviewScore).toBe(80);
       expect(config.merger.branchPatterns).toEqual([]);

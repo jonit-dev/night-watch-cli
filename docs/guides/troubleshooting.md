@@ -187,7 +187,7 @@ cat docs/prds/your-prd.md | wc -l
 **Fix:**
 
 - Split large PRDs into smaller ones
-- Increase `maxRuntime` in config (default: 7200s = 2h)
+- Set `maxRuntime` or `sessionMaxRuntime` in config; default `0` disables provider timeouts
 - Check for infinite loops in AI output
 
 ---

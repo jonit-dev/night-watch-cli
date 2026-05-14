@@ -149,17 +149,17 @@ export interface INightWatchConfig {
   /** Directory containing PRD files (relative to project root) */
   prdDir: string;
 
-  /** Maximum runtime in seconds for PRD execution */
+  /** Maximum runtime in seconds for PRD execution. 0 disables the provider timeout. */
   maxRuntime: number;
 
   /**
-   * Maximum runtime per executor session in seconds.
+   * Maximum runtime per executor session in seconds. 0 disables the provider timeout.
    * When a session hits this limit it checkpoints and re-queues the issue for the next run.
    * Defaults to maxRuntime when not set.
    */
   sessionMaxRuntime?: number;
 
-  /** Maximum runtime in seconds for PR reviewer */
+  /** Maximum runtime in seconds for PR reviewer. 0 disables the provider timeout. */
   reviewerMaxRuntime: number;
 
   /** Prefix for night-watch branches */
@@ -363,7 +363,7 @@ export interface IQaConfig {
   enabled: boolean;
   /** Cron schedule for QA execution */
   schedule: string;
-  /** Maximum runtime in seconds for QA */
+  /** Maximum runtime in seconds for QA. 0 disables the provider timeout. */
   maxRuntime: number;
   /** Branch patterns to match for QA (defaults to top-level branchPatterns if empty) */
   branchPatterns: string[];
@@ -382,7 +382,7 @@ export interface IAuditConfig {
   enabled: boolean;
   /** Cron schedule for audit execution */
   schedule: string;
-  /** Maximum runtime in seconds for the audit */
+  /** Maximum runtime in seconds for the audit. 0 disables the provider timeout. */
   maxRuntime: number;
   /** Whether audit findings should be expanded into board issues */
   createIssues: boolean;
@@ -395,7 +395,7 @@ export interface IAnalyticsConfig {
   enabled: boolean;
   /** Cron schedule for analytics execution */
   schedule: string;
-  /** Maximum runtime in seconds for the analytics job */
+  /** Maximum runtime in seconds for the analytics job. 0 disables the provider timeout. */
   maxRuntime: number;
   /** Number of days to look back when fetching Amplitude data */
   lookbackDays: number;
@@ -423,13 +423,13 @@ export interface IPrResolverConfig {
   enabled: boolean;
   /** Cron schedule for PR resolver execution */
   schedule: string;
-  /** Maximum runtime in seconds for the PR resolver */
+  /** Maximum runtime in seconds for the PR resolver. 0 disables the provider timeout. */
   maxRuntime: number;
   /** Branch patterns to filter which PRs to process (empty = all) */
   branchPatterns: string[];
   /** Maximum number of PRs to process per run (0 = unlimited) */
   maxPrsPerRun: number;
-  /** Per-PR timeout in seconds */
+  /** Per-PR timeout in seconds. 0 disables the provider timeout. */
   perPrTimeout: number;
   /** Whether to use AI to resolve merge conflicts */
   aiConflictResolution: boolean;
@@ -444,7 +444,7 @@ export interface IMergerConfig {
   enabled: boolean;
   /** Cron schedule for merger execution */
   schedule: string;
-  /** Maximum runtime in seconds for the merger */
+  /** Maximum runtime in seconds for the merger. 0 disables the provider timeout. */
   maxRuntime: number;
   /** Git merge method */
   mergeMethod: MergeMethod;
@@ -522,7 +522,7 @@ export interface IRoadmapScannerConfig {
   /** Cron schedule for the slicer (AI-powered PRD generation from roadmap items) */
   slicerSchedule: string;
 
-  /** Maximum runtime in seconds for the slicer */
+  /** Maximum runtime in seconds for the slicer. 0 disables the timeout. */
   slicerMaxRuntime: number;
 
   /** Source prioritization strategy when both roadmap and audit findings are available */

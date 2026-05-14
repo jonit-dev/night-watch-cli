@@ -37,7 +37,7 @@ export function buildEnvVars(
 ): Record<string, string> {
   const env = buildBaseEnvVars(config, 'planner', options.dryRun);
 
-  env.NW_PLAN_MAX_RUNTIME = String(options.timeout ? parseInt(options.timeout, 10) : 1800);
+  env.NW_PLAN_MAX_RUNTIME = String(options.timeout ? parseInt(options.timeout, 10) : 0);
   env.NW_PRD_DIR = config.prdDir;
   env.NW_PLAN_TASK = task;
   env.NW_CLAUDE_MODEL_ID =

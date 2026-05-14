@@ -345,7 +345,7 @@ describe('normalizeJobConfig', () => {
   it('pr-resolver has correct defaults', () => {
     const def = getJobDef('pr-resolver')!;
     expect(def.defaultConfig.schedule).toBe('15 6,14,22 * * *');
-    expect(def.defaultConfig.maxRuntime).toBe(3600);
+    expect(def.defaultConfig.maxRuntime).toBe(0);
     expect(def.queuePriority).toBe(35);
   });
 
@@ -354,10 +354,10 @@ describe('normalizeJobConfig', () => {
     const result = normalizeJobConfig({}, def);
     expect(result.enabled).toBe(true);
     expect(result.schedule).toBe('15 6,14,22 * * *');
-    expect(result.maxRuntime).toBe(3600);
+    expect(result.maxRuntime).toBe(0);
     expect(result.branchPatterns).toEqual([]);
     expect(result.maxPrsPerRun).toBe(0);
-    expect(result.perPrTimeout).toBe(600);
+    expect(result.perPrTimeout).toBe(0);
     expect(result.aiConflictResolution).toBe(true);
     expect(result.aiReviewResolution).toBe(false);
     expect(result.readyLabel).toBe('ready-to-merge');
@@ -389,7 +389,7 @@ describe('normalizeJobConfig', () => {
   it('merger has correct defaults', () => {
     const def = getJobDef('merger')!;
     expect(def.defaultConfig.schedule).toBe('55 */4 * * *');
-    expect(def.defaultConfig.maxRuntime).toBe(1800);
+    expect(def.defaultConfig.maxRuntime).toBe(0);
     expect(def.queuePriority).toBe(45);
     expect(def.defaultConfig.enabled).toBe(false);
   });
@@ -399,7 +399,7 @@ describe('normalizeJobConfig', () => {
     const result = normalizeJobConfig({}, def);
     expect(result.enabled).toBe(false);
     expect(result.schedule).toBe('55 */4 * * *');
-    expect(result.maxRuntime).toBe(1800);
+    expect(result.maxRuntime).toBe(0);
     expect(result.mergeMethod).toBe('squash');
     expect(result.minReviewScore).toBe(80);
     expect(result.branchPatterns).toEqual([]);

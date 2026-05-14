@@ -630,6 +630,7 @@ export function scanPrdDirectory(
   prdDir: string,
   maxRuntime: number,
 ): { pending: IPrdScanItem[]; completed: string[] } {
+  const claimStaleAfter = maxRuntime > 0 ? maxRuntime : 14400;
   const absolutePrdDir = path.join(projectDir, prdDir);
   const doneDir = path.join(absolutePrdDir, 'done');
 
@@ -650,7 +651,7 @@ export function scanPrdDirectory(
             const content = fs.readFileSync(claimPath, 'utf-8');
             const data = JSON.parse(content);
             const age = Math.floor(Date.now() / 1000) - data.timestamp;
-            if (age < maxRuntime) {
+            if (age < claimStaleAfter) {
               claimed = true;
               claimInfo = { hostname: data.hostname, pid: data.pid, timestamp: data.timestamp };
             }

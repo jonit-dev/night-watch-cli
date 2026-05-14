@@ -32,12 +32,12 @@ This creates `night-watch.config.json` with sensible defaults.
 
 ### Executor Configuration
 
-| Field               | Type         | Default         | Description                              |
-| ------------------- | ------------ | --------------- | ---------------------------------------- |
-| `executorEnabled`   | boolean      | `true`          | Enable the PRD executor                  |
-| `maxRuntime`        | number       | `7200`          | Max runtime in seconds for PRD execution |
-| `sessionMaxRuntime` | number\|null | `null`          | Per-session runtime for checkpointing    |
-| `cronSchedule`      | string       | `"5 */2 * * *"` | Cron schedule for executor               |
+| Field               | Type         | Default         | Description                                                     |
+| ------------------- | ------------ | --------------- | --------------------------------------------------------------- |
+| `executorEnabled`   | boolean      | `true`          | Enable the PRD executor                                         |
+| `maxRuntime`        | number       | `0`             | Max runtime in seconds for PRD execution (`0` = no timeout)     |
+| `sessionMaxRuntime` | number\|null | `null`          | Per-session runtime for checkpointing (`0`/`null` = no timeout) |
+| `cronSchedule`      | string       | `"5 */2 * * *"` | Cron schedule for executor                                      |
 
 **Session Checkpointing:**
 
@@ -45,7 +45,7 @@ When `sessionMaxRuntime` is set, the executor checkpoints progress at session bo
 
 ```json
 {
-  "maxRuntime": 7200,
+  "maxRuntime": 0,
   "sessionMaxRuntime": 1800
 }
 ```
@@ -54,14 +54,14 @@ This allows long-running PRDs to be processed in 30-minute chunks while preservi
 
 ### Reviewer Configuration
 
-| Field                  | Type    | Default          | Description                                            |
-| ---------------------- | ------- | ---------------- | ------------------------------------------------------ |
-| `reviewerEnabled`      | boolean | `true`           | Enable the PR reviewer                                 |
-| `reviewerMaxRuntime`   | number  | `3600`           | Max runtime in seconds for PR reviewer                 |
-| `reviewerSchedule`     | string  | `"25 */3 * * *"` | Cron schedule for reviewer                             |
-| `reviewerMaxRetries`   | number  | `2`              | Max retry attempts for reviewer fix iterations per run |
-| `reviewerRetryDelay`   | number  | `30`             | Delay in seconds between reviewer retry attempts       |
-| `reviewerMaxPrsPerRun` | number  | `0`              | Max PRs reviewer processes per run (`0` = unlimited)   |
+| Field                  | Type    | Default          | Description                                               |
+| ---------------------- | ------- | ---------------- | --------------------------------------------------------- |
+| `reviewerEnabled`      | boolean | `true`           | Enable the PR reviewer                                    |
+| `reviewerMaxRuntime`   | number  | `0`              | Max runtime in seconds for PR reviewer (`0` = no timeout) |
+| `reviewerSchedule`     | string  | `"25 */3 * * *"` | Cron schedule for reviewer                                |
+| `reviewerMaxRetries`   | number  | `2`              | Max retry attempts for reviewer fix iterations per run    |
+| `reviewerRetryDelay`   | number  | `30`             | Delay in seconds between reviewer retry attempts          |
+| `reviewerMaxPrsPerRun` | number  | `0`              | Max PRs reviewer processes per run (`0` = unlimited)      |
 
 **Retry Loop:**
 
@@ -308,15 +308,15 @@ PRDs whose filename (without `.md` extension) matches an entry execute first.
 
 ### Roadmap Scanner (Planner)
 
-| Field                             | Type    | Default           | Description                                       |
-| --------------------------------- | ------- | ----------------- | ------------------------------------------------- |
-| `roadmapScanner.enabled`          | boolean | `true`            | Enable planner runs                               |
-| `roadmapScanner.roadmapPath`      | string  | `"ROADMAP.md"`    | Path to ROADMAP.md file                           |
-| `roadmapScanner.autoScanInterval` | number  | `300`             | Interval in seconds between automatic scans       |
-| `roadmapScanner.slicerSchedule`   | string  | `"35 */6 * * *"`  | Cron schedule for planner                         |
-| `roadmapScanner.slicerMaxRuntime` | number  | `600`             | Maximum runtime in seconds for planner            |
-| `roadmapScanner.priorityMode`     | string  | `"roadmap-first"` | Source priority: `roadmap-first` or `audit-first` |
-| `roadmapScanner.issueColumn`      | string  | `"Draft"`         | Column for auto-created planner issues            |
+| Field                             | Type    | Default           | Description                                               |
+| --------------------------------- | ------- | ----------------- | --------------------------------------------------------- |
+| `roadmapScanner.enabled`          | boolean | `true`            | Enable planner runs                                       |
+| `roadmapScanner.roadmapPath`      | string  | `"ROADMAP.md"`    | Path to ROADMAP.md file                                   |
+| `roadmapScanner.autoScanInterval` | number  | `300`             | Interval in seconds between automatic scans               |
+| `roadmapScanner.slicerSchedule`   | string  | `"35 */6 * * *"`  | Cron schedule for planner                                 |
+| `roadmapScanner.slicerMaxRuntime` | number  | `0`               | Maximum runtime in seconds for planner (`0` = no timeout) |
+| `roadmapScanner.priorityMode`     | string  | `"roadmap-first"` | Source priority: `roadmap-first` or `audit-first`         |
+| `roadmapScanner.issueColumn`      | string  | `"Draft"`         | Column for auto-created planner issues                    |
 
 ### Board Provider
 
@@ -350,7 +350,7 @@ PRDs whose filename (without `.md` extension) matches an entry execute first.
 | -------------------------- | -------- | -------------------- | ------------------------------------------------------------------- |
 | `qa.enabled`               | boolean  | `true`               | Enable the QA process                                               |
 | `qa.schedule`              | string   | `"45 2,10,18 * * *"` | Cron schedule for QA execution                                      |
-| `qa.maxRuntime`            | number   | `3600`               | Maximum runtime in seconds for QA tasks                             |
+| `qa.maxRuntime`            | number   | `0`                  | Maximum runtime in seconds for QA tasks (`0` = no timeout)          |
 | `qa.branchPatterns`        | string[] | `[]`                 | Branch patterns to match (uses top-level `branchPatterns` if empty) |
 | `qa.artifacts`             | string   | `"both"`             | Artifacts to capture: `screenshot`, `video`, or `both`              |
 | `qa.skipLabel`             | string   | `"skip-qa"`          | GitHub label to skip QA for specific PRs                            |
@@ -358,24 +358,24 @@ PRDs whose filename (without `.md` extension) matches an entry execute first.
 
 ### Code Audit (audit)
 
-| Field                | Type    | Default        | Description                                       |
-| -------------------- | ------- | -------------- | ------------------------------------------------- |
-| `audit.enabled`      | boolean | `false`        | Enable the audit process                          |
-| `audit.schedule`     | string  | `"50 3 * * 1"` | Cron schedule for audit execution (weekly Monday) |
-| `audit.maxRuntime`   | number  | `1800`         | Maximum runtime in seconds for the audit          |
-| `audit.createIssues` | boolean | `false`        | Create board issues for selected audit findings   |
-| `audit.targetColumn` | string  | `"Draft"`      | Board column for created audit issues             |
+| Field                | Type    | Default        | Description                                                 |
+| -------------------- | ------- | -------------- | ----------------------------------------------------------- |
+| `audit.enabled`      | boolean | `false`        | Enable the audit process                                    |
+| `audit.schedule`     | string  | `"50 3 * * 1"` | Cron schedule for audit execution (weekly Monday)           |
+| `audit.maxRuntime`   | number  | `0`            | Maximum runtime in seconds for the audit (`0` = no timeout) |
+| `audit.createIssues` | boolean | `false`        | Create board issues for selected audit findings             |
+| `audit.targetColumn` | string  | `"Draft"`      | Board column for created audit issues                       |
 
 ### Analytics Job (analytics)
 
-| Field                      | Type    | Default          | Description                             |
-| -------------------------- | ------- | ---------------- | --------------------------------------- |
-| `analytics.enabled`        | boolean | `false`          | Enable the analytics job                |
-| `analytics.schedule`       | string  | `"0 6 * * 1"`    | Cron schedule (weekly Monday 06:00)     |
-| `analytics.maxRuntime`     | number  | `900`            | Maximum runtime in seconds (15 minutes) |
-| `analytics.lookbackDays`   | number  | `7`              | Days of historical data to analyze      |
-| `analytics.targetColumn`   | string  | `"Draft"`        | Board column for created issues         |
-| `analytics.analysisPrompt` | string  | (default prompt) | Custom prompt for analysis              |
+| Field                      | Type    | Default          | Description                                   |
+| -------------------------- | ------- | ---------------- | --------------------------------------------- |
+| `analytics.enabled`        | boolean | `false`          | Enable the analytics job                      |
+| `analytics.schedule`       | string  | `"0 6 * * 1"`    | Cron schedule (weekly Monday 06:00)           |
+| `analytics.maxRuntime`     | number  | `0`              | Maximum runtime in seconds (`0` = no timeout) |
+| `analytics.lookbackDays`   | number  | `7`              | Days of historical data to analyze            |
+| `analytics.targetColumn`   | string  | `"Draft"`        | Board column for created issues               |
+| `analytics.analysisPrompt` | string  | (default prompt) | Custom prompt for analysis                    |
 
 ### Queue Configuration
 
@@ -441,9 +441,9 @@ All Night Watch environment variables are prefixed with `NW_`:
 | ------------------------------ | ------------------------- | ----------------------------------------------------------- |
 | `NW_DEFAULT_BRANCH`            | `defaultBranch`           | `main`                                                      |
 | `NW_PRD_DIR`                   | `prdDir`                  | `docs/prds`                                                 |
-| `NW_MAX_RUNTIME`               | `maxRuntime`              | `7200`                                                      |
+| `NW_MAX_RUNTIME`               | `maxRuntime`              | `0` or `7200`                                               |
 | `NW_SESSION_MAX_RUNTIME`       | `sessionMaxRuntime`       | `1800`                                                      |
-| `NW_REVIEWER_MAX_RUNTIME`      | `reviewerMaxRuntime`      | `3600`                                                      |
+| `NW_REVIEWER_MAX_RUNTIME`      | `reviewerMaxRuntime`      | `0` or `3600`                                               |
 | `NW_BRANCH_PREFIX`             | `branchPrefix`            | `night-watch`                                               |
 | `NW_BRANCH_PATTERNS`           | `branchPatterns`          | `["feat/", "night-watch/"]` (JSON array or comma-separated) |
 | `NW_MIN_REVIEW_SCORE`          | `minReviewScore`          | `80`                                                        |
@@ -487,13 +487,13 @@ All Night Watch environment variables are prefixed with `NW_`:
 
 **Job-Specific Runtime Variables:**
 
-| Variable                   | Config Key             | Example |
-| -------------------------- | ---------------------- | ------- |
-| `NW_EXECUTOR_MAX_RUNTIME`  | `maxRuntime`           | `7200`  |
-| `NW_REVIEWER_MAX_RUNTIME`  | `reviewerMaxRuntime`   | `3600`  |
-| `NW_QA_MAX_RUNTIME`        | `qa.maxRuntime`        | `3600`  |
-| `NW_AUDIT_MAX_RUNTIME`     | `audit.maxRuntime`     | `1800`  |
-| `NW_ANALYTICS_MAX_RUNTIME` | `analytics.maxRuntime` | `900`   |
+| Variable                   | Config Key             | Example       |
+| -------------------------- | ---------------------- | ------------- |
+| `NW_EXECUTOR_MAX_RUNTIME`  | `maxRuntime`           | `0` or `7200` |
+| `NW_REVIEWER_MAX_RUNTIME`  | `reviewerMaxRuntime`   | `0` or `3600` |
+| `NW_QA_MAX_RUNTIME`        | `qa.maxRuntime`        | `0` or `3600` |
+| `NW_AUDIT_MAX_RUNTIME`     | `audit.maxRuntime`     | `0` or `1800` |
+| `NW_ANALYTICS_MAX_RUNTIME` | `analytics.maxRuntime` | `0` or `900`  |
 
 **Job-Specific Extra Fields:**
 

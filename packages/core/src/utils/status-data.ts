@@ -299,6 +299,7 @@ export function countPRDs(
   prdDir: string,
   maxRuntime: number,
 ): { pending: number; claimed: number; done: number } {
+  const claimStaleAfter = maxRuntime > 0 ? maxRuntime : 14400;
   const fullPrdPath = path.join(projectDir, prdDir);
 
   if (!fs.existsSync(fullPrdPath)) {
@@ -333,7 +334,7 @@ export function countPRDs(
             const content = fs.readFileSync(claimPath, 'utf-8');
             const claimData = JSON.parse(content);
             const age = Math.floor(Date.now() / 1000) - claimData.timestamp;
-            if (age < maxRuntime) {
+            if (age < claimStaleAfter) {
               claimed++;
             } else {
               pending++;
@@ -381,6 +382,7 @@ export function parsePrdDependencies(prdPath: string): string[] {
  * Cross-validates claim files with executor lock to avoid stale "in-progress" status
  */
 export function collectPrdInfo(projectDir: string, prdDir: string, maxRuntime: number): IPrdInfo[] {
+  const claimStaleAfter = maxRuntime > 0 ? maxRuntime : 14400;
   const fullPrdPath = path.join(projectDir, prdDir);
   const prds: IPrdInfo[] = [];
 
@@ -435,7 +437,7 @@ export function collectPrdInfo(projectDir: string, prdDir: string, maxRuntime: n
             const content = fs.readFileSync(claimPath, 'utf-8');
             const claimData = JSON.parse(content);
             const age = Math.floor(Date.now() / 1000) - claimData.timestamp;
-            if (age < maxRuntime) {
+            if (age < claimStaleAfter) {
               // Cross-check: verify executor lock exists and is running
               if (executorLock.running) {
                 status = 'in-progress';

@@ -15,7 +15,7 @@ Night Watch follows a **Job Registry pattern** for scalable job architecture. Ea
 - **Purpose**: Creates implementation PRs from Product Requirements Documents (PRDs)
 - **CLI Command**: `run`
 - **Schedule**: Every 2 hours (default: `5 */2 * * *`)
-- **Max Runtime**: 2 hours (7200s)
+- **Max Runtime**: none by default (set seconds in config to enable)
 - **Priority**: 50 (highest priority)
 - **Env Prefix**: `NW_EXECUTOR`
 
@@ -24,7 +24,7 @@ Night Watch follows a **Job Registry pattern** for scalable job architecture. Ea
 - **Purpose**: Reviews and improves PRs on night-watch branches
 - **CLI Command**: `review`
 - **Schedule**: Every 3 hours (default: `25 */3 * * *`)
-- **Max Runtime**: 1 hour (3600s)
+- **Max Runtime**: none by default (set seconds in config to enable)
 - **Priority**: 40
 - **Env Prefix**: `NW_REVIEWER`
 - **Features**:
@@ -37,7 +37,7 @@ Night Watch follows a **Job Registry pattern** for scalable job architecture. Ea
 - **Purpose**: Generates PRDs from roadmap items
 - **CLI Command**: `planner` (also `slice`)
 - **Schedule**: Every 6 hours (default: `35 */6 * * *`)
-- **Max Runtime**: 10 minutes (600s)
+- **Max Runtime**: none by default (set seconds in config to enable)
 - **Priority**: 30
 - **Env Prefix**: `NW_PLANNER`
 - **Roadmap Integration**: Parses ROADMAP.md files
@@ -47,7 +47,7 @@ Night Watch follows a **Job Registry pattern** for scalable job architecture. Ea
 - **Purpose**: Automated UI testing and quality assurance
 - **CLI Command**: `qa`
 - **Schedule**: 3x daily (staggered: `45 2,10,18 * * *`)
-- **Max Runtime**: 1 hour (3600s)
+- **Max Runtime**: none by default (set seconds in config to enable)
 - **Priority**: 20
 - **Env Prefix**: `NW_QA`
 - **Features**:
@@ -61,7 +61,7 @@ Night Watch follows a **Job Registry pattern** for scalable job architecture. Ea
 - **Purpose**: Code quality and security audits
 - **CLI Command**: `audit`
 - **Schedule**: Weekly on Monday 03:50 (default: `50 3 * * 1`)
-- **Max Runtime**: 30 minutes (1800s)
+- **Max Runtime**: none by default (set seconds in config to enable)
 - **Priority**: 15
 - **Env Prefix**: `NW_AUDIT`
 - **Output**: GitHub issues for findings
@@ -71,7 +71,7 @@ Night Watch follows a **Job Registry pattern** for scalable job architecture. Ea
 - **Purpose**: Product analytics analysis and insight generation
 - **CLI Command**: `analytics`
 - **Schedule**: Weekly on Monday 06:00 (default: `0 6 * * 1`)
-- **Max Runtime**: 15 minutes (900s)
+- **Max Runtime**: none by default (set seconds in config to enable)
 - **Priority**: 10
 - **Env Prefix**: `NW_ANALYTICS`
 - **Integration**: Amplitude data analysis
@@ -454,7 +454,7 @@ Rich context including:
 
 - **Automatic Fallback**: Rate limit fallback to native Claude
 - **Retry Logic**: Configurable retry attempts
-- **Timeout Protection**: Job timeouts prevent runaway processes
+- **Timeout Protection**: Optional job timeouts can be enabled in config
 
 ### Isolation
 

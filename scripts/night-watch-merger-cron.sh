@@ -8,7 +8,7 @@ set -euo pipefail
 # (oldest PR first by creation date). Rebases remaining PRs after each merge.
 #
 # Required env vars (with defaults shown):
-#   NW_MERGER_MAX_RUNTIME=1800               - Maximum runtime in seconds (30 min)
+#   NW_MERGER_MAX_RUNTIME=0                  - Maximum runtime in seconds (0 = no timeout)
 #   NW_MERGER_MERGE_METHOD=squash            - Merge method: squash|merge|rebase
 #   NW_MERGER_MIN_REVIEW_SCORE=80            - Minimum review score threshold
 #   NW_MERGER_BRANCH_PATTERNS=               - Comma-separated branch prefixes (empty = all)
@@ -24,7 +24,7 @@ PROJECT_DIR="${1:?Usage: $0 /path/to/project}"
 PROJECT_NAME=$(basename "${PROJECT_DIR}")
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/merger.log"
-MAX_RUNTIME="${NW_MERGER_MAX_RUNTIME:-1800}"
+MAX_RUNTIME="${NW_MERGER_MAX_RUNTIME:-0}"
 MAX_LOG_SIZE="524288"  # 512 KB
 MERGE_METHOD="${NW_MERGER_MERGE_METHOD:-squash}"
 MIN_REVIEW_SCORE="${NW_MERGER_MIN_REVIEW_SCORE:-80}"
@@ -410,8 +410,12 @@ run_reviewer_repair_for_pr() {
   local reviewer_exit=1
 
   elapsed=$(( $(date +%s) - SCRIPT_START_TIME ))
-  remaining=$(( MAX_RUNTIME - elapsed - 30 ))
-  if [ "${remaining}" -lt 120 ]; then
+  if is_runtime_limited "${MAX_RUNTIME}"; then
+    remaining=$(( MAX_RUNTIME - elapsed - 30 ))
+  else
+    remaining=0
+  fi
+  if is_runtime_limited "${MAX_RUNTIME}" && [ "${remaining}" -lt 120 ]; then
     log "INFO: PR #${pr_number} (${pr_branch}): Not enough merger runtime left for targeted reviewer repair (${remaining}s), skipping repair"
     return 1
   fi
@@ -550,13 +554,15 @@ if [ "${DRY_RUN}" = "1" ]; then
 fi
 
 # Timeout watchdog
-(
-  sleep "${MAX_RUNTIME}"
-  log "TIMEOUT: Merger exceeded ${MAX_RUNTIME}s, terminating"
-  kill -TERM $$ 2>/dev/null || true
-) &
-WATCHDOG_PID=$!
-append_exit_trap "cleanup_watchdog ${WATCHDOG_PID}"
+if is_runtime_limited "${MAX_RUNTIME}"; then
+  (
+    sleep "${MAX_RUNTIME}"
+    log "TIMEOUT: Merger exceeded ${MAX_RUNTIME}s, terminating"
+    kill -TERM $$ 2>/dev/null || true
+  ) &
+  WATCHDOG_PID=$!
+  append_exit_trap "cleanup_watchdog ${WATCHDOG_PID}"
+fi
 
 # Discover open PRs sorted by creation date (oldest first = FIFO)
 log "INFO: Scanning open PRs..."
@@ -713,7 +719,7 @@ while IFS= read -r pr_json; do
 
   # Enforce global timeout
   elapsed=$(( $(date +%s) - SCRIPT_START_TIME ))
-  if [ "${elapsed}" -ge "${MAX_RUNTIME}" ]; then
+  if is_runtime_limited "${MAX_RUNTIME}" && [ "${elapsed}" -ge "${MAX_RUNTIME}" ]; then
     log "WARN: Global timeout reached (${MAX_RUNTIME}s), stopping early"
     break
   fi

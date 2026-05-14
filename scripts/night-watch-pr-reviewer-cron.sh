@@ -7,7 +7,7 @@ set -euo pipefail
 # NOTE: This script expects environment variables to be set by the caller.
 # The Node.js CLI will inject config values via environment variables.
 # Required env vars (with defaults shown):
-#   NW_REVIEWER_MAX_RUNTIME=3600 - Maximum runtime in seconds (1 hour)
+#   NW_REVIEWER_MAX_RUNTIME=0    - Maximum runtime in seconds (0 = no timeout)
 #   NW_PROVIDER_CMD=claude       - AI provider CLI to use (claude, codex, etc.)
 #   NW_DRY_RUN=0                 - Set to 1 for dry-run mode (prints diagnostics only)
 
@@ -15,7 +15,7 @@ PROJECT_DIR="${1:?Usage: $0 /path/to/project}"
 PROJECT_NAME=$(basename "${PROJECT_DIR}")
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/reviewer.log"
-MAX_RUNTIME="${NW_REVIEWER_MAX_RUNTIME:-3600}"  # 1 hour
+MAX_RUNTIME="${NW_REVIEWER_MAX_RUNTIME:-0}"  # 0 = no provider timeout
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 PROVIDER_LABEL="${NW_PROVIDER_LABEL:-}"
@@ -1012,21 +1012,24 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
     worker_pr="${WORKER_PRS[$idx]}"
     worker_output="${WORKER_OUTPUTS[$idx]}"
 
-    # Guard: abort the wait loop when the global budget is exhausted
-    PARENT_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
-    PARENT_REMAINING=$(( MAX_RUNTIME - PARENT_ELAPSED ))
-    if [ "${PARENT_REMAINING}" -le 0 ]; then
-      log "PARALLEL: global timeout exhausted — killing remaining workers"
-      for remaining_idx in $(seq "${idx}" $(( ${#WORKER_PIDS[@]} - 1 ))); do
-        kill "${WORKER_PIDS[$remaining_idx]}" 2>/dev/null || true
-      done
-      EXIT_CODE=124
-      break
-    fi
+    watchdog_pid=""
+    if is_runtime_limited "${MAX_RUNTIME}"; then
+      # Guard: abort the wait loop when the global budget is exhausted
+      PARENT_ELAPSED=$(( $(date +%s) - SCRIPT_START_TIME ))
+      PARENT_REMAINING=$(( MAX_RUNTIME - PARENT_ELAPSED ))
+      if [ "${PARENT_REMAINING}" -le 0 ]; then
+        log "PARALLEL: global timeout exhausted — killing remaining workers"
+        for remaining_idx in $(seq "${idx}" $(( ${#WORKER_PIDS[@]} - 1 ))); do
+          kill "${WORKER_PIDS[$remaining_idx]}" 2>/dev/null || true
+        done
+        EXIT_CODE=124
+        break
+      fi
 
-    # Watchdog: kill the worker if it outlives the remaining budget
-    ( sleep "${PARENT_REMAINING}" 2>/dev/null; kill "${worker_pid}" 2>/dev/null || true ) &
-    watchdog_pid=$!
+      # Watchdog: kill the worker if it outlives the remaining budget
+      ( sleep "${PARENT_REMAINING}" 2>/dev/null; kill "${worker_pid}" 2>/dev/null || true ) &
+      watchdog_pid=$!
+    fi
 
     worker_exit_code=0
     if wait "${worker_pid}" 2>/dev/null; then
@@ -1036,8 +1039,10 @@ if [ -z "${TARGET_PR}" ] && [ "${WORKER_MODE}" != "1" ] && [ "${PARALLEL_ENABLED
     fi
 
     # Cancel the watchdog — the worker finished in time
-    kill "${watchdog_pid}" 2>/dev/null || true
-    wait "${watchdog_pid}" 2>/dev/null || true
+    if [ -n "${watchdog_pid}" ]; then
+      kill "${watchdog_pid}" 2>/dev/null || true
+      wait "${watchdog_pid}" 2>/dev/null || true
+    fi
 
     if [ -f "${worker_output}" ] && [ -s "${worker_output}" ]; then
       cat "${worker_output}" >> "${LOG_FILE}"
@@ -1268,6 +1273,11 @@ if [ -n "${TARGET_PR}" ]; then
 fi
 
 remaining_runtime_budget() {
+  if ! is_runtime_limited "${MAX_RUNTIME}"; then
+    printf "0"
+    return 0
+  fi
+
   local now_ms
   local elapsed_ms
   local remaining_ms
@@ -1299,7 +1309,7 @@ sleep_with_runtime_budget() {
     return 0
   fi
 
-  if [ -z "${TARGET_PR}" ]; then
+  if [ -z "${TARGET_PR}" ] || ! is_runtime_limited "${MAX_RUNTIME}"; then
     sleep "${requested_sleep}"
     return 0
   fi
@@ -1325,7 +1335,7 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
   ATTEMPTS_MADE="${ATTEMPT}"
 
   ATTEMPT_TIMEOUT="${MAX_RUNTIME}"
-  if [ -n "${TARGET_PR}" ]; then
+  if [ -n "${TARGET_PR}" ] && is_runtime_limited "${MAX_RUNTIME}"; then
     # Give each targeted attempt the full remaining runtime budget.
     # Retries only happen after a quick return (low score / invalid output / rate limit);
     # a timed-out provider run is not retried, so pre-splitting the budget would
@@ -1367,7 +1377,7 @@ for ATTEMPT in $(seq 1 "${TOTAL_ATTEMPTS}"); do
   mapfile -d '' -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${REVIEW_WORKTREE_DIR}" "${REVIEWER_PROMPT}")
 
   # Execute — always cd into worktree so provider tools resolve project files correctly
-  if (cd "${REVIEW_WORKTREE_DIR}" && timeout "${ATTEMPT_TIMEOUT}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
+  if (cd "${REVIEW_WORKTREE_DIR}" && run_with_optional_timeout "${ATTEMPT_TIMEOUT}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
     EXIT_CODE=0
   else
     EXIT_CODE=$?

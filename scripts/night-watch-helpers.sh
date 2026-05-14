@@ -614,6 +614,29 @@ detect_default_branch() {
   echo "main"
 }
 
+# ── Runtime limits ───────────────────────────────────────────────────────────
+
+is_runtime_limited() {
+  local limit="${1:-0}"
+  case "${limit}" in
+    ""|"0"|"none"|"null"|"false")
+      return 1
+      ;;
+  esac
+  [[ "${limit}" =~ ^[0-9]+$ ]] && [ "${limit}" -gt 0 ]
+}
+
+run_with_optional_timeout() {
+  local limit="${1:-0}"
+  shift
+
+  if is_runtime_limited "${limit}"; then
+    timeout "${limit}" "$@"
+  else
+    "$@"
+  fi
+}
+
 # ── Claim management ─────────────────────────────────────────────────────────
 
 claim_prd() {

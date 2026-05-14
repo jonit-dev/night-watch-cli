@@ -174,7 +174,7 @@ export interface IQaConfig {
   enabled: boolean;
   /** Cron schedule for QA execution */
   schedule: string;
-  /** Maximum runtime in seconds for QA */
+  /** Maximum runtime in seconds for QA. 0 disables the provider timeout. */
   maxRuntime: number;
   /** Branch patterns to match for QA (defaults to top-level branchPatterns if empty) */
   branchPatterns: string[];
@@ -193,7 +193,7 @@ export interface IAuditConfig {
   enabled: boolean;
   /** Cron schedule for audit execution */
   schedule: string;
-  /** Maximum runtime in seconds for the audit */
+  /** Maximum runtime in seconds for the audit. 0 disables the provider timeout. */
   maxRuntime: number;
   /** Whether audit findings should be expanded into board issues */
   createIssues: boolean;
@@ -208,13 +208,13 @@ export interface IPrResolverConfig {
   enabled: boolean;
   /** Cron schedule for PR resolver execution */
   schedule: string;
-  /** Maximum runtime in seconds for the PR resolver */
+  /** Maximum runtime in seconds for the PR resolver. 0 disables the provider timeout. */
   maxRuntime: number;
   /** Branch patterns to filter which PRs to process (empty = all) */
   branchPatterns: string[];
   /** Maximum number of PRs to process per run (0 = unlimited) */
   maxPrsPerRun: number;
-  /** Per-PR timeout in seconds */
+  /** Per-PR timeout in seconds. 0 disables the provider timeout. */
   perPrTimeout: number;
   /** Whether to use AI to resolve merge conflicts */
   aiConflictResolution: boolean;
@@ -246,7 +246,7 @@ export interface IAnalyticsConfig {
   enabled: boolean;
   /** Cron schedule for analytics execution */
   schedule: string;
-  /** Maximum runtime in seconds for the analytics job */
+  /** Maximum runtime in seconds for the analytics job. 0 disables the provider timeout. */
   maxRuntime: number;
   /** Number of days to look back when fetching Amplitude data */
   lookbackDays: number;

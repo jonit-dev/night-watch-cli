@@ -160,7 +160,11 @@ function resolveGitHubBlobUrl(projectDir: string, relPath: string): string | nul
   }
 }
 
-export function buildGithubIssueBody(prdPath: string, projectDir: string, prdContent: string): string {
+export function buildGithubIssueBody(
+  prdPath: string,
+  projectDir: string,
+  prdContent: string,
+): string {
   const relPath = path.relative(projectDir, prdPath);
   const blobUrl = resolveGitHubBlobUrl(projectDir, relPath);
   const fileLine = blobUrl ? `PRD file: [\`${relPath}\`](${blobUrl})` : `PRD file: \`${relPath}\``;
@@ -264,21 +268,27 @@ function runGh(args: string[], cwd: string): string | null {
   return null;
 }
 
-function createGithubIssue(title: string, prdPath: string, projectDir: string, prdContent: string): string | null {
+function createGithubIssue(
+  title: string,
+  prdPath: string,
+  projectDir: string,
+  prdContent: string,
+): string | null {
   const tmpFile = path.join(projectDir, `.prd-issue-body-${Date.now()}.tmp`);
   try {
     const body = buildGithubIssueBody(prdPath, projectDir, prdContent);
     fs.writeFileSync(tmpFile, body, 'utf-8');
 
     const baseArgs = ['issue', 'create', '--title', `PRD: ${title}`, '--body-file', tmpFile];
-    return (
-      runGh([...baseArgs, '--label', 'prd'], projectDir) ??
-      runGh(baseArgs, projectDir)
-    );
+    return runGh([...baseArgs, '--label', 'prd'], projectDir) ?? runGh(baseArgs, projectDir);
   } catch {
     return null;
   } finally {
-    try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
+    try {
+      fs.unlinkSync(tmpFile);
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -296,6 +306,7 @@ function isClaimActive(
   claimPath: string,
   maxRuntime: number,
 ): { active: boolean; hostname?: string; pid?: number } {
+  const claimStaleAfter = maxRuntime > 0 ? maxRuntime : 14400;
   try {
     if (!fs.existsSync(claimPath)) {
       return { active: false };
@@ -303,7 +314,7 @@ function isClaimActive(
     const content = fs.readFileSync(claimPath, 'utf-8');
     const claim = JSON.parse(content) as { timestamp: number; hostname?: string; pid?: number };
     const age = Math.floor(Date.now() / 1000) - claim.timestamp;
-    if (age < maxRuntime) {
+    if (age < claimStaleAfter) {
       return { active: true, hostname: claim.hostname, pid: claim.pid };
     }
     return { active: false };
@@ -333,7 +344,9 @@ export function prdCommand(program: Command): void {
         ? (CLAUDE_MODEL_IDS[options.model as keyof typeof CLAUDE_MODEL_IDS] ?? options.model)
         : undefined;
       const modelLabel = resolvedModel ?? CLAUDE_MODEL_IDS.opus;
-      dim(`Calling Claude (${modelLabel}) to generate the PRD. It can take several minutes, please hang on!\n`);
+      dim(
+        `Calling Claude (${modelLabel}) to generate the PRD. It can take several minutes, please hang on!\n`,
+      );
       const generated = await generatePrdWithClaude(name, projectDir, resolvedModel);
 
       if (!generated) {

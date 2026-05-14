@@ -173,7 +173,7 @@ export function buildEnvOverrideConfig(
   }
   if (process.env.NW_SLICER_MAX_RUNTIME) {
     const v = parseInt(process.env.NW_SLICER_MAX_RUNTIME, 10);
-    if (!isNaN(v) && v > 0) {
+    if (!isNaN(v) && v >= 0) {
       env.roadmapScanner = { ...roadmapBase(), slicerMaxRuntime: v };
     }
   }

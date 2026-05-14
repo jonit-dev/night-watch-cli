@@ -122,7 +122,7 @@ sequenceDiagram
 
     loop Retry attempts (max 3)
         CRON->>HELP: build_provider_cmd()
-        CRON->>AI: timeout $MAX_RUNTIME claude -p "$PROMPT"
+        CRON->>AI: run_with_optional_timeout $MAX_RUNTIME claude -p "$PROMPT"
         AI-->>CRON: exit code
 
         alt Exit 0 (success)
@@ -276,16 +276,16 @@ The Node.js CLI sets these env vars before spawning bash scripts:
 
 ### Core Configuration
 
-| Variable                 | Source                     | Purpose                      |
-| ------------------------ | -------------------------- | ---------------------------- |
-| `NW_PROVIDER_CMD`        | `config.provider`          | CLI binary (claude, codex)   |
-| `NW_PROVIDER_LABEL`      | `config.providerLabel`     | Human-readable label         |
-| `NW_MAX_RUNTIME`         | `config.maxRuntime`        | Max execution time (seconds) |
-| `NW_SESSION_MAX_RUNTIME` | `config.sessionMaxRuntime` | Per-invocation timeout       |
-| `NW_PRD_DIR`             | `config.prdDir`            | PRD directory path           |
-| `NW_BRANCH_PREFIX`       | `config.branchPrefix`      | Git branch prefix            |
-| `NW_DEFAULT_BRANCH`      | `config.defaultBranch`     | Default git branch           |
-| `NW_DRY_RUN`             | `--dry-run` flag           | Skip actual execution        |
+| Variable                 | Source                     | Purpose                                          |
+| ------------------------ | -------------------------- | ------------------------------------------------ |
+| `NW_PROVIDER_CMD`        | `config.provider`          | CLI binary (claude, codex)                       |
+| `NW_PROVIDER_LABEL`      | `config.providerLabel`     | Human-readable label                             |
+| `NW_MAX_RUNTIME`         | `config.maxRuntime`        | Max execution time in seconds (`0` = no timeout) |
+| `NW_SESSION_MAX_RUNTIME` | `config.sessionMaxRuntime` | Per-invocation timeout (`0`/unset = no timeout)  |
+| `NW_PRD_DIR`             | `config.prdDir`            | PRD directory path                               |
+| `NW_BRANCH_PREFIX`       | `config.branchPrefix`      | Git branch prefix                                |
+| `NW_DEFAULT_BRANCH`      | `config.defaultBranch`     | Default git branch                               |
+| `NW_DRY_RUN`             | `--dry-run` flag           | Skip actual execution                            |
 
 ### Provider Presets
 

@@ -7,11 +7,11 @@ set -euo pipefail
 # NOTE: This script expects environment variables to be set by the caller.
 # The Node.js CLI will inject config values via environment variables.
 # Required env vars (with defaults shown):
-#   NW_PR_RESOLVER_MAX_RUNTIME=3600          - Maximum runtime in seconds (1 hour)
+#   NW_PR_RESOLVER_MAX_RUNTIME=0             - Maximum runtime in seconds (0 = no timeout)
 #   NW_PROVIDER_CMD=claude                   - AI provider CLI to use (claude, codex, etc.)
 #   NW_DRY_RUN=0                             - Set to 1 for dry-run mode (prints diagnostics only)
 #   NW_PR_RESOLVER_MAX_PRS_PER_RUN=0         - Max PRs to process per run (0 = unlimited)
-#   NW_PR_RESOLVER_PER_PR_TIMEOUT=600        - Per-PR AI timeout in seconds
+#   NW_PR_RESOLVER_PER_PR_TIMEOUT=0          - Per-PR AI timeout in seconds (0 = no timeout)
 #   NW_PR_RESOLVER_AI_CONFLICT_RESOLUTION=1  - Set to 1 to use AI for conflict resolution
 #   NW_PR_RESOLVER_AI_REVIEW_RESOLUTION=0    - Set to 1 to also address review comments
 #   NW_PR_RESOLVER_READY_LABEL=ready-to-merge - Label to add when PR is conflict-free
@@ -21,12 +21,12 @@ PROJECT_DIR="${1:?Usage: $0 /path/to/project}"
 PROJECT_NAME=$(basename "${PROJECT_DIR}")
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/pr-resolver.log"
-MAX_RUNTIME="${NW_PR_RESOLVER_MAX_RUNTIME:-3600}"  # 1 hour
+MAX_RUNTIME="${NW_PR_RESOLVER_MAX_RUNTIME:-0}"  # 0 = no global timeout
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 PROVIDER_LABEL="${NW_PROVIDER_LABEL:-}"
 MAX_PRS_PER_RUN="${NW_PR_RESOLVER_MAX_PRS_PER_RUN:-0}"
-PER_PR_TIMEOUT="${NW_PR_RESOLVER_PER_PR_TIMEOUT:-600}"
+PER_PR_TIMEOUT="${NW_PR_RESOLVER_PER_PR_TIMEOUT:-0}"
 AI_CONFLICT_RESOLUTION="${NW_PR_RESOLVER_AI_CONFLICT_RESOLUTION:-1}"
 AI_REVIEW_RESOLUTION="${NW_PR_RESOLVER_AI_REVIEW_RESOLUTION:-0}"
 READY_LABEL="${NW_PR_RESOLVER_READY_LABEL:-ready-to-merge}"
@@ -38,13 +38,10 @@ if ! [[ "${MAX_PRS_PER_RUN}" =~ ^[0-9]+$ ]]; then
   MAX_PRS_PER_RUN="0"
 fi
 if ! [[ "${PER_PR_TIMEOUT}" =~ ^[0-9]+$ ]]; then
-  PER_PR_TIMEOUT="600"
+  PER_PR_TIMEOUT="0"
 fi
 if [ "${MAX_PRS_PER_RUN}" -gt 100 ]; then
   MAX_PRS_PER_RUN="100"
-fi
-if [ "${PER_PR_TIMEOUT}" -gt 3600 ]; then
-  PER_PR_TIMEOUT="3600"
 fi
 
 mkdir -p "${LOG_DIR}"
@@ -183,7 +180,7 @@ Work exclusively in the directory: ${worktree_dir}"
         local -a cmd_parts
         mapfile -d '' -t cmd_parts < <(build_provider_cmd "${worktree_dir}" "${ai_prompt}")
 
-        if timeout "${PER_PR_TIMEOUT}" "${cmd_parts[@]}" >> "${LOG_FILE}" 2>&1; then
+        if run_with_optional_timeout "${PER_PR_TIMEOUT}" "${cmd_parts[@]}" >> "${LOG_FILE}" 2>&1; then
           rebase_success=1
           log "INFO: AI resolved conflicts for PR #${pr_number}" "branch=${pr_branch}"
         else
@@ -241,7 +238,7 @@ Work in the directory: ${review_workdir}"
       local -a review_cmd_parts
       mapfile -d '' -t review_cmd_parts < <(build_provider_cmd "${review_workdir}" "${review_prompt}")
 
-      if timeout "${PER_PR_TIMEOUT}" "${review_cmd_parts[@]}" >> "${LOG_FILE}" 2>&1; then
+      if run_with_optional_timeout "${PER_PR_TIMEOUT}" "${review_cmd_parts[@]}" >> "${LOG_FILE}" 2>&1; then
         log "INFO: AI addressed review comments for PR #${pr_number}" "branch=${pr_branch}"
       else
         log "WARN: AI failed to address review comments for PR #${pr_number}" "branch=${pr_branch}"
@@ -379,7 +376,7 @@ while IFS= read -r pr_line; do
 
   # Enforce global timeout
   elapsed=$(( $(date +%s) - SCRIPT_START_TIME ))
-  if [ "${elapsed}" -ge "${MAX_RUNTIME}" ]; then
+  if is_runtime_limited "${MAX_RUNTIME}" && [ "${elapsed}" -ge "${MAX_RUNTIME}" ]; then
     log "WARN: Global timeout reached (${MAX_RUNTIME}s), stopping early"
     break
   fi

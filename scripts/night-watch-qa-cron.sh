@@ -7,7 +7,7 @@ set -euo pipefail
 # NOTE: This script expects environment variables to be set by the caller.
 # The Node.js CLI will inject config values via environment variables.
 # Required env vars (with defaults shown):
-#   NW_QA_MAX_RUNTIME=3600            - Maximum runtime in seconds (1 hour)
+#   NW_QA_MAX_RUNTIME=0               - Maximum runtime in seconds (0 = no timeout)
 #   NW_PROVIDER_CMD=claude            - AI provider CLI to use (claude, codex, etc.)
 #   NW_BRANCH_PATTERNS=feat/,night-watch/ - Comma-separated branch prefixes to match
 #   NW_QA_SKIP_LABEL=skip-qa          - Label to skip QA on a PR
@@ -19,7 +19,7 @@ PROJECT_DIR="${1:?Usage: $0 /path/to/project}"
 PROJECT_NAME=$(basename "${PROJECT_DIR}")
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/night-watch-qa.log"
-MAX_RUNTIME="${NW_QA_MAX_RUNTIME:-3600}"  # 1 hour
+MAX_RUNTIME="${NW_QA_MAX_RUNTIME:-0}"  # 0 = no provider timeout
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 PROVIDER_LABEL="${NW_PROVIDER_LABEL:-}"
@@ -599,7 +599,7 @@ for pr_ref in ${PRS_NEEDING_QA}; do
   mapfile -d '' -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${QA_WORKTREE_DIR}" "${QA_PROMPT}")
 
   # Execute — always cd into worktree so provider tools resolve project files correctly
-  if (cd "${QA_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
+  if (cd "${QA_WORKTREE_DIR}" && run_with_optional_timeout "${MAX_RUNTIME}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
     PROVIDER_OK=1
   else
     local_exit=$?

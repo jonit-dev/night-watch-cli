@@ -7,7 +7,7 @@ set -euo pipefail
 # NOTE: This script expects environment variables to be set by the caller.
 # The Node.js CLI will inject config values via environment variables.
 # Required env vars (with defaults shown):
-#   NW_AUDIT_MAX_RUNTIME=1800    - Maximum runtime in seconds (30 minutes)
+#   NW_AUDIT_MAX_RUNTIME=0       - Maximum runtime in seconds (0 = no timeout)
 #   NW_AUDIT_CREATE_ISSUES=0     - Set to 1 to request per-finding board issue sections
 #   NW_PROVIDER_CMD=claude       - AI provider CLI to use (claude, codex, etc.)
 #   NW_DRY_RUN=0                 - Set to 1 for dry-run mode (prints diagnostics only)
@@ -17,7 +17,7 @@ PROJECT_NAME=$(basename "${PROJECT_DIR}")
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/audit.log"
 REPORT_FILE="${PROJECT_DIR}/logs/audit-report.md"
-MAX_RUNTIME="${NW_AUDIT_MAX_RUNTIME:-1800}"  # 30 minutes
+MAX_RUNTIME="${NW_AUDIT_MAX_RUNTIME:-0}"  # 0 = no provider timeout
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 SCRIPT_TYPE="audit"
@@ -174,7 +174,7 @@ for AUDIT_ATTEMPT in $(seq 1 "${AUDIT_MAX_RETRIES}"); do
   mapfile -d '' -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${AUDIT_WORKTREE_DIR}" "${AUDIT_PROMPT}")
 
   # Execute — always cd into worktree so provider tools resolve project files correctly
-  if (cd "${AUDIT_WORKTREE_DIR}" && timeout "${MAX_RUNTIME}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
+  if (cd "${AUDIT_WORKTREE_DIR}" && run_with_optional_timeout "${MAX_RUNTIME}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
     EXIT_CODE=0
   else
     EXIT_CODE=$?

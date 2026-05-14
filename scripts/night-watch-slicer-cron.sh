@@ -10,7 +10,7 @@ set -euo pipefail
 # NOTE: This script expects environment variables to be set by the caller.
 # The Node.js CLI will inject config values via environment variables.
 # Required env vars (with defaults shown):
-#   NW_SLICER_MAX_RUNTIME=600  - Maximum runtime in seconds (10 minutes)
+#   NW_SLICER_MAX_RUNTIME=0    - Maximum runtime in seconds (0 = no timeout)
 #   NW_PROVIDER_CMD=claude     - AI provider CLI to use (claude, codex, etc.)
 #   NW_DRY_RUN=0               - Set to 1 for dry-run mode (prints diagnostics only)
 
@@ -19,7 +19,7 @@ PROJECT_NAME=$(basename "${PROJECT_DIR}")
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/slicer.log"
 LOCK_FILE=""
-MAX_RUNTIME="${NW_SLICER_MAX_RUNTIME:-600}"  # 10 minutes
+MAX_RUNTIME="${NW_SLICER_MAX_RUNTIME:-0}"  # 0 = no timeout
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 PROVIDER_LABEL="${NW_PROVIDER_LABEL:-}"
@@ -110,7 +110,7 @@ fi
 EXIT_CODE=0
 SLICER_RUN_START=$(date +%s)
 log "SLICER: Starting night-watch slice timeout=${MAX_RUNTIME}s"
-if timeout "${MAX_RUNTIME}" "${CLI_BIN}" slice >> "${LOG_FILE}" 2>&1; then
+if run_with_optional_timeout "${MAX_RUNTIME}" "${CLI_BIN}" slice >> "${LOG_FILE}" 2>&1; then
   EXIT_CODE=0
 else
   EXIT_CODE=$?

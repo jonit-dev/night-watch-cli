@@ -35,9 +35,9 @@ export const DEFAULT_PRD_DIR = 'docs/prds';
 // Summary Configuration
 export const DEFAULT_SUMMARY_WINDOW_HOURS = 12;
 
-// Runtime Configuration (in seconds)
-export const DEFAULT_MAX_RUNTIME = 7200;
-export const DEFAULT_REVIEWER_MAX_RUNTIME = 3600;
+// Runtime Configuration (in seconds; 0 = no provider timeout)
+export const DEFAULT_MAX_RUNTIME = 0;
+export const DEFAULT_REVIEWER_MAX_RUNTIME = 0;
 
 // Cron Schedule Configuration
 export const DEFAULT_CRON_SCHEDULE = '5 * * * *';
@@ -101,7 +101,7 @@ export const DEFAULT_PRD_PRIORITY: string[] = [];
 
 // Roadmap Scanner Configuration
 export const DEFAULT_SLICER_SCHEDULE = '35 */6 * * *'; // every 6 hours (staggered)
-export const DEFAULT_SLICER_MAX_RUNTIME = 600; // 10 minutes
+export const DEFAULT_SLICER_MAX_RUNTIME = 0;
 
 export const DEFAULT_ROADMAP_SCANNER: IRoadmapScannerConfig = {
   enabled: true,
@@ -134,7 +134,7 @@ export const VALID_MERGE_METHODS: MergeMethod[] = ['squash', 'merge', 'rebase'];
 // QA Configuration
 export const DEFAULT_QA_ENABLED = true;
 export const DEFAULT_QA_SCHEDULE = '45 2,10,18 * * *'; // 3x daily, staggered
-export const DEFAULT_QA_MAX_RUNTIME = 3600; // 1 hour
+export const DEFAULT_QA_MAX_RUNTIME = 0;
 export const DEFAULT_QA_ARTIFACTS: QaArtifacts = 'both';
 export const DEFAULT_QA_SKIP_LABEL = 'skip-qa';
 export const DEFAULT_QA_AUTO_INSTALL_PLAYWRIGHT = true;
@@ -156,7 +156,7 @@ export const QA_LOG_NAME = 'night-watch-qa';
 // Audit Configuration
 export const DEFAULT_AUDIT_ENABLED = false;
 export const DEFAULT_AUDIT_SCHEDULE = '50 3 * * 1'; // weekly Monday 03:50
-export const DEFAULT_AUDIT_MAX_RUNTIME = 1800; // 30 minutes
+export const DEFAULT_AUDIT_MAX_RUNTIME = 0;
 export const DEFAULT_AUDIT_CREATE_ISSUES = false;
 export const DEFAULT_AUDIT_TARGET_COLUMN = 'Draft' as const;
 
@@ -171,7 +171,7 @@ export const DEFAULT_AUDIT: IAuditConfig = {
 // Analytics Configuration (Amplitude integration)
 export const DEFAULT_ANALYTICS_ENABLED = false;
 export const DEFAULT_ANALYTICS_SCHEDULE = '0 6 * * 1'; // weekly Monday 06:00
-export const DEFAULT_ANALYTICS_MAX_RUNTIME = 900; // 15 minutes
+export const DEFAULT_ANALYTICS_MAX_RUNTIME = 0;
 export const DEFAULT_ANALYTICS_LOOKBACK_DAYS = 7;
 export const DEFAULT_ANALYTICS_TARGET_COLUMN = 'Draft' as const;
 export const DEFAULT_ANALYTICS_PROMPT = `You are an analytics reviewer. Analyze the following Amplitude product analytics data.
@@ -192,9 +192,9 @@ export const DEFAULT_ANALYTICS: IAnalyticsConfig = {
 // PR Resolver Configuration
 export const DEFAULT_PR_RESOLVER_ENABLED = true;
 export const DEFAULT_PR_RESOLVER_SCHEDULE = '15 6,14,22 * * *';
-export const DEFAULT_PR_RESOLVER_MAX_RUNTIME = 3600;
+export const DEFAULT_PR_RESOLVER_MAX_RUNTIME = 0;
 export const DEFAULT_PR_RESOLVER_MAX_PRS_PER_RUN = 0;
-export const DEFAULT_PR_RESOLVER_PER_PR_TIMEOUT = 600;
+export const DEFAULT_PR_RESOLVER_PER_PR_TIMEOUT = 0;
 export const DEFAULT_PR_RESOLVER_AI_CONFLICT_RESOLUTION = true;
 export const DEFAULT_PR_RESOLVER_AI_REVIEW_RESOLUTION = false;
 export const DEFAULT_PR_RESOLVER_READY_LABEL = 'ready-to-merge';
@@ -214,7 +214,7 @@ export const DEFAULT_PR_RESOLVER: IPrResolverConfig = {
 // Merger Configuration
 export const DEFAULT_MERGER_ENABLED = false;
 export const DEFAULT_MERGER_SCHEDULE = '55 */4 * * *';
-export const DEFAULT_MERGER_MAX_RUNTIME = 1800;
+export const DEFAULT_MERGER_MAX_RUNTIME = 0;
 export const DEFAULT_MERGER_MERGE_METHOD: MergeMethod = 'squash';
 export const DEFAULT_MERGER_MIN_REVIEW_SCORE = 80;
 export const DEFAULT_MERGER_REBASE_BEFORE_MERGE = true;

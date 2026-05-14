@@ -513,7 +513,7 @@ night-watch plan "Feature" --dry-run                  # Show what would run
 
 - `[task]` — Feature/task description to plan (optional — provider runs interactively if omitted)
 - `--dry-run` — Show what would be executed without running
-- `--timeout <seconds>` — Override max runtime (default: 1800s / 30 min)
+- `--timeout <seconds>` — Override max runtime (default: no timeout)
 - `--provider <string>` — AI provider to use (claude or codex)
 
 **Logs:**

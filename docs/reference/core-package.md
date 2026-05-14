@@ -176,18 +176,18 @@ graph TD
 
 Key fields:
 
-| Field            | Type                  | Default          | Purpose                      |
-| ---------------- | --------------------- | ---------------- | ---------------------------- |
-| `provider`       | `'claude' \| 'codex'` | `'claude'`       | AI provider                  |
-| `prdDir`         | string                | `'docs/prds'`    | PRD file directory           |
-| `maxRuntime`     | number                | `7200`           | Max execution time (seconds) |
-| `branchPrefix`   | string                | `'night-watch'`  | Git branch prefix            |
-| `minReviewScore` | number                | `80`             | Minimum PR review score      |
-| `cronSchedule`   | string                | `'0 0-21 * * *'` | Executor cron                |
-| `notifications`  | object                | `{}`             | Webhook config               |
-| `slack`          | object?               | undefined        | Slack bot config             |
-| `boardProvider`  | string?               | undefined        | Board integration            |
-| `autoMerge`      | boolean               | false            | Auto-merge approved PRs      |
+| Field            | Type                  | Default          | Purpose                                          |
+| ---------------- | --------------------- | ---------------- | ------------------------------------------------ |
+| `provider`       | `'claude' \| 'codex'` | `'claude'`       | AI provider                                      |
+| `prdDir`         | string                | `'docs/prds'`    | PRD file directory                               |
+| `maxRuntime`     | number                | `0`              | Max execution time in seconds (`0` = no timeout) |
+| `branchPrefix`   | string                | `'night-watch'`  | Git branch prefix                                |
+| `minReviewScore` | number                | `80`             | Minimum PR review score                          |
+| `cronSchedule`   | string                | `'0 0-21 * * *'` | Executor cron                                    |
+| `notifications`  | object                | `{}`             | Webhook config                                   |
+| `slack`          | object?               | undefined        | Slack bot config                                 |
+| `boardProvider`  | string?               | undefined        | Board integration                                |
+| `autoMerge`      | boolean               | false            | Auto-merge approved PRs                          |
 
 See [configuration.md](configuration.md) for the full reference.
 

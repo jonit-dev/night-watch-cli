@@ -9,7 +9,7 @@ set -euo pipefail
 # Required env vars (with defaults shown):
 #   NW_PLAN_TASK=''          - Task/feature description to plan (required)
 #   NW_PRD_DIR=docs/PRDs     - PRD output directory (relative to project)
-#   NW_PLAN_MAX_RUNTIME=1800 - Maximum runtime in seconds
+#   NW_PLAN_MAX_RUNTIME=0    - Maximum runtime in seconds (0 = no timeout)
 #   NW_PROVIDER_CMD=claude   - AI provider CLI to use
 #   NW_DRY_RUN=0             - Set to 1 for dry-run mode
 
@@ -18,7 +18,7 @@ PROJECT_NAME=$(basename "${PROJECT_DIR}")
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/plan.log"
 LOCK_FILE=""
-MAX_RUNTIME="${NW_PLAN_MAX_RUNTIME:-1800}"
+MAX_RUNTIME="${NW_PLAN_MAX_RUNTIME:-0}"
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 PROVIDER_LABEL="${NW_PROVIDER_LABEL:-}"
@@ -132,7 +132,7 @@ EXIT_CODE=0
 mapfile -d '' -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${PROJECT_DIR}" "${CREATOR_PROMPT}")
 
 # Execute in the project directory so the provider can explore the codebase
-if (cd "${PROJECT_DIR}" && timeout "${MAX_RUNTIME}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
+if (cd "${PROJECT_DIR}" && run_with_optional_timeout "${MAX_RUNTIME}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
   EXIT_CODE=0
 else
   EXIT_CODE=$?

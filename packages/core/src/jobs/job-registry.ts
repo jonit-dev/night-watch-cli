@@ -15,7 +15,7 @@ export interface IBaseJobConfig {
   enabled: boolean;
   /** Cron schedule for the job */
   schedule: string;
-  /** Maximum runtime in seconds */
+  /** Maximum runtime in seconds; 0 disables the provider timeout */
   maxRuntime: number;
 }
 
@@ -76,7 +76,7 @@ export const JOB_REGISTRY: IJobDefinition[] = [
     defaultConfig: {
       enabled: true,
       schedule: '5 */2 * * *',
-      maxRuntime: 7200,
+      maxRuntime: 0,
     },
   },
   {
@@ -91,7 +91,7 @@ export const JOB_REGISTRY: IJobDefinition[] = [
     defaultConfig: {
       enabled: true,
       schedule: '25 */3 * * *',
-      maxRuntime: 3600,
+      maxRuntime: 0,
     },
   },
   {
@@ -107,7 +107,7 @@ export const JOB_REGISTRY: IJobDefinition[] = [
     extraFields: [
       { name: 'branchPatterns', type: 'string[]', defaultValue: [] },
       { name: 'maxPrsPerRun', type: 'number', defaultValue: 0 },
-      { name: 'perPrTimeout', type: 'number', defaultValue: 600 },
+      { name: 'perPrTimeout', type: 'number', defaultValue: 0 },
       { name: 'aiConflictResolution', type: 'boolean', defaultValue: true },
       { name: 'aiReviewResolution', type: 'boolean', defaultValue: false },
       { name: 'readyLabel', type: 'string', defaultValue: 'ready-to-merge' },
@@ -115,10 +115,10 @@ export const JOB_REGISTRY: IJobDefinition[] = [
     defaultConfig: {
       enabled: true,
       schedule: '15 6,14,22 * * *',
-      maxRuntime: 3600,
+      maxRuntime: 0,
       branchPatterns: [],
       maxPrsPerRun: 0,
-      perPrTimeout: 600,
+      perPrTimeout: 0,
       aiConflictResolution: true,
       aiReviewResolution: false,
       readyLabel: 'ready-to-merge',
@@ -143,7 +143,7 @@ export const JOB_REGISTRY: IJobDefinition[] = [
     defaultConfig: {
       enabled: true,
       schedule: '35 */6 * * *',
-      maxRuntime: 600,
+      maxRuntime: 0,
     },
   },
   {
@@ -170,7 +170,7 @@ export const JOB_REGISTRY: IJobDefinition[] = [
     defaultConfig: {
       enabled: true,
       schedule: '45 2,10,18 * * *',
-      maxRuntime: 3600,
+      maxRuntime: 0,
       branchPatterns: [],
       artifacts: 'both',
       skipLabel: 'skip-qa',
@@ -205,7 +205,7 @@ export const JOB_REGISTRY: IJobDefinition[] = [
     defaultConfig: {
       enabled: false,
       schedule: '50 3 * * 1',
-      maxRuntime: 1800,
+      maxRuntime: 0,
       createIssues: false,
       targetColumn: 'Draft',
     } as IBaseJobConfig & { createIssues: boolean; targetColumn: string },
@@ -232,7 +232,7 @@ export const JOB_REGISTRY: IJobDefinition[] = [
     defaultConfig: {
       enabled: false,
       schedule: '0 6 * * 1',
-      maxRuntime: 900,
+      maxRuntime: 0,
       lookbackDays: 7,
       targetColumn: 'Draft',
       analysisPrompt: '',
@@ -273,7 +273,7 @@ export const JOB_REGISTRY: IJobDefinition[] = [
     defaultConfig: {
       enabled: false,
       schedule: '55 */4 * * *',
-      maxRuntime: 1800,
+      maxRuntime: 0,
       mergeMethod: 'squash',
       minReviewScore: 80,
       branchPatterns: [],
@@ -461,7 +461,7 @@ export function buildJobEnvOverrides(
   const maxRuntimeVal = process.env[`${envPrefix}_MAX_RUNTIME`];
   if (maxRuntimeVal) {
     const v = parseInt(maxRuntimeVal, 10);
-    if (!isNaN(v) && v > 0) {
+    if (!isNaN(v) && v >= 0) {
       result.maxRuntime = v;
       changed = true;
     }
@@ -488,7 +488,7 @@ export function buildJobEnvOverrides(
         break;
       case 'number': {
         const v = parseInt(envVal, 10);
-        if (!isNaN(v) && v > 0) {
+        if (!isNaN(v) && v >= 0) {
           result[field.name] = v;
           changed = true;
         }

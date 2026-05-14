@@ -8,7 +8,7 @@ set -euo pipefail
 # NOTE: This script expects environment variables to be set by the caller.
 # The Node.js CLI will inject config values via environment variables.
 # Required env vars (with defaults shown):
-#   NW_MAX_RUNTIME=14400         - Maximum runtime in seconds (4 hours)
+#   NW_MAX_RUNTIME=0             - Maximum runtime in seconds (0 = no timeout)
 #   NW_PROVIDER_CMD=claude       - AI provider CLI to use (claude, codex, etc.)
 #   NW_DRY_RUN=0                 - Set to 1 for dry-run mode (prints diagnostics only)
 
@@ -22,8 +22,9 @@ else
 fi
 LOG_DIR="${PROJECT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/executor.log"
-MAX_RUNTIME="${NW_MAX_RUNTIME:-14400}"  # 4 hours — used for cooldowns and eligibility
+MAX_RUNTIME="${NW_MAX_RUNTIME:-0}"  # 0 = no provider timeout
 SESSION_MAX_RUNTIME="${NW_SESSION_MAX_RUNTIME:-${MAX_RUNTIME}}"  # per-invocation timeout; defaults to MAX_RUNTIME
+CLAIM_STALE_AFTER="${NW_CLAIM_STALE_AFTER:-14400}"
 MAX_LOG_SIZE="524288"  # 512 KB
 PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 # Human-friendly provider label used in PR comments, board comments, and commit attribution.
@@ -217,7 +218,7 @@ if [ "${NW_BOARD_ENABLED:-}" = "true" ]; then
       fi
     else
       BOARD_DISCOVERY_STATUS=0
-      if ISSUE_JSON=$(find_eligible_board_issue "${PROJECT_DIR}" "${MAX_RUNTIME}"); then
+      if ISSUE_JSON=$(find_eligible_board_issue "${PROJECT_DIR}" "${CLAIM_STALE_AFTER}"); then
         BOARD_DISCOVERY_STATUS=0
       else
         BOARD_DISCOVERY_STATUS=$?
@@ -275,7 +276,7 @@ if [ -z "${ISSUE_NUMBER}" ]; then
   fi
   # Filesystem mode: scan PRD directory
   if [ -z "${ELIGIBLE_PRD:-}" ]; then
-    ELIGIBLE_PRD=$(find_eligible_prd "${PRD_DIR}" "${MAX_RUNTIME}" "${PROJECT_DIR}")
+    ELIGIBLE_PRD=$(find_eligible_prd "${PRD_DIR}" "${CLAIM_STALE_AFTER}" "${PROJECT_DIR}")
   fi
   if [ -z "${ELIGIBLE_PRD}" ]; then
     log "SKIP: No eligible PRDs (all done, in-progress, or blocked)"
@@ -932,7 +933,7 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
   mapfile -d '' -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${WORKTREE_DIR}" "${PROMPT}")
 
   # Execute — always cd into worktree so provider tools resolve project files correctly
-  if (cd "${WORKTREE_DIR}" && timeout "${SESSION_MAX_RUNTIME}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
+  if (cd "${WORKTREE_DIR}" && run_with_optional_timeout "${SESSION_MAX_RUNTIME}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
     EXIT_CODE=0
   else
     EXIT_CODE=$?
@@ -1091,7 +1092,7 @@ if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
         model_arg="${preset_model_flag} ${preset_model}"
       fi
       # shellcheck disable=SC2086
-      timeout "${SESSION_MAX_RUNTIME}" \
+      run_with_optional_timeout "${SESSION_MAX_RUNTIME}" \
         "${preset_cmd}" \
           "${preset_prompt_flag:--p}" "${PROMPT}" \
           ${preset_auto_approve_flag:+${preset_auto_approve_flag}} \
@@ -1152,7 +1153,7 @@ if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
         cd "${WORKTREE_DIR}" && \
           unset ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN \
                 ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL && \
-          timeout "${SESSION_MAX_RUNTIME}" \
+          run_with_optional_timeout "${SESSION_MAX_RUNTIME}" \
             claude -p "${PROMPT}" \
               --dangerously-skip-permissions \
               --model "${model}" \

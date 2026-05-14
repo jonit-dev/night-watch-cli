@@ -547,7 +547,7 @@ When `sessionMaxRuntime` is set, executor checkpoints progress at session bounda
 
 ```json
 {
-  "maxRuntime": 7200,
+  "maxRuntime": 0,
   "sessionMaxRuntime": 1800
 }
 ```
