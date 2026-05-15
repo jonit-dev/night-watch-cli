@@ -93,6 +93,7 @@ function buildScheduleInfoResponse(
   const analyticsPlan = getSchedulingPlan(projectDir, config, 'analytics');
   const prResolverPlan = getSchedulingPlan(projectDir, config, 'pr-resolver');
   const mergerPlan = getSchedulingPlan(projectDir, config, 'merger');
+  const managerPlan = getSchedulingPlan(projectDir, config, 'manager');
 
   const executorInstalled =
     installed && config.executorEnabled !== false && hasScheduledCommand(entries, 'run');
@@ -110,6 +111,8 @@ function buildScheduleInfoResponse(
     installed && (config.prResolver?.enabled ?? true) && hasScheduledCommand(entries, 'resolve');
   const mergerInstalled =
     installed && (config.merger?.enabled ?? false) && hasScheduledCommand(entries, 'merge');
+  const managerInstalled =
+    installed && (config.manager?.enabled ?? true) && hasScheduledCommand(entries, 'manager');
 
   return {
     executor: {
@@ -206,6 +209,19 @@ function buildScheduleInfoResponse(
       delayMinutes: mergerPlan.totalDelayMinutes,
       manualDelayMinutes: mergerPlan.manualDelayMinutes,
       balancedDelayMinutes: mergerPlan.balancedDelayMinutes,
+    },
+    manager: {
+      schedule: config.manager?.schedule ?? '15 7 * * *',
+      installed: managerInstalled,
+      nextRun: managerInstalled
+        ? addDelayToIsoString(
+            computeNextRun(config.manager?.schedule ?? '15 7 * * *'),
+            managerPlan.totalDelayMinutes,
+          )
+        : null,
+      delayMinutes: managerPlan.totalDelayMinutes,
+      manualDelayMinutes: managerPlan.manualDelayMinutes,
+      balancedDelayMinutes: managerPlan.balancedDelayMinutes,
     },
     paused: !installed,
     schedulingPriority: config.schedulingPriority,

@@ -378,6 +378,7 @@ export function buildInitConfig(params: {
     },
     audit: { ...defaults.audit },
     analytics: { ...defaults.analytics },
+    manager: { ...defaults.manager },
     feedback: { ...defaults.feedback },
     merger: { ...defaults.merger },
     prResolver: { ...defaults.prResolver },

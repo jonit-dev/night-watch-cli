@@ -42,6 +42,7 @@ export interface IProviderPreset {
 
 /** Git merge methods for auto-merge */
 export type MergeMethod = 'squash' | 'merge' | 'rebase';
+export type MergerCiPolicy = 'ci-only' | 'fallback-local' | 'ignore';
 
 /** Days of the week (0 = Sunday, 6 = Saturday) */
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6;
@@ -56,7 +57,8 @@ export type JobType =
   | 'analytics'
   | 'planner'
   | 'pr-resolver'
-  | 'merger';
+  | 'merger'
+  | 'manager';
 
 /** Per-job provider configuration */
 export interface IJobProviders {
@@ -68,6 +70,7 @@ export interface IJobProviders {
   analytics?: Provider;
   'pr-resolver'?: Provider;
   merger?: Provider;
+  manager?: Provider;
 }
 
 /**
@@ -114,7 +117,9 @@ export type NotificationEvent =
   | 'review_ready_for_human'
   | 'pr_resolver_completed'
   | 'pr_resolver_conflict_resolved'
-  | 'pr_resolver_failed';
+  | 'pr_resolver_failed'
+  | 'manager_blocked'
+  | 'manager_weekly_summary';
 
 export interface IWebhookConfig {
   type: WebhookType;
@@ -235,6 +240,8 @@ export interface IMergerConfig {
   branchPatterns: string[];
   rebaseBeforeMerge: boolean;
   maxPrsPerRun: number;
+  ciPolicy: MergerCiPolicy;
+  localCheckCommand: string;
 }
 
 // ==================== Analytics Config ====================
@@ -254,6 +261,22 @@ export interface IAnalyticsConfig {
   targetColumn: BoardColumnName;
   /** Custom prompt for the AI analysis (optional override) */
   analysisPrompt: string;
+}
+
+export type ManagerAuthority = 'draft' | 'ready' | 'workflow';
+export type ManagerOutputMode = 'board-draft' | 'filesystem-prd' | 'report-only';
+
+export interface IManagerConfig {
+  enabled: boolean;
+  schedule: string;
+  maxRuntime: number;
+  authority: ManagerAuthority;
+  outputMode: ManagerOutputMode;
+  targetColumn: BoardColumnName;
+  memoryPath: string;
+  docsDir: string;
+  weeklySummaryEnabled: boolean;
+  weeklySummaryDay: DayOfWeek;
 }
 
 export interface IFeedbackConfig {
@@ -313,6 +336,7 @@ export interface INightWatchConfig {
   qa: IQaConfig;
   audit: IAuditConfig;
   analytics: IAnalyticsConfig;
+  manager: IManagerConfig;
   feedback: IFeedbackConfig;
   prResolver?: IPrResolverConfig;
   merger?: IMergerConfig;

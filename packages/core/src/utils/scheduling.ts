@@ -47,6 +47,8 @@ export function isJobTypeEnabled(config: INightWatchConfig, jobType: JobType): b
       return config.roadmapScanner.enabled;
     case 'analytics':
       return config.analytics.enabled;
+    case 'manager':
+      return config.manager.enabled;
     default:
       return true;
   }
@@ -56,6 +58,8 @@ function getJobSchedule(config: INightWatchConfig, jobType: JobType): string {
   switch (jobType) {
     case 'reviewer':
       return config.reviewerSchedule ?? '';
+    case 'manager':
+      return config.manager.schedule ?? '';
     case 'executor':
     default:
       return config.cronSchedule ?? '';

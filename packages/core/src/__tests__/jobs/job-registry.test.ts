@@ -20,11 +20,11 @@ import {
 import { VALID_JOB_TYPES, DEFAULT_QUEUE_PRIORITY, LOG_FILE_NAMES } from '../../constants.js';
 
 describe('JOB_REGISTRY', () => {
-  it('should define all 8 job types', () => {
-    expect(JOB_REGISTRY).toHaveLength(8);
+  it('should define all 9 job types', () => {
+    expect(JOB_REGISTRY).toHaveLength(9);
   });
 
-  it('should include executor, reviewer, qa, audit, slicer, analytics, pr-resolver, merger', () => {
+  it('should include executor, reviewer, qa, audit, slicer, analytics, pr-resolver, merger, manager', () => {
     const ids = JOB_REGISTRY.map((j) => j.id);
     expect(ids).toContain('executor');
     expect(ids).toContain('reviewer');
@@ -34,6 +34,7 @@ describe('JOB_REGISTRY', () => {
     expect(ids).toContain('analytics');
     expect(ids).toContain('pr-resolver');
     expect(ids).toContain('merger');
+    expect(ids).toContain('manager');
   });
 
   it('should include pr-resolver in job registry', () => {
@@ -42,6 +43,10 @@ describe('JOB_REGISTRY', () => {
 
   it('should include merger in JOB_REGISTRY', () => {
     expect(getJobDef('merger')).toBeDefined();
+  });
+
+  it('should include manager in JOB_REGISTRY', () => {
+    expect(getJobDef('manager')).toBeDefined();
   });
 
   it('each job definition has required fields', () => {
@@ -132,9 +137,9 @@ describe('getJobDefByLogName', () => {
 });
 
 describe('getValidJobTypes', () => {
-  it('returns all 8 job types', () => {
+  it('returns all 9 job types', () => {
     const types = getValidJobTypes();
-    expect(types).toHaveLength(8);
+    expect(types).toHaveLength(9);
     expect(types).toContain('executor');
     expect(types).toContain('reviewer');
     expect(types).toContain('qa');
@@ -143,6 +148,7 @@ describe('getValidJobTypes', () => {
     expect(types).toContain('analytics');
     expect(types).toContain('pr-resolver');
     expect(types).toContain('merger');
+    expect(types).toContain('manager');
   });
 });
 
@@ -157,6 +163,7 @@ describe('getDefaultQueuePriority', () => {
     expect(typeof priority.analytics).toBe('number');
     expect(typeof priority['pr-resolver']).toBe('number');
     expect(typeof priority.merger).toBe('number');
+    expect(typeof priority.manager).toBe('number');
   });
 
   it('executor has highest priority', () => {
@@ -169,6 +176,12 @@ describe('getDefaultQueuePriority', () => {
     const priority = getDefaultQueuePriority();
     expect(priority['pr-resolver']).toBeGreaterThan(priority.slicer);
     expect(priority['pr-resolver']).toBeLessThan(priority.reviewer);
+  });
+
+  it('manager has priority between slicer and qa', () => {
+    const priority = getDefaultQueuePriority();
+    expect(priority.manager).toBeLessThan(priority.slicer);
+    expect(priority.manager).toBeGreaterThan(priority.qa);
   });
 });
 
@@ -191,6 +204,11 @@ describe('getLogFileNames', () => {
   it('maps qa to "night-watch-qa"', () => {
     const logFiles = getLogFileNames();
     expect(logFiles.qa).toBe('night-watch-qa');
+  });
+
+  it('maps manager to "manager"', () => {
+    const logFiles = getLogFileNames();
+    expect(logFiles.manager).toBe('manager');
   });
 });
 

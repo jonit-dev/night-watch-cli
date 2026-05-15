@@ -122,6 +122,27 @@ night-watch audit --timeout 3600  # Override max runtime (1 hour)
 
 ---
 
+## `night-watch manager`
+
+Run the Manager agent. Manager compares the roadmap, PRDs, board state, job status, logs, and documentation coverage, then reports or drafts follow-up work according to `manager.outputMode`.
+
+```bash
+night-watch manager                 # Run Manager now
+night-watch manager --dry-run       # Analyze without writing memory/docs/issues
+night-watch manager --dry-run --json # Machine-readable dry-run result
+night-watch manager --provider codex # Override provider
+night-watch manager --timeout 1800  # Override max runtime
+```
+
+**Behavior:**
+
+- Uses `roadmapScanner.roadmapPath` as the roadmap source.
+- Writes Manager memory under `manager.memoryPath` and generated docs under `manager.docsDir`.
+- Creates board draft issues when `manager.outputMode` is `board-draft` and the board provider is configured.
+- Logs cron output to `logs/manager.log`.
+
+---
+
 ## `night-watch install`
 
 Install crontab entries for automated execution.
@@ -131,6 +152,7 @@ night-watch install                        # Install with default schedules
 night-watch install --schedule "0 * * * *" # Custom executor schedule
 night-watch install --reviewer-schedule "0 */2 * * *" # Custom reviewer schedule
 night-watch install --no-reviewer          # Skip reviewer cron
+night-watch install --no-manager           # Skip manager cron
 ```
 
 **Default Schedules:**

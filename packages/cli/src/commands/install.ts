@@ -10,6 +10,7 @@ import * as fs from 'fs';
 import {
   INightWatchConfig,
   LOG_DIR,
+  MANAGER_LOG_NAME,
   dim,
   generateMarker,
   getEntries,
@@ -40,6 +41,8 @@ export interface IInstallOptions {
   prResolver?: boolean;
   noMerger?: boolean;
   merger?: boolean;
+  noManager?: boolean;
+  manager?: boolean;
   force?: boolean;
 }
 
@@ -155,6 +158,8 @@ export function performInstall(
     prResolver?: boolean;
     noMerger?: boolean;
     merger?: boolean;
+    noManager?: boolean;
+    manager?: boolean;
     force?: boolean;
   },
 ): IInstallResult {
@@ -273,6 +278,16 @@ export function performInstall(
       entries.push(mergerEntry);
     }
 
+    // Manager entry (if enabled and noManager not set)
+    const disableManager = options?.noManager === true || options?.manager === false;
+    const installManager = disableManager ? false : (config.manager?.enabled ?? false);
+    if (installManager) {
+      const managerSchedule = config.manager.schedule;
+      const managerLog = path.join(logDir, `${MANAGER_LOG_NAME}.log`);
+      const managerEntry = `${managerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} manager >> ${shellQuote(managerLog)} 2>&1  ${marker}`;
+      entries.push(managerEntry);
+    }
+
     const existingEntries = new Set(
       Array.from(new Set([...getEntries(marker), ...getProjectEntries(projectDir)])),
     );
@@ -310,6 +325,7 @@ export function installCommand(program: Command): void {
     .option('--no-analytics', 'Skip installing analytics cron')
     .option('--no-pr-resolver', 'Skip installing PR resolver cron')
     .option('--no-merger', 'Skip installing merger cron')
+    .option('--no-manager', 'Skip installing manager cron')
     .option('-f, --force', 'Replace existing cron entries for this project')
     .action(async (options: IInstallOptions) => {
       try {
@@ -469,6 +485,21 @@ export function installCommand(program: Command): void {
           entries.push(mergerEntry);
         }
 
+        // Determine if manager should be installed
+        const disableManager =
+          options.noManager === true ||
+          (options as Record<string, unknown>).manager === false;
+        const installManager = disableManager ? false : (config.manager?.enabled ?? false);
+
+        // Manager entry (if enabled)
+        let managerLog: string | undefined;
+        if (installManager) {
+          managerLog = path.join(logDir, `${MANAGER_LOG_NAME}.log`);
+          const managerSchedule = config.manager.schedule;
+          const managerEntry = `${managerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} manager >> ${shellQuote(managerLog)} 2>&1  ${marker}`;
+          entries.push(managerEntry);
+        }
+
         // Add all entries
         const existingEntrySet = new Set(existingEntries);
         const currentCrontab = readCrontab();
@@ -508,6 +539,9 @@ export function installCommand(program: Command): void {
         }
         if (installMerger && mergerLog) {
           dim(`  Merger: ${mergerLog}`);
+        }
+        if (installManager && managerLog) {
+          dim(`  Manager: ${managerLog}`);
         }
         console.log();
         dim('To uninstall, run: night-watch uninstall');

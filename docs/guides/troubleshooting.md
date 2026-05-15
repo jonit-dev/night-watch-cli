@@ -392,6 +392,7 @@ crontab -l | grep night-watch
 | Reviewer | `logs/reviewer.log` | PR review cycles        |
 | QA       | `logs/qa.log`       | QA test runs            |
 | Audit    | `logs/audit.log`    | Code audit runs         |
+| Manager  | `logs/manager.log`  | Roadmap/project health  |
 | Server   | `logs/server.log`   | Web UI API requests     |
 
 ---

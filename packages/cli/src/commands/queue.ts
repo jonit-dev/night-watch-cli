@@ -42,6 +42,7 @@ const VALID_JOB_TYPES: JobType[] = [
   'planner',
   'pr-resolver',
   'merger',
+  'manager',
 ];
 
 function formatTimestamp(unixTs: number | null): string {
@@ -234,7 +235,7 @@ export function createQueueCommand(): Command {
     .requiredOption('--project <dir>', 'Project directory')
     .requiredOption(
       '--job-type <type>',
-      'Job type (executor, reviewer, qa, audit, slicer, planner, pr-resolver, merger)',
+      'Job type (executor, reviewer, qa, audit, slicer, planner, pr-resolver, merger, manager)',
     )
     .action((opts: { project: string; jobType: string }) => {
       try {
@@ -447,6 +448,7 @@ const QUEUE_MARKER_KEYS = new Set([
   'NW_AUTO_MERGE_METHOD',
   'NW_MAX_RUNTIME',
   'NW_QA_MAX_RUNTIME',
+  'NW_MANAGER_MAX_RUNTIME',
 ]);
 
 /**
@@ -481,6 +483,8 @@ function getScriptNameForJobType(jobType: JobType): string | null {
       return 'night-watch-pr-resolver-cron.sh';
     case 'merger':
       return 'night-watch-merger-cron.sh';
+    case 'manager':
+      return 'night-watch-manager-cron.sh';
     default:
       return null;
   }

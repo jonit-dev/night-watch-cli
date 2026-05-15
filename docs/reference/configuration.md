@@ -377,6 +377,21 @@ PRDs whose filename (without `.md` extension) matches an entry execute first.
 | `analytics.targetColumn`   | string  | `"Draft"`        | Board column for created issues               |
 | `analytics.analysisPrompt` | string  | (default prompt) | Custom prompt for analysis                    |
 
+### Manager Job (manager)
+
+| Field                          | Type    | Default                          | Description                                      |
+| ------------------------------ | ------- | -------------------------------- | ------------------------------------------------ |
+| `manager.enabled`              | boolean | `true`                           | Enable Manager cron runs                         |
+| `manager.schedule`             | string  | `"15 7 * * *"`                   | Cron schedule for Manager                        |
+| `manager.maxRuntime`           | number  | `0`                              | Maximum runtime in seconds (`0` = no timeout)    |
+| `manager.authority`            | string  | `"draft"`                        | Authority level: `draft`, `ready`, or `workflow` |
+| `manager.outputMode`           | string  | `"board-draft"`                  | Output mode: `board-draft`, `filesystem-prd`, or `report-only` |
+| `manager.targetColumn`         | string  | `"Draft"`                        | Board column for created Manager issues          |
+| `manager.memoryPath`           | string  | `".night-watch/manager/memory.md"` | Markdown memory file path                      |
+| `manager.docsDir`              | string  | `".night-watch/manager/docs"`    | Directory for Manager-owned generated docs       |
+| `manager.weeklySummaryEnabled` | boolean | `true`                           | Send weekly roadmap/project summaries            |
+| `manager.weeklySummaryDay`     | number  | `1`                              | Day of week for weekly summaries (0 = Sunday)    |
+
 ### Queue Configuration
 
 ```json
@@ -473,6 +488,7 @@ All Night Watch environment variables are prefixed with `NW_`:
 | `NW_QA_ENABLED`          | `qa.enabled`         | `true`  |
 | `NW_AUDIT_ENABLED`       | `audit.enabled`      | `false` |
 | `NW_ANALYTICS_ENABLED`   | `analytics.enabled`  | `false` |
+| `NW_MANAGER_ENABLED`     | `manager.enabled`    | `true`  |
 | `NW_AUDIT_CREATE_ISSUES` | `audit.createIssues` | `false` |
 
 **Job-Specific Schedule Variables:**
@@ -484,6 +500,7 @@ All Night Watch environment variables are prefixed with `NW_`:
 | `NW_QA_SCHEDULE`        | `qa.schedule`        | `45 2,10,18 * * *` |
 | `NW_AUDIT_SCHEDULE`     | `audit.schedule`     | `50 3 * * 1`       |
 | `NW_ANALYTICS_SCHEDULE` | `analytics.schedule` | `0 6 * * 1`        |
+| `NW_MANAGER_SCHEDULE`   | `manager.schedule`   | `15 7 * * *`       |
 
 **Job-Specific Runtime Variables:**
 
@@ -494,6 +511,7 @@ All Night Watch environment variables are prefixed with `NW_`:
 | `NW_QA_MAX_RUNTIME`        | `qa.maxRuntime`        | `0` or `3600` |
 | `NW_AUDIT_MAX_RUNTIME`     | `audit.maxRuntime`     | `0` or `1800` |
 | `NW_ANALYTICS_MAX_RUNTIME` | `analytics.maxRuntime` | `0` or `900`  |
+| `NW_MANAGER_MAX_RUNTIME`   | `manager.maxRuntime`   | `0` or `1800` |
 
 **Job-Specific Extra Fields:**
 

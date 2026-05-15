@@ -12,6 +12,7 @@ import {
   AUDIT_LOG_NAME,
   EXECUTOR_LOG_FILE,
   LOG_DIR,
+  MANAGER_LOG_NAME,
   MERGER_LOG_NAME,
   PLANNER_LOG_NAME,
   QA_LOG_NAME,
@@ -79,7 +80,7 @@ export function logsCommand(program: Command): void {
     .option('-f, --follow', 'Follow log output (tail -f)')
     .option(
       '-t, --type <type>',
-      'Log type to view (executor|reviewer|qa|audit|planner|analytics|merger|all)',
+      'Log type to view (executor|reviewer|qa|audit|planner|analytics|merger|manager|all)',
       'all',
     )
     .action(async (options: ILogsOptions) => {
@@ -95,6 +96,7 @@ export function logsCommand(program: Command): void {
         const plannerLog = path.join(logDir, `${PLANNER_LOG_NAME}.log`);
         const analyticsLog = path.join(logDir, `${ANALYTICS_LOG_NAME}.log`);
         const mergerLog = path.join(logDir, `${MERGER_LOG_NAME}.log`);
+        const managerLog = path.join(logDir, `${MANAGER_LOG_NAME}.log`);
 
         // Determine which logs to show
         const logType = options.type?.toLowerCase() || 'all';
@@ -106,12 +108,13 @@ export function logsCommand(program: Command): void {
           logType === 'all' || logType === 'planner' || logType === 'slice' || logType === 'slicer';
         const showAnalytics = logType === 'all' || logType === 'analytics';
         const showMerger = logType === 'all' || logType === 'merge' || logType === 'merger';
+        const showManager = logType === 'all' || logType === 'manager';
 
         // Handle --follow mode
         if (options.follow) {
           if (logType === 'all') {
             dim('Note: Following all logs is not supported. Showing executor log.');
-            dim('Use --type reviewer|qa|audit|planner|analytics|merger for other logs.\n');
+            dim('Use --type reviewer|qa|audit|planner|analytics|merger|manager for other logs.\n');
           }
 
           let targetLog = executorLog;
@@ -121,6 +124,7 @@ export function logsCommand(program: Command): void {
           else if (showPlanner) targetLog = plannerLog;
           else if (showAnalytics) targetLog = analyticsLog;
           else if (showMerger) targetLog = mergerLog;
+          else if (showManager) targetLog = managerLog;
           followLog(targetLog);
           return;
         }
@@ -177,12 +181,19 @@ export function logsCommand(program: Command): void {
           console.log(getLastLines(mergerLog, lineCount));
         }
 
+        if (showManager) {
+          header('Manager Log');
+          dim(`File: ${managerLog}`);
+          console.log();
+          console.log(getLastLines(managerLog, lineCount));
+        }
+
         // Add tip
         console.log();
         dim('---');
         dim('Tip: Use -f to follow logs in real-time');
         dim(
-          '     Use --type executor|reviewer|qa|audit|planner|analytics|merger to view specific logs',
+          '     Use --type executor|reviewer|qa|audit|planner|analytics|merger|manager to view specific logs',
         );
       } catch (err) {
         console.error(`Error reading logs: ${err instanceof Error ? err.message : String(err)}`);

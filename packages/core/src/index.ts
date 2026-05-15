@@ -47,6 +47,7 @@ export * from './utils/job-queue.js';
 export * from './utils/summary.js';
 export * from './analytics/index.js';
 export * from './audit/index.js';
+export * from './manager/index.js';
 export * from './feedback/outcome-parser.js';
 export * from './feedback/pattern-analyzer.js';
 export * from './feedback/prompt-augmenter.js';

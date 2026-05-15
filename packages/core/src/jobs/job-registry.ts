@@ -147,6 +147,60 @@ export const JOB_REGISTRY: IJobDefinition[] = [
     },
   },
   {
+    id: 'manager',
+    name: 'Manager',
+    description: 'Monitors roadmap progress and creates draft PRDs for project gaps',
+    cliCommand: 'manager',
+    logName: 'manager',
+    lockSuffix: '-manager.lock',
+    queuePriority: 25,
+    envPrefix: 'NW_MANAGER',
+    extraFields: [
+      {
+        name: 'authority',
+        type: 'enum',
+        enumValues: ['draft', 'ready', 'workflow'],
+        defaultValue: 'draft',
+      },
+      {
+        name: 'outputMode',
+        type: 'enum',
+        enumValues: ['board-draft', 'filesystem-prd', 'report-only'],
+        defaultValue: 'board-draft',
+      },
+      {
+        name: 'targetColumn',
+        type: 'enum',
+        enumValues: [...BOARD_COLUMNS],
+        defaultValue: 'Draft',
+      },
+      { name: 'memoryPath', type: 'string', defaultValue: '.night-watch/manager/memory.md' },
+      { name: 'docsDir', type: 'string', defaultValue: '.night-watch/manager/docs' },
+      { name: 'weeklySummaryEnabled', type: 'boolean', defaultValue: true },
+      { name: 'weeklySummaryDay', type: 'number', defaultValue: 1 },
+    ],
+    defaultConfig: {
+      enabled: true,
+      schedule: '15 7 * * *',
+      maxRuntime: 0,
+      authority: 'draft',
+      outputMode: 'board-draft',
+      targetColumn: 'Draft',
+      memoryPath: '.night-watch/manager/memory.md',
+      docsDir: '.night-watch/manager/docs',
+      weeklySummaryEnabled: true,
+      weeklySummaryDay: 1,
+    } as IBaseJobConfig & {
+      authority: string;
+      outputMode: string;
+      targetColumn: string;
+      memoryPath: string;
+      docsDir: string;
+      weeklySummaryEnabled: boolean;
+      weeklySummaryDay: number;
+    },
+  },
+  {
     id: 'qa',
     name: 'QA',
     description: 'Runs end-to-end tests on PRs',

@@ -75,6 +75,10 @@ export function getEventEmoji(event: NotificationEvent): string {
       return '\uD83D\uDD00';
     case 'merge_failed':
       return '\u274C';
+    case 'manager_blocked':
+      return '\u26A0\uFE0F';
+    case 'manager_weekly_summary':
+      return '\uD83D\uDCCA';
   }
 }
 
@@ -113,6 +117,10 @@ export function getEventTitle(event: NotificationEvent): string {
       return 'PR Merged';
     case 'merge_failed':
       return 'Merge Failed';
+    case 'manager_blocked':
+      return 'Manager Needs Human Input';
+    case 'manager_weekly_summary':
+      return 'Manager Weekly Summary';
   }
 }
 
@@ -151,6 +159,10 @@ export function getEventColor(event: NotificationEvent): number {
       return 0x9b59b6;
     case 'merge_failed':
       return 0xff0000;
+    case 'manager_blocked':
+      return 0xffa500;
+    case 'manager_weekly_summary':
+      return 0x3498db;
   }
 }
 

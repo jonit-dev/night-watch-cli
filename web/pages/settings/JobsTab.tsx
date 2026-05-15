@@ -9,12 +9,14 @@ import {
   Play,
   Search,
   Sparkles,
+  ClipboardList,
 } from 'lucide-react';
 import {
   IAnalyticsConfig,
   IQaConfig,
   IAuditConfig,
   IMergerConfig,
+  IManagerConfig,
   IPrResolverConfig,
   IRoadmapScannerConfig,
   IJobProviders,
@@ -39,7 +41,8 @@ type JobKey =
   | 'slicer'
   | 'analytics'
   | 'pr-resolver'
-  | 'merger';
+  | 'merger'
+  | 'manager';
 
 interface IConfigFormJobs {
   executorEnabled: boolean;
@@ -60,6 +63,7 @@ interface IConfigFormJobs {
   feedback: IFeedbackConfig;
   prResolver: IPrResolverConfig;
   merger: IMergerConfig;
+  manager: IManagerConfig;
   roadmapScanner: IRoadmapScannerConfig;
   providerEnv: Record<string, string>;
   jobProviders: IJobProviders;
@@ -209,7 +213,7 @@ const JobsTab: React.FC<IJobsTabProps> = ({
               Enable jobs, choose providers, and tune runtime behavior. Cadence stays in Automation &gt; Schedules.
             </p>
           </div>
-          <span className="text-xs text-slate-500">8 total jobs</span>
+          <span className="text-xs text-slate-500">9 total jobs</span>
         </div>
 
         {/* PRD Executor */}
@@ -732,6 +736,101 @@ const JobsTab: React.FC<IJobsTabProps> = ({
               onChange={(patterns) => updateField('merger', { ...form.merger, branchPatterns: patterns })}
               placeholder="e.g., feat/, night-watch/"
             />
+          </div>
+        </JobAccordion>
+
+        {/* Manager */}
+        <JobAccordion
+          id="job-section-manager"
+          title="Manager"
+          icon={ClipboardList}
+          description="Monitors roadmap, PRDs, docs, board state, and system health"
+          enabled={form.manager.enabled}
+          onToggle={(checked) => updateField('manager', { ...form.manager, enabled: checked })}
+          expanded={expandedJob === 'manager'}
+          onExpandChange={(expanded) => onExpandedJobChange(expanded ? 'manager' : null)}
+          scheduleSummary={cronToHuman(form.manager.schedule)}
+          providerLabel={form.jobProviders.manager ? presetOptions.find(p => p.value === form.jobProviders.manager)?.label : 'Global'}
+        >
+          <div className="space-y-6">
+            <CadencePanel summary={cronToHuman(form.manager.schedule)} onOpen={() => onOpenSchedule('manager')} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Select
+                label="Provider"
+                value={form.jobProviders.manager ?? ''}
+                onChange={(val) => updateJobProvider('manager', val)}
+                options={providerOptionsWithDefault}
+              />
+              <Input
+                label="Max Runtime"
+                type="number"
+                min="0"
+                value={String(form.manager.maxRuntime)}
+                onChange={(e) => updateField('manager', { ...form.manager, maxRuntime: Math.max(0, Number(e.target.value || 0)) })}
+                rightIcon={<span className="text-xs">sec</span>}
+              />
+              <Select
+                label="Output Mode"
+                value={form.manager.outputMode}
+                onChange={(value) => updateField('manager', { ...form.manager, outputMode: value as IManagerConfig['outputMode'] })}
+                options={[
+                  { value: 'board-draft', label: 'Board Draft' },
+                  { value: 'filesystem-prd', label: 'Filesystem PRD' },
+                  { value: 'report-only', label: 'Report Only' },
+                ]}
+              />
+              <Select
+                label="Authority"
+                value={form.manager.authority}
+                onChange={(value) => updateField('manager', { ...form.manager, authority: value as IManagerConfig['authority'] })}
+                options={[
+                  { value: 'draft', label: 'Draft' },
+                  { value: 'ready', label: 'Ready' },
+                  { value: 'workflow', label: 'Workflow' },
+                ]}
+              />
+              <Select
+                label="Target Column"
+                value={form.manager.targetColumn}
+                onChange={(value) => updateField('manager', { ...form.manager, targetColumn: value as IManagerConfig['targetColumn'] })}
+                options={[
+                  { value: 'Draft', label: 'Draft' },
+                  { value: 'Ready', label: 'Ready' },
+                  { value: 'In Progress', label: 'In Progress' },
+                  { value: 'Review', label: 'Review' },
+                  { value: 'Done', label: 'Done' },
+                ]}
+              />
+              <Input
+                label="Memory Path"
+                value={form.manager.memoryPath}
+                onChange={(e) => updateField('manager', { ...form.manager, memoryPath: e.target.value })}
+              />
+              <Input
+                label="Generated Docs Directory"
+                value={form.manager.docsDir}
+                onChange={(e) => updateField('manager', { ...form.manager, docsDir: e.target.value })}
+              />
+              <Input
+                label="Weekly Summary Day"
+                type="number"
+                min="0"
+                max="6"
+                value={String(form.manager.weeklySummaryDay)}
+                onChange={(e) => updateField('manager', { ...form.manager, weeklySummaryDay: Math.max(0, Math.min(6, Number(e.target.value || 0))) as IManagerConfig['weeklySummaryDay'] })}
+                helperText="0 = Sunday, 1 = Monday"
+              />
+              <div className="flex items-center justify-between p-3 rounded-md border border-slate-800 bg-slate-950/40">
+                <div>
+                  <span className="text-sm font-medium text-slate-200">Weekly summary</span>
+                  <p className="text-xs text-slate-500 mt-1">Send a periodic project health summary</p>
+                </div>
+                <Switch
+                  checked={form.manager.weeklySummaryEnabled}
+                  onChange={(checked) => updateField('manager', { ...form.manager, weeklySummaryEnabled: checked })}
+                />
+              </div>
+            </div>
           </div>
         </JobAccordion>
       </section>

@@ -220,6 +220,34 @@ describe('install command', () => {
     expect(slicerEntry).toContain('# night-watch-cli:');
   });
 
+  it('should add manager crontab entry when manager is enabled', () => {
+    const config = createTestConfig({
+      manager: {
+        enabled: true,
+        schedule: '15 7 * * *',
+        maxRuntime: 0,
+        authority: 'draft',
+        outputMode: 'board-draft',
+        targetColumn: 'Draft',
+        memoryPath: '.night-watch/manager/memory.md',
+        docsDir: '.night-watch/manager/docs',
+        weeklySummaryEnabled: true,
+        weeklySummaryDay: 1,
+      },
+    } as Partial<INightWatchConfig>);
+
+    const result = performInstall(tempDir, config);
+
+    expect(result.success).toBe(true);
+    expect(result.entries).toHaveLength(3); // executor, reviewer, manager
+
+    const managerEntry = result.entries[2];
+    expect(managerEntry).toContain("' manager ");
+    expect(managerEntry).toContain('manager.log');
+    expect(managerEntry).toContain('15 7 * * *');
+    expect(managerEntry).toContain('# night-watch-cli:');
+  });
+
   it('should skip executor entry when executor is disabled', () => {
     const config = createTestConfig({
       executorEnabled: false,

@@ -2,6 +2,7 @@ import type {
   IAnalyticsConfig,
   IAuditConfig,
   IMergerConfig,
+  IManagerConfig,
   INightWatchConfig,
   IPrResolverConfig,
   IQaConfig,
@@ -44,6 +45,7 @@ export const JOB_DEFINITIONS: IJobDefinition[] = [
   { id: 'analytics', label: 'Analytics', processName: 'analytics', color: { bg: 'bg-pink-500',   border: 'border-pink-500/60'   } },
   { id: 'pr-resolver', label: 'PR Resolver', processName: 'pr-resolver', color: { bg: 'bg-teal-500', border: 'border-teal-500/60' } },
   { id: 'merger',    label: 'Merger',    processName: 'merger',    color: { bg: 'bg-cyan-500',   border: 'border-cyan-500/60'   } },
+  { id: 'manager',   label: 'Manager',   processName: 'manager',   color: { bg: 'bg-indigo-500', border: 'border-indigo-500/60' } },
 ];
 
 export const WEB_JOB_REGISTRY: IWebJobDefinition[] = [
@@ -143,6 +145,19 @@ export const WEB_JOB_REGISTRY: IWebJobDefinition[] = [
     getSchedule: (config) => config.merger?.schedule ?? '55 */4 * * *',
     settingsSection: 'advanced',
     buildEnabledPatch: (enabled, config) => ({ merger: { ...(config.merger ?? {}), enabled } as IMergerConfig }),
+  },
+  {
+    id: 'manager',
+    label: 'Manager',
+    processName: 'manager',
+    color: { bg: 'bg-indigo-500', border: 'border-indigo-500/60' },
+    triggerEndpoint: '/api/actions/manager',
+    scheduleTemplateKey: 'manager',
+    getEnabled: (config) => config.manager?.enabled ?? true,
+    getSchedule: (config) => config.manager?.schedule ?? '15 7 * * *',
+    settingsSection: 'advanced',
+    buildEnabledPatch: (enabled, config) =>
+      ({ manager: { ...(config.manager ?? {}), enabled } as IManagerConfig }),
   },
 ];
 

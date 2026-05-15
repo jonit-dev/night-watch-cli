@@ -8,6 +8,7 @@ import {
   Layout,
   Play,
   Search,
+  ClipboardList,
 } from 'lucide-react';
 import Card from '../ui/Card';
 import CronScheduleInput from '../ui/CronScheduleInput';
@@ -22,6 +23,7 @@ export interface IScheduleConfigForm {
   roadmapScanner: { slicerSchedule: string; enabled: boolean };
   prResolver?: { schedule: string; enabled: boolean };
   merger?: { schedule: string; enabled: boolean };
+  manager?: { schedule: string; enabled: boolean };
 }
 
 interface IScheduleConfigProps {
@@ -139,6 +141,7 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
                       ['Planner', tpl.hints.slicer],
                       ['PR Resolver', tpl.hints.prResolver],
                       ['Merger', tpl.hints.merger],
+                      ['Manager', tpl.hints.manager],
                     ] as [string, string][]
                   ).map(([name, hint]) => (
                     <div key={name} className="flex items-center gap-2">
@@ -221,6 +224,16 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
               description="Scans, rebases, and merges approved PRs"
               value={form.merger.schedule}
               onChange={(val) => onFieldChange('merger', { ...form.merger, schedule: val })}
+            />
+          )}
+          {form.manager && (
+            <JobScheduleCard
+              id="job-schedule-manager"
+              icon={ClipboardList}
+              title="Manager"
+              description="Monitors roadmap, PRDs, docs, and system health"
+              value={form.manager.schedule}
+              onChange={(val) => onFieldChange('manager', { ...form.manager, schedule: val })}
             />
           )}
         </div>

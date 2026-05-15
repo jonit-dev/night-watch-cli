@@ -1318,13 +1318,13 @@ describe('status-data utilities', () => {
   });
 
   describe('collectLogInfo', () => {
-    it('should collect info for executor/reviewer/qa/audit/planner/analytics/pr-resolver/merger logs', async () => {
+    it('should collect info for executor/reviewer/qa/audit/planner/analytics/pr-resolver/merger/manager logs', async () => {
       const logDir = path.join(tempDir, 'logs');
       fs.mkdirSync(logDir, { recursive: true });
       fs.writeFileSync(path.join(logDir, 'executor.log'), 'Executor line 1');
 
       const result = collectLogInfo(tempDir);
-      expect(result).toHaveLength(8);
+      expect(result).toHaveLength(9);
 
       const executorLog = result.find((l) => l.name === 'executor');
       expect(executorLog).toBeDefined();
@@ -1358,9 +1358,13 @@ describe('status-data utilities', () => {
       const mergerLog = result.find((l) => l.name === 'merger');
       expect(mergerLog).toBeDefined();
       expect(mergerLog!.exists).toBe(false);
+
+      const managerLog = result.find((l) => l.name === 'manager');
+      expect(managerLog).toBeDefined();
+      expect(managerLog!.exists).toBe(false);
     });
 
-    it('should use correct file names (executor.log, reviewer.log, night-watch-qa.log, analytics.log, pr-resolver.log, merger.log)', async () => {
+    it('should use correct file names (executor.log, reviewer.log, night-watch-qa.log, analytics.log, pr-resolver.log, merger.log, manager.log)', async () => {
       const logDir = path.join(tempDir, 'logs');
       fs.mkdirSync(logDir, { recursive: true });
       fs.writeFileSync(path.join(logDir, 'executor.log'), 'Executor line 1');
@@ -1371,9 +1375,10 @@ describe('status-data utilities', () => {
       fs.writeFileSync(path.join(logDir, 'analytics.log'), 'Analytics line 1');
       fs.writeFileSync(path.join(logDir, 'pr-resolver.log'), 'PR Resolver line 1');
       fs.writeFileSync(path.join(logDir, 'merger.log'), 'Merger line 1');
+      fs.writeFileSync(path.join(logDir, 'manager.log'), 'Manager line 1');
 
       const result = collectLogInfo(tempDir);
-      expect(result).toHaveLength(8);
+      expect(result).toHaveLength(9);
 
       const executorLog = result.find((l) => l.name === 'executor');
       expect(executorLog).toBeDefined();
@@ -1409,6 +1414,11 @@ describe('status-data utilities', () => {
       expect(mergerLog).toBeDefined();
       expect(mergerLog!.exists).toBe(true);
       expect(mergerLog!.path).toContain('merger.log');
+
+      const managerLog = result.find((l) => l.name === 'manager');
+      expect(managerLog).toBeDefined();
+      expect(managerLog!.exists).toBe(true);
+      expect(managerLog!.path).toContain('manager.log');
     });
   });
 
@@ -1552,7 +1562,7 @@ describe('status-data utilities', () => {
       expect(snapshot.config).toBe(config);
       expect(Array.isArray(snapshot.prds)).toBe(true);
       expect(Array.isArray(snapshot.processes)).toBe(true);
-      expect(snapshot.processes).toHaveLength(8);
+      expect(snapshot.processes).toHaveLength(9);
       expect(snapshot.processes[0].name).toBe('executor');
       expect(snapshot.processes[1].name).toBe('reviewer');
       expect(snapshot.processes[2].name).toBe('qa');
@@ -1561,9 +1571,10 @@ describe('status-data utilities', () => {
       expect(snapshot.processes[5].name).toBe('analytics');
       expect(snapshot.processes[6].name).toBe('pr-resolver');
       expect(snapshot.processes[7].name).toBe('merger');
+      expect(snapshot.processes[8].name).toBe('manager');
       expect(Array.isArray(snapshot.prs)).toBe(true);
       expect(Array.isArray(snapshot.logs)).toBe(true);
-      expect(snapshot.logs).toHaveLength(8);
+      expect(snapshot.logs).toHaveLength(9);
       expect(snapshot.crontab).toHaveProperty('installed');
       expect(snapshot.crontab).toHaveProperty('entries');
       expect(snapshot.activePrd).toBeNull();

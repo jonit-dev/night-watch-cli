@@ -11,6 +11,7 @@ import {
   IBoardProviderConfig,
   IFeedbackConfig,
   IJobProviders,
+  IManagerConfig,
   IMergerConfig,
   INightWatchConfig,
   INotificationConfig,
@@ -43,6 +44,7 @@ import {
   DEFAULT_REVIEWER_SCHEDULE,
   getDefaultAnalyticsConfig,
   getDefaultAuditConfig,
+  getDefaultManagerConfig,
   getDefaultMergerConfig,
   getDefaultPrResolverConfig,
   getDefaultQaConfig,
@@ -58,6 +60,7 @@ const JOB_PROVIDER_KEYS: Array<keyof IJobProviders> = [
   'analytics',
   'pr-resolver',
   'merger',
+  'manager',
 ];
 
 const WEBHOOK_TRIGGER_JOB_IDS: JobType[] = [
@@ -69,6 +72,7 @@ const WEBHOOK_TRIGGER_JOB_IDS: JobType[] = [
   'analytics',
   'pr-resolver',
   'merger',
+  'manager',
 ];
 
 const DEFAULT_WEBHOOK_TRIGGERS: IWebhookTriggerConfig = {
@@ -128,6 +132,7 @@ type ConfigForm = {
   feedback: IFeedbackConfig;
   prResolver: IPrResolverConfig;
   merger: IMergerConfig;
+  manager: IManagerConfig;
   queue: INightWatchConfig['queue'];
   webhookTriggers: IWebhookTriggerConfig;
 };
@@ -194,6 +199,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => {
     },
     prResolver: config.prResolver ?? getDefaultPrResolverConfig(),
     merger: config.merger ?? getDefaultMergerConfig(),
+    manager: config.manager ?? getDefaultManagerConfig(),
     queue: config.queue || {
       enabled: true,
       mode: 'conservative' as const,
@@ -347,6 +353,8 @@ const Settings: React.FC = () => {
         (config?.prResolver?.schedule ?? getDefaultPrResolverConfig().schedule) ||
       form.merger.enabled !== (config?.merger?.enabled ?? false) ||
       form.merger.schedule !== (config?.merger?.schedule ?? getDefaultMergerConfig().schedule) ||
+      form.manager.enabled !== (config?.manager?.enabled ?? getDefaultManagerConfig().enabled) ||
+      form.manager.schedule !== (config?.manager?.schedule ?? getDefaultManagerConfig().schedule) ||
       form.roadmapScanner.enabled !== (config?.roadmapScanner?.enabled ?? true) ||
       (form.roadmapScanner.slicerSchedule || getDefaultRoadmapScannerConfig().slicerSchedule) !==
         (config?.roadmapScanner?.slicerSchedule || getDefaultRoadmapScannerConfig().slicerSchedule);
@@ -412,6 +420,7 @@ const Settings: React.FC = () => {
         feedback: form.feedback,
         prResolver: form.prResolver,
         merger: form.merger,
+        manager: form.manager,
         queue: form.queue,
         webhookTriggers: form.webhookTriggers,
       });

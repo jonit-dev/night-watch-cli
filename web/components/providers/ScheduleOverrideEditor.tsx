@@ -26,6 +26,7 @@ const JOB_TYPE_LABELS: Record<JobType, string> = {
   planner: 'Planner',
   'pr-resolver': 'PR Resolver',
   merger: 'Merger',
+  manager: 'Manager',
 };
 
 const emptyOverride: IProviderScheduleOverride = {

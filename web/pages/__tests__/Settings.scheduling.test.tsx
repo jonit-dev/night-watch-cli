@@ -84,6 +84,7 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
         executor: 50,
         reviewer: 40,
         slicer: 30,
+        manager: 25,
         qa: 20,
         audit: 10,
       },
@@ -127,9 +128,28 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
       ciPolicy: 'fallback-local',
       localCheckCommand: 'yarn install --frozen-lockfile && yarn verify && yarn test',
     },
+    manager: {
+      enabled: true,
+      schedule: '15 7 * * *',
+      maxRuntime: 0,
+      authority: 'draft',
+      outputMode: 'board-draft',
+      targetColumn: 'Draft',
+      memoryPath: '.night-watch/manager/memory.md',
+      docsDir: '.night-watch/manager/docs',
+      weeklySummaryEnabled: true,
+      weeklySummaryDay: 1,
+    },
   };
 
-  return { ...base, ...overrides };
+  return {
+    ...base,
+    ...overrides,
+    manager: {
+      ...base.manager,
+      ...(overrides.manager ?? {}),
+    },
+  };
 }
 
 vi.mock('../../api', () => ({

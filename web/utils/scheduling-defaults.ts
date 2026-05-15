@@ -2,6 +2,7 @@ import type {
   IAnalyticsConfig,
   IAuditConfig,
   IMergerConfig,
+  IManagerConfig,
   IPrResolverConfig,
   IQaConfig,
   IRoadmapScannerConfig,
@@ -72,6 +73,19 @@ export const DEFAULT_MERGER_CONFIG: IMergerConfig = {
   localCheckCommand: 'yarn install --frozen-lockfile && yarn verify && yarn test',
 };
 
+export const DEFAULT_MANAGER_CONFIG: IManagerConfig = {
+  enabled: true,
+  schedule: '15 7 * * *',
+  maxRuntime: 0,
+  authority: 'draft',
+  outputMode: 'board-draft',
+  targetColumn: 'Draft',
+  memoryPath: '.night-watch/manager/memory.md',
+  docsDir: '.night-watch/manager/docs',
+  weeklySummaryEnabled: true,
+  weeklySummaryDay: 1,
+};
+
 export function getDefaultRoadmapScannerConfig(): IRoadmapScannerConfig {
   return { ...DEFAULT_ROADMAP_SCANNER_CONFIG };
 }
@@ -103,4 +117,8 @@ export function getDefaultMergerConfig(): IMergerConfig {
     ...DEFAULT_MERGER_CONFIG,
     branchPatterns: [...DEFAULT_MERGER_CONFIG.branchPatterns],
   };
+}
+
+export function getDefaultManagerConfig(): IManagerConfig {
+  return { ...DEFAULT_MANAGER_CONFIG };
 }

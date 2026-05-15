@@ -1,6 +1,6 @@
 /**
  * Schedules tab for the dashboard TUI
- * View and manage crontab entries for executor and reviewer
+ * View and manage crontab entries for scheduled jobs
  */
 
 import blessed from 'blessed';
@@ -103,6 +103,7 @@ export function createSchedulesTab(): ITab {
     const { config } = ctx;
     const executorHuman = cronToHuman(config.cronSchedule);
     const reviewerHuman = cronToHuman(config.reviewerSchedule);
+    const managerHuman = cronToHuman(config.manager.schedule);
 
     const lines = [
       `{bold}Executor Schedule:{/bold}  ${config.cronSchedule}`,
@@ -111,9 +112,13 @@ export function createSchedulesTab(): ITab {
       `{bold}Reviewer Schedule:{/bold}  ${config.reviewerSchedule}`,
       `  ${reviewerHuman}`,
       '',
-      `{bold}Reviewer Enabled:{/bold}  ${config.reviewerEnabled ? '{green-fg}Yes{/green-fg}' : '{red-fg}No{/red-fg}'}`,
+      `{bold}Manager Schedule:{/bold}  ${config.manager.schedule}`,
+      `  ${managerHuman}`,
       '',
-      '{#888888-fg}Keys: e:Edit Executor  v:Edit Reviewer  i:Install  x:Uninstall  R:Reinstall{/#888888-fg}',
+      `{bold}Reviewer Enabled:{/bold}  ${config.reviewerEnabled ? '{green-fg}Yes{/green-fg}' : '{red-fg}No{/red-fg}'}`,
+      `{bold}Manager Enabled:{/bold}  ${config.manager.enabled ? '{green-fg}Yes{/green-fg}' : '{red-fg}No{/red-fg}'}`,
+      '',
+      '{#888888-fg}Keys: e:Edit Executor  v:Edit Reviewer  m:Edit Manager  i:Install  x:Uninstall  R:Reinstall{/#888888-fg}',
     ];
 
     scheduleBox.setContent(lines.join('\n'));
@@ -121,10 +126,14 @@ export function createSchedulesTab(): ITab {
 
   function applySchedule(
     ctx: ITabContext,
-    field: 'cronSchedule' | 'reviewerSchedule',
+    field: 'cronSchedule' | 'reviewerSchedule' | 'manager.schedule',
     cronExpr: string,
   ) {
-    const result = saveConfig(ctx.projectDir, { [field]: cronExpr });
+    const patch =
+      field === 'manager.schedule'
+        ? { manager: { ...ctx.config.manager, schedule: cronExpr } }
+        : { [field]: cronExpr };
+    const result = saveConfig(ctx.projectDir, patch);
     if (!result.success) {
       ctx.showMessage(`Save failed: ${result.error}`, 'error');
       return;
@@ -151,10 +160,10 @@ export function createSchedulesTab(): ITab {
 
   function showCustomCronInput(
     ctx: ITabContext,
-    field: 'cronSchedule' | 'reviewerSchedule',
+    field: 'cronSchedule' | 'reviewerSchedule' | 'manager.schedule',
     label: string,
   ) {
-    const currentValue = ctx.config[field];
+    const currentValue = field === 'manager.schedule' ? ctx.config.manager.schedule : ctx.config[field];
 
     const inputBox = blessed.textbox({
       top: 'center',
@@ -194,7 +203,7 @@ export function createSchedulesTab(): ITab {
 
   function editSchedule(
     ctx: ITabContext,
-    field: 'cronSchedule' | 'reviewerSchedule',
+    field: 'cronSchedule' | 'reviewerSchedule' | 'manager.schedule',
     label: string,
   ) {
     const presetItems = SCHEDULE_PRESETS.map((p) => ` ${p.label}  (${p.cron})`);
@@ -221,7 +230,7 @@ export function createSchedulesTab(): ITab {
     selectorList.setItems(presetItems as unknown as string[]);
 
     // Pre-select current schedule if it matches a preset
-    const currentCron = ctx.config[field];
+    const currentCron = field === 'manager.schedule' ? ctx.config.manager.schedule : ctx.config[field];
     const matchIdx = SCHEDULE_PRESETS.findIndex((p) => p.cron === currentCron);
     if (matchIdx >= 0) {
       selectorList.select(matchIdx);
@@ -259,6 +268,7 @@ export function createSchedulesTab(): ITab {
     const handlers: Array<[string[], (...args: unknown[]) => void]> = [
       [['e'], () => editSchedule(ctx, 'cronSchedule', 'Executor Schedule')],
       [['v'], () => editSchedule(ctx, 'reviewerSchedule', 'Reviewer Schedule')],
+      [['m'], () => editSchedule(ctx, 'manager.schedule', 'Manager Schedule')],
       [
         ['i'],
         () => {
@@ -329,7 +339,7 @@ export function createSchedulesTab(): ITab {
     name: 'Schedules',
     container,
     activate(ctx: ITabContext) {
-      ctx.setFooter(' e:Executor  v:Reviewer  i:Install  x:Uninstall  R:Reinstall  q:Quit');
+      ctx.setFooter(' e:Executor  v:Reviewer  m:Manager  i:Install  x:Uninstall  R:Reinstall  q:Quit');
       renderCrontab(ctx);
       renderScheduleSettings(ctx);
       activeCtx = ctx;

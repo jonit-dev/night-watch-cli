@@ -101,6 +101,7 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
         executor: 50,
         reviewer: 40,
         slicer: 30,
+        manager: 25,
         qa: 20,
         audit: 10,
       },
@@ -133,6 +134,18 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
       ciPolicy: 'fallback-local',
       localCheckCommand: 'yarn install --frozen-lockfile && yarn verify && yarn test',
     },
+    manager: {
+      enabled: true,
+      schedule: '15 7 * * *',
+      maxRuntime: 0,
+      authority: 'draft',
+      outputMode: 'board-draft',
+      targetColumn: 'Draft',
+      memoryPath: '.night-watch/manager/memory.md',
+      docsDir: '.night-watch/manager/docs',
+      weeklySummaryEnabled: true,
+      weeklySummaryDay: 1,
+    },
   };
 
   return {
@@ -157,6 +170,14 @@ function makeConfig(overrides: Partial<INightWatchConfig> = {}): INightWatchConf
     feedback: {
       ...base.feedback,
       ...(overrides.feedback ?? {}),
+    },
+    merger: {
+      ...base.merger,
+      ...(overrides.merger ?? {}),
+    },
+    manager: {
+      ...base.manager,
+      ...(overrides.manager ?? {}),
     },
   };
 }
@@ -215,6 +236,14 @@ function makeScheduleInfo(overrides: Partial<IScheduleInfo> = {}): IScheduleInfo
       schedule: '55 */4 * * *',
       installed: true,
       nextRun: '2026-03-06T00:55:00.000Z',
+      delayMinutes: 0,
+      manualDelayMinutes: 0,
+      balancedDelayMinutes: 0,
+    },
+    manager: {
+      schedule: '15 7 * * *',
+      installed: true,
+      nextRun: '2026-03-06T07:15:00.000Z',
       delayMinutes: 0,
       manualDelayMinutes: 0,
       balancedDelayMinutes: 0,
@@ -357,6 +386,7 @@ describe('Scheduling (Automation) page', () => {
 
     await waitFor(() => {
       expect(screen.getByText('PRD Executor')).toBeInTheDocument();
+      expect(screen.getByText('Manager')).toBeInTheDocument();
     });
   });
 
@@ -368,6 +398,7 @@ describe('Scheduling (Automation) page', () => {
     await waitFor(() => {
       expect(screen.getByText('PRD Executor')).toBeInTheDocument();
       expect(screen.getByText('PR Reviewer')).toBeInTheDocument();
+      expect(screen.getByText('Manager')).toBeInTheDocument();
     });
   });
 

@@ -63,6 +63,7 @@ export interface IScheduleTemplate {
     slicer: string;
     prResolver: string;
     merger: string;
+    manager: string;
   };
   hints: {
     executor: string;
@@ -72,6 +73,7 @@ export interface IScheduleTemplate {
     slicer: string;
     prResolver: string;
     merger: string;
+    manager: string;
   };
 }
 
@@ -88,6 +90,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       slicer: '35 19,7 * * *',
       prResolver: '15 9,15,21 * * *',
       merger: '55 */4 * * *',
+      manager: '15 7 * * *',
     },
     hints: {
       executor: '8pm–6am every 2h (6 runs)',
@@ -97,6 +100,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       slicer: '7:35pm & 7:35am',
       prResolver: '9:15am, 3:15pm, 9:15pm',
       merger: 'Every 4h at :55',
+      manager: 'Daily at 7:15am',
     },
   },
   {
@@ -111,6 +115,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       slicer: '35 */6 * * *',
       prResolver: '15 6,14,22 * * *',
       merger: '55 */4 * * *',
+      manager: '15 7 * * *',
     },
     hints: {
       executor: 'Every hour at :05',
@@ -120,6 +125,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       slicer: 'Every 6h at :35',
       prResolver: '6:15am, 2:15pm & 10:15pm',
       merger: 'Every 4h at :55',
+      manager: 'Daily at 7:15am',
     },
   },
   {
@@ -134,6 +140,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       slicer: '35 7 * * 1',
       prResolver: '15 8,12,16 * * 1-5',
       merger: '55 */4 * * 1-5',
+      manager: '15 7 * * 1-5',
     },
     hints: {
       executor: 'Hourly at :05, 8am–8pm weekdays',
@@ -143,6 +150,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       slicer: 'Mon 7:35am',
       prResolver: '8:15am, 12:15pm & 4:15pm weekdays',
       merger: 'Every 4h at :55 weekdays',
+      manager: 'Weekdays at 7:15am',
     },
   },
   {
@@ -157,6 +165,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       slicer: '35 1 * * 1',
       prResolver: '15 8 * * 1,4',
       merger: '55 */8 * * *',
+      manager: '15 7 * * 1',
     },
     hints: {
       executor: '2:05am & 2:05pm',
@@ -166,6 +175,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       slicer: 'Mon 1:35am',
       prResolver: 'Mon & Thu at 8:15am',
       merger: 'Every 8h at :55',
+      manager: 'Mon 7:15am',
     },
   },
 ];
@@ -193,6 +203,7 @@ export function templateMatchesSchedules(
   slicer: string,
   prResolver: string,
   merger: string,
+  manager: string,
 ): boolean {
   return (
     isCronEquivalent(template.schedules.executor, executor) &&
@@ -201,7 +212,8 @@ export function templateMatchesSchedules(
     isCronEquivalent(template.schedules.audit, audit) &&
     isCronEquivalent(template.schedules.slicer, slicer) &&
     isCronEquivalent(template.schedules.prResolver, prResolver) &&
-    isCronEquivalent(template.schedules.merger, merger)
+    isCronEquivalent(template.schedules.merger, merger) &&
+    isCronEquivalent(template.schedules.manager, manager)
   );
 }
 
@@ -213,9 +225,10 @@ export function detectTemplate(
   slicer: string,
   prResolver: string,
   merger: string,
+  manager: string,
 ): IScheduleTemplate | undefined {
   return SCHEDULE_TEMPLATES.find((t) =>
-    templateMatchesSchedules(t, executor, reviewer, qa, audit, slicer, prResolver, merger),
+    templateMatchesSchedules(t, executor, reviewer, qa, audit, slicer, prResolver, merger, manager),
   );
 }
 
@@ -233,15 +246,16 @@ export function resolveActiveTemplate(
   slicer: string,
   prResolver: string,
   merger: string,
+  manager: string,
 ): IScheduleTemplate | undefined {
   const byId = getTemplateById(scheduleBundleId);
   if (
     byId &&
-    templateMatchesSchedules(byId, executor, reviewer, qa, audit, slicer, prResolver, merger)
+    templateMatchesSchedules(byId, executor, reviewer, qa, audit, slicer, prResolver, merger, manager)
   ) {
     return byId;
   }
-  return detectTemplate(executor, reviewer, qa, audit, slicer, prResolver, merger);
+  return detectTemplate(executor, reviewer, qa, audit, slicer, prResolver, merger, manager);
 }
 
 /**

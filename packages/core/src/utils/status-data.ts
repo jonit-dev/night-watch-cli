@@ -16,6 +16,7 @@ import {
   CLAIM_FILE_EXTENSION,
   LOCK_FILE_PREFIX,
   LOG_DIR,
+  MANAGER_LOG_NAME,
   MERGER_LOG_NAME,
   PLANNER_LOG_NAME,
   PR_RESOLVER_LOG_NAME,
@@ -168,6 +169,13 @@ export function prResolverLockPath(projectDir: string): string {
  */
 export function mergerLockPath(projectDir: string): string {
   return `${LOCK_FILE_PREFIX}merger-${projectRuntimeKey(projectDir)}.lock`;
+}
+
+/**
+ * Compute the lock file path for the manager job of a given project directory.
+ */
+export function managerLockPath(projectDir: string): string {
+  return `${LOCK_FILE_PREFIX}manager-${projectRuntimeKey(projectDir)}.lock`;
 }
 
 /**
@@ -788,6 +796,7 @@ export function collectLogInfo(projectDir: string): ILogInfo[] {
     { name: 'analytics', fileName: `${ANALYTICS_LOG_NAME}.log` },
     { name: 'pr-resolver', fileName: `${PR_RESOLVER_LOG_NAME}.log` },
     { name: 'merger', fileName: `${MERGER_LOG_NAME}.log` },
+    { name: 'manager', fileName: `${MANAGER_LOG_NAME}.log` },
   ];
   return logEntries.map(({ name, fileName }) => {
     const logPath = path.join(projectDir, LOG_DIR, fileName);
@@ -836,6 +845,7 @@ export async function fetchStatusSnapshot(
   const analyticsLock = checkLockFile(analyticsLockPath(projectDir));
   const prResolverLock = checkLockFile(prResolverLockPath(projectDir));
   const mergerLock = checkLockFile(mergerLockPath(projectDir));
+  const managerLock = checkLockFile(managerLockPath(projectDir));
 
   const processes: IProcessInfo[] = [
     { name: 'executor', running: executorLock.running, pid: executorLock.pid },
@@ -846,6 +856,7 @@ export async function fetchStatusSnapshot(
     { name: 'analytics', running: analyticsLock.running, pid: analyticsLock.pid },
     { name: 'pr-resolver', running: prResolverLock.running, pid: prResolverLock.pid },
     { name: 'merger', running: mergerLock.running, pid: mergerLock.pid },
+    { name: 'manager', running: managerLock.running, pid: managerLock.pid },
   ];
 
   const prds = collectPrdInfo(projectDir, config.prdDir, config.maxRuntime);

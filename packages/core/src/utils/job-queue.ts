@@ -32,6 +32,7 @@ import {
   checkLockFile,
   executorLockPath,
   isProcessAliveSince,
+  managerLockPath,
   mergerLockPath,
   plannerLockPath,
   prResolverLockPath,
@@ -106,6 +107,8 @@ function getLockPathForJob(projectPath: string, jobType: JobType): string {
       return prResolverLockPath(projectPath);
     case 'merger':
       return mergerLockPath(projectPath);
+    case 'manager':
+      return managerLockPath(projectPath);
   }
 }
 

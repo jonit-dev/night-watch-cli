@@ -53,7 +53,8 @@ export type JobType =
   | 'analytics'
   | 'planner'
   | 'pr-resolver'
-  | 'merger';
+  | 'merger'
+  | 'manager';
 
 /**
  * Time-based provider schedule override.
@@ -107,6 +108,7 @@ export interface IJobProviders {
   planner?: Provider;
   'pr-resolver'?: Provider;
   merger?: Provider;
+  manager?: Provider;
 }
 
 export interface IWebhookTriggerGithubRule {
@@ -328,6 +330,9 @@ export interface INightWatchConfig {
   /** Merge orchestrator configuration */
   merger: IMergerConfig;
 
+  /** Roadmap-aware project manager configuration */
+  manager: IManagerConfig;
+
   /** Per-job provider configuration */
   jobProviders: IJobProviders;
 
@@ -467,6 +472,32 @@ export interface IMergerConfig {
   localCheckCommand: string;
 }
 
+export type ManagerAuthority = 'draft' | 'ready' | 'workflow';
+export type ManagerOutputMode = 'board-draft' | 'filesystem-prd' | 'report-only';
+
+export interface IManagerConfig {
+  /** Whether the manager job is enabled */
+  enabled: boolean;
+  /** Cron schedule for manager execution */
+  schedule: string;
+  /** Maximum runtime in seconds for the manager. 0 disables the provider timeout. */
+  maxRuntime: number;
+  /** How much authority Manager has when acting on findings */
+  authority: ManagerAuthority;
+  /** Where Manager publishes actionable findings */
+  outputMode: ManagerOutputMode;
+  /** Board column to place created draft issues in */
+  targetColumn: BoardColumnName;
+  /** Markdown memory path, relative to project root */
+  memoryPath: string;
+  /** Directory for Manager-owned generated docs, relative to project root */
+  docsDir: string;
+  /** Whether Manager should send weekly roadmap/project summaries */
+  weeklySummaryEnabled: boolean;
+  /** Day of week for weekly summaries (0 = Sunday, 6 = Saturday) */
+  weeklySummaryDay: DayOfWeek;
+}
+
 export type WebhookType = 'slack' | 'discord' | 'telegram';
 export const NOTIFICATION_EVENTS = [
   'run_started',
@@ -484,6 +515,8 @@ export const NOTIFICATION_EVENTS = [
   'pr_resolver_failed',
   'merge_completed',
   'merge_failed',
+  'manager_blocked',
+  'manager_weekly_summary',
 ] as const;
 
 export type NotificationEvent = (typeof NOTIFICATION_EVENTS)[number];

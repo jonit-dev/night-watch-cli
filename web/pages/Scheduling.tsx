@@ -14,6 +14,7 @@ import {
   Layout,
   GitMerge,
   GitPullRequest,
+  ClipboardList,
   Save,
   RotateCcw,
   AlertTriangle,
@@ -34,6 +35,7 @@ import type {
   IAuditConfig,
   IFeedbackConfig,
   IJobProviders,
+  IManagerConfig,
   IMergerConfig,
   INightWatchConfig,
   IPrResolverConfig,
@@ -69,6 +71,7 @@ import {
   DEFAULT_REVIEWER_SCHEDULE,
   getDefaultAnalyticsConfig,
   getDefaultAuditConfig,
+  getDefaultManagerConfig,
   getDefaultMergerConfig,
   getDefaultPrResolverConfig,
   getDefaultQaConfig,
@@ -101,6 +104,7 @@ type AutomationForm = {
   feedback: IFeedbackConfig;
   prResolver: IPrResolverConfig;
   merger: IMergerConfig;
+  manager: IManagerConfig;
   roadmapScanner: IRoadmapScannerConfig;
   queue: NonNullable<INightWatchConfig['queue']>;
 };
@@ -110,7 +114,7 @@ const DEFAULT_QUEUE: NonNullable<INightWatchConfig['queue']> = {
   mode: 'conservative' as QueueMode,
   maxConcurrency: 1,
   maxWaitTime: 7200,
-  priority: { executor: 50, reviewer: 40, slicer: 30, qa: 20, audit: 10 },
+  priority: { executor: 50, reviewer: 40, slicer: 30, manager: 25, qa: 20, audit: 10 },
   providerBuckets: {},
 };
 
@@ -123,6 +127,7 @@ const JOB_PROVIDER_KEYS: Array<keyof IJobProviders> = [
   'analytics',
   'pr-resolver',
   'merger',
+  'manager',
 ];
 
 const VALID_AUTOMATION_TABS = new Set(['overview', 'schedules', 'jobs']);
@@ -130,7 +135,7 @@ const VALID_AUTOMATION_TABS = new Set(['overview', 'schedules', 'jobs']);
 const normalizeJobType = (jobId: string | null): string | null => {
   if (!jobId) return null;
   const normalized = jobId === 'planner' ? 'slicer' : jobId;
-  return ['executor', 'reviewer', 'qa', 'audit', 'slicer', 'analytics', 'pr-resolver', 'merger'].includes(normalized)
+  return ['executor', 'reviewer', 'qa', 'audit', 'slicer', 'analytics', 'pr-resolver', 'merger', 'manager'].includes(normalized)
     ? normalized
     : null;
 };
@@ -166,6 +171,7 @@ const toAutomationForm = (config: INightWatchConfig): AutomationForm => ({
   },
   prResolver: config.prResolver ?? getDefaultPrResolverConfig(),
   merger: config.merger ?? getDefaultMergerConfig(),
+  manager: config.manager ?? getDefaultManagerConfig(),
   roadmapScanner: config.roadmapScanner || getDefaultRoadmapScannerConfig(),
   queue: config.queue || DEFAULT_QUEUE,
 });
@@ -180,6 +186,7 @@ const resolveTemplateForForm = (form: AutomationForm): IScheduleTemplate | undef
     form.roadmapScanner.slicerSchedule ?? getDefaultRoadmapScannerConfig().slicerSchedule,
     form.prResolver?.schedule ?? getDefaultPrResolverConfig().schedule,
     form.merger?.schedule ?? getDefaultMergerConfig().schedule,
+    form.manager?.schedule ?? getDefaultManagerConfig().schedule,
   );
 
 const normalizeAutomationForm = (
@@ -339,6 +346,7 @@ const Scheduling: React.FC = () => {
         roadmapScanner: { ...prev.roadmapScanner, slicerSchedule: tpl.schedules.slicer },
         prResolver: { ...prev.prResolver, schedule: tpl.schedules.prResolver },
         merger: { ...prev.merger, schedule: tpl.schedules.merger },
+        manager: { ...prev.manager, schedule: tpl.schedules.manager },
       };
     });
   };
@@ -381,6 +389,7 @@ const Scheduling: React.FC = () => {
         feedback: form.feedback,
         prResolver: form.prResolver,
         merger: form.merger,
+        manager: form.manager,
         roadmapScanner: form.roadmapScanner,
         queue: form.queue,
       });
@@ -870,6 +879,7 @@ const Scheduling: React.FC = () => {
               { id: 'analytics', label: 'Run Analytics', icon: BarChart3, enabled: form?.analytics?.enabled ?? false },
               { id: 'pr-resolver', label: 'Run PR Resolver', icon: GitMerge, enabled: form?.prResolver?.enabled ?? false },
               { id: 'merger', label: 'Run Merger', icon: GitPullRequest, enabled: form?.merger?.enabled ?? false },
+              { id: 'manager', label: 'Run Manager', icon: ClipboardList, enabled: form?.manager?.enabled ?? false },
             ].map((job) => (
               <button
                 key={job.id}
@@ -912,6 +922,7 @@ const Scheduling: React.FC = () => {
         },
         prResolver: form.prResolver,
         merger: form.merger,
+        manager: form.manager,
       }}
       scheduleMode={scheduleMode}
       selectedTemplateId={selectedTemplateId}

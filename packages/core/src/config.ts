@@ -35,6 +35,7 @@ import {
   DEFAULT_FALLBACK_ON_RATE_LIMIT,
   DEFAULT_FEEDBACK,
   DEFAULT_JOB_PROVIDERS,
+  DEFAULT_MANAGER,
   DEFAULT_MAX_LOG_SIZE,
   DEFAULT_MAX_RETRIES,
   DEFAULT_MAX_RUNTIME,
@@ -109,6 +110,7 @@ export function getDefaultConfig(): INightWatchConfig {
     qa: { ...DEFAULT_QA },
     audit: { ...DEFAULT_AUDIT },
     analytics: { ...DEFAULT_ANALYTICS },
+    manager: { ...DEFAULT_MANAGER },
     feedback: { ...DEFAULT_FEEDBACK },
     prResolver: { ...DEFAULT_PR_RESOLVER },
     merger: { ...DEFAULT_MERGER },
@@ -336,6 +338,7 @@ function mergeConfigLayer(base: INightWatchConfig, layer: Partial<INightWatchCon
       _key === 'qa' ||
       _key === 'audit' ||
       _key === 'analytics' ||
+      _key === 'manager' ||
       _key === 'feedback' ||
       _key === 'prResolver' ||
       _key === 'merger'
@@ -407,6 +410,13 @@ function mergeConfigs(
       0,
       Math.min(20, Math.floor(merged.feedback.successStreakToExpire)),
     ),
+  };
+  merged.manager = {
+    ...merged.manager,
+    weeklySummaryDay: Math.max(
+      0,
+      Math.min(6, Math.floor(merged.manager.weeklySummaryDay)),
+    ) as DayOfWeek,
   };
   if (merged.secondaryFallbackModel === undefined) {
     merged.secondaryFallbackModel =

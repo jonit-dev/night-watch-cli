@@ -81,6 +81,7 @@ const ScheduleTimeline: React.FC<ScheduleTimelineProps> = ({
         analytics: config.analytics?.enabled ? config.analytics?.schedule : null,
         'pr-resolver': config.prResolver?.enabled ? config.prResolver.schedule : null,
         merger: config.merger?.enabled ? config.merger?.schedule : null,
+        manager: config.manager?.enabled ? config.manager.schedule : null,
       };
 
       const offset = config.cronScheduleOffset || 0;
@@ -127,6 +128,7 @@ const ScheduleTimeline: React.FC<ScheduleTimelineProps> = ({
     if (configs.every(c => !c.config.analytics?.enabled)) disabled.add('analytics');
     if (configs.every(c => !c.config.prResolver?.enabled)) disabled.add('pr-resolver');
     if (configs.every(c => !c.config.merger?.enabled)) disabled.add('merger');
+    if (configs.every(c => !c.config.manager?.enabled)) disabled.add('manager');
     return disabled;
   }, [configs]);
 

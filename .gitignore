@@ -46,3 +46,4 @@ qa-artifacts/
 
 night-watch.config.json
 .worktrees
+.night-watch/manager/

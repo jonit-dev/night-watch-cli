@@ -61,6 +61,7 @@ export function performUninstall(
           'slicer.log',
           'audit.log',
           'pr-resolver.log',
+          'manager.log',
         ];
         logFiles.forEach((logFile) => {
           const logPath = path.join(logDir, logFile);
@@ -134,6 +135,7 @@ export function uninstallCommand(program: Command): void {
               'slicer.log',
               'audit.log',
               'pr-resolver.log',
+              'manager.log',
             ];
             let logsRemoved = 0;
 

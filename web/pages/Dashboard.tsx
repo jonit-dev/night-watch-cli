@@ -115,7 +115,7 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleTriggerJob = async (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics' | 'pr-resolver' | 'merger') => {
+  const handleTriggerJob = async (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics' | 'pr-resolver' | 'merger' | 'manager') => {
     setTriggeringJob(job);
     try {
       const registryId = job === 'planner' ? 'slicer' : job;
@@ -177,6 +177,7 @@ const Dashboard: React.FC = () => {
       { agent: 'Analytics', nextRun: scheduleInfo?.analytics?.nextRun ?? null },
       { agent: 'PR Resolver', nextRun: scheduleInfo?.prResolver?.nextRun ?? null },
       { agent: 'Merger', nextRun: scheduleInfo?.merger?.nextRun ?? null },
+      { agent: 'Manager', nextRun: scheduleInfo?.manager?.nextRun ?? null },
     ];
 
     let earliest: { agent: string; nextRun: string | null } | null = null;

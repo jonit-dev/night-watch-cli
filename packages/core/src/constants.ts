@@ -9,6 +9,7 @@ import {
   IAuditConfig,
   IFeedbackConfig,
   IJobProviders,
+  IManagerConfig,
   IMergerConfig,
   INotificationConfig,
   IPrResolverConfig,
@@ -189,6 +190,31 @@ export const DEFAULT_ANALYTICS: IAnalyticsConfig = {
   analysisPrompt: DEFAULT_ANALYTICS_PROMPT,
 };
 
+// Manager Configuration
+export const DEFAULT_MANAGER_ENABLED = true;
+export const DEFAULT_MANAGER_SCHEDULE = '15 7 * * *';
+export const DEFAULT_MANAGER_MAX_RUNTIME = 0;
+export const DEFAULT_MANAGER_AUTHORITY = 'draft';
+export const DEFAULT_MANAGER_OUTPUT_MODE = 'board-draft';
+export const DEFAULT_MANAGER_TARGET_COLUMN = 'Draft' as const;
+export const DEFAULT_MANAGER_MEMORY_PATH = '.night-watch/manager/memory.md';
+export const DEFAULT_MANAGER_DOCS_DIR = '.night-watch/manager/docs';
+export const DEFAULT_MANAGER_WEEKLY_SUMMARY_ENABLED = true;
+export const DEFAULT_MANAGER_WEEKLY_SUMMARY_DAY = 1 as const;
+
+export const DEFAULT_MANAGER: IManagerConfig = {
+  enabled: DEFAULT_MANAGER_ENABLED,
+  schedule: DEFAULT_MANAGER_SCHEDULE,
+  maxRuntime: DEFAULT_MANAGER_MAX_RUNTIME,
+  authority: DEFAULT_MANAGER_AUTHORITY,
+  outputMode: DEFAULT_MANAGER_OUTPUT_MODE,
+  targetColumn: DEFAULT_MANAGER_TARGET_COLUMN,
+  memoryPath: DEFAULT_MANAGER_MEMORY_PATH,
+  docsDir: DEFAULT_MANAGER_DOCS_DIR,
+  weeklySummaryEnabled: DEFAULT_MANAGER_WEEKLY_SUMMARY_ENABLED,
+  weeklySummaryDay: DEFAULT_MANAGER_WEEKLY_SUMMARY_DAY,
+};
+
 // PR Resolver Configuration
 export const DEFAULT_PR_RESOLVER_ENABLED = true;
 export const DEFAULT_PR_RESOLVER_SCHEDULE = '15 6,14,22 * * *';
@@ -242,6 +268,7 @@ export const AUDIT_LOG_NAME = 'audit';
 export const PLANNER_LOG_NAME = 'slicer';
 export const ANALYTICS_LOG_NAME = 'analytics';
 export const PR_RESOLVER_LOG_NAME = 'pr-resolver';
+export const MANAGER_LOG_NAME = 'manager';
 
 // Valid providers (backward compat - derived from built-in presets)
 export const VALID_PROVIDERS: Provider[] = ['claude', 'codex'];

@@ -2671,4 +2671,67 @@ describe('config', () => {
       expect(config.merger).toBeDefined();
     });
   });
+
+  describe('manager config', () => {
+    it('loads default manager config', () => {
+      const config = getDefaultConfig();
+      expect(config.manager).toBeDefined();
+      expect(config.manager.enabled).toBe(true);
+      expect(config.manager.schedule).toBe('15 7 * * *');
+      expect(config.manager.maxRuntime).toBe(0);
+      expect(config.manager.authority).toBe('draft');
+      expect(config.manager.outputMode).toBe('board-draft');
+      expect(config.manager.targetColumn).toBe('Draft');
+      expect(config.manager.memoryPath).toBe('.night-watch/manager/memory.md');
+      expect(config.manager.docsDir).toBe('.night-watch/manager/docs');
+      expect(config.manager.weeklySummaryEnabled).toBe(true);
+      expect(config.manager.weeklySummaryDay).toBe(1);
+    });
+
+    it('loads manager config from file', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          manager: {
+            enabled: false,
+            schedule: '0 8 * * 2',
+            maxRuntime: 900,
+            authority: 'ready',
+            outputMode: 'filesystem-prd',
+            targetColumn: 'Ready',
+            memoryPath: '.night-watch/custom-manager.md',
+            docsDir: '.night-watch/custom-manager-docs',
+            weeklySummaryEnabled: false,
+            weeklySummaryDay: 5,
+          },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.manager.enabled).toBe(false);
+      expect(config.manager.schedule).toBe('0 8 * * 2');
+      expect(config.manager.maxRuntime).toBe(900);
+      expect(config.manager.authority).toBe('ready');
+      expect(config.manager.outputMode).toBe('filesystem-prd');
+      expect(config.manager.targetColumn).toBe('Ready');
+      expect(config.manager.memoryPath).toBe('.night-watch/custom-manager.md');
+      expect(config.manager.docsDir).toBe('.night-watch/custom-manager-docs');
+      expect(config.manager.weeklySummaryEnabled).toBe(false);
+      expect(config.manager.weeklySummaryDay).toBe(5);
+    });
+
+    it('overrides manager env vars', () => {
+      process.env.NW_MANAGER_ENABLED = '0';
+      process.env.NW_MANAGER_SCHEDULE = '30 9 * * *';
+      process.env.NW_MANAGER_MAX_RUNTIME = '1200';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.manager.enabled).toBe(false);
+      expect(config.manager.schedule).toBe('30 9 * * *');
+      expect(config.manager.maxRuntime).toBe(1200);
+    });
+  });
 });

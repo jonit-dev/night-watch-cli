@@ -34,6 +34,7 @@ import { notifyCommand } from './commands/notify.js';
 import { summaryCommand } from './commands/summary.js';
 import { resolveCommand } from './commands/resolve.js';
 import { mergeCommand } from './commands/merge.js';
+import { managerCommand } from './commands/manager.js';
 import { agentCommand, configCommand, healthCommand, jobCommand } from './commands/agent.js';
 
 // Find the package root (works from both src/ in dev and dist/src/ in production)
@@ -137,6 +138,9 @@ resolveCommand(program);
 
 // Register merge command (merger orchestrator)
 mergeCommand(program);
+
+// Register manager command (roadmap/project health manager)
+managerCommand(program);
 
 // Register machine-readable agent manageability commands
 agentCommand(program);
