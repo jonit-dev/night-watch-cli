@@ -27,6 +27,10 @@ import { errorHandler } from './middleware/error-handler.middleware.js';
 import { setupGracefulShutdown } from './middleware/graceful-shutdown.middleware.js';
 import { resolveProject } from './middleware/project-resolver.middleware.js';
 import { SseClientSet, startSseStatusWatcher } from './middleware/sse.middleware.js';
+import {
+  collectProjectStartupSummary,
+  formatProjectStartupSummaryLine,
+} from './global-startup-summary.js';
 
 import { createActionRoutes, createProjectActionRoutes } from './routes/action.routes.js';
 import { createBoardRoutes, createProjectBoardRoutes } from './routes/board.routes.js';
@@ -283,7 +287,7 @@ export function startServer(projectDir: string, port: number): void {
   setupGracefulShutdown(server);
 }
 
-export function startGlobalServer(port: number): void {
+export async function startGlobalServer(port: number): Promise<void> {
   bootContainer();
   const entries = loadRegistry();
 
@@ -299,11 +303,14 @@ export function startGlobalServer(port: number): void {
     );
   }
 
+  const summaries = await Promise.all(valid.map((entry) => collectProjectStartupSummary(entry)));
+
   console.log(`\nNight Watch Global UI`);
   console.log(`Managing ${valid.length} project(s):`);
-  for (const p of valid) {
-    console.log(`  - ${p.name} (${p.path})`);
+  for (const summary of summaries) {
+    console.log(formatProjectStartupSummaryLine(summary));
   }
+  console.log('');
 
   const app = createGlobalApp();
 

@@ -1,10 +1,11 @@
-import * as fs from "fs";
-import { describe, expect, it } from "vitest";
+import * as fs from 'fs';
+import { describe, expect, it } from 'vitest';
 import {
   acquireServeLock,
   getServeLockPath,
+  isServeDebugEnabled,
   releaseServeLock,
-} from "@/cli/commands/serve.js";
+} from '@/cli/commands/serve.js';
 
 function uniquePort(seed: number): number {
   const base = 43000;
@@ -12,12 +13,12 @@ function uniquePort(seed: number): number {
   return base + pidOffset + seed;
 }
 
-describe("serve command lock", () => {
-  it("acquires and releases a lock", () => {
+describe('serve command lock', () => {
+  it('acquires and releases a lock', () => {
     const port = uniquePort(1);
-    const lockPath = getServeLockPath("global", port);
+    const lockPath = getServeLockPath('global', port);
     try {
-      const result = acquireServeLock("global", port);
+      const result = acquireServeLock('global', port);
       expect(result.acquired).toBe(true);
       expect(fs.existsSync(lockPath)).toBe(true);
     } finally {
@@ -27,13 +28,13 @@ describe("serve command lock", () => {
     expect(fs.existsSync(lockPath)).toBe(false);
   });
 
-  it("rejects duplicate serve process for same mode+port", () => {
+  it('rejects duplicate serve process for same mode+port', () => {
     const port = uniquePort(2);
-    const lockPath = getServeLockPath("global", port);
+    const lockPath = getServeLockPath('global', port);
 
     try {
-      fs.writeFileSync(lockPath, `${process.pid}\n`, "utf-8");
-      const result = acquireServeLock("global", port);
+      fs.writeFileSync(lockPath, `${process.pid}\n`, 'utf-8');
+      const result = acquireServeLock('global', port);
       expect(result.acquired).toBe(false);
       expect(result.existingPid).toBe(process.pid);
     } finally {
@@ -43,13 +44,13 @@ describe("serve command lock", () => {
     }
   });
 
-  it("cleans stale lock and acquires", () => {
+  it('cleans stale lock and acquires', () => {
     const port = uniquePort(3);
-    const lockPath = getServeLockPath("local", port);
+    const lockPath = getServeLockPath('local', port);
 
     try {
-      fs.writeFileSync(lockPath, "99999999\n", "utf-8");
-      const result = acquireServeLock("local", port);
+      fs.writeFileSync(lockPath, '99999999\n', 'utf-8');
+      const result = acquireServeLock('local', port);
       expect(result.acquired).toBe(true);
       expect(result.stalePidCleaned).toBe(99999999);
       expect(fs.existsSync(lockPath)).toBe(true);
@@ -61,3 +62,24 @@ describe("serve command lock", () => {
   });
 });
 
+describe('serve command debug output', () => {
+  it('requires NIGHT_WATCH_DEBUG_SERVE=1 for verbose process diagnostics', () => {
+    const previous = process.env.NIGHT_WATCH_DEBUG_SERVE;
+    try {
+      delete process.env.NIGHT_WATCH_DEBUG_SERVE;
+      expect(isServeDebugEnabled()).toBe(false);
+
+      process.env.NIGHT_WATCH_DEBUG_SERVE = '0';
+      expect(isServeDebugEnabled()).toBe(false);
+
+      process.env.NIGHT_WATCH_DEBUG_SERVE = '1';
+      expect(isServeDebugEnabled()).toBe(true);
+    } finally {
+      if (previous === undefined) {
+        delete process.env.NIGHT_WATCH_DEBUG_SERVE;
+      } else {
+        process.env.NIGHT_WATCH_DEBUG_SERVE = previous;
+      }
+    }
+  });
+});

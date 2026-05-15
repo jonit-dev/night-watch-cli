@@ -111,13 +111,17 @@ export function releaseServeLock(lockPath: string): void {
   }
 }
 
+export function isServeDebugEnabled(): boolean {
+  return process.env.NIGHT_WATCH_DEBUG_SERVE === '1';
+}
+
 export function serveCommand(program: Command): void {
   program
     .command('serve')
     .description('Start the Night Watch web UI server')
     .option('-p, --port <number>', 'Port to run the server on', '7575')
     .option('-g, --global', 'Start in global mode (manage all registered projects)')
-    .action((options) => {
+    .action(async (options) => {
       const port = parseInt(options.port, 10);
       if (isNaN(port) || port < 1 || port > 65535) {
         console.error(`Invalid port: ${options.port}. Port must be between 1 and 65535.`);
@@ -143,12 +147,17 @@ export function serveCommand(program: Command): void {
           `[serve] cleaned stale lock from PID ${lock.stalePidCleaned} (${lock.lockPath})`,
         );
       }
-      console.log(`[serve] lock acquired ${lock.lockPath} pid=${process.pid}`);
+
+      const debugServe = isServeDebugEnabled();
+      if (debugServe) {
+        console.log(`[serve] lock acquired ${lock.lockPath} pid=${process.pid}`);
+      }
+
       process.on('exit', () => {
         releaseServeLock(lock.lockPath);
       });
 
-      if (options.global) {
+      if (debugServe && options.global) {
         const execArgv = process.execArgv.length > 0 ? process.execArgv.join(' ') : '(none)';
         console.log(`[serve] mode=global port=${port} pid=${process.pid} node=${process.version}`);
         console.log(`[serve] execPath=${process.execPath}`);
@@ -157,7 +166,7 @@ export function serveCommand(program: Command): void {
       }
 
       if (options.global) {
-        startGlobalServer(port);
+        await startGlobalServer(port);
       } else {
         const projectDir = process.cwd();
         startServer(projectDir, port);
