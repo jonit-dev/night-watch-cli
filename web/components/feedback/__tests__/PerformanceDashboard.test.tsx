@@ -150,32 +150,59 @@ const patterns = {
   ],
 };
 
+function stubFeedbackFetch() {
+  const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith('/api/feedback/summary')) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(summary),
+      } as Response);
+    }
+    if (url.endsWith('/api/feedback/patterns')) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(patterns),
+      } as Response);
+    }
+    return Promise.reject(new Error(`Unhandled URL: ${url}`));
+  });
+
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
 describe('PerformanceDashboard', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('should render feedback summary', async () => {
+  it('renders compact dashboard analytics without detailed breakdowns', async () => {
     useStore.setState({ globalModeLoading: false, selectedProjectId: null });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((input: RequestInfo | URL) => {
-        const url = String(input);
-        if (url.endsWith('/api/feedback/summary')) {
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve(summary),
-          } as Response);
-        }
-        if (url.endsWith('/api/feedback/patterns')) {
-          return Promise.resolve({
-            ok: true,
-            json: () => Promise.resolve(patterns),
-          } as Response);
-        }
-        return Promise.reject(new Error(`Unhandled URL: ${url}`));
-      }),
-    );
+    const fetchMock = stubFeedbackFetch();
+
+    render(<PerformanceDashboard variant="compact" onViewDetails={() => undefined} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Basic Analytics')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('7 Day Success')).toBeInTheDocument();
+    expect(screen.getByText('30 Day Success')).toBeInTheDocument();
+    expect(screen.getByText('Failures')).toBeInTheDocument();
+    expect(screen.getByText('Avg Duration')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /view analytics/i })).toBeInTheDocument();
+    expect(screen.queryByText('Success-Rate Trend')).not.toBeInTheDocument();
+    expect(screen.queryByText('Failure Categories')).not.toBeInTheDocument();
+    expect(screen.queryByText('Job Breakdown')).not.toBeInTheDocument();
+    expect(screen.queryByText('Provider Breakdown')).not.toBeInTheDocument();
+    expect(screen.queryByText('Repeated test failures')).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/api/feedback/patterns'));
+  });
+
+  it('renders full analytics details', async () => {
+    useStore.setState({ globalModeLoading: false, selectedProjectId: null });
+    stubFeedbackFetch();
 
     render(<PerformanceDashboard />);
 
@@ -183,7 +210,7 @@ describe('PerformanceDashboard', () => {
       expect(screen.getAllByText('75%').length).toBeGreaterThan(0);
     });
 
-    expect(screen.getByText('Feedback Performance')).toBeInTheDocument();
+    expect(screen.getByText('Analytics')).toBeInTheDocument();
     expect(screen.getByText('Success-Rate Trend')).toBeInTheDocument();
     expect(screen.getByText('Failure Categories')).toBeInTheDocument();
     expect(screen.getByText('Job Breakdown')).toBeInTheDocument();

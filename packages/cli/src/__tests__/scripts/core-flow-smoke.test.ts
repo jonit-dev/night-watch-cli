@@ -348,7 +348,10 @@ describe('core flow smoke tests (bash scripts)', () => {
     fs.mkdirSync(path.join(projectDir, 'logs'), { recursive: true });
 
     const branchName = 'night-watch/existing-worktree';
-    const existingWorktree = path.join(path.dirname(projectDir), 'nw-smoke-existing-pr-worktree');
+    const existingWorktree = fs.mkdtempSync(
+      path.join(path.dirname(projectDir), 'nw-smoke-existing-pr-worktree-'),
+    );
+    fs.rmSync(existingWorktree, { recursive: true, force: true });
     execSync(`git worktree add -b ${branchName} ${existingWorktree} HEAD`, {
       cwd: projectDir,
       stdio: 'ignore',

@@ -6,6 +6,7 @@ import { ToastContainer } from './components/ui/Toast';
 import { useGlobalMode } from './hooks/useGlobalMode';
 import { useStatusSync } from './hooks/useStatusSync';
 // import Agents from './pages/Agents';
+import Analytics from './pages/Analytics';
 import Board from './pages/Board';
 import Dashboard from './pages/Dashboard';
 import Logs from './pages/Logs';
@@ -33,6 +34,7 @@ const App: React.FC = () => {
             <div className="max-w-7xl mx-auto w-full">
               <Routes>
                 <Route path="/" element={<Dashboard />} />
+                <Route path="/analytics" element={<Analytics />} />
                 <Route path="/prs" element={<PRs />} />
                 <Route path="/board" element={<Board />} />
                 <Route path="/scheduling" element={<Scheduling />} />

@@ -1,4 +1,5 @@
 import {
+  BarChart3,
   Briefcase,
   Calendar,
   ChevronLeft,
@@ -27,6 +28,7 @@ const Sidebar: React.FC = () => {
 
   const navItems = useMemo(() => [
     { icon: Home, label: 'Dashboard', path: '/', section: 'Overview' },
+    { icon: BarChart3, label: 'Analytics', path: '/analytics' },
     { icon: Terminal, label: 'Logs', path: '/logs' },
     { icon: Kanban, label: 'Board', path: '/board', section: 'Work' },
     { icon: GitPullRequest, label: 'Pull Requests', path: '/prs', badge: openPrCount },

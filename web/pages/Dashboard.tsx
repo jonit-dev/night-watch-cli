@@ -337,7 +337,7 @@ const Dashboard: React.FC = () => {
         </div>
       ) : null}
 
-      <PerformanceDashboard />
+      <PerformanceDashboard variant="compact" onViewDetails={() => navigate('/analytics')} />
 
       {/* Board Widget */}
       <div className="mt-6">

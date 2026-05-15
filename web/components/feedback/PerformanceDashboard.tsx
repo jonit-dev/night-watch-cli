@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertCircle, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
+import { AlertCircle, ArrowRight, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
 import {
   fetchFeedbackPatterns,
   fetchFeedbackSummary,
@@ -65,9 +65,15 @@ const Metric: React.FC<IMetricProps> = ({ label, value, detail }) => (
   </div>
 );
 
-const PerformanceDashboard: React.FC = () => {
+interface IPerformanceDashboardProps {
+  variant?: 'compact' | 'full';
+  onViewDetails?: () => void;
+}
+
+const PerformanceDashboard: React.FC<IPerformanceDashboardProps> = ({ variant = 'full', onViewDetails }) => {
   const { addToast, selectedProjectId, globalModeLoading } = useStore();
   const [updatingAugmentationId, setUpdatingAugmentationId] = React.useState<number | null>(null);
+  const isCompact = variant === 'compact';
 
   const {
     data: summary,
@@ -81,11 +87,15 @@ const PerformanceDashboard: React.FC = () => {
     loading: patternsLoading,
     error: patternsError,
     refetch: refetchPatterns,
-  } = useApi<IFeedbackPatterns>(fetchFeedbackPatterns, [selectedProjectId], { enabled: !globalModeLoading });
+  } = useApi<IFeedbackPatterns>(fetchFeedbackPatterns, [selectedProjectId], {
+    enabled: !globalModeLoading && !isCompact,
+  });
 
   const handleRefresh = () => {
     refetchSummary();
-    refetchPatterns();
+    if (!isCompact) {
+      refetchPatterns();
+    }
   };
 
   const handleAugmentationAction = async (id: number, action: NonNullable<IAugmentationUpdate['action']>) => {
@@ -109,8 +119,8 @@ const PerformanceDashboard: React.FC = () => {
     }
   };
 
-  const loading = summaryLoading || patternsLoading;
-  const error = summaryError || patternsError;
+  const loading = summaryLoading || (!isCompact && patternsLoading);
+  const error = summaryError || (!isCompact ? patternsError : null);
   const last7 = summary?.windows.last7Days ?? null;
   const last30 = summary?.windows.last30Days ?? null;
   const activePatterns = (patterns?.patterns ?? [])
@@ -134,19 +144,31 @@ const PerformanceDashboard: React.FC = () => {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 id="feedback-performance-heading" className="text-lg font-semibold text-slate-200">
-            Feedback Performance
+            {isCompact ? 'Basic Analytics' : 'Analytics'}
           </h2>
-          <p className="mt-1 text-sm text-slate-500">Outcome trends, repeated failures, and prompt augmentations.</p>
+          <p className="mt-1 text-sm text-slate-500">
+            {isCompact
+              ? 'High-level job health. Full breakdowns live in Analytics.'
+              : 'Outcome trends, repeated failures, provider breakdowns, and prompt augmentations.'}
+          </p>
         </div>
-        <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
-          <RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          {isCompact && onViewDetails ? (
+            <Button variant="outline" size="sm" onClick={onViewDetails}>
+              View analytics
+              <ArrowRight className="ml-1.5 h-4 w-4" />
+            </Button>
+          ) : null}
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={loading}>
+            <RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <Card className="p-5">
         {loading && !summary ? (
-          <div className="py-10 text-center text-sm text-slate-500">Loading feedback performance...</div>
+          <div className="py-10 text-center text-sm text-slate-500">Loading analytics...</div>
         ) : error ? (
           <div className="flex items-center gap-3 rounded-lg border border-red-900/50 bg-red-950/20 p-4 text-sm text-red-300">
             <AlertCircle className="h-5 w-5 shrink-0" />
@@ -158,6 +180,29 @@ const PerformanceDashboard: React.FC = () => {
             <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
               This panel will populate after executor, reviewer, QA, audit, planner, or merge jobs complete.
             </p>
+          </div>
+        ) : isCompact ? (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <Metric
+              label="7 Day Success"
+              value={formatPercent(last7?.successRate ?? null)}
+              detail={`${last7?.successCount ?? 0} of ${last7?.totalCount ?? 0} completed`}
+            />
+            <Metric
+              label="30 Day Success"
+              value={formatPercent(last30?.successRate ?? null)}
+              detail={getTrendLabel(last7?.successRate ?? null, last30?.successRate ?? null)}
+            />
+            <Metric
+              label="Failures"
+              value={String((last30?.failureCount ?? 0) + (last30?.timeoutCount ?? 0))}
+              detail="Last 30 days"
+            />
+            <Metric
+              label="Avg Duration"
+              value={formatDuration(last30?.averageDurationSeconds ?? null)}
+              detail="Last 30 days"
+            />
           </div>
         ) : (
           <div className="space-y-6">
@@ -291,15 +336,17 @@ const PerformanceDashboard: React.FC = () => {
         )}
       </Card>
 
-      <Card className="p-5">
-        <PatternList
-          activePatterns={activePatterns}
-          augmentations={summary?.activeAugmentations ?? []}
-          topFailurePatterns={topFailurePatterns}
-          updatingAugmentationId={updatingAugmentationId}
-          onAugmentationAction={handleAugmentationAction}
-        />
-      </Card>
+      {!isCompact ? (
+        <Card className="p-5">
+          <PatternList
+            activePatterns={activePatterns}
+            augmentations={summary?.activeAugmentations ?? []}
+            topFailurePatterns={topFailurePatterns}
+            updatingAugmentationId={updatingAugmentationId}
+            onAugmentationAction={handleAugmentationAction}
+          />
+        </Card>
+      ) : null}
     </section>
   );
 };
