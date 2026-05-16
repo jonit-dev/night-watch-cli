@@ -3,6 +3,7 @@ import { Plus, X, ExternalLink } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
+import LoadingState from '../components/ui/LoadingState';
 import {
   useApi,
   fetchBoardStatus,
@@ -423,9 +424,10 @@ const Board: React.FC = () => {
 
   if (globalModeLoading || loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-slate-400">Loading board...</div>
-      </div>
+      <LoadingState
+        message="Loading board"
+        detail="Fetching columns and issue cards."
+      />
     );
   }
 

@@ -38,6 +38,9 @@ export function useStatusSync(): void {
       return;
     }
 
+    setStatus(null);
+    statusRef.current = null;
+
     // Initial fetch
     fetchStatus()
       .then((snapshot) => {

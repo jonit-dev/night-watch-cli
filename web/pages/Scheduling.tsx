@@ -26,6 +26,7 @@ import Switch from '../components/ui/Switch';
 import Input from '../components/ui/Input';
 import Badge from '../components/ui/Badge';
 import Tabs from '../components/ui/Tabs';
+import LoadingState from '../components/ui/LoadingState';
 import ScheduleTimeline from '../components/scheduling/ScheduleTimeline.js';
 import ScheduleConfig from '../components/scheduling/ScheduleConfig.js';
 import JobsTab from './settings/JobsTab.js';
@@ -214,6 +215,7 @@ const Scheduling: React.FC = () => {
   const [allProjectConfigs, setAllProjectConfigs] = useState<Array<{ projectId: string; config: INightWatchConfig }>>([]);
   const [queueStatus, setQueueStatus] = useState<IQueueStatus | null>(null);
   const [queueAnalytics, setQueueAnalytics] = useState<IQueueAnalytics | null>(null);
+  const [liveDataLoading, setLiveDataLoading] = useState(true);
 
   // Schedules/Jobs form state
   const [activeTab, setActiveTab] = useState<string>('overview');
@@ -244,15 +246,36 @@ const Scheduling: React.FC = () => {
   // Refresh live data every 30 seconds
   useEffect(() => {
     if (globalModeLoading) return;
-    const fetchData = () => {
+    let cancelled = false;
+    setLiveDataLoading(true);
+    setQueueStatus(null);
+    setQueueAnalytics(null);
+    setAllProjectConfigs([]);
+
+    const fetchData = async (showLoading = false) => {
+      if (showLoading) {
+        setLiveDataLoading(true);
+      }
       refetchSchedule();
-      fetchQueueStatus().then(setQueueStatus).catch(() => {});
-      fetchQueueAnalytics(24).then(setQueueAnalytics).catch(() => {});
-      fetchAllConfigs().then(setAllProjectConfigs).catch(() => {});
+      const [nextQueueStatus, nextQueueAnalytics, nextConfigs] = await Promise.all([
+        fetchQueueStatus().catch(() => null),
+        fetchQueueAnalytics(24).catch(() => null),
+        fetchAllConfigs().catch(() => []),
+      ]);
+      if (cancelled) return;
+      setQueueStatus(nextQueueStatus);
+      setQueueAnalytics(nextQueueAnalytics);
+      setAllProjectConfigs(nextConfigs);
+      setLiveDataLoading(false);
     };
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+    fetchData(true);
+    const interval = setInterval(() => {
+      fetchData();
+    }, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [selectedProjectId, globalModeLoading, refetchSchedule]);
 
   // Init form from config
@@ -602,7 +625,12 @@ const Scheduling: React.FC = () => {
   }, [form?.providerPresets]);
 
   if (scheduleLoading || configLoading || !form) {
-    return <div className="flex items-center justify-center min-h-[400px] text-slate-500">Loading automation state...</div>;
+    return (
+      <LoadingState
+        message="Loading automation"
+        detail="Fetching schedules, queue state, and job configuration."
+      />
+    );
   }
 
   if (scheduleError || !scheduleInfo || !config) {
@@ -684,7 +712,9 @@ const Scheduling: React.FC = () => {
 
           {/* Live Queue Table */}
           <div className="p-0">
-            {!queueStatus?.items.length ? (
+            {liveDataLoading && !queueStatus ? (
+              <LoadingState variant="inline" message="Loading queue" />
+            ) : !queueStatus?.items.length ? (
               <div className="py-12 flex flex-col items-center justify-center text-slate-500 text-sm italic">
                 <div className="mb-3 p-3 rounded-full bg-slate-900 border border-slate-800">
                   <ListRestart className="h-6 w-6 opacity-30" />
@@ -745,20 +775,26 @@ const Scheduling: React.FC = () => {
               <RefreshCw className="h-3 w-3 animate-spin-slow" /> Live Update
             </div>
           </div>
-          <ScheduleTimeline
-            configs={allProjectConfigs}
-            currentProjectId={selectedProjectId ?? undefined}
-            onEditJob={(_projectId, jobType) => goToJobSettings(jobType)}
-            queueStatus={queueStatus}
-            queueAnalytics={queueAnalytics}
-          />
+          {liveDataLoading && allProjectConfigs.length === 0 ? (
+            <LoadingState variant="card" message="Loading timeline" rows={2} />
+          ) : (
+            <ScheduleTimeline
+              configs={allProjectConfigs}
+              currentProjectId={selectedProjectId ?? undefined}
+              onEditJob={(_projectId, jobType) => goToJobSettings(jobType)}
+              queueStatus={queueStatus}
+              queueAnalytics={queueAnalytics}
+            />
+          )}
         </section>
 
         {/* Execution History */}
         <section className="space-y-4">
           <h3 className="text-lg font-semibold text-slate-200">Execution History (Last 24h)</h3>
           <Card className="border-slate-800 overflow-hidden">
-            {!queueAnalytics?.recentRuns.length ? (
+            {liveDataLoading && !queueAnalytics ? (
+              <LoadingState variant="inline" message="Loading execution history" />
+            ) : !queueAnalytics?.recentRuns.length ? (
               <div className="py-20 text-center text-slate-500 italic text-sm">No recorded runs in the last 24 hours.</div>
             ) : (
               <div className="overflow-x-auto">

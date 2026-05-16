@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Pause, Play, Search, ArrowDownCircle, AlertCircle } from 'lucide-react';
 import Button from '../components/ui/Button';
+import LoadingState from '../components/ui/LoadingState';
 import { useApi, fetchLogs } from '../api';
 import { useStore } from '../store/useStore';
 import { JOB_DEFINITIONS } from '../utils/jobs.js';
@@ -126,7 +127,7 @@ const Logs: React.FC = () => {
            className="flex-1 overflow-y-auto p-4 font-mono text-sm terminal-scroll bg-slate-900"
          >
             {logLoading ? (
-              <div className="flex items-center justify-center h-full text-slate-500">Loading logs...</div>
+              <LoadingState variant="inline" message="Loading logs" />
             ) : filteredLogs.length === 0 ? (
               <div className="flex items-center justify-center h-full text-slate-500">
                 {filter ? 'No logs match your filter' : 'No logs yet — logs will appear after the first run'}

@@ -13,6 +13,7 @@ import { useStore } from '../../store/useStore.js';
 import Badge from '../ui/Badge.js';
 import Button from '../ui/Button.js';
 import Card from '../ui/Card.js';
+import LoadingState from '../ui/LoadingState.js';
 import PatternList from './PatternList.js';
 
 function formatPercent(value: number | null): string {
@@ -167,8 +168,12 @@ const PerformanceDashboard: React.FC<IPerformanceDashboardProps> = ({ variant = 
       </div>
 
       <Card className="p-5">
-        {loading && !summary ? (
-          <div className="py-10 text-center text-sm text-slate-500">Loading analytics...</div>
+        {loading ? (
+          <LoadingState
+            variant="inline"
+            message="Loading analytics"
+            detail={isCompact ? undefined : 'Preparing trends, failure patterns, and provider breakdowns.'}
+          />
         ) : error ? (
           <div className="flex items-center gap-3 rounded-lg border border-red-900/50 bg-red-950/20 p-4 text-sm text-red-300">
             <AlertCircle className="h-5 w-5 shrink-0" />

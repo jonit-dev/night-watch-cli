@@ -3,6 +3,7 @@ import { ExternalLink, CheckCircle, XCircle, Loader2, AlertCircle, Search, Arrow
 import { useApi, fetchPrs, triggerReview } from '../api';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
+import LoadingState from '../components/ui/LoadingState';
 import { useStore } from '../store/useStore';
 
 type FilterType = 'all' | 'needs-work' | 'pending' | 'passed';
@@ -120,9 +121,10 @@ const PRs: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-slate-400">Loading PRs...</div>
-      </div>
+      <LoadingState
+        message="Loading pull requests"
+        detail="Fetching review status and CI results."
+      />
     );
   }
 

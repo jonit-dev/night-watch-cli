@@ -15,6 +15,7 @@ import { useApi, fetchScheduleInfo, fetchBoardStatus, triggerCancel, triggerClea
 import { useStore } from '../store/useStore';
 import AgentStatusBar from '../components/dashboard/AgentStatusBar';
 import PerformanceDashboard from '../components/feedback/PerformanceDashboard.js';
+import LoadingState from '../components/ui/LoadingState';
 
 const BOARD_COLUMN_COLORS: Record<BoardColumnName, string> = {
   'Draft':       'text-slate-400  bg-slate-500/10  ring-slate-500/20',
@@ -32,7 +33,7 @@ const Dashboard: React.FC = () => {
   const [togglingSchedule, setTogglingSchedule] = useState(false);
   const { setProjectName, addToast, selectedProjectId, globalModeLoading, status } = useStore();
 
-  const { data: scheduleInfo } = useApi(fetchScheduleInfo, [selectedProjectId], { enabled: !globalModeLoading });
+  const { data: scheduleInfo, loading: scheduleLoading } = useApi(fetchScheduleInfo, [selectedProjectId], { enabled: !globalModeLoading });
   const { data: boardStatus, loading: boardLoading } = useApi<IBoardStatus | null>(
     () => fetchBoardStatus().catch(() => null),
     [selectedProjectId],
@@ -49,19 +50,12 @@ const Dashboard: React.FC = () => {
     }
   }, [currentStatus, setProjectName]);
 
-  if (globalModeLoading) {
+  if (globalModeLoading || !currentStatus || scheduleLoading || boardLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-slate-400">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!currentStatus) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-slate-400">Loading...</div>
-      </div>
+      <LoadingState
+        message="Loading dashboard"
+        detail="Collecting status, schedule, board, and analytics data."
+      />
     );
   }
 
@@ -349,9 +343,7 @@ const Dashboard: React.FC = () => {
         </div>
         <Card className="p-4">
           {boardLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="text-slate-400 text-sm">Loading board...</div>
-            </div>
+            <LoadingState variant="inline" message="Loading board" />
           ) : !boardStatus ? (
             <p className="text-sm text-slate-500 italic">
               Board not configured — run <code className="font-mono bg-slate-800 px-1.5 py-0.5 rounded text-indigo-300 text-xs">night-watch board setup</code> to enable.

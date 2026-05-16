@@ -4,6 +4,7 @@ import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import Switch from '../components/ui/Switch';
+import LoadingState from '../components/ui/LoadingState';
 import { useStore } from '../store/useStore';
 import {
   fetchRoadmap,
@@ -94,9 +95,10 @@ const Roadmap: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-slate-400">Loading roadmap scanner...</div>
-      </div>
+      <LoadingState
+        message="Loading roadmap scanner"
+        detail="Checking scanner status and roadmap items."
+      />
     );
   }
 

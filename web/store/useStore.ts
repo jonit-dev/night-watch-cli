@@ -32,7 +32,7 @@ interface AppState {
 
   // Status state (single source of truth, synced via SSE + polling)
   status: IStatusSnapshot | null;
-  setStatus: (s: IStatusSnapshot) => void;
+  setStatus: (s: IStatusSnapshot | null) => void;
 
   // Multi-project state
   globalModeLoading: boolean;
@@ -72,6 +72,9 @@ export const useStore = create<AppState>((set, get) => ({
   // Status state (single source of truth, updated by useStatusSync)
   status: null,
   setStatus: (snapshot) => set((state) => {
+    if (!snapshot) {
+      return { status: null };
+    }
     // Only update if the incoming snapshot is newer than the stored one
     // This prevents stale SSE payload overwriting a fresher poll result
     if (!state.status || new Date(snapshot.timestamp) > new Date(state.status.timestamp)) {

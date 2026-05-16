@@ -33,6 +33,7 @@ import PresetFormModal from '../components/providers/PresetFormModal.js';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge.js';
 import Tabs from '../components/ui/Tabs';
+import LoadingState from '../components/ui/LoadingState';
 import { useStore } from '../store/useStore';
 import ProjectTab from './settings/ProjectTab.js';
 import AiProvidersTab from './settings/AiProvidersTab.js';
@@ -538,17 +539,16 @@ const Settings: React.FC = () => {
 
   if (legacyAutomationTab) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-slate-400">Opening automation...</div>
-      </div>
+      <LoadingState message="Opening automation" rows={1} />
     );
   }
 
   if (configLoading || !form) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-slate-400">Loading settings...</div>
-      </div>
+      <LoadingState
+        message="Loading settings"
+        detail="Fetching project configuration and health checks."
+      />
     );
   }
 
