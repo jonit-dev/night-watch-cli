@@ -15,6 +15,23 @@ vi.mock('@night-watch/core', () => ({
   dispatchNextJob: vi.fn(),
   enqueueJob: vi.fn(),
   expireStaleJobs: vi.fn(),
+  getJobDef: vi.fn((jobType: string) => {
+    const cliCommands: Record<string, string> = {
+      executor: 'run',
+      reviewer: 'review',
+      'pr-resolver': 'resolve',
+      slicer: 'planner',
+      planner: 'planner',
+      manager: 'manager',
+      qa: 'qa',
+      audit: 'audit',
+      ux: 'ux',
+      analytics: 'analytics',
+      merger: 'merge',
+    };
+    const cliCommand = cliCommands[jobType];
+    return cliCommand ? { id: jobType, cliCommand } : undefined;
+  }),
   getQueueStatus: vi.fn(() => ({
     enabled: true,
     running: null,
