@@ -22,6 +22,7 @@ import {
   prResolverLockPath,
   qaLockPath,
   reviewerLockPath,
+  uxLockPath,
 } from '@night-watch/core';
 
 interface IJobRoutesDeps {
@@ -289,6 +290,8 @@ function getLockPathForJob(projectDir: string, jobId: JobType): string {
       return qaLockPath(projectDir);
     case 'audit':
       return auditLockPath(projectDir);
+    case 'ux':
+      return uxLockPath(projectDir);
     case 'slicer':
     case 'planner':
       return plannerLockPath(projectDir);

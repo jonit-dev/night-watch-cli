@@ -21,6 +21,7 @@ const JOB_TYPE_LABELS: Record<JobType, string> = {
   reviewer: 'Reviewer',
   qa: 'QA',
   audit: 'Audit',
+  ux: 'UX',
   slicer: 'Planner',
   analytics: 'Analytics',
   planner: 'Planner',

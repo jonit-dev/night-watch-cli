@@ -89,6 +89,7 @@ function buildScheduleInfoResponse(
   const reviewerPlan = getSchedulingPlan(projectDir, config, 'reviewer');
   const qaPlan = getSchedulingPlan(projectDir, config, 'qa');
   const auditPlan = getSchedulingPlan(projectDir, config, 'audit');
+  const uxPlan = getSchedulingPlan(projectDir, config, 'ux');
   const plannerPlan = getSchedulingPlan(projectDir, config, 'slicer');
   const analyticsPlan = getSchedulingPlan(projectDir, config, 'analytics');
   const prResolverPlan = getSchedulingPlan(projectDir, config, 'pr-resolver');
@@ -101,6 +102,7 @@ function buildScheduleInfoResponse(
     installed && config.reviewerEnabled && hasScheduledCommand(entries, 'review');
   const qaInstalled = installed && config.qa.enabled && hasScheduledCommand(entries, 'qa');
   const auditInstalled = installed && config.audit.enabled && hasScheduledCommand(entries, 'audit');
+  const uxInstalled = installed && config.ux.enabled && hasScheduledCommand(entries, 'ux');
   const plannerInstalled =
     installed &&
     config.roadmapScanner.enabled &&
@@ -157,6 +159,16 @@ function buildScheduleInfoResponse(
       delayMinutes: auditPlan.totalDelayMinutes,
       manualDelayMinutes: auditPlan.manualDelayMinutes,
       balancedDelayMinutes: auditPlan.balancedDelayMinutes,
+    },
+    ux: {
+      schedule: config.ux.schedule,
+      installed: uxInstalled,
+      nextRun: uxInstalled
+        ? addDelayToIsoString(computeNextRun(config.ux.schedule), uxPlan.totalDelayMinutes)
+        : null,
+      delayMinutes: uxPlan.totalDelayMinutes,
+      manualDelayMinutes: uxPlan.manualDelayMinutes,
+      balancedDelayMinutes: uxPlan.balancedDelayMinutes,
     },
     planner: {
       schedule: config.roadmapScanner.slicerSchedule,

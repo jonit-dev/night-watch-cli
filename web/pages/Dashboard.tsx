@@ -109,7 +109,19 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handleTriggerJob = async (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics' | 'pr-resolver' | 'merger' | 'manager') => {
+  const handleTriggerJob = async (
+    job:
+      | 'executor'
+      | 'reviewer'
+      | 'qa'
+      | 'audit'
+      | 'ux'
+      | 'planner'
+      | 'analytics'
+      | 'pr-resolver'
+      | 'merger'
+      | 'manager',
+  ) => {
     setTriggeringJob(job);
     try {
       const registryId = job === 'planner' ? 'slicer' : job;

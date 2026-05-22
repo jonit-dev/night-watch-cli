@@ -61,6 +61,7 @@ import {
   DEFAULT_SCHEDULING_PRIORITY,
   DEFAULT_SECONDARY_FALLBACK_MODEL,
   DEFAULT_TEMPLATES_DIR,
+  DEFAULT_UX,
   DEFAULT_WEBHOOK_TRIGGERS,
 } from './constants.js';
 import { normalizeConfig } from './config-normalize.js';
@@ -109,6 +110,7 @@ export function getDefaultConfig(): INightWatchConfig {
     claudeModel: DEFAULT_CLAUDE_MODEL,
     qa: { ...DEFAULT_QA },
     audit: { ...DEFAULT_AUDIT },
+    ux: { ...DEFAULT_UX, flows: [...DEFAULT_UX.flows] },
     analytics: { ...DEFAULT_ANALYTICS },
     manager: { ...DEFAULT_MANAGER },
     feedback: { ...DEFAULT_FEEDBACK },
@@ -337,6 +339,7 @@ function mergeConfigLayer(base: INightWatchConfig, layer: Partial<INightWatchCon
       _key === 'boardProvider' ||
       _key === 'qa' ||
       _key === 'audit' ||
+      _key === 'ux' ||
       _key === 'analytics' ||
       _key === 'manager' ||
       _key === 'feedback' ||

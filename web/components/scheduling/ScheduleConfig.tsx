@@ -19,6 +19,7 @@ export interface IScheduleConfigForm {
   reviewerSchedule: string;
   qa: { schedule: string; enabled: boolean };
   audit: { schedule: string; enabled: boolean };
+  ux?: { schedule: string; enabled: boolean };
   analytics?: { schedule: string; enabled: boolean };
   roadmapScanner: { slicerSchedule: string; enabled: boolean };
   prResolver?: { schedule: string; enabled: boolean };
@@ -138,6 +139,7 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
                       ['Reviewer', tpl.hints.reviewer],
                       ['QA', tpl.hints.qa],
                       ['Audit', tpl.hints.audit],
+                      ['UX', tpl.hints.ux],
                       ['Planner', tpl.hints.slicer],
                       ['PR Resolver', tpl.hints.prResolver],
                       ['Merger', tpl.hints.merger],
@@ -188,6 +190,16 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
             value={form.audit.schedule}
             onChange={(val) => onFieldChange('audit', { ...form.audit, schedule: val })}
           />
+          {form.ux && (
+            <JobScheduleCard
+              id="job-schedule-ux"
+              icon={Eye}
+              title="UX"
+              description="Inspect product flows with browser automation"
+              value={form.ux.schedule}
+              onChange={(val) => onFieldChange('ux', { ...form.ux, schedule: val })}
+            />
+          )}
           <JobScheduleCard
             id="job-schedule-slicer"
             icon={Layout}

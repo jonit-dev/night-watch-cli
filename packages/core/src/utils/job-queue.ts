@@ -38,6 +38,7 @@ import {
   prResolverLockPath,
   qaLockPath,
   reviewerLockPath,
+  uxLockPath,
 } from './status-data.js';
 
 const logger = createLogger('job-queue');
@@ -98,6 +99,8 @@ function getLockPathForJob(projectPath: string, jobType: JobType): string {
       return qaLockPath(projectPath);
     case 'audit':
       return auditLockPath(projectPath);
+    case 'ux':
+      return uxLockPath(projectPath);
     case 'slicer':
     case 'planner':
       return plannerLockPath(projectPath);

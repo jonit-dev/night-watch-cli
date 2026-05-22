@@ -16,30 +16,34 @@ By default, all jobs use the global `provider` setting. With `jobProviders`, you
   "jobProviders": {
     "analytics": "claude-opus-4-6",
     "planner": "claude-sonnet-4-6",
+    "ux": "codex",
     "qa": "codex"
   }
 }
 ```
 
 In this example:
+
 - Executor uses `claude` (default)
 - Reviewer uses `claude` (default)
 - Analytics uses `claude-opus-4-6`
 - Planner uses `claude-sonnet-4-6`
+- UX uses `codex`
 - QA uses `codex`
 
 ---
 
 ## Available Job Types
 
-| Job Type | Description | Default Provider |
-|----------|-------------|------------------|
-| `executor` | PRD execution | global `provider` |
-| `reviewer` | PR review | global `provider` |
-| `qa` | Playwright testing | global `provider` |
-| `audit` | Code quality audit | global `provider` |
-| `analytics` | Amplitude analysis | global `provider` |
-| `planner` | Roadmap slicing | global `provider` |
+| Job Type    | Description              | Default Provider  |
+| ----------- | ------------------------ | ----------------- |
+| `executor`  | PRD execution            | global `provider` |
+| `reviewer`  | PR review                | global `provider` |
+| `qa`        | Playwright testing       | global `provider` |
+| `audit`     | Code quality audit       | global `provider` |
+| `ux`        | Browser-guided UX review | global `provider` |
+| `analytics` | Amplitude analysis       | global `provider` |
+| `planner`   | Roadmap slicing          | global `provider` |
 
 ---
 
@@ -55,6 +59,7 @@ In this example:
     "reviewer": "claude",
     "qa": "codex",
     "audit": "claude-sonnet-4-6",
+    "ux": "codex",
     "analytics": "claude-opus-4-6",
     "planner": "claude-sonnet-4-6"
   }
@@ -71,6 +76,7 @@ Use cheaper models for non-critical jobs:
   "jobProviders": {
     "qa": "claude-sonnet-4-6",
     "audit": "claude-sonnet-4-6",
+    "ux": "claude-sonnet-4-6",
     "analytics": "claude-sonnet-4-6"
   }
 }
@@ -86,6 +92,7 @@ Use specialized providers for specific tasks:
   "jobProviders": {
     "analytics": "claude-opus-4-6",
     "qa": "codex",
+    "ux": "codex",
     "planner": "claude-sonnet-4-6"
   }
 }
@@ -103,6 +110,7 @@ When a job runs, Night Watch resolves the provider:
 4. Execute with resolved preset
 
 **Flowchart:**
+
 ```
 job runs → jobProviders[jobType]? → yes → use preset
             ↓ no
@@ -120,6 +128,7 @@ Per-job providers work seamlessly with [provider-aware queue mode](queue-modes.m
   "provider": "claude",
   "jobProviders": {
     "analytics": "claude-opus-4-6",
+    "ux": "codex",
     "qa": "codex"
   },
   "queue": {
@@ -134,9 +143,10 @@ Per-job providers work seamlessly with [provider-aware queue mode](queue-modes.m
 ```
 
 **Execution behavior:**
+
 - Executor, reviewer, planner → `claude` bucket (max 2 concurrent)
 - Analytics → `claude-opus-4-6` bucket (max 1 concurrent)
-- QA → `codex` bucket (max 1 concurrent)
+- QA and UX → `codex` bucket (max 1 concurrent)
 
 ---
 
@@ -192,14 +202,15 @@ Per-job providers work seamlessly with [provider-aware queue mode](queue-modes.m
 
 ## Environment Variables
 
-| Variable | Config Key |
-|----------|------------|
-| `NW_JOB_PROVIDER_EXECUTOR` | `jobProviders.executor` |
-| `NW_JOB_PROVIDER_REVIEWER` | `jobProviders.reviewer` |
-| `NW_JOB_PROVIDER_QA` | `jobProviders.qa` |
-| `NW_JOB_PROVIDER_AUDIT` | `jobProviders.audit` |
+| Variable                    | Config Key               |
+| --------------------------- | ------------------------ |
+| `NW_JOB_PROVIDER_EXECUTOR`  | `jobProviders.executor`  |
+| `NW_JOB_PROVIDER_REVIEWER`  | `jobProviders.reviewer`  |
+| `NW_JOB_PROVIDER_QA`        | `jobProviders.qa`        |
+| `NW_JOB_PROVIDER_AUDIT`     | `jobProviders.audit`     |
+| `NW_JOB_PROVIDER_UX`        | `jobProviders.ux`        |
 | `NW_JOB_PROVIDER_ANALYTICS` | `jobProviders.analytics` |
-| `NW_JOB_PROVIDER_PLANNER` | `jobProviders.planner` |
+| `NW_JOB_PROVIDER_PLANNER`   | `jobProviders.planner`   |
 
 ---
 

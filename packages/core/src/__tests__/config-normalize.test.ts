@@ -251,6 +251,32 @@ describe('normalizeConfig - registry-driven job configs', () => {
     expect((normalized.analytics as Record<string, unknown>)?.targetColumn).toBe('Ready');
   });
 
+  it('normalizes ux config via registry', () => {
+    const normalized = normalizeConfig({
+      ux: {
+        enabled: true,
+        schedule: '0 9 * * 1',
+        maxRuntime: 1200,
+        targetColumn: 'Ready',
+        baseUrl: 'http://localhost:5173',
+        startUrl: '/settings',
+        flows: ['sign in', 'create project'],
+        autoInstallPlaywright: false,
+        maxIssues: 6,
+        reportPrompt: 'focus on mobile usability',
+      },
+    });
+    expect(normalized.ux?.enabled).toBe(true);
+    expect(normalized.ux?.schedule).toBe('0 9 * * 1');
+    expect((normalized.ux as Record<string, unknown>)?.targetColumn).toBe('Ready');
+    expect((normalized.ux as Record<string, unknown>)?.flows).toEqual([
+      'sign in',
+      'create project',
+    ]);
+    expect((normalized.ux as Record<string, unknown>)?.autoInstallPlaywright).toBe(false);
+    expect((normalized.ux as Record<string, unknown>)?.maxIssues).toBe(6);
+  });
+
   it('applies qa defaults for missing fields', () => {
     const normalized = normalizeConfig({ qa: {} });
     expect(normalized.qa?.enabled).toBe(true);

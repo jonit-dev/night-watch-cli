@@ -60,6 +60,7 @@ export interface IScheduleTemplate {
     reviewer: string;
     qa: string;
     audit: string;
+    ux: string;
     slicer: string;
     prResolver: string;
     merger: string;
@@ -70,6 +71,7 @@ export interface IScheduleTemplate {
     reviewer: string;
     qa: string;
     audit: string;
+    ux: string;
     slicer: string;
     prResolver: string;
     merger: string;
@@ -87,6 +89,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       reviewer: '25 8,14,20 * * *',
       qa: '45 22,10 * * *',
       audit: '50 4 * * 1',
+      ux: '0 7 * * 1',
       slicer: '35 19,7 * * *',
       prResolver: '15 9,15,21 * * *',
       merger: '55 */4 * * *',
@@ -97,6 +100,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       reviewer: '8:25am, 2:25pm, 8:25pm',
       qa: '10:45pm & 10:45am',
       audit: 'Mon 4:50am',
+      ux: 'Mon 7:00am',
       slicer: '7:35pm & 7:35am',
       prResolver: '9:15am, 3:15pm, 9:15pm',
       merger: 'Every 4h at :55',
@@ -112,6 +116,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       reviewer: '25 */3 * * *',
       qa: '45 2,10,18 * * *',
       audit: '50 3 * * 1',
+      ux: '0 7 * * 1',
       slicer: '35 */6 * * *',
       prResolver: '15 6,14,22 * * *',
       merger: '55 */4 * * *',
@@ -122,6 +127,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       reviewer: 'Every 3h at :25',
       qa: '2:45am, 10:45am & 6:45pm',
       audit: 'Mon 3:50am',
+      ux: 'Mon 7:00am',
       slicer: 'Every 6h at :35',
       prResolver: '6:15am, 2:15pm & 10:15pm',
       merger: 'Every 4h at :55',
@@ -137,6 +143,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       reviewer: '25 9,13,17,19 * * 1-5',
       qa: '45 10,14,18 * * 1-5',
       audit: '50 9 * * 1',
+      ux: '0 10 * * 1',
       slicer: '35 7 * * 1',
       prResolver: '15 8,12,16 * * 1-5',
       merger: '55 */4 * * 1-5',
@@ -147,6 +154,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       reviewer: '9:25am, 1:25pm, 5:25pm, 7:25pm',
       qa: '10:45am, 2:45pm & 6:45pm weekdays',
       audit: 'Mon 9:50am',
+      ux: 'Mon 10:00am',
       slicer: 'Mon 7:35am',
       prResolver: '8:15am, 12:15pm & 4:15pm weekdays',
       merger: 'Every 4h at :55 weekdays',
@@ -162,6 +170,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       reviewer: '25 8,20 * * *',
       qa: '45 3 * * 0',
       audit: '50 4 * * 0',
+      ux: '0 7 * * 1',
       slicer: '35 1 * * 1',
       prResolver: '15 8 * * 1,4',
       merger: '55 */8 * * *',
@@ -172,6 +181,7 @@ export const SCHEDULE_TEMPLATES: IScheduleTemplate[] = [
       reviewer: '8:25am & 8:25pm',
       qa: 'Sun 3:45am',
       audit: 'Sun 4:50am',
+      ux: 'Mon 7:00am',
       slicer: 'Mon 1:35am',
       prResolver: 'Mon & Thu at 8:15am',
       merger: 'Every 8h at :55',
@@ -200,6 +210,7 @@ export function templateMatchesSchedules(
   reviewer: string,
   qa: string,
   audit: string,
+  ux: string,
   slicer: string,
   prResolver: string,
   merger: string,
@@ -210,6 +221,7 @@ export function templateMatchesSchedules(
     isCronEquivalent(template.schedules.reviewer, reviewer) &&
     isCronEquivalent(template.schedules.qa, qa) &&
     isCronEquivalent(template.schedules.audit, audit) &&
+    isCronEquivalent(template.schedules.ux, ux) &&
     isCronEquivalent(template.schedules.slicer, slicer) &&
     isCronEquivalent(template.schedules.prResolver, prResolver) &&
     isCronEquivalent(template.schedules.merger, merger) &&
@@ -222,13 +234,25 @@ export function detectTemplate(
   reviewer: string,
   qa: string,
   audit: string,
+  ux: string,
   slicer: string,
   prResolver: string,
   merger: string,
   manager: string,
 ): IScheduleTemplate | undefined {
   return SCHEDULE_TEMPLATES.find((t) =>
-    templateMatchesSchedules(t, executor, reviewer, qa, audit, slicer, prResolver, merger, manager),
+    templateMatchesSchedules(
+      t,
+      executor,
+      reviewer,
+      qa,
+      audit,
+      ux,
+      slicer,
+      prResolver,
+      merger,
+      manager,
+    ),
   );
 }
 
@@ -243,6 +267,7 @@ export function resolveActiveTemplate(
   reviewer: string,
   qa: string,
   audit: string,
+  ux: string,
   slicer: string,
   prResolver: string,
   merger: string,
@@ -251,11 +276,22 @@ export function resolveActiveTemplate(
   const byId = getTemplateById(scheduleBundleId);
   if (
     byId &&
-    templateMatchesSchedules(byId, executor, reviewer, qa, audit, slicer, prResolver, merger, manager)
+    templateMatchesSchedules(
+      byId,
+      executor,
+      reviewer,
+      qa,
+      audit,
+      ux,
+      slicer,
+      prResolver,
+      merger,
+      manager,
+    )
   ) {
     return byId;
   }
-  return detectTemplate(executor, reviewer, qa, audit, slicer, prResolver, merger, manager);
+  return detectTemplate(executor, reviewer, qa, audit, ux, slicer, prResolver, merger, manager);
 }
 
 /**

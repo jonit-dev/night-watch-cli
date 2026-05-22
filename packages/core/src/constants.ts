@@ -18,6 +18,7 @@ import {
   IQaConfig,
   IQueueConfig,
   IRoadmapScannerConfig,
+  IUxConfig,
   IWebhookTriggerConfig,
   JobType,
   MergeMethod,
@@ -169,6 +170,30 @@ export const DEFAULT_AUDIT: IAuditConfig = {
   targetColumn: DEFAULT_AUDIT_TARGET_COLUMN,
 };
 
+// UX Audit Configuration
+export const DEFAULT_UX_ENABLED = false;
+export const DEFAULT_UX_SCHEDULE = '0 7 * * 1'; // weekly Monday 07:00
+export const DEFAULT_UX_MAX_RUNTIME = 0;
+export const DEFAULT_UX_TARGET_COLUMN = 'Draft' as const;
+export const DEFAULT_UX_BASE_URL = '';
+export const DEFAULT_UX_START_URL = '';
+export const DEFAULT_UX_AUTO_INSTALL_PLAYWRIGHT = true;
+export const DEFAULT_UX_MAX_ISSUES = 10;
+export const DEFAULT_UX_REPORT_PROMPT = '';
+
+export const DEFAULT_UX: IUxConfig = {
+  enabled: DEFAULT_UX_ENABLED,
+  schedule: DEFAULT_UX_SCHEDULE,
+  maxRuntime: DEFAULT_UX_MAX_RUNTIME,
+  targetColumn: DEFAULT_UX_TARGET_COLUMN,
+  baseUrl: DEFAULT_UX_BASE_URL,
+  startUrl: DEFAULT_UX_START_URL,
+  flows: [],
+  autoInstallPlaywright: DEFAULT_UX_AUTO_INSTALL_PLAYWRIGHT,
+  maxIssues: DEFAULT_UX_MAX_ISSUES,
+  reportPrompt: DEFAULT_UX_REPORT_PROMPT,
+};
+
 // Analytics Configuration (Amplitude integration)
 export const DEFAULT_ANALYTICS_ENABLED = false;
 export const DEFAULT_ANALYTICS_SCHEDULE = '0 6 * * 1'; // weekly Monday 06:00
@@ -265,6 +290,7 @@ export const DEFAULT_MERGER: IMergerConfig = {
 export const MERGER_LOG_NAME = 'merger';
 
 export const AUDIT_LOG_NAME = 'audit';
+export const UX_LOG_NAME = 'ux';
 export const PLANNER_LOG_NAME = 'slicer';
 export const ANALYTICS_LOG_NAME = 'analytics';
 export const PR_RESOLVER_LOG_NAME = 'pr-resolver';

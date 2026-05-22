@@ -22,6 +22,7 @@ The queue system controls how jobs are dispatched and executed. You can configur
       "reviewer": 40,
       "qa": 30,
       "audit": 20,
+      "ux": 10,
       "analytics": 10,
       "planner": 5
     },
@@ -42,12 +43,14 @@ The queue system controls how jobs are dispatched and executed. You can configur
 Jobs execute one at a time, in order. This is the safest mode and ensures no concurrent API calls.
 
 **When to use:**
+
 - Rate-limited APIs
 - Debugging job failures
 - Single-provider setups
 - Testing and development
 
 **Behavior:**
+
 - Jobs queue up and execute sequentially
 - No parallel execution even with multiple providers
 - Predictable execution order
@@ -57,16 +60,19 @@ Jobs execute one at a time, in order. This is the safest mode and ensures no con
 Jobs execute in parallel across different providers, with per-provider concurrency limits.
 
 **When to use:**
+
 - Multiple provider configurations
 - Provider-specific rate limits
 - Optimizing throughput across APIs
 
 **Behavior:**
+
 - Each provider has its own concurrency bucket
 - Jobs for `claude` execute independently from `codex`
 - Configure `providerBuckets` to control per-provider limits
 
 **Example:**
+
 ```json
 {
   "queue": {
@@ -84,10 +90,12 @@ Jobs execute in parallel across different providers, with per-provider concurren
 Night Watch automatically selects the best mode based on your configuration.
 
 **Behavior:**
+
 - Uses `provider-aware` when multiple providers are configured with `providerBuckets`
 - Falls back to `conservative` for single-provider setups
 
 **When to use:**
+
 - Most users
 - Dynamic provider configurations
 - "Set it and forget it"
@@ -96,14 +104,14 @@ Night Watch automatically selects the best mode based on your configuration.
 
 ## Configuration Options
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `enabled` | boolean | `true` | Enable/disable the queue system |
-| `mode` | string | `"auto"` | Queue mode: `conservative`, `provider-aware`, or `auto` |
-| `maxConcurrency` | number | `1` | Global max concurrent jobs (conservative mode) |
-| `maxWaitTime` | number | `7200` | Max wait time in seconds before job expires |
-| `priority` | object | (see defaults) | Job type priority for queue ordering |
-| `providerBuckets` | object | `{}` | Per-provider concurrency limits |
+| Field             | Type    | Default        | Description                                             |
+| ----------------- | ------- | -------------- | ------------------------------------------------------- |
+| `enabled`         | boolean | `true`         | Enable/disable the queue system                         |
+| `mode`            | string  | `"auto"`       | Queue mode: `conservative`, `provider-aware`, or `auto` |
+| `maxConcurrency`  | number  | `1`            | Global max concurrent jobs (conservative mode)          |
+| `maxWaitTime`     | number  | `7200`         | Max wait time in seconds before job expires             |
+| `priority`        | object  | (see defaults) | Job type priority for queue ordering                    |
+| `providerBuckets` | object  | `{}`           | Per-provider concurrency limits                         |
 
 ---
 
@@ -111,14 +119,15 @@ Night Watch automatically selects the best mode based on your configuration.
 
 Jobs with higher priority values execute first. Default priorities:
 
-| Job Type | Default Priority |
-|----------|-----------------|
-| `executor` | 50 |
-| `reviewer` | 40 |
-| `qa` | 30 |
-| `audit` | 20 |
-| `analytics` | 10 |
-| `planner` | 5 |
+| Job Type    | Default Priority |
+| ----------- | ---------------- |
+| `executor`  | 50               |
+| `reviewer`  | 40               |
+| `qa`        | 30               |
+| `audit`     | 20               |
+| `ux`        | 10               |
+| `analytics` | 10               |
+| `planner`   | 5                |
 
 Customize priorities in your config:
 
@@ -154,11 +163,13 @@ Configure per-provider concurrency limits for `provider-aware` mode:
 ```
 
 **Bucket Resolution:**
+
 - Jobs specify their provider (via `jobProviders` or default)
 - Queue looks up matching bucket by preset ID
 - Falls back to provider base name (`claude-opus-4-6` → `claude`)
 
 **Example:**
+
 ```json
 {
   "provider": "claude",
@@ -178,6 +189,7 @@ Configure per-provider concurrency limits for `provider-aware` mode:
 ```
 
 In this configuration:
+
 - Executor jobs use `claude` bucket (max 2 concurrent)
 - Analytics jobs use `claude-opus-4-6` bucket (max 1 concurrent)
 - QA jobs use `codex` bucket (max 1 concurrent)
@@ -186,12 +198,12 @@ In this configuration:
 
 ## Environment Variables
 
-| Variable | Config Key |
-|----------|------------|
-| `NW_QUEUE_ENABLED` | `queue.enabled` |
-| `NW_QUEUE_MODE` | `queue.mode` |
+| Variable                   | Config Key             |
+| -------------------------- | ---------------------- |
+| `NW_QUEUE_ENABLED`         | `queue.enabled`        |
+| `NW_QUEUE_MODE`            | `queue.mode`           |
 | `NW_QUEUE_MAX_CONCURRENCY` | `queue.maxConcurrency` |
-| `NW_QUEUE_MAX_WAIT_TIME` | `queue.maxWaitTime` |
+| `NW_QUEUE_MAX_WAIT_TIME`   | `queue.maxWaitTime`    |
 
 ---
 

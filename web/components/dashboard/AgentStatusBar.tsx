@@ -10,7 +10,19 @@ interface IAgentStatusBarProps {
   onViewLog: () => void;
   cancellingProcess: 'run' | 'review' | null;
   clearingLock: boolean;
-  onTriggerJob: (job: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics' | 'pr-resolver' | 'merger' | 'manager') => void;
+  onTriggerJob: (
+    job:
+      | 'executor'
+      | 'reviewer'
+      | 'qa'
+      | 'audit'
+      | 'ux'
+      | 'planner'
+      | 'analytics'
+      | 'pr-resolver'
+      | 'merger'
+      | 'manager',
+  ) => void;
   triggeringJob: string | null;
 }
 
@@ -18,7 +30,17 @@ interface IAgentConfig {
   name: string;
   displayName: string;
   processName: string;
-  triggerId: 'executor' | 'reviewer' | 'qa' | 'audit' | 'planner' | 'analytics' | 'pr-resolver' | 'merger' | 'manager';
+  triggerId:
+    | 'executor'
+    | 'reviewer'
+    | 'qa'
+    | 'audit'
+    | 'ux'
+    | 'planner'
+    | 'analytics'
+    | 'pr-resolver'
+    | 'merger'
+    | 'manager';
   cancelType?: 'run' | 'review';
   runningLabel: string;
   idleLabel: string;
@@ -29,6 +51,7 @@ const AGENTS: IAgentConfig[] = [
   { name: 'reviewer', displayName: 'Reviewer', processName: 'reviewer', triggerId: 'reviewer', cancelType: 'review', runningLabel: 'Running', idleLabel: 'Idle' },
   { name: 'qa', displayName: 'QA', processName: 'qa', triggerId: 'qa', runningLabel: 'Running', idleLabel: 'Idle' },
   { name: 'auditor', displayName: 'Auditor', processName: 'audit', triggerId: 'audit', runningLabel: 'Running', idleLabel: 'Idle' },
+  { name: 'ux', displayName: 'UX', processName: 'ux', triggerId: 'ux', runningLabel: 'Inspecting', idleLabel: 'Idle' },
   { name: 'planner', displayName: 'Planner', processName: 'planner', triggerId: 'planner', runningLabel: 'Writing PRDs', idleLabel: 'Idle' },
   { name: 'analytics', displayName: 'Analytics', processName: 'analytics', triggerId: 'analytics', runningLabel: 'Running', idleLabel: 'Idle' },
   { name: 'pr-resolver', displayName: 'PR Resolver', processName: 'pr-resolver', triggerId: 'pr-resolver', runningLabel: 'Resolving', idleLabel: 'Idle' },

@@ -35,6 +35,8 @@ export interface IInstallOptions {
   qa?: boolean;
   noAudit?: boolean;
   audit?: boolean;
+  noUx?: boolean;
+  ux?: boolean;
   noAnalytics?: boolean;
   analytics?: boolean;
   noPrResolver?: boolean;
@@ -152,6 +154,8 @@ export function performInstall(
     qa?: boolean;
     noAudit?: boolean;
     audit?: boolean;
+    noUx?: boolean;
+    ux?: boolean;
     noAnalytics?: boolean;
     analytics?: boolean;
     noPrResolver?: boolean;
@@ -248,6 +252,16 @@ export function performInstall(
       entries.push(auditEntry);
     }
 
+    // UX entry (if enabled and noUx not set)
+    const disableUx = options?.noUx === true || options?.ux === false;
+    const installUx = disableUx ? false : config.ux.enabled;
+    if (installUx) {
+      const uxSchedule = config.ux.schedule;
+      const uxLog = path.join(logDir, 'ux.log');
+      const uxEntry = `${uxSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} ux >> ${shellQuote(uxLog)} 2>&1  ${marker}`;
+      entries.push(uxEntry);
+    }
+
     // Analytics entry (if enabled and noAnalytics not set)
     const disableAnalytics = options?.noAnalytics === true || options?.analytics === false;
     const installAnalytics = disableAnalytics ? false : config.analytics.enabled;
@@ -322,6 +336,7 @@ export function installCommand(program: Command): void {
     .option('--no-slicer', 'Skip installing slicer cron')
     .option('--no-qa', 'Skip installing QA cron')
     .option('--no-audit', 'Skip installing audit cron')
+    .option('--no-ux', 'Skip installing UX cron')
     .option('--no-analytics', 'Skip installing analytics cron')
     .option('--no-pr-resolver', 'Skip installing PR resolver cron')
     .option('--no-merger', 'Skip installing merger cron')
@@ -441,6 +456,20 @@ export function installCommand(program: Command): void {
           entries.push(auditEntry);
         }
 
+        // Determine if UX should be installed
+        const disableUx =
+          options.noUx === true || (options as Record<string, unknown>).ux === false;
+        const installUx = disableUx ? false : config.ux.enabled;
+
+        // UX entry (if enabled)
+        let uxLog: string | undefined;
+        if (installUx) {
+          uxLog = path.join(logDir, 'ux.log');
+          const uxSchedule = config.ux.schedule;
+          const uxEntry = `${uxSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} ux >> ${shellQuote(uxLog)} 2>&1  ${marker}`;
+          entries.push(uxEntry);
+        }
+
         // Determine if analytics should be installed
         const disableAnalytics =
           options.noAnalytics === true || (options as Record<string, unknown>).analytics === false;
@@ -472,8 +501,7 @@ export function installCommand(program: Command): void {
 
         // Determine if merger should be installed
         const disableMerger =
-          options.noMerger === true ||
-          (options as Record<string, unknown>).merger === false;
+          options.noMerger === true || (options as Record<string, unknown>).merger === false;
         const installMerger = disableMerger ? false : (config.merger?.enabled ?? false);
 
         // Merger entry (if enabled)
@@ -487,8 +515,7 @@ export function installCommand(program: Command): void {
 
         // Determine if manager should be installed
         const disableManager =
-          options.noManager === true ||
-          (options as Record<string, unknown>).manager === false;
+          options.noManager === true || (options as Record<string, unknown>).manager === false;
         const installManager = disableManager ? false : (config.manager?.enabled ?? false);
 
         // Manager entry (if enabled)
@@ -530,6 +557,9 @@ export function installCommand(program: Command): void {
         }
         if (installAudit && auditLog) {
           dim(`  Audit: ${auditLog}`);
+        }
+        if (installUx && uxLog) {
+          dim(`  UX: ${uxLog}`);
         }
         if (installAnalytics && analyticsLog) {
           dim(`  Analytics: ${analyticsLog}`);

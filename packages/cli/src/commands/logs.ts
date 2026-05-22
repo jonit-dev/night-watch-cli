@@ -17,6 +17,7 @@ import {
   PLANNER_LOG_NAME,
   QA_LOG_NAME,
   REVIEWER_LOG_FILE,
+  UX_LOG_NAME,
   dim,
   header,
 } from '@night-watch/core';
@@ -80,7 +81,7 @@ export function logsCommand(program: Command): void {
     .option('-f, --follow', 'Follow log output (tail -f)')
     .option(
       '-t, --type <type>',
-      'Log type to view (executor|reviewer|qa|audit|planner|analytics|merger|manager|all)',
+      'Log type to view (executor|reviewer|qa|audit|ux|planner|analytics|merger|manager|all)',
       'all',
     )
     .action(async (options: ILogsOptions) => {
@@ -93,6 +94,7 @@ export function logsCommand(program: Command): void {
         const reviewerLog = path.join(logDir, REVIEWER_LOG_FILE);
         const qaLog = path.join(logDir, `${QA_LOG_NAME}.log`);
         const auditLog = path.join(logDir, `${AUDIT_LOG_NAME}.log`);
+        const uxLog = path.join(logDir, `${UX_LOG_NAME}.log`);
         const plannerLog = path.join(logDir, `${PLANNER_LOG_NAME}.log`);
         const analyticsLog = path.join(logDir, `${ANALYTICS_LOG_NAME}.log`);
         const mergerLog = path.join(logDir, `${MERGER_LOG_NAME}.log`);
@@ -104,6 +106,7 @@ export function logsCommand(program: Command): void {
         const showReviewer = logType === 'all' || logType === 'review' || logType === 'reviewer';
         const showQa = logType === 'all' || logType === 'qa';
         const showAudit = logType === 'all' || logType === 'audit';
+        const showUx = logType === 'all' || logType === 'ux';
         const showPlanner =
           logType === 'all' || logType === 'planner' || logType === 'slice' || logType === 'slicer';
         const showAnalytics = logType === 'all' || logType === 'analytics';
@@ -114,13 +117,16 @@ export function logsCommand(program: Command): void {
         if (options.follow) {
           if (logType === 'all') {
             dim('Note: Following all logs is not supported. Showing executor log.');
-            dim('Use --type reviewer|qa|audit|planner|analytics|merger|manager for other logs.\n');
+            dim(
+              'Use --type reviewer|qa|audit|ux|planner|analytics|merger|manager for other logs.\n',
+            );
           }
 
           let targetLog = executorLog;
           if (showReviewer) targetLog = reviewerLog;
           else if (showQa) targetLog = qaLog;
           else if (showAudit) targetLog = auditLog;
+          else if (showUx) targetLog = uxLog;
           else if (showPlanner) targetLog = plannerLog;
           else if (showAnalytics) targetLog = analyticsLog;
           else if (showMerger) targetLog = mergerLog;
@@ -160,6 +166,13 @@ export function logsCommand(program: Command): void {
           console.log(getLastLines(auditLog, lineCount));
         }
 
+        if (showUx) {
+          header('UX Log');
+          dim(`File: ${uxLog}`);
+          console.log();
+          console.log(getLastLines(uxLog, lineCount));
+        }
+
         if (showPlanner) {
           header('Planner Log');
           dim(`File: ${plannerLog}`);
@@ -193,7 +206,7 @@ export function logsCommand(program: Command): void {
         dim('---');
         dim('Tip: Use -f to follow logs in real-time');
         dim(
-          '     Use --type executor|reviewer|qa|audit|planner|analytics|merger|manager to view specific logs',
+          '     Use --type executor|reviewer|qa|audit|ux|planner|analytics|merger|manager to view specific logs',
         );
       } catch (err) {
         console.error(`Error reading logs: ${err instanceof Error ? err.message : String(err)}`);

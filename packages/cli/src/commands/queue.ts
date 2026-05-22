@@ -17,6 +17,7 @@ import {
   dispatchNextJob,
   enqueueJob,
   expireStaleJobs,
+  getJobDef,
   getQueueStatus,
   getScriptPath,
   loadConfig,
@@ -38,6 +39,7 @@ const VALID_JOB_TYPES: JobType[] = [
   'reviewer',
   'qa',
   'audit',
+  'ux',
   'slicer',
   'planner',
   'pr-resolver',
@@ -235,7 +237,7 @@ export function createQueueCommand(): Command {
     .requiredOption('--project <dir>', 'Project directory')
     .requiredOption(
       '--job-type <type>',
-      'Job type (executor, reviewer, qa, audit, slicer, planner, pr-resolver, merger, manager)',
+      'Job type (executor, reviewer, qa, audit, ux, slicer, planner, pr-resolver, merger, manager)',
     )
     .action((opts: { project: string; jobType: string }) => {
       try {
@@ -279,7 +281,8 @@ export function createQueueCommand(): Command {
 
       // Construct the spawn command based on job type
       const scriptName = getScriptNameForJobType(entry.jobType);
-      if (!scriptName) {
+      const jobDef = getJobDef(entry.jobType);
+      if (!scriptName && (!jobDef || entry.jobType !== 'ux')) {
         logger.error(`Unknown job type: ${entry.jobType}`);
         return;
       }
@@ -304,14 +307,15 @@ export function createQueueCommand(): Command {
         NW_QUEUE_ENTRY_ID: String(entry.id),
       };
 
-      // Resolve the bundled script path for the current install context.
-      const scriptPath = getScriptPath(scriptName);
-
-      logger.info(`Spawning: ${scriptPath} ${entry.projectPath}`);
-
       try {
+        const command = scriptName ? 'bash' : 'night-watch';
+        const args = scriptName
+          ? [getScriptPath(scriptName), entry.projectPath]
+          : [jobDef!.cliCommand];
+        logger.info(`Spawning: ${command} ${args.join(' ')}`);
+
         // Spawn as detached to let it run independently
-        const child = spawn('bash', [scriptPath, entry.projectPath], {
+        const child = spawn(command, args, {
           detached: true,
           stdio: 'ignore',
           env,

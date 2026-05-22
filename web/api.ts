@@ -30,6 +30,7 @@ import type {
     IRoadmapScannerConfig,
     IRoadmapStatus,
     IStatusSnapshot,
+    IUxConfig,
     IWebhookConfig,
     IWebhookTriggerConfig,
     IWebhookTriggerGithubConfig,
@@ -47,7 +48,7 @@ import { getWebJobDef } from './utils/jobs';
 export type {
     ClaudeModel, DayOfWeek, IAnalyticsConfig, IAuditConfig, IBoardProviderConfig, IJobProviders, ILogInfo, IManagerConfig, IMergerConfig, INightWatchConfig,
     INotificationConfig, IFeedbackConfig, IPrdInfo, IProviderBucketConfig, IProviderPreset, IProviderScheduleOverride, IPrInfo, IProcessInfo, IQaConfig,
-    IPrResolverConfig, IQueueConfig, IRoadmapItem, IRoadmapScannerConfig, IRoadmapStatus, IStatusSnapshot, IWebhookConfig, IWebhookTriggerConfig,
+    IPrResolverConfig, IQueueConfig, IRoadmapItem, IRoadmapScannerConfig, IRoadmapStatus, IStatusSnapshot, IUxConfig, IWebhookConfig, IWebhookTriggerConfig,
     IWebhookTriggerGithubConfig, IWebhookTriggerGithubRule,
     JobType, MergerCiPolicy, MergeMethod, QaArtifacts, QueueMode
 };
@@ -210,6 +211,14 @@ export interface IScheduleInfo {
     balancedDelayMinutes: number;
   };
   audit?: {
+    schedule: string;
+    installed: boolean;
+    nextRun: string | null;
+    delayMinutes: number;
+    manualDelayMinutes: number;
+    balancedDelayMinutes: number;
+  };
+  ux?: {
     schedule: string;
     installed: boolean;
     nextRun: string | null;

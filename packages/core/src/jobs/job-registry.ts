@@ -265,6 +265,50 @@ export const JOB_REGISTRY: IJobDefinition[] = [
     } as IBaseJobConfig & { createIssues: boolean; targetColumn: string },
   },
   {
+    id: 'ux',
+    name: 'UX',
+    description: 'Inspects user flows with browser automation and drafts prioritized UX reports',
+    cliCommand: 'ux',
+    logName: 'ux',
+    lockSuffix: '-ux.lock',
+    queuePriority: 10,
+    envPrefix: 'NW_UX',
+    extraFields: [
+      {
+        name: 'targetColumn',
+        type: 'enum',
+        enumValues: [...BOARD_COLUMNS],
+        defaultValue: 'Draft',
+      },
+      { name: 'baseUrl', type: 'string', defaultValue: '' },
+      { name: 'startUrl', type: 'string', defaultValue: '' },
+      { name: 'flows', type: 'string[]', defaultValue: [] },
+      { name: 'autoInstallPlaywright', type: 'boolean', defaultValue: true },
+      { name: 'maxIssues', type: 'number', defaultValue: 10 },
+      { name: 'reportPrompt', type: 'string', defaultValue: '' },
+    ],
+    defaultConfig: {
+      enabled: false,
+      schedule: '0 7 * * 1',
+      maxRuntime: 0,
+      targetColumn: 'Draft',
+      baseUrl: '',
+      startUrl: '',
+      flows: [],
+      autoInstallPlaywright: true,
+      maxIssues: 10,
+      reportPrompt: '',
+    } as IBaseJobConfig & {
+      targetColumn: string;
+      baseUrl: string;
+      startUrl: string;
+      flows: string[];
+      autoInstallPlaywright: boolean;
+      maxIssues: number;
+      reportPrompt: string;
+    },
+  },
+  {
     id: 'analytics',
     name: 'Analytics',
     description: 'Analyzes product analytics and creates issues for trends',

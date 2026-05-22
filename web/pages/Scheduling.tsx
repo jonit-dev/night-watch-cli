@@ -45,6 +45,7 @@ import type {
   IQueueAnalytics,
   IQueueStatus,
   IRoadmapScannerConfig,
+  IUxConfig,
   QueueMode,
 } from '../api';
 import {
@@ -77,6 +78,7 @@ import {
   getDefaultPrResolverConfig,
   getDefaultQaConfig,
   getDefaultRoadmapScannerConfig,
+  getDefaultUxConfig,
 } from '../utils/scheduling-defaults.js';
 import { BUILT_IN_PRESETS } from '../constants/presets.js';
 
@@ -101,6 +103,7 @@ type AutomationForm = {
   providerPresets: Record<string, IProviderPreset>;
   qa: IQaConfig;
   audit: IAuditConfig;
+  ux: IUxConfig;
   analytics: IAnalyticsConfig;
   feedback: IFeedbackConfig;
   prResolver: IPrResolverConfig;
@@ -115,7 +118,7 @@ const DEFAULT_QUEUE: NonNullable<INightWatchConfig['queue']> = {
   mode: 'conservative' as QueueMode,
   maxConcurrency: 1,
   maxWaitTime: 7200,
-  priority: { executor: 50, reviewer: 40, slicer: 30, manager: 25, qa: 20, audit: 10 },
+  priority: { executor: 50, reviewer: 40, slicer: 30, manager: 25, qa: 20, audit: 10, ux: 10 },
   providerBuckets: {},
 };
 
@@ -124,6 +127,7 @@ const JOB_PROVIDER_KEYS: Array<keyof IJobProviders> = [
   'reviewer',
   'qa',
   'audit',
+  'ux',
   'slicer',
   'analytics',
   'pr-resolver',
@@ -136,7 +140,7 @@ const VALID_AUTOMATION_TABS = new Set(['overview', 'schedules', 'jobs']);
 const normalizeJobType = (jobId: string | null): string | null => {
   if (!jobId) return null;
   const normalized = jobId === 'planner' ? 'slicer' : jobId;
-  return ['executor', 'reviewer', 'qa', 'audit', 'slicer', 'analytics', 'pr-resolver', 'merger', 'manager'].includes(normalized)
+  return ['executor', 'reviewer', 'qa', 'audit', 'ux', 'slicer', 'analytics', 'pr-resolver', 'merger', 'manager'].includes(normalized)
     ? normalized
     : null;
 };
@@ -162,6 +166,7 @@ const toAutomationForm = (config: INightWatchConfig): AutomationForm => ({
   providerPresets: config.providerPresets ?? {},
   qa: config.qa || getDefaultQaConfig(),
   audit: config.audit || getDefaultAuditConfig(),
+  ux: config.ux || getDefaultUxConfig(),
   analytics: config.analytics || getDefaultAnalyticsConfig(),
   feedback: config.feedback ?? {
     enabled: true,
@@ -184,6 +189,7 @@ const resolveTemplateForForm = (form: AutomationForm): IScheduleTemplate | undef
     form.reviewerSchedule,
     form.qa.schedule,
     form.audit.schedule,
+    form.ux.schedule,
     form.roadmapScanner.slicerSchedule ?? getDefaultRoadmapScannerConfig().slicerSchedule,
     form.prResolver?.schedule ?? getDefaultPrResolverConfig().schedule,
     form.merger?.schedule ?? getDefaultMergerConfig().schedule,
@@ -366,6 +372,7 @@ const Scheduling: React.FC = () => {
         scheduleBundleId: tpl.id,
         qa: { ...prev.qa, schedule: tpl.schedules.qa },
         audit: { ...prev.audit, schedule: tpl.schedules.audit },
+        ux: { ...prev.ux, schedule: tpl.schedules.ux },
         roadmapScanner: { ...prev.roadmapScanner, slicerSchedule: tpl.schedules.slicer },
         prResolver: { ...prev.prResolver, schedule: tpl.schedules.prResolver },
         merger: { ...prev.merger, schedule: tpl.schedules.merger },
@@ -408,6 +415,7 @@ const Scheduling: React.FC = () => {
         jobProviders: cleanedJobProviders,
         qa: form.qa,
         audit: form.audit,
+        ux: form.ux,
         analytics: form.analytics,
         feedback: form.feedback,
         prResolver: form.prResolver,
@@ -911,6 +919,7 @@ const Scheduling: React.FC = () => {
               { id: 'reviewer', label: 'Run Reviewer', icon: Search, enabled: form?.reviewerEnabled ?? false },
               { id: 'qa', label: 'Run QA', icon: Zap, enabled: form?.qa?.enabled ?? false },
               { id: 'audit', label: 'Run Audit', icon: ListRestart, enabled: form?.audit?.enabled ?? false },
+              { id: 'ux', label: 'Run UX', icon: Eye, enabled: form?.ux?.enabled ?? false },
               { id: 'planner', label: 'Run Planner', icon: Layout, enabled: form?.roadmapScanner?.enabled ?? false },
               { id: 'analytics', label: 'Run Analytics', icon: BarChart3, enabled: form?.analytics?.enabled ?? false },
               { id: 'pr-resolver', label: 'Run PR Resolver', icon: GitMerge, enabled: form?.prResolver?.enabled ?? false },
@@ -951,6 +960,7 @@ const Scheduling: React.FC = () => {
         reviewerSchedule: form.reviewerSchedule,
         qa: form.qa,
         audit: form.audit,
+        ux: form.ux,
         analytics: form.analytics,
         roadmapScanner: {
           ...form.roadmapScanner,

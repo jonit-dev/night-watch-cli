@@ -43,6 +43,10 @@ interface IStatusInfo {
     running: boolean;
     pid: number | null;
   };
+  ux: {
+    running: boolean;
+    pid: number | null;
+  };
   planner: {
     running: boolean;
     pid: number | null;
@@ -87,6 +91,12 @@ interface IStatusInfo {
       size: number;
     };
     audit?: {
+      path: string;
+      lastLines: string[];
+      exists: boolean;
+      size: number;
+    };
+    ux?: {
       path: string;
       lastLines: string[];
       exists: boolean;
@@ -144,6 +154,7 @@ export function statusCommand(program: Command): void {
         const reviewerProc = snapshot.processes.find((p) => p.name === 'reviewer');
         const qaProc = snapshot.processes.find((p) => p.name === 'qa');
         const auditProc = snapshot.processes.find((p) => p.name === 'audit');
+        const uxProc = snapshot.processes.find((p) => p.name === 'ux');
         const plannerProc = snapshot.processes.find((p) => p.name === 'planner');
         const analyticsProc = snapshot.processes.find((p) => p.name === 'analytics');
         const mergerProc = snapshot.processes.find((p) => p.name === 'merger');
@@ -151,6 +162,7 @@ export function statusCommand(program: Command): void {
         const reviewerLog = snapshot.logs.find((l) => l.name === 'reviewer');
         const qaLog = snapshot.logs.find((l) => l.name === 'qa');
         const auditLog = snapshot.logs.find((l) => l.name === 'audit');
+        const uxLog = snapshot.logs.find((l) => l.name === 'ux');
         const plannerLog = snapshot.logs.find((l) => l.name === 'planner');
         const analyticsLog = snapshot.logs.find((l) => l.name === 'analytics');
         const mergerLog = snapshot.logs.find((l) => l.name === 'merger');
@@ -172,6 +184,7 @@ export function statusCommand(program: Command): void {
           reviewer: { running: reviewerProc?.running ?? false, pid: reviewerProc?.pid ?? null },
           qa: { running: qaProc?.running ?? false, pid: qaProc?.pid ?? null },
           audit: { running: auditProc?.running ?? false, pid: auditProc?.pid ?? null },
+          ux: { running: uxProc?.running ?? false, pid: uxProc?.pid ?? null },
           planner: { running: plannerProc?.running ?? false, pid: plannerProc?.pid ?? null },
           analytics: { running: analyticsProc?.running ?? false, pid: analyticsProc?.pid ?? null },
           merger: { running: mergerProc?.running ?? false, pid: mergerProc?.pid ?? null },
@@ -209,6 +222,14 @@ export function statusCommand(program: Command): void {
                   lastLines: auditLog.lastLines,
                   exists: auditLog.exists,
                   size: auditLog.size,
+                }
+              : undefined,
+            ux: uxLog
+              ? {
+                  path: uxLog.path,
+                  lastLines: uxLog.lastLines,
+                  exists: uxLog.exists,
+                  size: uxLog.size,
                 }
               : undefined,
             planner: plannerLog
@@ -275,6 +296,7 @@ export function statusCommand(program: Command): void {
         ]);
         processTable.push(['QA', formatRunningStatus(status.qa.running, status.qa.pid)]);
         processTable.push(['Audit', formatRunningStatus(status.audit.running, status.audit.pid)]);
+        processTable.push(['UX', formatRunningStatus(status.ux.running, status.ux.pid)]);
         processTable.push([
           'Planner',
           formatRunningStatus(status.planner.running, status.planner.pid),
@@ -344,6 +366,13 @@ export function statusCommand(program: Command): void {
             status.logs.audit.exists ? 'Exists' : 'Not found',
           ]);
         }
+        if (status.logs.ux) {
+          logTable.push([
+            'UX',
+            status.logs.ux.exists ? formatBytes(status.logs.ux.size) : '-',
+            status.logs.ux.exists ? 'Exists' : 'Not found',
+          ]);
+        }
         if (status.logs.planner) {
           logTable.push([
             'Planner',
@@ -385,6 +414,10 @@ export function statusCommand(program: Command): void {
             dim('  Audit last 5 lines:');
             status.logs.audit.lastLines.forEach((line) => dim(`    ${line}`));
           }
+          if (status.logs.ux?.exists && status.logs.ux.lastLines.length > 0) {
+            dim('  UX last 5 lines:');
+            status.logs.ux.lastLines.forEach((line) => dim(`    ${line}`));
+          }
           if (status.logs.planner?.exists && status.logs.planner.lastLines.length > 0) {
             dim('  Planner last 5 lines:');
             status.logs.planner.lastLines.forEach((line) => dim(`    ${line}`));
@@ -407,6 +440,7 @@ export function statusCommand(program: Command): void {
         dim('  night-watch review   - Run reviewer now');
         dim('  night-watch qa       - Run QA now');
         dim('  night-watch audit    - Run audit now');
+        dim('  night-watch ux       - Run UX agent now');
         dim('  night-watch planner  - Run planner now');
         dim('  night-watch analytics - Run analytics now');
         dim('  night-watch merge     - Run merger now');

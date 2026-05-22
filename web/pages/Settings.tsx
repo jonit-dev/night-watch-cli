@@ -20,6 +20,7 @@ import {
   IProviderScheduleOverride,
   IQaConfig,
   IRoadmapScannerConfig,
+  IUxConfig,
   IWebhookConfig,
   IWebhookTriggerConfig,
   JobType,
@@ -50,6 +51,7 @@ import {
   getDefaultPrResolverConfig,
   getDefaultQaConfig,
   getDefaultRoadmapScannerConfig,
+  getDefaultUxConfig,
 } from '../utils/scheduling-defaults.js';
 
 const JOB_PROVIDER_KEYS: Array<keyof IJobProviders> = [
@@ -57,6 +59,7 @@ const JOB_PROVIDER_KEYS: Array<keyof IJobProviders> = [
   'reviewer',
   'qa',
   'audit',
+  'ux',
   'slicer',
   'analytics',
   'pr-resolver',
@@ -69,6 +72,7 @@ const WEBHOOK_TRIGGER_JOB_IDS: JobType[] = [
   'reviewer',
   'qa',
   'audit',
+  'ux',
   'slicer',
   'analytics',
   'pr-resolver',
@@ -129,6 +133,7 @@ type ConfigForm = {
   providerScheduleOverrides: IProviderScheduleOverride[];
   qa: IQaConfig;
   audit: IAuditConfig;
+  ux: IUxConfig;
   analytics: IAnalyticsConfig;
   feedback: IFeedbackConfig;
   prResolver: IPrResolverConfig;
@@ -190,6 +195,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => {
     providerScheduleOverrides: config.providerScheduleOverrides ?? [],
     qa: config.qa || getDefaultQaConfig(),
     audit: { ...getDefaultAuditConfig(), ...(config.audit ?? {}) },
+    ux: { ...getDefaultUxConfig(), ...(config.ux ?? {}) },
     analytics: config.analytics || getDefaultAnalyticsConfig(),
     feedback: config.feedback ?? {
       enabled: true,
@@ -212,6 +218,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => {
         slicer: 30,
         qa: 20,
         audit: 10,
+        ux: 10,
       },
       providerBuckets: {},
     },
@@ -347,6 +354,8 @@ const Settings: React.FC = () => {
       form.qa.schedule !== config?.qa.schedule ||
       form.audit.enabled !== (config?.audit.enabled ?? false) ||
       form.audit.schedule !== config?.audit.schedule ||
+      form.ux.enabled !== (config?.ux?.enabled ?? false) ||
+      form.ux.schedule !== (config?.ux?.schedule ?? getDefaultUxConfig().schedule) ||
       form.analytics.enabled !== (config?.analytics?.enabled ?? false) ||
       form.analytics.schedule !== (config?.analytics?.schedule ?? getDefaultAnalyticsConfig().schedule) ||
       form.prResolver.enabled !== (config?.prResolver?.enabled ?? getDefaultPrResolverConfig().enabled) ||
@@ -417,6 +426,7 @@ const Settings: React.FC = () => {
         providerScheduleOverrides: form.providerScheduleOverrides,
         qa: form.qa,
         audit: form.audit,
+        ux: form.ux,
         analytics: form.analytics,
         feedback: form.feedback,
         prResolver: form.prResolver,

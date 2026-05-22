@@ -1,6 +1,7 @@
 import type {
   IAnalyticsConfig,
   IAuditConfig,
+  IUxConfig,
   IMergerConfig,
   IManagerConfig,
   IPrResolverConfig,
@@ -37,6 +38,19 @@ export const DEFAULT_AUDIT_CONFIG: IAuditConfig = {
   maxRuntime: 1800,
   createIssues: false,
   targetColumn: 'Draft',
+};
+
+export const DEFAULT_UX_CONFIG: IUxConfig = {
+  enabled: false,
+  schedule: '0 7 * * 1',
+  maxRuntime: 0,
+  targetColumn: 'Draft',
+  baseUrl: '',
+  startUrl: '',
+  flows: [],
+  autoInstallPlaywright: true,
+  maxIssues: 10,
+  reportPrompt: '',
 };
 
 export const DEFAULT_ANALYTICS_CONFIG: IAnalyticsConfig = {
@@ -99,6 +113,10 @@ export function getDefaultQaConfig(): IQaConfig {
 
 export function getDefaultAuditConfig(): IAuditConfig {
   return { ...DEFAULT_AUDIT_CONFIG };
+}
+
+export function getDefaultUxConfig(): IUxConfig {
+  return { ...DEFAULT_UX_CONFIG, flows: [...DEFAULT_UX_CONFIG.flows] };
 }
 
 export function getDefaultAnalyticsConfig(): IAnalyticsConfig {

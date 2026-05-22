@@ -21,6 +21,7 @@ import {
   IRoadmapScannerConfig,
   IJobProviders,
   IFeedbackConfig,
+  IUxConfig,
   MergeMethod,
   QaArtifacts,
   INightWatchConfig,
@@ -38,6 +39,7 @@ type JobKey =
   | 'reviewer'
   | 'qa'
   | 'audit'
+  | 'ux'
   | 'slicer'
   | 'analytics'
   | 'pr-resolver'
@@ -59,6 +61,7 @@ interface IConfigFormJobs {
   branchPatterns: string[];
   qa: IQaConfig;
   audit: IAuditConfig;
+  ux: IUxConfig;
   analytics: IAnalyticsConfig;
   feedback: IFeedbackConfig;
   prResolver: IPrResolverConfig;
@@ -430,6 +433,88 @@ const JobsTab: React.FC<IJobsTabProps> = ({
                 ]}
               />
             </div>
+          </div>
+        </JobAccordion>
+
+        {/* UX */}
+        <JobAccordion
+          id="job-section-ux"
+          title="UX"
+          icon={Eye}
+          description="Inspect product flows with Playwright and draft prioritized UX reports"
+          enabled={form.ux.enabled}
+          onToggle={(checked) => updateField('ux', { ...form.ux, enabled: checked })}
+          expanded={expandedJob === 'ux'}
+          onExpandChange={(expanded) => onExpandedJobChange(expanded ? 'ux' : null)}
+          scheduleSummary={cronToHuman(form.ux.schedule)}
+          providerLabel={form.jobProviders.ux ? presetOptions.find(p => p.value === form.jobProviders.ux)?.label : 'Global'}
+        >
+          <div className="space-y-6">
+            <CadencePanel summary={cronToHuman(form.ux.schedule)} onOpen={() => onOpenSchedule('ux')} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Select
+                label="Provider"
+                value={form.jobProviders.ux ?? ''}
+                onChange={(val) => updateJobProvider('ux', val)}
+                options={providerOptionsWithDefault}
+              />
+              <Input
+                label="Max Runtime"
+                type="number"
+                value={String(form.ux.maxRuntime)}
+                onChange={(e) => updateField('ux', { ...form.ux, maxRuntime: Number(e.target.value || 0) })}
+                rightIcon={<span className="text-xs">sec</span>}
+              />
+              <Input
+                label="Base URL"
+                value={form.ux.baseUrl}
+                onChange={(e) => updateField('ux', { ...form.ux, baseUrl: e.target.value })}
+                placeholder="https://app.example.com"
+              />
+              <Input
+                label="Start URL"
+                value={form.ux.startUrl}
+                onChange={(e) => updateField('ux', { ...form.ux, startUrl: e.target.value })}
+                placeholder="/dashboard"
+              />
+              <Input
+                label="Max Issues"
+                type="number"
+                value={String(form.ux.maxIssues)}
+                onChange={(e) => updateField('ux', { ...form.ux, maxIssues: Math.max(1, Number(e.target.value || 10)) })}
+              />
+              <Select
+                label="Target Column"
+                value={form.ux.targetColumn}
+                onChange={(value) => updateField('ux', { ...form.ux, targetColumn: value as IUxConfig['targetColumn'] })}
+                options={[
+                  { value: 'Draft', label: 'Draft' },
+                  { value: 'Ready', label: 'Ready' },
+                  { value: 'In Progress', label: 'In Progress' },
+                  { value: 'Review', label: 'Review' },
+                  { value: 'Done', label: 'Done' },
+                ]}
+              />
+              <Switch
+                label="Auto-install Playwright"
+                checked={form.ux.autoInstallPlaywright}
+                onChange={(checked) => updateField('ux', { ...form.ux, autoInstallPlaywright: checked })}
+                className="self-end pb-2"
+              />
+            </div>
+            <TagInput
+              label="Flows"
+              values={form.ux.flows}
+              onChange={(flows) => updateField('ux', { ...form.ux, flows })}
+              placeholder="e.g., Sign in, Create project"
+              helpText="Key flows for the UX agent to inspect."
+            />
+            <Input
+              label="Report Prompt"
+              value={form.ux.reportPrompt}
+              onChange={(e) => updateField('ux', { ...form.ux, reportPrompt: e.target.value })}
+              placeholder="Optional custom UX instructions"
+            />
           </div>
         </JobAccordion>
 

@@ -49,6 +49,7 @@ export type JobType =
   | 'reviewer'
   | 'qa'
   | 'audit'
+  | 'ux'
   | 'slicer'
   | 'analytics'
   | 'planner'
@@ -103,6 +104,7 @@ export interface IJobProviders {
   reviewer?: Provider;
   qa?: Provider;
   audit?: Provider;
+  ux?: Provider;
   slicer?: Provider;
   analytics?: Provider;
   planner?: Provider;
@@ -318,6 +320,9 @@ export interface INightWatchConfig {
   /** Code audit configuration */
   audit: IAuditConfig;
 
+  /** UX audit configuration */
+  ux: IUxConfig;
+
   /** Analytics job configuration (Amplitude integration) */
   analytics: IAnalyticsConfig;
 
@@ -393,6 +398,29 @@ export interface IAuditConfig {
   createIssues: boolean;
   /** Board column to place created issues in */
   targetColumn: BoardColumnName;
+}
+
+export interface IUxConfig {
+  /** Whether the UX audit process is enabled */
+  enabled: boolean;
+  /** Cron schedule for UX audit execution */
+  schedule: string;
+  /** Maximum runtime in seconds for the UX audit. 0 disables the provider timeout. */
+  maxRuntime: number;
+  /** Board column to place created UX report in */
+  targetColumn: BoardColumnName;
+  /** Base app URL for UX inspection */
+  baseUrl: string;
+  /** Starting URL/path for UX inspection */
+  startUrl: string;
+  /** Key user flows to inspect */
+  flows: string[];
+  /** Whether the provider should install/check Playwright if missing */
+  autoInstallPlaywright: boolean;
+  /** Maximum prioritized findings to include in the report */
+  maxIssues: number;
+  /** Optional custom UX report instructions */
+  reportPrompt: string;
 }
 
 export interface IAnalyticsConfig {

@@ -20,16 +20,17 @@ import {
 import { VALID_JOB_TYPES, DEFAULT_QUEUE_PRIORITY, LOG_FILE_NAMES } from '../../constants.js';
 
 describe('JOB_REGISTRY', () => {
-  it('should define all 9 job types', () => {
-    expect(JOB_REGISTRY).toHaveLength(9);
+  it('should define all 10 job types', () => {
+    expect(JOB_REGISTRY).toHaveLength(10);
   });
 
-  it('should include executor, reviewer, qa, audit, slicer, analytics, pr-resolver, merger, manager', () => {
+  it('should include executor, reviewer, qa, audit, ux, slicer, analytics, pr-resolver, merger, manager', () => {
     const ids = JOB_REGISTRY.map((j) => j.id);
     expect(ids).toContain('executor');
     expect(ids).toContain('reviewer');
     expect(ids).toContain('qa');
     expect(ids).toContain('audit');
+    expect(ids).toContain('ux');
     expect(ids).toContain('slicer');
     expect(ids).toContain('analytics');
     expect(ids).toContain('pr-resolver');
@@ -47,6 +48,13 @@ describe('JOB_REGISTRY', () => {
 
   it('should include manager in JOB_REGISTRY', () => {
     expect(getJobDef('manager')).toBeDefined();
+  });
+
+  it('should include ux in JOB_REGISTRY', () => {
+    const def = getJobDef('ux');
+    expect(def).toBeDefined();
+    expect(def?.cliCommand).toBe('ux');
+    expect(def?.defaultConfig.enabled).toBe(false);
   });
 
   it('each job definition has required fields', () => {
@@ -137,13 +145,14 @@ describe('getJobDefByLogName', () => {
 });
 
 describe('getValidJobTypes', () => {
-  it('returns all 9 job types', () => {
+  it('returns all 10 job types', () => {
     const types = getValidJobTypes();
-    expect(types).toHaveLength(9);
+    expect(types).toHaveLength(10);
     expect(types).toContain('executor');
     expect(types).toContain('reviewer');
     expect(types).toContain('qa');
     expect(types).toContain('audit');
+    expect(types).toContain('ux');
     expect(types).toContain('slicer');
     expect(types).toContain('analytics');
     expect(types).toContain('pr-resolver');
@@ -159,6 +168,7 @@ describe('getDefaultQueuePriority', () => {
     expect(typeof priority.reviewer).toBe('number');
     expect(typeof priority.qa).toBe('number');
     expect(typeof priority.audit).toBe('number');
+    expect(typeof priority.ux).toBe('number');
     expect(typeof priority.slicer).toBe('number');
     expect(typeof priority.analytics).toBe('number');
     expect(typeof priority['pr-resolver']).toBe('number');
@@ -209,6 +219,11 @@ describe('getLogFileNames', () => {
   it('maps manager to "manager"', () => {
     const logFiles = getLogFileNames();
     expect(logFiles.manager).toBe('manager');
+  });
+
+  it('maps ux to "ux"', () => {
+    const logFiles = getLogFileNames();
+    expect(logFiles.ux).toBe('ux');
   });
 });
 
@@ -352,6 +367,31 @@ describe('normalizeJobConfig', () => {
     expect(result.lookbackDays).toBe(14);
     expect(result.targetColumn).toBe('Ready');
     expect(result.analysisPrompt).toBe('test prompt');
+  });
+
+  it('normalizes ux extra fields', () => {
+    const uxDef = getJobDef('ux')!;
+    const result = normalizeJobConfig(
+      {
+        enabled: true,
+        targetColumn: 'Ready',
+        baseUrl: 'http://localhost:3000',
+        startUrl: '/dashboard',
+        flows: ['sign in'],
+        autoInstallPlaywright: false,
+        maxIssues: 5,
+        reportPrompt: 'focus mobile',
+      },
+      uxDef,
+    );
+    expect(result.enabled).toBe(true);
+    expect(result.targetColumn).toBe('Ready');
+    expect(result.baseUrl).toBe('http://localhost:3000');
+    expect(result.startUrl).toBe('/dashboard');
+    expect(result.flows).toEqual(['sign in']);
+    expect(result.autoInstallPlaywright).toBe(false);
+    expect(result.maxIssues).toBe(5);
+    expect(result.reportPrompt).toBe('focus mobile');
   });
 
   it('rejects invalid analytics targetColumn and falls back to default', () => {

@@ -80,6 +80,18 @@ describe('config', () => {
         maxActiveAugmentations: 3,
         successStreakToExpire: 3,
       });
+      expect(config.ux).toEqual({
+        enabled: false,
+        schedule: '0 7 * * 1',
+        maxRuntime: 0,
+        targetColumn: 'Draft',
+        baseUrl: '',
+        startUrl: '',
+        flows: [],
+        autoInstallPlaywright: true,
+        maxIssues: 10,
+        reportPrompt: '',
+      });
     });
 
     it('should return defaults with provider and reviewerEnabled', () => {

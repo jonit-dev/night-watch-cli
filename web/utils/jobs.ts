@@ -1,6 +1,7 @@
 import type {
   IAnalyticsConfig,
   IAuditConfig,
+  IUxConfig,
   IMergerConfig,
   IManagerConfig,
   INightWatchConfig,
@@ -41,6 +42,7 @@ export const JOB_DEFINITIONS: IJobDefinition[] = [
   { id: 'reviewer',  label: 'Reviewer',  processName: 'reviewer',  color: { bg: 'bg-green-500',  border: 'border-green-500/60'  } },
   { id: 'qa',        label: 'QA',        processName: 'qa',        color: { bg: 'bg-purple-500', border: 'border-purple-500/60' } },
   { id: 'audit',     label: 'Audit',     processName: 'audit',     color: { bg: 'bg-orange-500', border: 'border-orange-500/60' } },
+  { id: 'ux',        label: 'UX',        processName: 'ux',        color: { bg: 'bg-lime-500',   border: 'border-lime-500/60'   } },
   { id: 'slicer',    label: 'Planner',   processName: 'planner',   color: { bg: 'bg-yellow-500', border: 'border-yellow-500/60' } },
   { id: 'analytics', label: 'Analytics', processName: 'analytics', color: { bg: 'bg-pink-500',   border: 'border-pink-500/60'   } },
   { id: 'pr-resolver', label: 'PR Resolver', processName: 'pr-resolver', color: { bg: 'bg-teal-500', border: 'border-teal-500/60' } },
@@ -96,6 +98,19 @@ export const WEB_JOB_REGISTRY: IWebJobDefinition[] = [
     getSchedule: (config) => config.audit?.schedule ?? '50 3 * * 1',
     settingsSection: 'advanced',
     buildEnabledPatch: (enabled, config) => ({ audit: { ...(config.audit ?? {}), enabled } as IAuditConfig }),
+  },
+  {
+    id: 'ux',
+    label: 'UX',
+    processName: 'ux',
+    color: { bg: 'bg-lime-500', border: 'border-lime-500/60' },
+    triggerEndpoint: '/api/actions/ux',
+    scheduleTemplateKey: 'ux',
+    getEnabled: (config) => config.ux?.enabled ?? false,
+    getSchedule: (config) => config.ux?.schedule ?? '0 7 * * 1',
+    settingsSection: 'advanced',
+    buildEnabledPatch: (enabled, config) =>
+      ({ ux: { ...(config.ux ?? {}), enabled } as IUxConfig }),
   },
   {
     id: 'slicer',
