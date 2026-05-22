@@ -52,6 +52,7 @@
       "reviewer": 40,
       "slicer": 30,
       "qa": 20,
+      "ux": 10,
       "audit": 10
     }
   },
@@ -65,6 +66,7 @@
       "slicer",
       "qa",
       "audit",
+      "ux",
       "analytics",
       "merger"
     ],
@@ -94,5 +96,17 @@
     "enabled": true,
     "schedule": "50 3 * * 1",
     "maxRuntime": 1800
+  },
+  "ux": {
+    "enabled": false,
+    "schedule": "0 7 * * 1",
+    "maxRuntime": 0,
+    "targetColumn": "Draft",
+    "baseUrl": "",
+    "startUrl": "",
+    "flows": [],
+    "autoInstallPlaywright": true,
+    "maxIssues": 10,
+    "reportPrompt": ""
   }
 }

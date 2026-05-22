@@ -343,6 +343,7 @@ describe('init command', () => {
       expect(config.roadmapScanner).toEqual(defaults.roadmapScanner);
       expect(config.qa).toEqual(defaults.qa);
       expect(config.audit).toEqual(defaults.audit);
+      expect(config.ux).toEqual(defaults.ux);
       expect(config.queue).toEqual(defaults.queue);
       expect(config.boardProvider).toEqual(defaults.boardProvider);
       expect(config.jobProviders).toEqual(defaults.jobProviders);
