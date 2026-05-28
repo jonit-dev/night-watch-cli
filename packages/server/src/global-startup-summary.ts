@@ -73,13 +73,14 @@ function failureRateFromSummary(summary: ISessionOutcomeSummary): number | null 
 
 function getExecutorStatus(
   config: INightWatchConfig,
-  snapshot: Pick<IStatusSnapshot, 'processes'>,
+  snapshot: Pick<IStatusSnapshot, 'crontab' | 'processes'>,
 ): IProjectStartupSummary['status'] {
   if (snapshot.processes.some((processInfo) => processInfo.running)) {
     return 'running';
   }
 
-  const executorActive = config.executorEnabled !== false && !config.pausedJobs?.executor;
+  const executorActive =
+    snapshot.crontab.installed && config.executorEnabled !== false && !config.pausedJobs?.executor;
   return executorActive ? 'active' : 'paused';
 }
 

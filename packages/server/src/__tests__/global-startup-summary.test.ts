@@ -113,6 +113,17 @@ describe('global startup summary', () => {
     expect(summary.runningProcesses).toEqual(['reviewer']);
   });
 
+  it('marks a project as paused when cron is not installed', () => {
+    const summary = buildProjectStartupSummary(
+      { name: 'project', path: '/work/project' },
+      makeConfig({ executorEnabled: true, pausedJobs: { executor: false } }),
+      makeSnapshot({ crontab: { entries: [], installed: false } }),
+      makeOutcomeSummary(),
+    );
+
+    expect(summary.status).toBe('paused');
+  });
+
   it('formats a readable one-line summary without color when requested', () => {
     const line = formatProjectStartupSummaryLine(
       {
