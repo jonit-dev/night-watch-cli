@@ -355,6 +355,8 @@ export function buildInitConfig(params: {
     reviewerRetryDelay: defaults.reviewerRetryDelay,
     provider: params.provider,
     providerLabel: '',
+    modelAttribution: defaults.modelAttribution,
+    newPrLabel: defaults.newPrLabel,
     executorEnabled: defaults.executorEnabled ?? true,
     reviewerEnabled: params.reviewerEnabled,
     providerEnv: { ...defaults.providerEnv },

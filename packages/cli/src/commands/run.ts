@@ -498,6 +498,8 @@ export function buildEnvVars(
   }
   env.NW_PRD_DIR = config.prdDir;
   env.NW_BRANCH_PREFIX = config.branchPrefix;
+  env.NW_MODEL_ATTRIBUTION_ENABLED = config.modelAttribution ? '1' : '0';
+  env.NW_NEW_PR_LABEL = config.newPrLabel ?? 'draft';
 
   // PRD priority order
   if (config.prdPriority && config.prdPriority.length > 0) {

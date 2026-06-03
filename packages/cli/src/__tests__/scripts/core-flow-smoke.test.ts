@@ -1017,6 +1017,7 @@ describe('core flow smoke tests (bash scripts)', () => {
     const fakeBin = mkTempDir('nw-smoke-bin-pr-deferred-');
     const providerDoneFlag = path.join(projectDir, '.smoke-provider-done');
     const createdFlag = path.join(projectDir, '.smoke-pr-created');
+    const ghCallLog = path.join(projectDir, '.smoke-gh-calls');
     const branchName = 'night-watch/01-smoke-pr-deferred';
 
     fs.writeFileSync(
@@ -1033,6 +1034,7 @@ describe('core flow smoke tests (bash scripts)', () => {
     fs.writeFileSync(
       path.join(fakeBin, 'gh'),
       '#!/usr/bin/env bash\n' +
+        'printf \'%s\\n\' "$*" >> "$NW_SMOKE_GH_CALL_LOG"\n' +
         'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
         '  jq_query=""\n' +
         '  for ((i=1; i<=$#; i++)); do\n' +
@@ -1078,6 +1080,7 @@ describe('core flow smoke tests (bash scripts)', () => {
       NW_DEFAULT_BRANCH: 'main',
       NW_SMOKE_PROVIDER_DONE_FLAG: providerDoneFlag,
       NW_SMOKE_CREATED_FLAG: createdFlag,
+      NW_SMOKE_GH_CALL_LOG: ghCallLog,
       NW_SMOKE_BRANCH: branchName,
     });
 
@@ -1086,6 +1089,10 @@ describe('core flow smoke tests (bash scripts)', () => {
     expect(result.stdout).toContain('pr_url=https://example.test/pull/123');
     expect(result.stdout).toContain('pr_number=123');
     expect(fs.existsSync(createdFlag)).toBe(true);
+    const ghCalls = fs.readFileSync(ghCallLog, 'utf-8');
+    expect(ghCalls).toContain('pr create');
+    expect(ghCalls).toContain('--label draft');
+    expect(ghCalls).not.toContain('Provider/model:');
   });
 
   it('executor filesystem mode should preserve queue cleanup after claiming a PRD', () => {

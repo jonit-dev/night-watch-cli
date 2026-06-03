@@ -32,6 +32,8 @@ PROVIDER_CMD="${NW_PROVIDER_CMD:-claude}"
 # EFFECTIVE_PROVIDER_LABEL may be updated after execution if rate-limit fallback is triggered.
 PROVIDER_LABEL="${NW_PROVIDER_LABEL:-${PROVIDER_CMD}}"
 EFFECTIVE_PROVIDER_LABEL="${PROVIDER_LABEL}"
+MODEL_ATTRIBUTION_ENABLED="${NW_MODEL_ATTRIBUTION_ENABLED:-0}"
+NEW_PR_LABEL="${NW_NEW_PR_LABEL:-draft}"
 BRANCH_PREFIX="${NW_BRANCH_PREFIX:-night-watch}"
 SCRIPT_START_TIME=$(date +%s)
 
@@ -372,21 +374,28 @@ build_executor_pr_title() {
 
 build_executor_pr_body() {
   local status_blurb=""
+  local attribution_blurb=""
 
   status_blurb="Status labels:
 - ${NW_EXECUTOR_PARTIAL_LABEL}: implementation is in progress and intentionally incomplete
 - ${NW_EXECUTOR_RESUMABLE_LABEL}: resume this PR before starting new work
 - ${NW_EXECUTOR_READY_REVIEW_LABEL}: implementation is complete and ready for review"
 
+  if [ "${MODEL_ATTRIBUTION_ENABLED}" = "1" ]; then
+    attribution_blurb="\n\nProvider/model: ${EFFECTIVE_PROVIDER_LABEL}"
+  fi
+
   if [ -n "${ISSUE_NUMBER}" ]; then
-    printf 'Closes #%s\n\nNight Watch manages this draft PR automatically so progress is preserved across retries and timeouts.\n\n%s\n' \
+    printf 'Closes #%s\n\nNight Watch manages this draft PR automatically so progress is preserved across retries and timeouts.\n\n%s%s\n' \
       "${ISSUE_NUMBER}" \
-      "${status_blurb}"
+      "${status_blurb}" \
+      "${attribution_blurb}"
   else
-    printf 'Source PRD: `%s/%s`\n\nNight Watch manages this draft PR automatically so progress is preserved across retries and timeouts.\n\n%s\n' \
+    printf 'Source PRD: `%s/%s`\n\nNight Watch manages this draft PR automatically so progress is preserved across retries and timeouts.\n\n%s%s\n' \
       "${PRD_DIR_REL}" \
       "${ELIGIBLE_PRD}" \
-      "${status_blurb}"
+      "${status_blurb}" \
+      "${attribution_blurb}"
   fi
 }
 
@@ -395,6 +404,16 @@ refresh_executor_pr_metadata() {
   EXECUTOR_PR_NUMBER=$(printf '%s' "${EXECUTOR_PR_JSON}" | jq -r '.number // empty' 2>/dev/null || true)
   EXECUTOR_PR_URL=$(printf '%s' "${EXECUTOR_PR_JSON}" | jq -r '.url // empty' 2>/dev/null || true)
   EXECUTOR_PR_DRAFT=$(printf '%s' "${EXECUTOR_PR_JSON}" | jq -r '.isDraft // false' 2>/dev/null || true)
+}
+
+ensure_executor_pr_labels() {
+  ensure_executor_status_labels
+  if [ -n "${NEW_PR_LABEL}" ]; then
+    ensure_github_label \
+      "${NEW_PR_LABEL}" \
+      "Default label applied to newly opened Night Watch draft PRs" \
+      "6f42c1"
+  fi
 }
 
 sync_executor_pr_status() {
@@ -406,7 +425,7 @@ sync_executor_pr_status() {
     return 1
   fi
 
-  ensure_executor_status_labels
+  ensure_executor_pr_labels
 
   if [ -n "${add_labels}" ]; then
     gh pr edit "${EXECUTOR_PR_NUMBER}" --add-label "${add_labels}" >> "${LOG_FILE}" 2>&1 || true
@@ -489,14 +508,19 @@ ensure_executor_pr() {
     log "WARN: Initial push for ${BRANCH_NAME} failed before PR creation"
   fi
 
-  ensure_executor_status_labels
+  ensure_executor_pr_labels
+  local create_args=(
+    --draft
+    --base "${DEFAULT_BRANCH}"
+    --head "${BRANCH_NAME}"
+    --title "${pr_title}"
+    --body "${pr_body}"
+  )
+  if [ -n "${NEW_PR_LABEL}" ]; then
+    create_args+=(--label "${NEW_PR_LABEL}")
+  fi
   if ! create_output=$(
-    gh pr create \
-      --draft \
-      --base "${DEFAULT_BRANCH}" \
-      --head "${BRANCH_NAME}" \
-      --title "${pr_title}" \
-      --body "${pr_body}" 2>> "${LOG_FILE}"
+    gh pr create "${create_args[@]}" 2>> "${LOG_FILE}"
   ); then
     log "FAIL: gh pr create failed for ${BRANCH_NAME}"
     return 1

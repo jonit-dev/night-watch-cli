@@ -148,6 +148,13 @@ export function buildEnvOverrideConfig(
     const v = parseBoolean(process.env.NW_EXECUTOR_ENABLED);
     if (v !== null) env.executorEnabled = v;
   }
+  if (process.env.NW_MODEL_ATTRIBUTION_ENABLED !== undefined) {
+    const v = parseBoolean(process.env.NW_MODEL_ATTRIBUTION_ENABLED);
+    if (v !== null) env.modelAttribution = v;
+  }
+  if (process.env.NW_NEW_PR_LABEL !== undefined) {
+    env.newPrLabel = process.env.NW_NEW_PR_LABEL.trim();
+  }
   if (process.env.NW_NOTIFICATIONS) {
     try {
       const parsed = JSON.parse(process.env.NW_NOTIFICATIONS);

@@ -24,10 +24,13 @@ describe('night-watch helpers', () => {
     const isolatedHelpersScript = path.join(tempDir, 'night-watch-helpers.sh');
     fs.copyFileSync(helpersScript, isolatedHelpersScript);
 
+    const emptyPathDir = path.join(tempDir, 'empty-path');
+    fs.mkdirSync(emptyPathDir);
+
     // Call resolve_provider_key with a non-existent project dir; the helper
     // falls back gracefully to an empty string when the CLI binary is missing.
     const result = runShell(
-      `source "${isolatedHelpersScript}"; resolve_provider_key /tmp/no-such-project executor`,
+      `PATH="${emptyPathDir}"; source "${isolatedHelpersScript}"; resolve_provider_key /tmp/no-such-project executor`,
       undefined,
       {
         ...process.env,
@@ -124,10 +127,14 @@ exit 0
       { mode: 0o755 },
     );
 
-    const result = runShell(`source "${helpersScript}"; find_executor_resume_pr "night-watch"`, tempDir, {
-      ...process.env,
-      PATH: `${fakeBinDir}:${process.env.PATH}`,
-    });
+    const result = runShell(
+      `source "${helpersScript}"; find_executor_resume_pr "night-watch"`,
+      tempDir,
+      {
+        ...process.env,
+        PATH: `${fakeBinDir}:${process.env.PATH}`,
+      },
+    );
 
     expect(result.status).toBe(0);
     expect(result.stdout.trim()).toBe('');

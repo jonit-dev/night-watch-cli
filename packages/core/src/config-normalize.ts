@@ -112,6 +112,11 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
   if (providerLabelVal) {
     normalized.providerLabel = providerLabelVal;
   }
+  normalized.modelAttribution = readBoolean(rawConfig.modelAttribution);
+  const newPrLabelVal = readString(rawConfig.newPrLabel);
+  if (newPrLabelVal !== undefined) {
+    normalized.newPrLabel = newPrLabelVal.trim();
+  }
 
   const rawProviderEnv = readObject(rawConfig.providerEnv);
   if (rawProviderEnv) {

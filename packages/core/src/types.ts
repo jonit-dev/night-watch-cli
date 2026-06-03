@@ -252,6 +252,18 @@ export interface INightWatchConfig {
   providerLabel?: string;
 
   /**
+   * When true, include provider/model attribution in PR-facing artifacts such as PR bodies
+   * and board comments. Defaults to false so new PRs are stealth/no-attribution by default.
+   */
+  modelAttribution: boolean;
+
+  /**
+   * GitHub label applied to newly created executor PRs. Empty string disables the label.
+   * Defaults to "draft".
+   */
+  newPrLabel: string;
+
+  /**
    * When true, automatically fall back to native Claude (OAuth / direct Anthropic API)
    * after the first rate-limit (429) on a proxy provider (e.g. GLM-5 via api.z.ai).
    * A Telegram warning is sent immediately when the fallback is triggered.

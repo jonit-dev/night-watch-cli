@@ -20,6 +20,30 @@ describe('run command', () => {
       expect(envVars.NW_PROVIDER_CMD).toBe('claude');
     });
 
+    it('should default to stealth PR attribution and draft labels for newly opened PRs', () => {
+      const config: INightWatchConfig = {
+        ...getDefaultConfig(),
+      };
+
+      const envVars = buildEnvVars(config, { dryRun: false });
+
+      expect(envVars.NW_MODEL_ATTRIBUTION_ENABLED).toBe('0');
+      expect(envVars.NW_NEW_PR_LABEL).toBe('draft');
+    });
+
+    it('should allow config to enable model attribution and override the new PR label', () => {
+      const config: INightWatchConfig = {
+        ...getDefaultConfig(),
+        modelAttribution: true,
+        newPrLabel: 'needs-triage',
+      };
+
+      const envVars = buildEnvVars(config, { dryRun: false });
+
+      expect(envVars.NW_MODEL_ATTRIBUTION_ENABLED).toBe('1');
+      expect(envVars.NW_NEW_PR_LABEL).toBe('needs-triage');
+    });
+
     it('should use job-specific provider for executor when set', () => {
       const config: INightWatchConfig = {
         ...getDefaultConfig(),

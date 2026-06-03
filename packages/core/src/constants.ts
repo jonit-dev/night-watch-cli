@@ -80,6 +80,8 @@ export const DEFAULT_PROVIDER: Provider = 'claude';
 export const DEFAULT_EXECUTOR_ENABLED = true;
 export const DEFAULT_REVIEWER_ENABLED = true;
 export const DEFAULT_PROVIDER_ENV: Record<string, string> = {};
+export const DEFAULT_MODEL_ATTRIBUTION = false;
+export const DEFAULT_NEW_PR_LABEL = 'draft';
 
 // Rate-limit fallback
 export const DEFAULT_FALLBACK_ON_RATE_LIMIT = true;

@@ -45,7 +45,7 @@ describe('getBranchTipTimestamp', () => {
   });
 
   it('should return timestamp for a local branch', () => {
-    git(['init']);
+    git(['init', '-b', 'master']);
     git(['config', 'user.email', 'test@test.com']);
     git(['config', 'user.name', 'Test']);
     makeCommit('Initial commit');

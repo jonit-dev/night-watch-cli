@@ -279,6 +279,14 @@ function validateConfigChanges(
     return 'autoMerge must be a boolean';
   }
 
+  if (changes.modelAttribution !== undefined && typeof changes.modelAttribution !== 'boolean') {
+    return 'modelAttribution must be a boolean';
+  }
+
+  if (changes.newPrLabel !== undefined && typeof changes.newPrLabel !== 'string') {
+    return 'newPrLabel must be a string';
+  }
+
   if (changes.autoMergeMethod !== undefined) {
     const validMethods = ['squash', 'merge', 'rebase'];
     if (!validMethods.includes(changes.autoMergeMethod)) {
