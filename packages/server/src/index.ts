@@ -51,6 +51,7 @@ import {
   createStatusRoutes,
 } from './routes/status.routes.js';
 import { createGlobalQueueRoutes, createQueueRoutes } from './routes/queue.routes.js';
+import { createTelemetryRoutes } from './routes/telemetry.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -146,6 +147,7 @@ export function createApp(projectDir: string): Express {
   app.use('/api/queue', createQueueRoutes({ getConfig: () => config }));
   app.use('/api/feedback', createFeedbackRoutes({ projectDir }));
   app.use('/api/global-notifications', createGlobalNotificationsRoutes());
+  app.use('/api/telemetry', createTelemetryRoutes());
 
   app.get('/api/prs', async (_req: Request, res: Response): Promise<void> => {
     try {
@@ -254,6 +256,7 @@ export function createGlobalApp(): Express {
   // Global queue routes (not project-scoped — reads the shared state DB)
   app.use('/api/queue', createGlobalQueueRoutes());
   app.use('/api/global-notifications', createGlobalNotificationsRoutes());
+  app.use('/api/telemetry', createTelemetryRoutes());
 
   app.use('/api/projects/:projectId', resolveProject, createProjectRouter());
 

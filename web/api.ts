@@ -42,6 +42,7 @@ import type {
     QueueMode,
 } from '@shared/types';
 import { DependencyList, useEffect, useRef, useState } from 'react';
+import { trackWebApiOutcome, trackWebTelemetry, WebTelemetryProperties } from './telemetry';
 import { getWebJobDef } from './utils/jobs';
 
 // Re-export shared types so consumers can import from either place
@@ -104,6 +105,27 @@ function apiPath(basePath: string): string {
   return basePath;
 }
 
+function nowMs(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
+async function withWebApiTelemetry<T>(
+  resource: NonNullable<WebTelemetryProperties['resource']>,
+  action: NonNullable<WebTelemetryProperties['action']>,
+  operation: () => Promise<T>,
+  extra: WebTelemetryProperties = {},
+): Promise<T> {
+  const startedAt = nowMs();
+  try {
+    const result = await operation();
+    trackWebApiOutcome(resource, action, startedAt, true, extra);
+    return result;
+  } catch (error) {
+    trackWebApiOutcome(resource, action, startedAt, false, extra);
+    throw error;
+  }
+}
+
 // ==================== Project List (global mode only) ====================
 
 export interface ProjectInfo {
@@ -121,7 +143,17 @@ export function fetchServerMode(): Promise<ServerModeInfo> {
 }
 
 export function fetchProjects(): Promise<ProjectInfo[]> {
-  return apiFetch<ProjectInfo[]>('/api/projects');
+  return withWebApiTelemetry('project', 'view', async () => {
+    const projects = await apiFetch<ProjectInfo[]>('/api/projects');
+    trackWebTelemetry('web_ui_action', {
+      uiArea: 'project_selector',
+      action: 'view',
+      resource: 'project',
+      projectCount: projects.length,
+      itemCount: projects.length,
+    });
+    return projects;
+  });
 }
 
 export interface IRemoveProjectResult {
@@ -387,10 +419,16 @@ export function updateFeedbackAugmentation(
   id: number,
   update: IAugmentationUpdate,
 ): Promise<IAugmentationUpdateResult> {
-  return apiFetch<IAugmentationUpdateResult>(apiPath(`/api/feedback/augmentations/${id}`), {
-    method: 'PATCH',
-    body: JSON.stringify(update),
-  });
+  return withWebApiTelemetry(
+    'augmentation',
+    update.action === 'expire' ? 'toggle' : 'toggle',
+    () =>
+      apiFetch<IAugmentationUpdateResult>(apiPath(`/api/feedback/augmentations/${id}`), {
+        method: 'PATCH',
+        body: JSON.stringify(update),
+      }),
+    { uiArea: 'feedback', statusCategory: update.action === 'expire' ? 'disabled' : 'unknown' },
+  );
 }
 
 export function fetchPrs(): Promise<IPrInfo[]> {
@@ -399,7 +437,22 @@ export function fetchPrs(): Promise<IPrInfo[]> {
 
 export function fetchLogs(name: string, lines?: number): Promise<LogResponse> {
   const query = lines !== undefined ? `?lines=${encodeURIComponent(lines)}` : '';
-  return apiFetch<LogResponse>(apiPath(`/api/logs/${encodeURIComponent(name)}${query}`));
+  return withWebApiTelemetry(
+    'logs',
+    'view',
+    async () => {
+      const response = await apiFetch<LogResponse>(apiPath(`/api/logs/${encodeURIComponent(name)}${query}`));
+      trackWebTelemetry('web_ui_action', {
+        uiArea: 'logs',
+        action: 'view',
+        resource: 'logs',
+        jobType: name,
+        itemCount: response.lines.length,
+      });
+      return response;
+    },
+    { uiArea: 'logs', jobType: name },
+  );
 }
 
 export function fetchConfig(): Promise<INightWatchConfig> {
@@ -434,10 +487,16 @@ export type ConfigUpdatePayload = Partial<Omit<INightWatchConfig, 'jobProviders'
 };
 
 export function updateConfig(changes: ConfigUpdatePayload): Promise<INightWatchConfig> {
-  return apiFetch<INightWatchConfig>(apiPath('/api/config'), {
-    method: 'PUT',
-    body: JSON.stringify(changes),
-  });
+  return withWebApiTelemetry(
+    'config',
+    'save',
+    () =>
+      apiFetch<INightWatchConfig>(apiPath('/api/config'), {
+        method: 'PUT',
+        body: JSON.stringify(changes),
+      }),
+    { uiArea: 'settings' },
+  );
 }
 
 export function fetchDoctor(): Promise<DoctorCheck[]> {
@@ -455,9 +514,15 @@ export function triggerRun(): Promise<ActionResult> {
 }
 
 export function triggerReview(): Promise<ActionResult> {
-  return apiFetch<ActionResult>(apiPath('/api/actions/review'), {
-    method: 'POST',
-  });
+  return withWebApiTelemetry(
+    'job',
+    'trigger',
+    () =>
+      apiFetch<ActionResult>(apiPath('/api/actions/review'), {
+        method: 'POST',
+      }),
+    { uiArea: 'jobs', jobType: 'reviewer' },
+  );
 }
 
 export function triggerQa(): Promise<ActionResult> {
@@ -505,19 +570,36 @@ export function triggerJob(jobId: string): Promise<ActionResult> {
   if (!jobDef) {
     return Promise.reject(new Error(`Unknown job ID: ${jobId}`));
   }
-  return apiFetch<ActionResult>(apiPath(jobDef.triggerEndpoint), { method: 'POST' });
+  return withWebApiTelemetry(
+    'job',
+    'trigger',
+    () => apiFetch<ActionResult>(apiPath(jobDef.triggerEndpoint), { method: 'POST' }),
+    { uiArea: 'jobs', jobType: jobId },
+  );
 }
 
 export function triggerInstallCron(): Promise<ActionResult> {
-  return apiFetch<ActionResult>(apiPath('/api/actions/install-cron'), {
-    method: 'POST',
-  });
+  return withWebApiTelemetry(
+    'cron',
+    'resume',
+    () =>
+      apiFetch<ActionResult>(apiPath('/api/actions/install-cron'), {
+        method: 'POST',
+      }),
+    { uiArea: 'schedules' },
+  );
 }
 
 export function triggerUninstallCron(): Promise<ActionResult> {
-  return apiFetch<ActionResult>(apiPath('/api/actions/uninstall-cron'), {
-    method: 'POST',
-  });
+  return withWebApiTelemetry(
+    'cron',
+    'pause',
+    () =>
+      apiFetch<ActionResult>(apiPath('/api/actions/uninstall-cron'), {
+        method: 'POST',
+      }),
+    { uiArea: 'schedules' },
+  );
 }
 
 export interface CancelResultItem {
@@ -531,10 +613,16 @@ export interface CancelActionResult {
 }
 
 export function triggerCancel(type: 'run' | 'review' | 'all' = 'all'): Promise<CancelActionResult> {
-  return apiFetch<CancelActionResult>(apiPath('/api/actions/cancel'), {
-    method: 'POST',
-    body: JSON.stringify({ type }),
-  });
+  return withWebApiTelemetry(
+    'job',
+    'cancel',
+    () =>
+      apiFetch<CancelActionResult>(apiPath('/api/actions/cancel'), {
+        method: 'POST',
+        body: JSON.stringify({ type }),
+      }),
+    { uiArea: 'jobs', jobType: type },
+  );
 }
 
 // ==================== Board ====================
@@ -562,7 +650,19 @@ export interface IBoardStatus {
 }
 
 export function fetchBoardStatus(): Promise<IBoardStatus> {
-  return apiFetch<IBoardStatus>(apiPath('/api/board/status'));
+  return withWebApiTelemetry('board_issue', 'view', async () => {
+    const board = await apiFetch<IBoardStatus>(apiPath('/api/board/status'));
+    const itemCount = BOARD_COLUMNS.reduce((sum, column) => sum + (board.columns[column]?.length ?? 0), 0);
+    trackWebTelemetry('web_ui_action', {
+      uiArea: 'board',
+      action: 'view',
+      resource: 'board_issue',
+      itemCount,
+      columnCount: BOARD_COLUMNS.length,
+      enabled: board.enabled,
+    });
+    return board;
+  }, { uiArea: 'board' });
 }
 
 export function createBoardIssue(input: {
@@ -571,35 +671,54 @@ export function createBoardIssue(input: {
   column?: BoardColumnName;
   labels?: string[];
 }): Promise<IBoardIssue> {
-  return apiFetch<IBoardIssue>(apiPath('/api/board/issues'), {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
+  return withWebApiTelemetry(
+    'board_issue',
+    'create',
+    () =>
+      apiFetch<IBoardIssue>(apiPath('/api/board/issues'), {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }),
+    { uiArea: 'board' },
+  );
 }
 
 export function moveBoardIssue(number: number, column: BoardColumnName): Promise<{ moved: boolean }> {
-  return apiFetch<{ moved: boolean }>(apiPath(`/api/board/issues/${number}/move`), {
-    method: 'PATCH',
-    body: JSON.stringify({ column }),
-  });
+  return withWebApiTelemetry(
+    'board_issue',
+    'move',
+    () =>
+      apiFetch<{ moved: boolean }>(apiPath(`/api/board/issues/${number}/move`), {
+        method: 'PATCH',
+        body: JSON.stringify({ column }),
+      }),
+    { uiArea: 'board' },
+  );
 }
 
 export async function closeBoardIssue(number: number): Promise<void> {
-  const url = `${API_BASE}${apiPath(`/api/board/issues/${number}`)}`;
-  const response = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    method: 'DELETE',
-  });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
-  }
+  return withWebApiTelemetry('board_issue', 'close', async () => {
+    const url = `${API_BASE}${apiPath(`/api/board/issues/${number}`)}`;
+    const response = await fetch(url, {
+      headers: { 'Content-Type': 'application/json' },
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || `HTTP ${response.status}: ${response.statusText}`);
+    }
+  }, { uiArea: 'board' });
 }
 
 // ==================== Actions ====================
 
 export function triggerClearLock(): Promise<{ cleared: boolean }> {
-  return apiFetch<{ cleared: boolean }>(apiPath('/api/actions/clear-lock'), { method: 'POST' });
+  return withWebApiTelemetry(
+    'lock',
+    'clear',
+    () => apiFetch<{ cleared: boolean }>(apiPath('/api/actions/clear-lock'), { method: 'POST' }),
+    { uiArea: 'dashboard' },
+  );
 }
 
 // ==================== SSE Stream ====================
@@ -663,7 +782,19 @@ export interface IQueueStatus {
 }
 
 export function fetchQueueStatus(): Promise<IQueueStatus> {
-  return apiFetch<IQueueStatus>('/api/queue/status');
+  return withWebApiTelemetry('queue', 'view', async () => {
+    const status = await apiFetch<IQueueStatus>('/api/queue/status');
+    trackWebTelemetry('web_ui_action', {
+      uiArea: 'queue',
+      action: 'view',
+      resource: 'queue',
+      pendingCount: status.pending.total,
+      runningCount: status.running ? 1 : 0,
+      itemCount: status.items.length,
+      enabled: status.enabled,
+    });
+    return status;
+  }, { uiArea: 'queue' });
 }
 
 // ==================== Queue Analytics ====================
@@ -695,10 +826,16 @@ export function fetchQueueAnalytics(windowHours?: number): Promise<IQueueAnalyti
 }
 
 export function triggerClearQueue(force?: boolean): Promise<{ cleared: number }> {
-  return apiFetch<{ cleared: number }>('/api/queue/clear', {
-    method: 'POST',
-    body: JSON.stringify({ force: force ?? false }),
-  });
+  return withWebApiTelemetry(
+    'queue',
+    'clear',
+    () =>
+      apiFetch<{ cleared: number }>('/api/queue/clear', {
+        method: 'POST',
+        body: JSON.stringify({ force: force ?? false }),
+      }),
+    { uiArea: 'queue' },
+  );
 }
 
 // ==================== Global Notifications ====================
@@ -714,10 +851,16 @@ export function fetchGlobalNotifications(): Promise<IGlobalNotificationsConfig> 
 export function updateGlobalNotifications(
   config: IGlobalNotificationsConfig,
 ): Promise<IGlobalNotificationsConfig> {
-  return apiFetch<IGlobalNotificationsConfig>('/api/global-notifications', {
-    method: 'PUT',
-    body: JSON.stringify(config),
-  });
+  return withWebApiTelemetry(
+    'settings',
+    'save',
+    () =>
+      apiFetch<IGlobalNotificationsConfig>('/api/global-notifications', {
+        method: 'PUT',
+        body: JSON.stringify(config),
+      }),
+    { uiArea: 'settings' },
+  );
 }
 
 // ==================== Roadmap Scanner ====================
@@ -734,14 +877,35 @@ export function fetchRoadmap(): Promise<IRoadmapStatus> {
 }
 
 export function triggerRoadmapScan(): Promise<ScanResult> {
-  return apiFetch<ScanResult>(apiPath('/api/roadmap/scan'), { method: 'POST' });
+  return withWebApiTelemetry(
+    'roadmap',
+    'refresh',
+    async () => {
+      const result = await apiFetch<ScanResult>(apiPath('/api/roadmap/scan'), { method: 'POST' });
+      trackWebTelemetry('web_ui_action', {
+        uiArea: 'roadmap',
+        action: 'refresh',
+        resource: 'roadmap',
+        itemCount: result.created.length + result.skipped.length + result.errors.length,
+        statusCategory: result.errors.length > 0 ? 'warning' : 'success',
+      });
+      return result;
+    },
+    { uiArea: 'roadmap' },
+  );
 }
 
 export function toggleRoadmapScanner(enabled: boolean): Promise<INightWatchConfig> {
-  return apiFetch<INightWatchConfig>(apiPath('/api/roadmap/toggle'), {
-    method: 'PUT',
-    body: JSON.stringify({ enabled }),
-  });
+  return withWebApiTelemetry(
+    'roadmap',
+    'toggle',
+    () =>
+      apiFetch<INightWatchConfig>(apiPath('/api/roadmap/toggle'), {
+        method: 'PUT',
+        body: JSON.stringify({ enabled }),
+      }),
+    { uiArea: 'roadmap', enabled },
+  );
 }
 
 // ==================== React Hook ====================

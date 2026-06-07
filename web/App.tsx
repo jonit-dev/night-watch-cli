@@ -14,6 +14,7 @@ import PRs from './pages/PRs';
 import Roadmap from './pages/Roadmap';
 import Scheduling from './pages/Scheduling';
 import Settings from './pages/Settings';
+import { WebTelemetryRouteTracker } from './telemetry';
 
 const App: React.FC = () => {
   useGlobalMode();
@@ -21,6 +22,7 @@ const App: React.FC = () => {
 
   return (
     <Router>
+      <WebTelemetryRouteTracker />
       <div className="flex h-screen bg-[#030712] text-slate-300 overflow-hidden relative">
         {/* Subtle background glow effect */}
         <div className="absolute top-0 left-0 w-full h-96 bg-indigo-900/10 rounded-full blur-[120px] -translate-y-1/2 pointer-events-none z-0" />

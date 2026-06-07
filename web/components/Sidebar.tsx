@@ -17,6 +17,7 @@ import React, { useState, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useApi, fetchPrs } from '../api';
 import { useStore } from '../store/useStore';
+import { trackWebTelemetry } from '../telemetry';
 
 const Sidebar: React.FC = () => {
   const [collapsed, setCollapsed] = useState(false);
@@ -25,6 +26,7 @@ const Sidebar: React.FC = () => {
   // Fetch PR count for the badge
   const { data: prs } = useApi(fetchPrs, [selectedProjectId], { enabled: !globalModeLoading });
   const openPrCount = prs?.length ?? 0;
+  const validProjects = useMemo(() => projects.filter((p) => p.valid), [projects]);
 
   const navItems = useMemo(() => [
     { icon: Home, label: 'Dashboard', path: '/', section: 'Overview' },
@@ -57,10 +59,22 @@ const Sidebar: React.FC = () => {
                 <Briefcase className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-indigo-400 pointer-events-none" />
                 <select
                   value={selectedProjectId || ''}
-                  onChange={(e) => selectProject(e.target.value)}
+                  onChange={(e) => {
+                    const nextProjectId = e.target.value;
+                    const selectedProjectIndex = validProjects.findIndex((p) => p.name === nextProjectId);
+                    trackWebTelemetry('web_ui_action', {
+                      uiArea: 'project_selector',
+                      action: 'select',
+                      resource: 'project',
+                      selectedProjectIndex: selectedProjectIndex >= 0 ? selectedProjectIndex : undefined,
+                      projectCount: validProjects.length,
+                      globalMode: true,
+                    });
+                    selectProject(nextProjectId);
+                  }}
                   className="w-full bg-[#111827] border border-white/10 text-slate-200 rounded-lg py-3 pl-10 pr-8 text-sm font-medium shadow-sm appearance-none cursor-pointer hover:border-white/20 transition-colors focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20"
                 >
-                  {projects.filter((p) => p.valid).map((p) => (
+                  {validProjects.map((p) => (
                     <option key={p.name} value={p.name}>{p.name}</option>
                   ))}
                 </select>

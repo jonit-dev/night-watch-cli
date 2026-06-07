@@ -15,6 +15,7 @@ import Button from '../ui/Button.js';
 import Card from '../ui/Card.js';
 import LoadingState from '../ui/LoadingState.js';
 import PatternList from './PatternList.js';
+import { trackWebTelemetry } from '../../telemetry.js';
 
 function formatPercent(value: number | null): string {
   return value === null ? '—' : `${Math.round(value * 100)}%`;
@@ -93,6 +94,12 @@ const PerformanceDashboard: React.FC<IPerformanceDashboardProps> = ({ variant = 
   });
 
   const handleRefresh = () => {
+    trackWebTelemetry('web_ui_action', {
+      uiArea: 'feedback',
+      action: 'refresh',
+      resource: 'feedback',
+      itemCount: summary?.windows.last30Days.totalCount ?? 0,
+    });
     refetchSummary();
     if (!isCompact) {
       refetchPatterns();
@@ -103,6 +110,13 @@ const PerformanceDashboard: React.FC<IPerformanceDashboardProps> = ({ variant = 
     setUpdatingAugmentationId(id);
     try {
       await updateFeedbackAugmentation(id, { action });
+      trackWebTelemetry('web_ui_action', {
+        uiArea: 'feedback',
+        action: 'toggle',
+        resource: 'augmentation',
+        result: 'success',
+        success: true,
+      });
       addToast({
         title: action === 'expire' ? 'Augmentation Expired' : 'Augmentation Disabled',
         message: 'Prompt augmentation state was updated.',
@@ -110,6 +124,14 @@ const PerformanceDashboard: React.FC<IPerformanceDashboardProps> = ({ variant = 
       });
       handleRefresh();
     } catch (err) {
+      trackWebTelemetry('web_ui_action', {
+        uiArea: 'feedback',
+        action: 'toggle',
+        resource: 'augmentation',
+        result: 'failure',
+        success: false,
+        failure: true,
+      });
       addToast({
         title: 'Update Failed',
         message: err instanceof Error ? err.message : 'Failed to update augmentation',

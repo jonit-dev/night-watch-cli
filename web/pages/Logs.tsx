@@ -5,6 +5,7 @@ import LoadingState from '../components/ui/LoadingState';
 import { useApi, fetchLogs } from '../api';
 import { useStore } from '../store/useStore';
 import { JOB_DEFINITIONS } from '../utils/jobs.js';
+import { trackWebTelemetry } from '../telemetry.js';
 
 type LogName = string;
 
@@ -45,8 +46,37 @@ const Logs: React.FC = () => {
   const filteredLogs = logs.filter(log => log.toLowerCase().includes(filter.toLowerCase()));
 
   const handleLogChange = (logName: LogName) => {
+    trackWebTelemetry('web_ui_action', {
+      uiArea: 'logs',
+      action: 'select',
+      resource: 'logs',
+      jobType: logName,
+    });
     setActiveLog(logName);
     setFilter('');
+  };
+
+  const handleRefreshLogs = () => {
+    trackWebTelemetry('web_ui_action', {
+      uiArea: 'logs',
+      action: 'refresh',
+      resource: 'logs',
+      jobType: activeLog,
+      itemCount: logs.length,
+    });
+    refetchLogs();
+  };
+
+  const handleToggleAutoScroll = () => {
+    const next = !autoScroll;
+    trackWebTelemetry('web_ui_action', {
+      uiArea: 'logs',
+      action: next ? 'follow' : 'unfollow',
+      resource: 'logs',
+      jobType: activeLog,
+      enabled: next,
+    });
+    setAutoScroll(next);
   };
 
   const getProcessStatus = (logName: LogName) => {
@@ -61,7 +91,7 @@ const Logs: React.FC = () => {
         <AlertCircle className="h-12 w-12 text-red-400" />
         <div className="text-slate-300">Failed to load logs</div>
         <div className="text-sm text-slate-500">{logError.message}</div>
-        <Button onClick={() => refetchLogs()}>Retry</Button>
+        <Button onClick={handleRefreshLogs}>Retry</Button>
       </div>
     );
   }
@@ -102,11 +132,11 @@ const Logs: React.FC = () => {
             </div>
          </div>
          <div className="flex items-center space-x-2">
-            <Button size="sm" variant="ghost" onClick={() => refetchLogs()}>
+            <Button size="sm" variant="ghost" onClick={handleRefreshLogs}>
                <ArrowDownCircle className="h-4 w-4 mr-2" />
                Refresh
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setAutoScroll(!autoScroll)}>
+            <Button size="sm" variant="ghost" onClick={handleToggleAutoScroll}>
                {autoScroll ? <Pause className="h-4 w-4 mr-2" /> : <Play className="h-4 w-4 mr-2" />}
                {autoScroll ? 'Pause' : 'Resume'}
             </Button>
@@ -149,7 +179,7 @@ const Logs: React.FC = () => {
 
          {/* Auto-scroll indicator */}
          {!autoScroll && (
-            <div className="absolute bottom-4 right-4 bg-indigo-600 text-white px-3 py-1.5 rounded-full shadow-lg shadow-indigo-900/40 text-xs font-medium flex items-center cursor-pointer hover:bg-indigo-500 transition-colors" onClick={() => setAutoScroll(true)}>
+            <div className="absolute bottom-4 right-4 bg-indigo-600 text-white px-3 py-1.5 rounded-full shadow-lg shadow-indigo-900/40 text-xs font-medium flex items-center cursor-pointer hover:bg-indigo-500 transition-colors" onClick={handleToggleAutoScroll}>
                <ArrowDownCircle className="h-4 w-4 mr-2" />
                Scroll to bottom
             </div>

@@ -12,6 +12,10 @@ export const TELEMETRY_EVENT_NAMES = [
   'doctor_failed',
   'telemetry_enabled',
   'telemetry_disabled',
+  'web_app_opened',
+  'web_route_viewed',
+  'web_ui_action',
+  'web_api_action',
 ] as const;
 
 export type TelemetryEventName = (typeof TELEMETRY_EVENT_NAMES)[number];
@@ -36,13 +40,27 @@ export interface ITelemetryEventProperties {
   provider?: string;
   success?: boolean;
   failure?: boolean;
+  enabled?: boolean;
+  globalMode?: boolean;
   durationMs?: number;
   exitCode?: number;
   platform?: string;
   nodeMajorVersion?: number;
   boardMode?: boolean;
   registeredProjectCount?: number;
+  projectCount?: number;
+  selectedProjectIndex?: number;
+  itemCount?: number;
+  columnCount?: number;
+  pendingCount?: number;
+  runningCount?: number;
   errorCategory?: TelemetryErrorCategory;
+  routeName?: string;
+  uiArea?: string;
+  action?: string;
+  resource?: string;
+  result?: string;
+  statusCategory?: string;
 }
 
 export interface ITelemetryEventInput {

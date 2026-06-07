@@ -7,15 +7,107 @@ import {
 } from './schema.js';
 
 const STRING_PROPERTIES = ['cliVersion', 'command', 'jobType', 'provider', 'platform'] as const;
-const BOOLEAN_PROPERTIES = ['success', 'failure', 'boardMode'] as const;
+const WEB_STRING_PROPERTIES = [
+  'routeName',
+  'uiArea',
+  'action',
+  'resource',
+  'result',
+  'statusCategory',
+] as const;
+const BOOLEAN_PROPERTIES = ['success', 'failure', 'boardMode', 'enabled', 'globalMode'] as const;
 const INTEGER_PROPERTIES = [
   'durationMs',
   'exitCode',
   'nodeMajorVersion',
   'registeredProjectCount',
+  'projectCount',
+  'selectedProjectIndex',
+  'itemCount',
+  'columnCount',
+  'pendingCount',
+  'runningCount',
 ] as const;
 
 const SAFE_STRING_PATTERN = /^[a-zA-Z0-9_.:-]{1,80}$/;
+const WEB_ALLOWED_VALUES = {
+  routeName: [
+    'dashboard',
+    'analytics',
+    'prs',
+    'board',
+    'scheduling',
+    'logs',
+    'roadmap',
+    'settings',
+    'unknown',
+  ],
+  uiArea: [
+    'app',
+    'navigation',
+    'dashboard',
+    'project_selector',
+    'jobs',
+    'schedules',
+    'settings',
+    'feedback',
+    'logs',
+    'queue',
+    'board',
+    'roadmap',
+    'prs',
+  ],
+  action: [
+    'open',
+    'view',
+    'refresh',
+    'select',
+    'trigger',
+    'pause',
+    'resume',
+    'cancel',
+    'clear',
+    'save',
+    'toggle',
+    'create',
+    'move',
+    'close',
+    'filter',
+    'follow',
+    'unfollow',
+    'retry',
+    'remove',
+  ],
+  resource: [
+    'app',
+    'route',
+    'project',
+    'dashboard',
+    'job',
+    'schedule',
+    'settings',
+    'feedback',
+    'augmentation',
+    'logs',
+    'queue',
+    'board_issue',
+    'roadmap',
+    'prs',
+    'config',
+    'cron',
+    'lock',
+  ],
+  result: ['success', 'failure', 'accepted', 'rejected', 'partial', 'unknown'],
+  statusCategory: [
+    'success',
+    'failure',
+    'warning',
+    'empty',
+    'disabled',
+    'not_configured',
+    'unknown',
+  ],
+} as const;
 
 export interface ISanitizedTelemetryEvent {
   eventName: TelemetryEventName;
@@ -42,6 +134,19 @@ function sanitizeString(value: unknown): string | undefined {
     return undefined;
   }
   return trimmed;
+}
+
+function sanitizeAllowedWebString<K extends keyof typeof WEB_ALLOWED_VALUES>(
+  key: K,
+  value: unknown,
+): (typeof WEB_ALLOWED_VALUES)[K][number] | undefined {
+  const sanitized = sanitizeString(value);
+  if (!sanitized) {
+    return undefined;
+  }
+  return (WEB_ALLOWED_VALUES[key] as readonly string[]).includes(sanitized)
+    ? (sanitized as (typeof WEB_ALLOWED_VALUES)[K][number])
+    : undefined;
 }
 
 function sanitizeBoolean(value: unknown): boolean | undefined {
@@ -90,6 +195,13 @@ export function sanitizeTelemetryEvent(
 
   for (const key of STRING_PROPERTIES) {
     const value = sanitizeString(properties[key]);
+    if (value !== undefined) {
+      sanitized[key] = value;
+    }
+  }
+
+  for (const key of WEB_STRING_PROPERTIES) {
+    const value = sanitizeAllowedWebString(key, properties[key]);
     if (value !== undefined) {
       sanitized[key] = value;
     }
