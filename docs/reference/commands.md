@@ -2,6 +2,8 @@
 
 > Related: [CLI Package](cli-package.md) | [Configuration](configuration.md) | [DEV-ONBOARDING](DEV-ONBOARDING.md) | [Local Testing](local-testing.md)
 
+Privacy and telemetry details: [Privacy](../privacy.md)
+
 ## `night-watch init`
 
 Initialize Night Watch in your project. Creates the working directories, instruction files, and config needed for first run.
@@ -189,6 +191,24 @@ night-watch status --json    # Output as JSON
 - PR status (open PRs on night-watch/feat branches)
 - Crontab status (installed or not)
 - Log file status (size, last lines)
+
+---
+
+## `night-watch telemetry`
+
+Inspect, disable, or re-enable anonymous product telemetry.
+
+```bash
+night-watch telemetry status
+night-watch telemetry disable
+night-watch telemetry enable
+```
+
+Telemetry is enabled by default, announced once on first run, and can be disabled with `night-watch telemetry disable`, `NW_TELEMETRY_DISABLED=1`, or `DO_NOT_TRACK=1`.
+
+`night-watch telemetry status` shows the effective state, reason, local config path, shortened install ID, privacy docs path, and opt-out commands.
+
+See [Privacy](../privacy.md) for exact event names, collected properties, and the never-collected list.
 
 ---
 

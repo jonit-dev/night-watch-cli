@@ -201,6 +201,7 @@ Full documentation is available at **[nightwatchcli.com](https://nightwatchcli.c
 | [5-Minute Walkthrough](docs/walkthrough.md) | From zero to your first AI-generated PR |
 | [Troubleshooting](docs/troubleshooting.md)  | Common errors and how to fix them       |
 | [Commands Reference](docs/commands.md)      | All CLI commands and their options      |
+| [Privacy](docs/privacy.md)                  | Anonymous telemetry and opt-out details |
 
 ### How-To Guides
 
@@ -229,6 +230,10 @@ Full documentation is available at **[nightwatchcli.com](https://nightwatchcli.c
 | [Dev Onboarding](docs/DEV-ONBOARDING.md) | Getting started as a contributor              |
 | [Local Testing](docs/local-testing.md)   | Test CLI locally without publishing           |
 | [Contributing](docs/contributing.md)     | Development workflow, conventions, PR process |
+
+### Telemetry
+
+Night Watch collects anonymous product telemetry by default to understand usage and improve the CLI. Disable it anytime with `night-watch telemetry disable`, `NW_TELEMETRY_DISABLED=1`, or `DO_NOT_TRACK=1`. See [Privacy](docs/privacy.md) for the exact collected and never-collected lists.
 
 ### Analysis
 

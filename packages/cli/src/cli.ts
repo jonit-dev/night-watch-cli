@@ -36,7 +36,9 @@ import { summaryCommand } from './commands/summary.js';
 import { resolveCommand } from './commands/resolve.js';
 import { mergeCommand } from './commands/merge.js';
 import { managerCommand } from './commands/manager.js';
+import { telemetryCommand } from './commands/telemetry.js';
 import { agentCommand, configCommand, healthCommand, jobCommand } from './commands/agent.js';
+import { bootstrapTelemetry } from './telemetry-bootstrap.js';
 
 // Find the package root (works from both src/ in dev and dist/src/ in production)
 const __filename = fileURLToPath(import.meta.url);
@@ -58,6 +60,8 @@ program
   .name('night-watch')
   .description('Autonomous PRD execution using Claude CLI + cron')
   .version(packageJson.version);
+
+bootstrapTelemetry(packageJson.version);
 
 // Register init command
 initCommand(program);
@@ -145,6 +149,9 @@ mergeCommand(program);
 
 // Register manager command (roadmap/project health manager)
 managerCommand(program);
+
+// Register telemetry command
+telemetryCommand(program);
 
 // Register machine-readable agent manageability commands
 agentCommand(program);

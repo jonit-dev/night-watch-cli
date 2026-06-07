@@ -33,6 +33,14 @@ import {
   maybeApplyCronSchedulingDelay,
 } from './shared/env-builder.js';
 import { getFeedbackAnalysisOptions, isFeedbackEnabled } from './shared/feedback.js';
+import {
+  buildTelemetryBaseProperties,
+  fireTelemetryEvent,
+  trackCommandCompleted,
+  trackCommandStarted,
+  trackJobCompletedOrFailed,
+  trackJobStarted,
+} from './shared/telemetry.js';
 import type { IPrDetails, JobType } from '@night-watch/core';
 import { execFileSync } from 'child_process';
 import * as path from 'path';
@@ -367,9 +375,12 @@ export function reviewCommand(program: Command): void {
 
       // Apply CLI flag overrides
       config = applyCliOverrides(config, options);
+      const commandStartedAt = Date.now();
+      await trackCommandStarted('review', config);
 
       if (!config.reviewerEnabled && !options.dryRun) {
         info('Reviewer is disabled in config; skipping review.');
+        await trackCommandCompleted('review', commandStartedAt, 0, config);
         process.exit(0);
       }
 
@@ -437,6 +448,7 @@ export function reviewCommand(program: Command): void {
         dim(`  bash ${scriptPath} ${projectDir}`);
         console.log();
 
+        await trackCommandCompleted('review', commandStartedAt, 0, config);
         process.exit(0);
       }
 
@@ -466,6 +478,8 @@ export function reviewCommand(program: Command): void {
 
       try {
         const startedAt = Date.now();
+        const provider = envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'reviewer');
+        await trackJobStarted('reviewer', provider, config);
         await maybeApplyCronSchedulingDelay(config, 'reviewer', projectDir);
         const { exitCode, stdout, stderr } = await executeScriptWithOutput(
           scriptPath,
@@ -474,6 +488,14 @@ export function reviewCommand(program: Command): void {
         );
         const finishedAt = Date.now();
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
+        await trackJobCompletedOrFailed(
+          'reviewer',
+          provider,
+          startedAt,
+          exitCode,
+          config,
+          scriptResult?.status,
+        );
 
         if (exitCode === 0) {
           if (scriptResult?.status === 'queued') {
@@ -523,6 +545,13 @@ export function reviewCommand(program: Command): void {
 
           if (!shouldNotifyCompletion) {
             info('Skipping review completion notification (review did not complete successfully)');
+          } else {
+            fireTelemetryEvent('review_completed', {
+              ...buildTelemetryBaseProperties(config),
+              jobType: 'reviewer',
+              provider,
+              success: true,
+            });
           }
 
           // Enrich with PR details (graceful — null if gh fails)
@@ -610,6 +639,12 @@ export function reviewCommand(program: Command): void {
 
           const autoMergedPrNumbers = parseAutoMergedPrNumbers(scriptResult?.data.auto_merged);
           if (autoMergedPrNumbers.length > 0) {
+            fireTelemetryEvent('auto_merge_completed', {
+              ...buildTelemetryBaseProperties(config),
+              jobType: 'reviewer',
+              provider,
+              success: true,
+            });
             const autoMergedPrNumber = autoMergedPrNumbers[0];
             const autoMergedPrDetails = fetchPrDetailsByNumber(autoMergedPrNumber, projectDir);
             const _mergeCtx = {
@@ -629,10 +664,14 @@ export function reviewCommand(program: Command): void {
           }
         }
 
+        await trackCommandCompleted('review', commandStartedAt, exitCode, config);
         process.exit(exitCode);
       } catch (err) {
         spinner.fail('Failed to execute review command');
         uiError(`${err instanceof Error ? err.message : String(err)}`);
+        await trackCommandCompleted('review', commandStartedAt, 1, config, {
+          errorCategory: err instanceof Error ? err.message : String(err),
+        });
         process.exit(1);
       }
     });

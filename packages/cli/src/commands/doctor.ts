@@ -23,6 +23,7 @@ import {
   validateWebhook,
   warn,
 } from '@night-watch/core';
+import { fireTelemetryEvent } from './shared/telemetry.js';
 import type { ICheckResult } from '@night-watch/core';
 export { validateWebhook } from '@night-watch/core';
 
@@ -31,6 +32,19 @@ export { validateWebhook } from '@night-watch/core';
  */
 interface IDoctorOptions {
   fix: boolean;
+}
+
+function resolveDoctorErrorCategory(
+  configPassed: boolean,
+  providerPassed: boolean,
+): 'config' | 'provider' | 'unknown' {
+  if (!configPassed) {
+    return 'config';
+  }
+  if (!providerPassed) {
+    return 'provider';
+  }
+  return 'unknown';
 }
 
 /**
@@ -194,6 +208,12 @@ export function doctorCommand(program: Command): void {
         success('All checks passed');
       } else {
         uiError('Issues found — fix errors above before running Night Watch');
+        fireTelemetryEvent('doctor_failed', {
+          command: 'doctor',
+          errorCategory: resolveDoctorErrorCategory(configResult.passed, providerResult.passed),
+          success: false,
+          failure: true,
+        });
         process.exit(1);
       }
     });

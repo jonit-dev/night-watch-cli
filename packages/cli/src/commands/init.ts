@@ -32,6 +32,7 @@ import {
   error as uiError,
   warn,
 } from '@night-watch/core';
+import { fireTelemetryEvent } from './shared/telemetry.js';
 
 // Get templates directory path.
 // Walk up from __dirname to find the package root (the directory that contains
@@ -1010,6 +1011,14 @@ export function initCommand(program: Command): void {
       label('Reviewer', reviewerEnabled ? 'Enabled' : 'Disabled');
       label('Playwright', playwrightStatus);
       console.log();
+
+      fireTelemetryEvent('cli_init_completed', {
+        command: 'init',
+        provider: selectedProvider,
+        boardMode:
+          (existingRaw.boardProvider as { enabled?: boolean } | undefined)?.enabled !== false,
+        success: true,
+      });
 
       // Next steps
       header('Next Steps');

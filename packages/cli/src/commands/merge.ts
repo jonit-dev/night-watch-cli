@@ -24,6 +24,14 @@ import {
   maybeApplyCronSchedulingDelay,
 } from './shared/env-builder.js';
 import { recordJobOutcome } from './shared/feedback.js';
+import {
+  buildTelemetryBaseProperties,
+  fireTelemetryEvent,
+  trackCommandCompleted,
+  trackCommandStarted,
+  trackJobCompletedOrFailed,
+  trackJobStarted,
+} from './shared/telemetry.js';
 import * as path from 'path';
 
 /**
@@ -167,9 +175,12 @@ export function mergeCommand(program: Command): void {
 
       // Apply CLI flag overrides
       config = applyCliOverrides(config, options);
+      const commandStartedAt = Date.now();
+      await trackCommandStarted('merge', config);
 
       if (!config.merger.enabled && !options.dryRun) {
         info('Merge orchestrator is disabled in config; skipping.');
+        await trackCommandCompleted('merge', commandStartedAt, 0, config);
         process.exit(0);
       }
 
@@ -181,6 +192,7 @@ export function mergeCommand(program: Command): void {
 
       if (options.dryRun) {
         printDryRun(config, envVars, scriptPath, projectDir);
+        await trackCommandCompleted('merge', commandStartedAt, 0, config);
         process.exit(0);
       }
 
@@ -190,6 +202,8 @@ export function mergeCommand(program: Command): void {
 
       try {
         const startedAt = Date.now();
+        const provider = envVars.NW_PROVIDER_KEY ?? resolveJobProvider(config, 'merger');
+        await trackJobStarted('merger', provider, config);
         await maybeApplyCronSchedulingDelay(config, 'merger', projectDir);
         const { exitCode, stdout, stderr } = await executeScriptWithOutput(
           scriptPath,
@@ -198,6 +212,14 @@ export function mergeCommand(program: Command): void {
         );
         const finishedAt = Date.now();
         const scriptResult = parseScriptResult(`${stdout}\n${stderr}`);
+        await trackJobCompletedOrFailed(
+          'merger',
+          provider,
+          startedAt,
+          exitCode,
+          config,
+          scriptResult?.status,
+        );
 
         if (exitCode === 0) {
           if (scriptResult?.status === 'queued') {
@@ -216,6 +238,14 @@ export function mergeCommand(program: Command): void {
         const failedCount = parseInt(scriptResult?.data?.failed ?? '0', 10);
 
         const notificationEvent = resolveMergeNotificationEvent(exitCode, mergedCount, failedCount);
+        if (mergedCount > 0 && exitCode === 0) {
+          fireTelemetryEvent('auto_merge_completed', {
+            ...buildTelemetryBaseProperties(config),
+            jobType: 'merger',
+            provider,
+            success: true,
+          });
+        }
 
         if (!options.dryRun) {
           try {
@@ -252,10 +282,14 @@ export function mergeCommand(program: Command): void {
           });
         }
 
+        await trackCommandCompleted('merge', commandStartedAt, exitCode, config);
         process.exit(exitCode);
       } catch (err) {
         spinner.fail('Failed to execute merge command');
         uiError(`${err instanceof Error ? err.message : String(err)}`);
+        await trackCommandCompleted('merge', commandStartedAt, 1, config, {
+          errorCategory: err instanceof Error ? err.message : String(err),
+        });
         process.exit(1);
       }
     });

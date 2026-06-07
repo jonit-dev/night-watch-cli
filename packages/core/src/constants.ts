@@ -423,6 +423,9 @@ export const HISTORY_FILE_NAME = 'history.json';
 export const PRD_STATES_FILE_NAME = 'prd-states.json';
 export const STATE_DB_FILE_NAME = 'state.db';
 export const GLOBAL_NOTIFICATIONS_FILE_NAME = 'global-notifications.json';
+export const TELEMETRY_FILE_NAME = 'telemetry.json';
+export const DEFAULT_AMPLITUDE_API_KEY = '5289e9a61e10e059d25f8eb846bceaa8';
+export const DEFAULT_AMPLITUDE_INGEST_ENDPOINT = 'https://api2.amplitude.com/2/httpapi';
 
 // Execution History
 export const MAX_HISTORY_RECORDS_PER_PRD = 10;

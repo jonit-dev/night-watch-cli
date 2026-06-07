@@ -46,6 +46,7 @@ export * from './utils/worktree-manager.js';
 export * from './utils/job-queue.js';
 export * from './utils/summary.js';
 export * from './analytics/index.js';
+export * from './telemetry/index.js';
 export * from './audit/index.js';
 export * from './ux/index.js';
 export * from './manager/index.js';

@@ -1,12 +1,19 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
+import {
+  resetTelemetryReporterForTests,
+  setTelemetryReporterForTests,
+} from '@/cli/commands/shared/telemetry.js';
+import { bootstrapTelemetry } from '@/cli/telemetry-bootstrap.js';
 
 const CLI_PKG_DIR = path.resolve(__dirname, '..', '..');
 const CLI_PATH = path.join(CLI_PKG_DIR, 'dist', 'cli.js');
 
 const packageJson = JSON.parse(fs.readFileSync(path.join(CLI_PKG_DIR, 'package.json'), 'utf-8'));
+process.env.NW_TELEMETRY_DISABLED = '1';
 
 describe('CLI', () => {
   describe('help output', () => {
@@ -36,6 +43,7 @@ describe('CLI', () => {
       expect(output).toContain('prs');
       expect(output).toContain('cancel');
       expect(output).toContain('retry');
+      expect(output).toContain('telemetry');
     });
 
     it('should show init command help', () => {
@@ -207,6 +215,36 @@ describe('CLI', () => {
 
       expect(output).toContain('completed PRD');
       expect(output).toContain('<prdName>');
+    });
+  });
+
+  describe('telemetry notice', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+      resetTelemetryReporterForTests();
+    });
+
+    it('should print first run notice once and continue', () => {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nw-cli-notice-'));
+      const originalEnv = { ...process.env };
+      process.env.NIGHT_WATCH_HOME = tempDir;
+      delete process.env.NW_TELEMETRY_DISABLED;
+      delete process.env.DO_NOT_TRACK;
+      setTelemetryReporterForTests(vi.fn().mockResolvedValue(undefined));
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      try {
+        bootstrapTelemetry('1.2.3', ['node', 'night-watch', 'status']);
+        bootstrapTelemetry('1.2.3', ['node', 'night-watch', 'status']);
+
+        expect(errorSpy).toHaveBeenCalledTimes(1);
+        expect(errorSpy.mock.calls[0]?.[0]).toContain(
+          'Night Watch collects anonymous product telemetry',
+        );
+      } finally {
+        process.env = originalEnv;
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
     });
   });
 

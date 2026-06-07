@@ -52,6 +52,7 @@ describe('init command', () => {
     // Isolate registry so tests don't pollute ~/.night-watch/projects.json
     registryDir = fs.mkdtempSync(path.join(os.tmpdir(), 'night-watch-registry-'));
     process.env.NIGHT_WATCH_HOME = registryDir;
+    process.env.NW_TELEMETRY_DISABLED = '1';
   });
 
   afterEach(() => {
@@ -59,6 +60,7 @@ describe('init command', () => {
     fs.rmSync(tempDir, { recursive: true, force: true });
     fs.rmSync(registryDir, { recursive: true, force: true });
     delete process.env.NIGHT_WATCH_HOME;
+    delete process.env.NW_TELEMETRY_DISABLED;
   });
 
   describe('should fail if not a git repo', () => {
@@ -76,7 +78,7 @@ describe('init command', () => {
         errorThrown = true;
         const err = error as { stderr?: string; stdout?: string };
         // Error output may be in stdout (colored) or stderr
-        const output = err.stderr || err.stdout || '';
+        const output = `${err.stderr ?? ''}\n${err.stdout ?? ''}`;
         expect(output.toLowerCase()).toContain('not a git repository');
       }
       expect(errorThrown).toBe(true);
