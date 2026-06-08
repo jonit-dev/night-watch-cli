@@ -112,6 +112,16 @@ describe('Package Files', () => {
     expect(content.startsWith('#!/usr/bin/env node')).toBe(true);
   });
 
+  it('should recover from better-sqlite3 native Node ABI mismatches', () => {
+    const binPath = path.join(packageRoot, 'bin', 'night-watch.mjs');
+    const content = fs.readFileSync(binPath, 'utf-8');
+
+    expect(content).toContain('NODE_MODULE_VERSION');
+    expect(content).toContain('ERR_DLOPEN_FAILED');
+    expect(content).toContain("npmBin, ['rebuild', 'better-sqlite3']");
+    expect(content).toContain('NIGHT_WATCH_NATIVE_REBUILD_ATTEMPTED');
+  });
+
   it('should include scripts in package', () => {
     const scriptsDir = path.join(packageRoot, 'scripts');
     expect(fs.existsSync(scriptsDir)).toBe(true);

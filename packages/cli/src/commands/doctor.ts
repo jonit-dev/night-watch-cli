@@ -110,7 +110,7 @@ export function doctorCommand(program: Command): void {
         checkNum++,
         totalChecks,
         'Node.js version',
-        () => checkNodeVersion(18),
+        () => checkNodeVersion(22),
         options,
       );
       if (nodeResult.passed) passedChecks++;

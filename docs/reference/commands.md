@@ -639,7 +639,7 @@ night-watch doctor --fix      # Auto-fix fixable issues
 
 **What it checks:**
 
-1. Node.js version (requires 18+)
+1. Node.js version (requires 22+)
 2. Git repository
 3. GitHub CLI (installed and authenticated)
 4. Provider CLI (Claude or Codex)
