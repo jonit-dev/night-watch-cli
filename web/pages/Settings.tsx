@@ -15,6 +15,7 @@ import {
   IMergerConfig,
   INightWatchConfig,
   INotificationConfig,
+  IOptimizerConfig,
   IPrResolverConfig,
   IProviderPreset,
   IProviderScheduleOverride,
@@ -48,6 +49,7 @@ import {
   getDefaultAuditConfig,
   getDefaultManagerConfig,
   getDefaultMergerConfig,
+  getDefaultOptimizerConfig,
   getDefaultPrResolverConfig,
   getDefaultQaConfig,
   getDefaultRoadmapScannerConfig,
@@ -59,6 +61,7 @@ const JOB_PROVIDER_KEYS: Array<keyof IJobProviders> = [
   'reviewer',
   'qa',
   'audit',
+  'optimizer',
   'ux',
   'slicer',
   'analytics',
@@ -72,6 +75,7 @@ const WEBHOOK_TRIGGER_JOB_IDS: JobType[] = [
   'reviewer',
   'qa',
   'audit',
+  'optimizer',
   'ux',
   'slicer',
   'analytics',
@@ -133,6 +137,7 @@ type ConfigForm = {
   providerScheduleOverrides: IProviderScheduleOverride[];
   qa: IQaConfig;
   audit: IAuditConfig;
+  optimizer: IOptimizerConfig;
   ux: IUxConfig;
   analytics: IAnalyticsConfig;
   feedback: IFeedbackConfig;
@@ -195,6 +200,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => {
     providerScheduleOverrides: config.providerScheduleOverrides ?? [],
     qa: config.qa || getDefaultQaConfig(),
     audit: { ...getDefaultAuditConfig(), ...(config.audit ?? {}) },
+    optimizer: { ...getDefaultOptimizerConfig(), ...(config.optimizer ?? {}) },
     ux: { ...getDefaultUxConfig(), ...(config.ux ?? {}) },
     analytics: config.analytics || getDefaultAnalyticsConfig(),
     feedback: config.feedback ?? {
@@ -217,6 +223,7 @@ const toFormState = (config: INightWatchConfig): ConfigForm => {
         reviewer: 40,
         slicer: 30,
         qa: 20,
+        optimizer: 15,
         audit: 10,
         ux: 10,
       },
@@ -354,6 +361,8 @@ const Settings: React.FC = () => {
       form.qa.schedule !== config?.qa.schedule ||
       form.audit.enabled !== (config?.audit.enabled ?? false) ||
       form.audit.schedule !== config?.audit.schedule ||
+      form.optimizer.enabled !== (config?.optimizer?.enabled ?? false) ||
+      form.optimizer.schedule !== (config?.optimizer?.schedule ?? getDefaultOptimizerConfig().schedule) ||
       form.ux.enabled !== (config?.ux?.enabled ?? false) ||
       form.ux.schedule !== (config?.ux?.schedule ?? getDefaultUxConfig().schedule) ||
       form.analytics.enabled !== (config?.analytics?.enabled ?? false) ||
@@ -426,6 +435,7 @@ const Settings: React.FC = () => {
         providerScheduleOverrides: form.providerScheduleOverrides,
         qa: form.qa,
         audit: form.audit,
+        optimizer: form.optimizer,
         ux: form.ux,
         analytics: form.analytics,
         feedback: form.feedback,

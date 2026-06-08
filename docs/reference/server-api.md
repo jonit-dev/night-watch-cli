@@ -184,7 +184,7 @@ Board columns: Draft, Ready, In Progress, Review, Done.
 | ------ | ----------------- | -------------------------- |
 | `GET`  | `/api/logs/:name` | Last N lines from log file |
 
-Query: `?lines=200` (default 200, max 10000). Valid names: `executor`, `reviewer`, `qa`.
+Query: `?lines=200` (default 200, max 10000). Valid names are registry-derived and include `executor`, `reviewer`, `qa`, `audit`, `optimizer`, `ux`, `planner`, `analytics`, `pr-resolver`, `merger`, and `manager`.
 
 ### Doctor (Health Check)
 

@@ -594,6 +594,50 @@ function validateConfigChanges(
     }
   }
 
+  if (changes.optimizer !== undefined) {
+    if (typeof changes.optimizer !== 'object' || changes.optimizer === null) {
+      return 'optimizer must be an object';
+    }
+
+    const optimizer = changes.optimizer;
+
+    if (optimizer.enabled !== undefined && typeof optimizer.enabled !== 'boolean') {
+      return 'optimizer.enabled must be a boolean';
+    }
+
+    const optimizerScheduleError = validateCronField('optimizer.schedule', optimizer.schedule);
+    if (optimizerScheduleError) {
+      return optimizerScheduleError;
+    }
+
+    if (
+      optimizer.maxRuntime !== undefined &&
+      (typeof optimizer.maxRuntime !== 'number' || optimizer.maxRuntime < 0)
+    ) {
+      return 'optimizer.maxRuntime must be a number >= 0';
+    }
+
+    for (const field of [
+      'branchPrefix',
+      'prLabel',
+      'targetScope',
+      'verificationCommand',
+    ] as const) {
+      if (optimizer[field] !== undefined && typeof optimizer[field] !== 'string') {
+        return `optimizer.${field} must be a string`;
+      }
+    }
+
+    if (
+      optimizer.maxFindingsToInspect !== undefined &&
+      (typeof optimizer.maxFindingsToInspect !== 'number' ||
+        optimizer.maxFindingsToInspect < 1 ||
+        !Number.isInteger(optimizer.maxFindingsToInspect))
+    ) {
+      return 'optimizer.maxFindingsToInspect must be an integer >= 1';
+    }
+  }
+
   // Analytics configuration validation
   if (changes.analytics !== undefined) {
     if (typeof changes.analytics !== 'object' || changes.analytics === null) {

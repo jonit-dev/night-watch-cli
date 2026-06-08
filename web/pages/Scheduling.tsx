@@ -15,6 +15,7 @@ import {
   GitMerge,
   GitPullRequest,
   ClipboardList,
+  Eye,
   Save,
   RotateCcw,
   AlertTriangle,
@@ -39,6 +40,7 @@ import type {
   IManagerConfig,
   IMergerConfig,
   INightWatchConfig,
+  IOptimizerConfig,
   IPrResolverConfig,
   IProviderPreset,
   IQaConfig,
@@ -75,6 +77,7 @@ import {
   getDefaultAuditConfig,
   getDefaultManagerConfig,
   getDefaultMergerConfig,
+  getDefaultOptimizerConfig,
   getDefaultPrResolverConfig,
   getDefaultQaConfig,
   getDefaultRoadmapScannerConfig,
@@ -103,6 +106,7 @@ type AutomationForm = {
   providerPresets: Record<string, IProviderPreset>;
   qa: IQaConfig;
   audit: IAuditConfig;
+  optimizer: IOptimizerConfig;
   ux: IUxConfig;
   analytics: IAnalyticsConfig;
   feedback: IFeedbackConfig;
@@ -118,7 +122,16 @@ const DEFAULT_QUEUE: NonNullable<INightWatchConfig['queue']> = {
   mode: 'conservative' as QueueMode,
   maxConcurrency: 1,
   maxWaitTime: 7200,
-  priority: { executor: 50, reviewer: 40, slicer: 30, manager: 25, qa: 20, audit: 10, ux: 10 },
+  priority: {
+    executor: 50,
+    reviewer: 40,
+    slicer: 30,
+    manager: 25,
+    qa: 20,
+    optimizer: 15,
+    audit: 10,
+    ux: 10,
+  },
   providerBuckets: {},
 };
 
@@ -127,6 +140,7 @@ const JOB_PROVIDER_KEYS: Array<keyof IJobProviders> = [
   'reviewer',
   'qa',
   'audit',
+  'optimizer',
   'ux',
   'slicer',
   'analytics',
@@ -140,7 +154,19 @@ const VALID_AUTOMATION_TABS = new Set(['overview', 'schedules', 'jobs']);
 const normalizeJobType = (jobId: string | null): string | null => {
   if (!jobId) return null;
   const normalized = jobId === 'planner' ? 'slicer' : jobId;
-  return ['executor', 'reviewer', 'qa', 'audit', 'ux', 'slicer', 'analytics', 'pr-resolver', 'merger', 'manager'].includes(normalized)
+  return [
+    'executor',
+    'reviewer',
+    'qa',
+    'audit',
+    'optimizer',
+    'ux',
+    'slicer',
+    'analytics',
+    'pr-resolver',
+    'merger',
+    'manager',
+  ].includes(normalized)
     ? normalized
     : null;
 };
@@ -166,6 +192,7 @@ const toAutomationForm = (config: INightWatchConfig): AutomationForm => ({
   providerPresets: config.providerPresets ?? {},
   qa: config.qa || getDefaultQaConfig(),
   audit: config.audit || getDefaultAuditConfig(),
+  optimizer: config.optimizer || getDefaultOptimizerConfig(),
   ux: config.ux || getDefaultUxConfig(),
   analytics: config.analytics || getDefaultAnalyticsConfig(),
   feedback: config.feedback ?? {
@@ -189,6 +216,7 @@ const resolveTemplateForForm = (form: AutomationForm): IScheduleTemplate | undef
     form.reviewerSchedule,
     form.qa.schedule,
     form.audit.schedule,
+    form.optimizer.schedule,
     form.ux.schedule,
     form.roadmapScanner.slicerSchedule ?? getDefaultRoadmapScannerConfig().slicerSchedule,
     form.prResolver?.schedule ?? getDefaultPrResolverConfig().schedule,
@@ -372,6 +400,7 @@ const Scheduling: React.FC = () => {
         scheduleBundleId: tpl.id,
         qa: { ...prev.qa, schedule: tpl.schedules.qa },
         audit: { ...prev.audit, schedule: tpl.schedules.audit },
+        optimizer: { ...prev.optimizer, schedule: tpl.schedules.optimizer },
         ux: { ...prev.ux, schedule: tpl.schedules.ux },
         roadmapScanner: { ...prev.roadmapScanner, slicerSchedule: tpl.schedules.slicer },
         prResolver: { ...prev.prResolver, schedule: tpl.schedules.prResolver },
@@ -415,6 +444,7 @@ const Scheduling: React.FC = () => {
         jobProviders: cleanedJobProviders,
         qa: form.qa,
         audit: form.audit,
+        optimizer: form.optimizer,
         ux: form.ux,
         analytics: form.analytics,
         feedback: form.feedback,
@@ -919,6 +949,7 @@ const Scheduling: React.FC = () => {
               { id: 'reviewer', label: 'Run Reviewer', icon: Search, enabled: form?.reviewerEnabled ?? false },
               { id: 'qa', label: 'Run QA', icon: Zap, enabled: form?.qa?.enabled ?? false },
               { id: 'audit', label: 'Run Audit', icon: ListRestart, enabled: form?.audit?.enabled ?? false },
+              { id: 'optimizer', label: 'Run Optimizer', icon: Zap, enabled: form?.optimizer?.enabled ?? false },
               { id: 'ux', label: 'Run UX', icon: Eye, enabled: form?.ux?.enabled ?? false },
               { id: 'planner', label: 'Run Planner', icon: Layout, enabled: form?.roadmapScanner?.enabled ?? false },
               { id: 'analytics', label: 'Run Analytics', icon: BarChart3, enabled: form?.analytics?.enabled ?? false },
@@ -960,6 +991,7 @@ const Scheduling: React.FC = () => {
         reviewerSchedule: form.reviewerSchedule,
         qa: form.qa,
         audit: form.audit,
+        optimizer: form.optimizer,
         ux: form.ux,
         analytics: form.analytics,
         roadmapScanner: {

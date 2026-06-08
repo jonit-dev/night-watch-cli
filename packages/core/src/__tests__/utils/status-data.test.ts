@@ -1324,13 +1324,13 @@ describe('status-data utilities', () => {
   });
 
   describe('collectLogInfo', () => {
-    it('should collect info for executor/reviewer/qa/audit/ux/planner/analytics/pr-resolver/merger/manager logs', async () => {
+    it('should collect info for executor/reviewer/qa/audit/optimizer/ux/planner/analytics/pr-resolver/merger/manager logs', async () => {
       const logDir = path.join(tempDir, 'logs');
       fs.mkdirSync(logDir, { recursive: true });
       fs.writeFileSync(path.join(logDir, 'executor.log'), 'Executor line 1');
 
       const result = collectLogInfo(tempDir);
-      expect(result).toHaveLength(10);
+      expect(result).toHaveLength(11);
 
       const executorLog = result.find((l) => l.name === 'executor');
       expect(executorLog).toBeDefined();
@@ -1348,6 +1348,10 @@ describe('status-data utilities', () => {
       const auditLog = result.find((l) => l.name === 'audit');
       expect(auditLog).toBeDefined();
       expect(auditLog!.exists).toBe(false);
+
+      const optimizerLog = result.find((l) => l.name === 'optimizer');
+      expect(optimizerLog).toBeDefined();
+      expect(optimizerLog!.exists).toBe(false);
 
       const uxLog = result.find((l) => l.name === 'ux');
       expect(uxLog).toBeDefined();
@@ -1374,13 +1378,14 @@ describe('status-data utilities', () => {
       expect(managerLog!.exists).toBe(false);
     });
 
-    it('should use correct file names (executor.log, reviewer.log, night-watch-qa.log, audit.log, ux.log, slicer.log, analytics.log, pr-resolver.log, merger.log, manager.log)', async () => {
+    it('should use correct file names (executor.log, reviewer.log, night-watch-qa.log, audit.log, optimizer.log, ux.log, slicer.log, analytics.log, pr-resolver.log, merger.log, manager.log)', async () => {
       const logDir = path.join(tempDir, 'logs');
       fs.mkdirSync(logDir, { recursive: true });
       fs.writeFileSync(path.join(logDir, 'executor.log'), 'Executor line 1');
       fs.writeFileSync(path.join(logDir, 'reviewer.log'), 'Reviewer line 1');
       fs.writeFileSync(path.join(logDir, 'night-watch-qa.log'), 'QA line 1');
       fs.writeFileSync(path.join(logDir, 'audit.log'), 'Audit line 1');
+      fs.writeFileSync(path.join(logDir, 'optimizer.log'), 'Optimizer line 1');
       fs.writeFileSync(path.join(logDir, 'ux.log'), 'UX line 1');
       fs.writeFileSync(path.join(logDir, 'slicer.log'), 'Planner line 1');
       fs.writeFileSync(path.join(logDir, 'analytics.log'), 'Analytics line 1');
@@ -1389,7 +1394,7 @@ describe('status-data utilities', () => {
       fs.writeFileSync(path.join(logDir, 'manager.log'), 'Manager line 1');
 
       const result = collectLogInfo(tempDir);
-      expect(result).toHaveLength(10);
+      expect(result).toHaveLength(11);
 
       const executorLog = result.find((l) => l.name === 'executor');
       expect(executorLog).toBeDefined();
@@ -1410,6 +1415,11 @@ describe('status-data utilities', () => {
       expect(auditLog).toBeDefined();
       expect(auditLog!.exists).toBe(true);
       expect(auditLog!.path).toContain('audit.log');
+
+      const optimizerLog = result.find((l) => l.name === 'optimizer');
+      expect(optimizerLog).toBeDefined();
+      expect(optimizerLog!.exists).toBe(true);
+      expect(optimizerLog!.path).toContain('optimizer.log');
 
       const uxLog = result.find((l) => l.name === 'ux');
       expect(uxLog).toBeDefined();
@@ -1578,20 +1588,21 @@ describe('status-data utilities', () => {
       expect(snapshot.config).toBe(config);
       expect(Array.isArray(snapshot.prds)).toBe(true);
       expect(Array.isArray(snapshot.processes)).toBe(true);
-      expect(snapshot.processes).toHaveLength(10);
+      expect(snapshot.processes).toHaveLength(11);
       expect(snapshot.processes[0].name).toBe('executor');
       expect(snapshot.processes[1].name).toBe('reviewer');
       expect(snapshot.processes[2].name).toBe('qa');
       expect(snapshot.processes[3].name).toBe('audit');
-      expect(snapshot.processes[4].name).toBe('ux');
-      expect(snapshot.processes[5].name).toBe('planner');
-      expect(snapshot.processes[6].name).toBe('analytics');
-      expect(snapshot.processes[7].name).toBe('pr-resolver');
-      expect(snapshot.processes[8].name).toBe('merger');
-      expect(snapshot.processes[9].name).toBe('manager');
+      expect(snapshot.processes[4].name).toBe('optimizer');
+      expect(snapshot.processes[5].name).toBe('ux');
+      expect(snapshot.processes[6].name).toBe('planner');
+      expect(snapshot.processes[7].name).toBe('analytics');
+      expect(snapshot.processes[8].name).toBe('pr-resolver');
+      expect(snapshot.processes[9].name).toBe('merger');
+      expect(snapshot.processes[10].name).toBe('manager');
       expect(Array.isArray(snapshot.prs)).toBe(true);
       expect(Array.isArray(snapshot.logs)).toBe(true);
-      expect(snapshot.logs).toHaveLength(10);
+      expect(snapshot.logs).toHaveLength(11);
       expect(snapshot.crontab).toHaveProperty('installed');
       expect(snapshot.crontab).toHaveProperty('entries');
       expect(snapshot.activePrd).toBeNull();

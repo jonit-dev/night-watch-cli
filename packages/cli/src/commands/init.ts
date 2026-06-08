@@ -380,6 +380,7 @@ export function buildInitConfig(params: {
       branchPatterns: [...defaults.qa.branchPatterns],
     },
     audit: { ...defaults.audit },
+    optimizer: { ...defaults.optimizer },
     ux: {
       ...defaults.ux,
       flows: [...defaults.ux.flows],

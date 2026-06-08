@@ -124,6 +124,28 @@ night-watch audit --timeout 3600  # Override max runtime (1 hour)
 
 ---
 
+## `night-watch optimize`
+
+Run the Optimizer agent. It scans for performance and algorithmic complexity bottlenecks, selects one high-confidence target, proves a baseline and after signal, and only opens a draft PR when verification passes.
+
+```bash
+night-watch optimize                         # Run Optimizer now
+night-watch optimize --dry-run               # Show provider, scanner, verification, report, and PR settings
+night-watch optimize --dry-run --json        # Machine-readable dry-run result
+night-watch optimize --provider codex        # Override provider
+night-watch optimize --timeout 3600          # Override max runtime
+night-watch optimize --target-scope web      # Limit scan scope for this run
+```
+
+**Behavior:**
+
+- Starts every run with the bundled first-pass scanner.
+- Works in an isolated worktree and never edits the primary checkout directly.
+- Writes `logs/optimizer-report.md` for failed, unsafe, no-op, or unproven runs.
+- Opens a draft PR under `optimizer.branchPrefix` only when before/after improvement and verification pass.
+
+---
+
 ## `night-watch manager`
 
 Run the Manager agent. Manager compares the roadmap, PRDs, board state, job status, logs, and documentation coverage, then reports or drafts follow-up work according to `manager.outputMode`.
@@ -154,6 +176,7 @@ night-watch install                        # Install with default schedules
 night-watch install --schedule "0 * * * *" # Custom executor schedule
 night-watch install --reviewer-schedule "0 */2 * * *" # Custom reviewer schedule
 night-watch install --no-reviewer          # Skip reviewer cron
+night-watch install --no-optimizer         # Skip optimizer cron
 night-watch install --no-manager           # Skip manager cron
 ```
 
@@ -265,7 +288,7 @@ night-watch job pause reviewer --json
 
 Pause state is stored in `night-watch.config.json` under `pausedJobs`. Cron scripts call `night-watch job is-paused <job>` before starting work, and queue claim/dispatch skips paused jobs. This prevents new cron/queue-dispatched runs; it does not kill an already running process.
 
-Supported job names are `executor`, `reviewer`, `qa`, `audit`, `slicer`, `planner`, `analytics`, `pr-resolver`, and `merger`.
+Supported job names are `executor`, `reviewer`, `qa`, `audit`, `optimizer`, `slicer`, `planner`, `analytics`, `pr-resolver`, `merger`, and `manager`.
 
 ---
 

@@ -8,6 +8,7 @@ import {
   Layout,
   Play,
   Search,
+  Sparkles,
   ClipboardList,
 } from 'lucide-react';
 import Card from '../ui/Card';
@@ -19,6 +20,7 @@ export interface IScheduleConfigForm {
   reviewerSchedule: string;
   qa: { schedule: string; enabled: boolean };
   audit: { schedule: string; enabled: boolean };
+  optimizer?: { schedule: string; enabled: boolean };
   ux?: { schedule: string; enabled: boolean };
   analytics?: { schedule: string; enabled: boolean };
   roadmapScanner: { slicerSchedule: string; enabled: boolean };
@@ -139,6 +141,7 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
                       ['Reviewer', tpl.hints.reviewer],
                       ['QA', tpl.hints.qa],
                       ['Audit', tpl.hints.audit],
+                      ['Optimizer', tpl.hints.optimizer],
                       ['UX', tpl.hints.ux],
                       ['Planner', tpl.hints.slicer],
                       ['PR Resolver', tpl.hints.prResolver],
@@ -190,6 +193,16 @@ const ScheduleConfig: React.FC<IScheduleConfigProps> = ({
             value={form.audit.schedule}
             onChange={(val) => onFieldChange('audit', { ...form.audit, schedule: val })}
           />
+          {form.optimizer && (
+            <JobScheduleCard
+              id="job-schedule-optimizer"
+              icon={Sparkles}
+              title="Optimizer"
+              description="Find and prove one performance improvement"
+              value={form.optimizer.schedule}
+              onChange={(val) => onFieldChange('optimizer', { ...form.optimizer, schedule: val })}
+            />
+          )}
           {form.ux && (
             <JobScheduleCard
               id="job-schedule-ux"

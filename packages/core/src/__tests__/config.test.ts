@@ -1493,6 +1493,94 @@ describe('config', () => {
     });
   });
 
+  describe('optimizer config', () => {
+    it('should load optimizer defaults when no optimizer config present', () => {
+      const config = loadConfig(tempDir);
+
+      expect(config.optimizer).toBeDefined();
+      expect(config.optimizer.enabled).toBe(false);
+      expect(config.optimizer.schedule).toBe('20 4 * * 2');
+      expect(config.optimizer.maxRuntime).toBe(0);
+      expect(config.optimizer.branchPrefix).toBe('night-watch/optimizer');
+      expect(config.optimizer.prLabel).toBe('optimization');
+      expect(config.optimizer.targetScope).toBe('');
+      expect(config.optimizer.maxFindingsToInspect).toBe(5);
+      expect(config.optimizer.verificationCommand).toBe('');
+    });
+
+    it('should load optimizer config from file', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          optimizer: {
+            enabled: true,
+            schedule: '0 5 * * 2',
+            maxRuntime: 1800,
+            branchPrefix: 'perf/optimizer',
+            prLabel: 'perf',
+            targetScope: 'packages/core/src',
+            maxFindingsToInspect: 3,
+            verificationCommand: 'yarn test',
+          },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.optimizer.enabled).toBe(true);
+      expect(config.optimizer.schedule).toBe('0 5 * * 2');
+      expect(config.optimizer.maxRuntime).toBe(1800);
+      expect(config.optimizer.branchPrefix).toBe('perf/optimizer');
+      expect(config.optimizer.prLabel).toBe('perf');
+      expect(config.optimizer.targetScope).toBe('packages/core/src');
+      expect(config.optimizer.maxFindingsToInspect).toBe(3);
+      expect(config.optimizer.verificationCommand).toBe('yarn test');
+    });
+
+    it('should preserve optimizer defaults when file config is partial', () => {
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          optimizer: {
+            enabled: true,
+          },
+        }),
+      );
+
+      const config = loadConfig(tempDir);
+
+      expect(config.optimizer.enabled).toBe(true);
+      expect(config.optimizer.schedule).toBe('20 4 * * 2');
+      expect(config.optimizer.branchPrefix).toBe('night-watch/optimizer');
+      expect(config.optimizer.prLabel).toBe('optimization');
+      expect(config.optimizer.maxFindingsToInspect).toBe(5);
+    });
+
+    it('should override optimizer fields from env vars', () => {
+      process.env.NW_OPTIMIZER_ENABLED = 'true';
+      process.env.NW_OPTIMIZER_SCHEDULE = '15 6 * * 3';
+      process.env.NW_OPTIMIZER_MAX_RUNTIME = '2400';
+      process.env.NW_OPTIMIZER_BRANCH_PREFIX = 'night-watch/perf';
+      process.env.NW_OPTIMIZER_PR_LABEL = 'performance';
+      process.env.NW_OPTIMIZER_TARGET_SCOPE = 'web';
+      process.env.NW_OPTIMIZER_MAX_FINDINGS_TO_INSPECT = '7';
+      process.env.NW_OPTIMIZER_VERIFICATION_COMMAND = 'yarn verify';
+
+      const config = loadConfig(tempDir);
+
+      expect(config.optimizer.enabled).toBe(true);
+      expect(config.optimizer.schedule).toBe('15 6 * * 3');
+      expect(config.optimizer.maxRuntime).toBe(2400);
+      expect(config.optimizer.branchPrefix).toBe('night-watch/perf');
+      expect(config.optimizer.prLabel).toBe('performance');
+      expect(config.optimizer.targetScope).toBe('web');
+      expect(config.optimizer.maxFindingsToInspect).toBe(7);
+      expect(config.optimizer.verificationCommand).toBe('yarn verify');
+    });
+  });
+
   describe('analytics config', () => {
     it('should load analytics defaults when no analytics config present', () => {
       const config = loadConfig(tempDir);
@@ -2148,7 +2236,7 @@ describe('config', () => {
      * The only field allowed to be missing from the shared contract is
      * `_cliProviderOverride`, which is internal to CLI runtime.
      */
-    it('should maintain parity between core INightWatchConfig and shared INightWatchConfig', () => {
+    it('should maintain parity between core INightWatchConfig and shared INightWatchConfig', async () => {
       // Import both interfaces
       const coreKeys: (keyof INightWatchConfig)[] = [
         'defaultBranch',
@@ -2182,14 +2270,14 @@ describe('config', () => {
         'autoMergeMethod',
         'qa',
         'audit',
+        'optimizer',
         'jobProviders',
         '_cliProviderOverride',
       ];
 
-      // Import the shared contract
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const sharedModule = require('../shared/types.ts');
-      const SharedINightWatchConfig = sharedModule.INightWatchConfig;
+      // Load the shared contract module using ESM semantics. Interfaces are erased at runtime,
+      // so the explicit key lists below are the parity assertion.
+      await import('../shared/types.js');
 
       // The shared contract should have all fields except _cliProviderOverride
       const sharedKeys: (keyof any)[] = [
@@ -2224,6 +2312,7 @@ describe('config', () => {
         'autoMergeMethod',
         'qa',
         'audit',
+        'optimizer',
         'jobProviders',
       ];
 

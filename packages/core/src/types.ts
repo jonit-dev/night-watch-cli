@@ -49,6 +49,7 @@ export type JobType =
   | 'reviewer'
   | 'qa'
   | 'audit'
+  | 'optimizer'
   | 'ux'
   | 'slicer'
   | 'analytics'
@@ -104,6 +105,7 @@ export interface IJobProviders {
   reviewer?: Provider;
   qa?: Provider;
   audit?: Provider;
+  optimizer?: Provider;
   ux?: Provider;
   slicer?: Provider;
   analytics?: Provider;
@@ -332,6 +334,9 @@ export interface INightWatchConfig {
   /** Code audit configuration */
   audit: IAuditConfig;
 
+  /** Performance and algorithmic complexity optimizer configuration */
+  optimizer: IOptimizerConfig;
+
   /** UX audit configuration */
   ux: IUxConfig;
 
@@ -410,6 +415,25 @@ export interface IAuditConfig {
   createIssues: boolean;
   /** Board column to place created issues in */
   targetColumn: BoardColumnName;
+}
+
+export interface IOptimizerConfig {
+  /** Whether the optimizer process is enabled */
+  enabled: boolean;
+  /** Cron schedule for optimizer execution */
+  schedule: string;
+  /** Maximum runtime in seconds for the optimizer. 0 disables the provider timeout. */
+  maxRuntime: number;
+  /** Prefix for optimizer branches */
+  branchPrefix: string;
+  /** GitHub label applied to optimizer PRs */
+  prLabel: string;
+  /** Optional relative path or glob-ish scope to scan; empty means whole repo */
+  targetScope: string;
+  /** Maximum top scanner leads the optimizer agent may inspect manually */
+  maxFindingsToInspect: number;
+  /** Optional explicit verification command; empty means auto-detect */
+  verificationCommand: string;
 }
 
 export interface IUxConfig {

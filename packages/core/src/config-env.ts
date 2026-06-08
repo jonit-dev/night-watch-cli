@@ -230,9 +230,9 @@ export function buildEnvOverrideConfig(
     }
   }
 
-  // Registry-driven env overrides for nested job configs (qa, audit, ux, analytics, manager)
+  // Registry-driven env overrides for nested job configs (qa, audit, optimizer, ux, analytics, manager)
   // Executor/reviewer use flat top-level fields; slicer/roadmapScanner handled above
-  for (const jobId of ['qa', 'audit', 'ux', 'analytics', 'manager'] as const) {
+  for (const jobId of ['qa', 'audit', 'optimizer', 'ux', 'analytics', 'manager'] as const) {
     const jobDef = getJobDef(jobId);
     if (!jobDef) continue;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

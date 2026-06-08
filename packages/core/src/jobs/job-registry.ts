@@ -265,6 +265,39 @@ export const JOB_REGISTRY: IJobDefinition[] = [
     } as IBaseJobConfig & { createIssues: boolean; targetColumn: string },
   },
   {
+    id: 'optimizer',
+    name: 'Optimizer',
+    description: 'Finds and proves one performance or algorithmic complexity improvement',
+    cliCommand: 'optimize',
+    logName: 'optimizer',
+    lockSuffix: '-optimizer.lock',
+    queuePriority: 15,
+    envPrefix: 'NW_OPTIMIZER',
+    extraFields: [
+      { name: 'branchPrefix', type: 'string', defaultValue: 'night-watch/optimizer' },
+      { name: 'prLabel', type: 'string', defaultValue: 'optimization' },
+      { name: 'targetScope', type: 'string', defaultValue: '' },
+      { name: 'maxFindingsToInspect', type: 'number', defaultValue: 5 },
+      { name: 'verificationCommand', type: 'string', defaultValue: '' },
+    ],
+    defaultConfig: {
+      enabled: false,
+      schedule: '20 4 * * 2',
+      maxRuntime: 0,
+      branchPrefix: 'night-watch/optimizer',
+      prLabel: 'optimization',
+      targetScope: '',
+      maxFindingsToInspect: 5,
+      verificationCommand: '',
+    } as IBaseJobConfig & {
+      branchPrefix: string;
+      prLabel: string;
+      targetScope: string;
+      maxFindingsToInspect: number;
+      verificationCommand: string;
+    },
+  },
+  {
     id: 'ux',
     name: 'UX',
     description: 'Inspects user flows with browser automation and drafts prioritized UX reports',

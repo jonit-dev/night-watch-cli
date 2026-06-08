@@ -20,16 +20,17 @@ import {
 import { VALID_JOB_TYPES, DEFAULT_QUEUE_PRIORITY, LOG_FILE_NAMES } from '../../constants.js';
 
 describe('JOB_REGISTRY', () => {
-  it('should define all 10 job types', () => {
-    expect(JOB_REGISTRY).toHaveLength(10);
+  it('should define all 11 job types', () => {
+    expect(JOB_REGISTRY).toHaveLength(11);
   });
 
-  it('should include executor, reviewer, qa, audit, ux, slicer, analytics, pr-resolver, merger, manager', () => {
+  it('should include executor, reviewer, qa, audit, optimizer, ux, slicer, analytics, pr-resolver, merger, manager', () => {
     const ids = JOB_REGISTRY.map((j) => j.id);
     expect(ids).toContain('executor');
     expect(ids).toContain('reviewer');
     expect(ids).toContain('qa');
     expect(ids).toContain('audit');
+    expect(ids).toContain('optimizer');
     expect(ids).toContain('ux');
     expect(ids).toContain('slicer');
     expect(ids).toContain('analytics');
@@ -55,6 +56,28 @@ describe('JOB_REGISTRY', () => {
     expect(def).toBeDefined();
     expect(def?.cliCommand).toBe('ux');
     expect(def?.defaultConfig.enabled).toBe(false);
+  });
+
+  it('should include optimizer in JOB_REGISTRY', () => {
+    const def = getJobDef('optimizer');
+    expect(def).toBeDefined();
+    expect(def?.cliCommand).toBe('optimize');
+    expect(def?.logName).toBe('optimizer');
+    expect(def?.lockSuffix).toBe('-optimizer.lock');
+    expect(def?.queuePriority).toBe(15);
+    expect(def?.envPrefix).toBe('NW_OPTIMIZER');
+    expect(def?.defaultConfig).toEqual(
+      expect.objectContaining({
+        enabled: false,
+        schedule: '20 4 * * 2',
+        maxRuntime: 0,
+        branchPrefix: 'night-watch/optimizer',
+        prLabel: 'optimization',
+        targetScope: '',
+        maxFindingsToInspect: 5,
+        verificationCommand: '',
+      }),
+    );
   });
 
   it('each job definition has required fields', () => {
@@ -145,13 +168,14 @@ describe('getJobDefByLogName', () => {
 });
 
 describe('getValidJobTypes', () => {
-  it('returns all 10 job types', () => {
+  it('returns all 11 job types', () => {
     const types = getValidJobTypes();
-    expect(types).toHaveLength(10);
+    expect(types).toHaveLength(11);
     expect(types).toContain('executor');
     expect(types).toContain('reviewer');
     expect(types).toContain('qa');
     expect(types).toContain('audit');
+    expect(types).toContain('optimizer');
     expect(types).toContain('ux');
     expect(types).toContain('slicer');
     expect(types).toContain('analytics');
@@ -168,6 +192,7 @@ describe('getDefaultQueuePriority', () => {
     expect(typeof priority.reviewer).toBe('number');
     expect(typeof priority.qa).toBe('number');
     expect(typeof priority.audit).toBe('number');
+    expect(typeof priority.optimizer).toBe('number');
     expect(typeof priority.ux).toBe('number');
     expect(typeof priority.slicer).toBe('number');
     expect(typeof priority.analytics).toBe('number');
@@ -192,6 +217,12 @@ describe('getDefaultQueuePriority', () => {
     const priority = getDefaultQueuePriority();
     expect(priority.manager).toBeLessThan(priority.slicer);
     expect(priority.manager).toBeGreaterThan(priority.qa);
+  });
+
+  it('optimizer has priority between qa and audit', () => {
+    const priority = getDefaultQueuePriority();
+    expect(priority.optimizer).toBeLessThan(priority.qa);
+    expect(priority.optimizer).toBeGreaterThan(priority.audit);
   });
 });
 

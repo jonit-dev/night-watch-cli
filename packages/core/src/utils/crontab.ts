@@ -21,6 +21,7 @@ const LEGACY_SCRIPT_NAMES = [
   'night-watch-pr-reviewer-cron.sh',
   'night-watch-qa-cron.sh',
   'night-watch-audit-cron.sh',
+  'night-watch-optimizer-cron.sh',
   'night-watch-slice-cron.sh',
   'night-watch-slicer-cron.sh',
   'night-watch-manager-cron.sh',

@@ -12,6 +12,7 @@ import {
   IManagerConfig,
   IMergerConfig,
   INotificationConfig,
+  IOptimizerConfig,
   IPrResolverConfig,
   IProviderPreset,
   IProviderScheduleOverride,
@@ -172,6 +173,27 @@ export const DEFAULT_AUDIT: IAuditConfig = {
   targetColumn: DEFAULT_AUDIT_TARGET_COLUMN,
 };
 
+// Optimizer Configuration
+export const DEFAULT_OPTIMIZER_ENABLED = false;
+export const DEFAULT_OPTIMIZER_SCHEDULE = '20 4 * * 2';
+export const DEFAULT_OPTIMIZER_MAX_RUNTIME = 0;
+export const DEFAULT_OPTIMIZER_BRANCH_PREFIX = 'night-watch/optimizer';
+export const DEFAULT_OPTIMIZER_PR_LABEL = 'optimization';
+export const DEFAULT_OPTIMIZER_TARGET_SCOPE = '';
+export const DEFAULT_OPTIMIZER_MAX_FINDINGS_TO_INSPECT = 5;
+export const DEFAULT_OPTIMIZER_VERIFICATION_COMMAND = '';
+
+export const DEFAULT_OPTIMIZER: IOptimizerConfig = {
+  enabled: DEFAULT_OPTIMIZER_ENABLED,
+  schedule: DEFAULT_OPTIMIZER_SCHEDULE,
+  maxRuntime: DEFAULT_OPTIMIZER_MAX_RUNTIME,
+  branchPrefix: DEFAULT_OPTIMIZER_BRANCH_PREFIX,
+  prLabel: DEFAULT_OPTIMIZER_PR_LABEL,
+  targetScope: DEFAULT_OPTIMIZER_TARGET_SCOPE,
+  maxFindingsToInspect: DEFAULT_OPTIMIZER_MAX_FINDINGS_TO_INSPECT,
+  verificationCommand: DEFAULT_OPTIMIZER_VERIFICATION_COMMAND,
+};
+
 // UX Audit Configuration
 export const DEFAULT_UX_ENABLED = false;
 export const DEFAULT_UX_SCHEDULE = '0 7 * * 1'; // weekly Monday 07:00
@@ -292,6 +314,7 @@ export const DEFAULT_MERGER: IMergerConfig = {
 export const MERGER_LOG_NAME = 'merger';
 
 export const AUDIT_LOG_NAME = 'audit';
+export const OPTIMIZER_LOG_NAME = 'optimizer';
 export const UX_LOG_NAME = 'ux';
 export const PLANNER_LOG_NAME = 'slicer';
 export const ANALYTICS_LOG_NAME = 'analytics';

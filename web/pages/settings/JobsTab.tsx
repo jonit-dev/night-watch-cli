@@ -15,6 +15,7 @@ import {
   IAnalyticsConfig,
   IQaConfig,
   IAuditConfig,
+  IOptimizerConfig,
   IMergerConfig,
   IManagerConfig,
   IPrResolverConfig,
@@ -39,6 +40,7 @@ type JobKey =
   | 'reviewer'
   | 'qa'
   | 'audit'
+  | 'optimizer'
   | 'ux'
   | 'slicer'
   | 'analytics'
@@ -61,6 +63,7 @@ interface IConfigFormJobs {
   branchPatterns: string[];
   qa: IQaConfig;
   audit: IAuditConfig;
+  optimizer: IOptimizerConfig;
   ux: IUxConfig;
   analytics: IAnalyticsConfig;
   feedback: IFeedbackConfig;
@@ -436,6 +439,67 @@ const JobsTab: React.FC<IJobsTabProps> = ({
           </div>
         </JobAccordion>
 
+        {/* Optimizer */}
+        <JobAccordion
+          id="job-section-optimizer"
+          title="Optimizer"
+          icon={Sparkles}
+          description="Find and prove one performance or complexity improvement"
+          enabled={form.optimizer.enabled}
+          onToggle={(checked) => updateField('optimizer', { ...form.optimizer, enabled: checked })}
+          expanded={expandedJob === 'optimizer'}
+          onExpandChange={(expanded) => onExpandedJobChange(expanded ? 'optimizer' : null)}
+          scheduleSummary={cronToHuman(form.optimizer.schedule)}
+          providerLabel={form.jobProviders.optimizer ? presetOptions.find(p => p.value === form.jobProviders.optimizer)?.label : 'Global'}
+        >
+          <div className="space-y-6">
+            <CadencePanel summary={cronToHuman(form.optimizer.schedule)} onOpen={() => onOpenSchedule('optimizer')} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Select
+                label="Provider"
+                value={form.jobProviders.optimizer ?? ''}
+                onChange={(val) => updateJobProvider('optimizer', val)}
+                options={providerOptionsWithDefault}
+              />
+              <Input
+                label="Max Runtime"
+                type="number"
+                value={String(form.optimizer.maxRuntime)}
+                onChange={(e) => updateField('optimizer', { ...form.optimizer, maxRuntime: Number(e.target.value || 0) })}
+                rightIcon={<span className="text-xs">sec</span>}
+              />
+              <Input
+                label="Target Scope"
+                value={form.optimizer.targetScope}
+                onChange={(e) => updateField('optimizer', { ...form.optimizer, targetScope: e.target.value })}
+                placeholder="repo"
+              />
+              <Input
+                label="Max Findings"
+                type="number"
+                value={String(form.optimizer.maxFindingsToInspect)}
+                onChange={(e) => updateField('optimizer', { ...form.optimizer, maxFindingsToInspect: Math.max(1, Number(e.target.value || 5)) })}
+              />
+              <Input
+                label="Branch Prefix"
+                value={form.optimizer.branchPrefix}
+                onChange={(e) => updateField('optimizer', { ...form.optimizer, branchPrefix: e.target.value })}
+              />
+              <Input
+                label="PR Label"
+                value={form.optimizer.prLabel}
+                onChange={(e) => updateField('optimizer', { ...form.optimizer, prLabel: e.target.value })}
+              />
+              <Input
+                label="Verification Command"
+                value={form.optimizer.verificationCommand}
+                onChange={(e) => updateField('optimizer', { ...form.optimizer, verificationCommand: e.target.value })}
+                placeholder="auto-detect"
+              />
+            </div>
+          </div>
+        </JobAccordion>
+
         {/* UX */}
         <JobAccordion
           id="job-section-ux"
@@ -504,7 +568,7 @@ const JobsTab: React.FC<IJobsTabProps> = ({
             </div>
             <TagInput
               label="Flows"
-              values={form.ux.flows}
+              value={form.ux.flows}
               onChange={(flows) => updateField('ux', { ...form.ux, flows })}
               placeholder="e.g., Sign in, Create project"
               helpText="Key flows for the UX agent to inspect."

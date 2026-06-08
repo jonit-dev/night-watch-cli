@@ -35,6 +35,8 @@ export interface IInstallOptions {
   qa?: boolean;
   noAudit?: boolean;
   audit?: boolean;
+  noOptimizer?: boolean;
+  optimizer?: boolean;
   noUx?: boolean;
   ux?: boolean;
   noAnalytics?: boolean;
@@ -154,6 +156,8 @@ export function performInstall(
     qa?: boolean;
     noAudit?: boolean;
     audit?: boolean;
+    noOptimizer?: boolean;
+    optimizer?: boolean;
     noUx?: boolean;
     ux?: boolean;
     noAnalytics?: boolean;
@@ -252,6 +256,16 @@ export function performInstall(
       entries.push(auditEntry);
     }
 
+    // Optimizer entry (if enabled and noOptimizer not set)
+    const disableOptimizer = options?.noOptimizer === true || options?.optimizer === false;
+    const installOptimizer = disableOptimizer ? false : config.optimizer.enabled;
+    if (installOptimizer) {
+      const optimizerSchedule = config.optimizer.schedule;
+      const optimizerLog = path.join(logDir, 'optimizer.log');
+      const optimizerEntry = `${optimizerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} optimize >> ${shellQuote(optimizerLog)} 2>&1  ${marker}`;
+      entries.push(optimizerEntry);
+    }
+
     // UX entry (if enabled and noUx not set)
     const disableUx = options?.noUx === true || options?.ux === false;
     const installUx = disableUx ? false : config.ux.enabled;
@@ -336,6 +350,7 @@ export function installCommand(program: Command): void {
     .option('--no-slicer', 'Skip installing slicer cron')
     .option('--no-qa', 'Skip installing QA cron')
     .option('--no-audit', 'Skip installing audit cron')
+    .option('--no-optimizer', 'Skip installing optimizer cron')
     .option('--no-ux', 'Skip installing UX cron')
     .option('--no-analytics', 'Skip installing analytics cron')
     .option('--no-pr-resolver', 'Skip installing PR resolver cron')
@@ -454,6 +469,20 @@ export function installCommand(program: Command): void {
           const auditSchedule = config.audit.schedule;
           const auditEntry = `${auditSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} audit >> ${shellQuote(auditLog)} 2>&1  ${marker}`;
           entries.push(auditEntry);
+        }
+
+        // Determine if optimizer should be installed
+        const disableOptimizer =
+          options.noOptimizer === true || (options as Record<string, unknown>).optimizer === false;
+        const installOptimizer = disableOptimizer ? false : config.optimizer.enabled;
+
+        // Optimizer entry (if enabled)
+        let optimizerLog: string | undefined;
+        if (installOptimizer) {
+          optimizerLog = path.join(logDir, 'optimizer.log');
+          const optimizerSchedule = config.optimizer.schedule;
+          const optimizerEntry = `${optimizerSchedule} ${pathPrefix}${providerEnvPrefix}${cliBinPrefix}${cronTriggerPrefix}cd ${shellQuote(projectDir)} && ${shellQuote(nightWatchBin)} optimize >> ${shellQuote(optimizerLog)} 2>&1  ${marker}`;
+          entries.push(optimizerEntry);
         }
 
         // Determine if UX should be installed

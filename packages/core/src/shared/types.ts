@@ -53,6 +53,7 @@ export type JobType =
   | 'reviewer'
   | 'qa'
   | 'audit'
+  | 'optimizer'
   | 'ux'
   | 'slicer'
   | 'analytics'
@@ -67,6 +68,7 @@ export interface IJobProviders {
   reviewer?: Provider;
   qa?: Provider;
   audit?: Provider;
+  optimizer?: Provider;
   ux?: Provider;
   slicer?: Provider;
   analytics?: Provider;
@@ -206,6 +208,17 @@ export interface IAuditConfig {
   createIssues: boolean;
   /** Board column to place created issues in */
   targetColumn: BoardColumnName;
+}
+
+export interface IOptimizerConfig {
+  enabled: boolean;
+  schedule: string;
+  maxRuntime: number;
+  branchPrefix: string;
+  prLabel: string;
+  targetScope: string;
+  maxFindingsToInspect: number;
+  verificationCommand: string;
 }
 
 // ==================== PR Resolver Config ====================
@@ -360,6 +373,7 @@ export interface INightWatchConfig {
   claudeModel?: ClaudeModel | null;
   qa: IQaConfig;
   audit: IAuditConfig;
+  optimizer: IOptimizerConfig;
   ux: IUxConfig;
   analytics: IAnalyticsConfig;
   manager: IManagerConfig;

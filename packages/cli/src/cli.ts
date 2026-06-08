@@ -10,6 +10,7 @@ import { runCommand } from './commands/run.js';
 import { reviewCommand } from './commands/review.js';
 import { qaCommand } from './commands/qa.js';
 import { auditCommand } from './commands/audit.js';
+import { optimizeCommand } from './commands/optimize.js';
 import { uxCommand } from './commands/ux.js';
 import { analyticsCommand } from './commands/analytics.js';
 import { installCommand } from './commands/install.js';
@@ -77,6 +78,9 @@ qaCommand(program);
 
 // Register audit command
 auditCommand(program);
+
+// Register optimizer command
+optimizeCommand(program);
 
 // Register UX command
 uxCommand(program);

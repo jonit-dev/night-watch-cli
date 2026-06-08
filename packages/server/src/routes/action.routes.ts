@@ -15,6 +15,7 @@ import {
   checkLockFile,
   executorLockPath,
   fetchStatusSnapshot,
+  optimizerLockPath,
   performCancel,
   plannerLockPath,
   reviewerLockPath,
@@ -67,6 +68,8 @@ function spawnAction(
       lockPath = reviewerLockPath(projectDir);
     } else if (command[0] === 'planner') {
       lockPath = plannerLockPath(projectDir);
+    } else if (command[0] === 'optimize') {
+      lockPath = optimizerLockPath(projectDir);
     }
 
     if (lockPath) {

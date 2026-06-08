@@ -168,6 +168,7 @@ Assign different AI providers to different job types:
     "reviewer": "claude-opus-4-6",
     "qa": "codex",
     "audit": "claude-sonnet-4-6",
+    "optimizer": "codex",
     "analytics": "claude-opus-4-6",
     "slicer": "claude-sonnet-4-6"
   }
@@ -366,6 +367,19 @@ PRDs whose filename (without `.md` extension) matches an entry execute first.
 | `audit.createIssues` | boolean | `false`        | Create board issues for selected audit findings             |
 | `audit.targetColumn` | string  | `"Draft"`      | Board column for created audit issues                       |
 
+### Optimizer Job (optimizer)
+
+| Field                            | Type    | Default                   | Description                                                             |
+| -------------------------------- | ------- | ------------------------- | ----------------------------------------------------------------------- |
+| `optimizer.enabled`              | boolean | `false`                   | Enable Optimizer cron runs                                              |
+| `optimizer.schedule`             | string  | `"20 4 * * 2"`            | Cron schedule for optimizer execution                                   |
+| `optimizer.maxRuntime`           | number  | `0`                       | Maximum runtime in seconds (`0` = no timeout)                           |
+| `optimizer.branchPrefix`         | string  | `"night-watch/optimizer"` | Prefix for optimizer branches (`<prefix>/<target-slug>`)                |
+| `optimizer.prLabel`              | string  | `"optimization"`          | Label applied to optimizer PRs                                          |
+| `optimizer.targetScope`          | string  | `""`                      | Optional path/scope to scan; empty means the whole repo                 |
+| `optimizer.maxFindingsToInspect` | number  | `5`                       | Maximum top scanner leads the agent should inspect manually             |
+| `optimizer.verificationCommand`  | string  | `""`                      | Explicit verification command; empty means project convention detection |
+
 ### Analytics Job (analytics)
 
 | Field                      | Type    | Default          | Description                                   |
@@ -379,18 +393,18 @@ PRDs whose filename (without `.md` extension) matches an entry execute first.
 
 ### Manager Job (manager)
 
-| Field                          | Type    | Default                          | Description                                      |
-| ------------------------------ | ------- | -------------------------------- | ------------------------------------------------ |
-| `manager.enabled`              | boolean | `true`                           | Enable Manager cron runs                         |
-| `manager.schedule`             | string  | `"15 7 * * *"`                   | Cron schedule for Manager                        |
-| `manager.maxRuntime`           | number  | `0`                              | Maximum runtime in seconds (`0` = no timeout)    |
-| `manager.authority`            | string  | `"draft"`                        | Authority level: `draft`, `ready`, or `workflow` |
-| `manager.outputMode`           | string  | `"board-draft"`                  | Output mode: `board-draft`, `filesystem-prd`, or `report-only` |
-| `manager.targetColumn`         | string  | `"Draft"`                        | Board column for created Manager issues          |
-| `manager.memoryPath`           | string  | `".night-watch/manager/memory.md"` | Markdown memory file path                      |
-| `manager.docsDir`              | string  | `".night-watch/manager/docs"`    | Directory for Manager-owned generated docs       |
-| `manager.weeklySummaryEnabled` | boolean | `true`                           | Send weekly roadmap/project summaries            |
-| `manager.weeklySummaryDay`     | number  | `1`                              | Day of week for weekly summaries (0 = Sunday)    |
+| Field                          | Type    | Default                            | Description                                                    |
+| ------------------------------ | ------- | ---------------------------------- | -------------------------------------------------------------- |
+| `manager.enabled`              | boolean | `true`                             | Enable Manager cron runs                                       |
+| `manager.schedule`             | string  | `"15 7 * * *"`                     | Cron schedule for Manager                                      |
+| `manager.maxRuntime`           | number  | `0`                                | Maximum runtime in seconds (`0` = no timeout)                  |
+| `manager.authority`            | string  | `"draft"`                          | Authority level: `draft`, `ready`, or `workflow`               |
+| `manager.outputMode`           | string  | `"board-draft"`                    | Output mode: `board-draft`, `filesystem-prd`, or `report-only` |
+| `manager.targetColumn`         | string  | `"Draft"`                          | Board column for created Manager issues                        |
+| `manager.memoryPath`           | string  | `".night-watch/manager/memory.md"` | Markdown memory file path                                      |
+| `manager.docsDir`              | string  | `".night-watch/manager/docs"`      | Directory for Manager-owned generated docs                     |
+| `manager.weeklySummaryEnabled` | boolean | `true`                             | Send weekly roadmap/project summaries                          |
+| `manager.weeklySummaryDay`     | number  | `1`                                | Day of week for weekly summaries (0 = Sunday)                  |
 
 ### Queue Configuration
 
@@ -405,6 +419,7 @@ PRDs whose filename (without `.md` extension) matches an entry execute first.
       "executor": 50,
       "reviewer": 40,
       "qa": 20,
+      "optimizer": 15,
       "audit": 10,
       "analytics": 10,
       "slicer": 30
@@ -487,6 +502,7 @@ All Night Watch environment variables are prefixed with `NW_`:
 | `NW_REVIEWER_ENABLED`    | `reviewerEnabled`    | `true`  |
 | `NW_QA_ENABLED`          | `qa.enabled`         | `true`  |
 | `NW_AUDIT_ENABLED`       | `audit.enabled`      | `false` |
+| `NW_OPTIMIZER_ENABLED`   | `optimizer.enabled`  | `false` |
 | `NW_ANALYTICS_ENABLED`   | `analytics.enabled`  | `false` |
 | `NW_MANAGER_ENABLED`     | `manager.enabled`    | `true`  |
 | `NW_AUDIT_CREATE_ISSUES` | `audit.createIssues` | `false` |
@@ -499,6 +515,7 @@ All Night Watch environment variables are prefixed with `NW_`:
 | `NW_REVIEWER_SCHEDULE`  | `reviewerSchedule`   | `25 */3 * * *`     |
 | `NW_QA_SCHEDULE`        | `qa.schedule`        | `45 2,10,18 * * *` |
 | `NW_AUDIT_SCHEDULE`     | `audit.schedule`     | `50 3 * * 1`       |
+| `NW_OPTIMIZER_SCHEDULE` | `optimizer.schedule` | `20 4 * * 2`       |
 | `NW_ANALYTICS_SCHEDULE` | `analytics.schedule` | `0 6 * * 1`        |
 | `NW_MANAGER_SCHEDULE`   | `manager.schedule`   | `15 7 * * *`       |
 
@@ -510,6 +527,7 @@ All Night Watch environment variables are prefixed with `NW_`:
 | `NW_REVIEWER_MAX_RUNTIME`  | `reviewerMaxRuntime`   | `0` or `3600` |
 | `NW_QA_MAX_RUNTIME`        | `qa.maxRuntime`        | `0` or `3600` |
 | `NW_AUDIT_MAX_RUNTIME`     | `audit.maxRuntime`     | `0` or `1800` |
+| `NW_OPTIMIZER_MAX_RUNTIME` | `optimizer.maxRuntime` | `0` or `3600` |
 | `NW_ANALYTICS_MAX_RUNTIME` | `analytics.maxRuntime` | `0` or `900`  |
 | `NW_MANAGER_MAX_RUNTIME`   | `manager.maxRuntime`   | `0` or `1800` |
 
@@ -517,14 +535,19 @@ All Night Watch environment variables are prefixed with `NW_`:
 
 For jobs with extra configuration fields (QA, Analytics):
 
-| Variable                        | Config Key                 | Example      |
-| ------------------------------- | -------------------------- | ------------ |
-| `NW_QA_BRANCH_PATTERNS`         | `qa.branchPatterns`        | `["feat/*"]` |
-| `NW_QA_ARTIFACTS`               | `qa.artifacts`             | `both`       |
-| `NW_QA_SKIP_LABEL`              | `qa.skipLabel`             | `skip-qa`    |
-| `NW_QA_AUTO_INSTALL_PLAYWRIGHT` | `qa.autoInstallPlaywright` | `true`       |
-| `NW_ANALYTICS_LOOKBACK_DAYS`    | `analytics.lookbackDays`   | `7`          |
-| `NW_ANALYTICS_TARGET_COLUMN`    | `analytics.targetColumn`   | `Draft`      |
+| Variable                               | Config Key                       | Example                 |
+| -------------------------------------- | -------------------------------- | ----------------------- |
+| `NW_QA_BRANCH_PATTERNS`                | `qa.branchPatterns`              | `["feat/*"]`            |
+| `NW_QA_ARTIFACTS`                      | `qa.artifacts`                   | `both`                  |
+| `NW_QA_SKIP_LABEL`                     | `qa.skipLabel`                   | `skip-qa`               |
+| `NW_QA_AUTO_INSTALL_PLAYWRIGHT`        | `qa.autoInstallPlaywright`       | `true`                  |
+| `NW_OPTIMIZER_BRANCH_PREFIX`           | `optimizer.branchPrefix`         | `night-watch/optimizer` |
+| `NW_OPTIMIZER_PR_LABEL`                | `optimizer.prLabel`              | `optimization`          |
+| `NW_OPTIMIZER_TARGET_SCOPE`            | `optimizer.targetScope`          | `packages/core`         |
+| `NW_OPTIMIZER_MAX_FINDINGS_TO_INSPECT` | `optimizer.maxFindingsToInspect` | `5`                     |
+| `NW_OPTIMIZER_VERIFICATION_COMMAND`    | `optimizer.verificationCommand`  | `yarn verify`           |
+| `NW_ANALYTICS_LOOKBACK_DAYS`           | `analytics.lookbackDays`         | `7`                     |
+| `NW_ANALYTICS_TARGET_COLUMN`           | `analytics.targetColumn`         | `Draft`                 |
 
 ## CLI Flags
 

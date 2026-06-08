@@ -44,6 +44,7 @@ import {
   DEFAULT_MODEL_ATTRIBUTION,
   DEFAULT_NEW_PR_LABEL,
   DEFAULT_NOTIFICATIONS,
+  DEFAULT_OPTIMIZER,
   DEFAULT_PRD_DIR,
   DEFAULT_PRD_PRIORITY,
   DEFAULT_PRIMARY_FALLBACK_MODEL,
@@ -114,6 +115,7 @@ export function getDefaultConfig(): INightWatchConfig {
     claudeModel: DEFAULT_CLAUDE_MODEL,
     qa: { ...DEFAULT_QA },
     audit: { ...DEFAULT_AUDIT },
+    optimizer: { ...DEFAULT_OPTIMIZER },
     ux: { ...DEFAULT_UX, flows: [...DEFAULT_UX.flows] },
     analytics: { ...DEFAULT_ANALYTICS },
     manager: { ...DEFAULT_MANAGER },
@@ -343,6 +345,7 @@ function mergeConfigLayer(base: INightWatchConfig, layer: Partial<INightWatchCon
       _key === 'boardProvider' ||
       _key === 'qa' ||
       _key === 'audit' ||
+      _key === 'optimizer' ||
       _key === 'ux' ||
       _key === 'analytics' ||
       _key === 'manager' ||

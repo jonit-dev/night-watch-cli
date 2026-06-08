@@ -34,6 +34,7 @@ import {
   isProcessAliveSince,
   managerLockPath,
   mergerLockPath,
+  optimizerLockPath,
   plannerLockPath,
   prResolverLockPath,
   qaLockPath,
@@ -99,6 +100,8 @@ function getLockPathForJob(projectPath: string, jobType: JobType): string {
       return qaLockPath(projectPath);
     case 'audit':
       return auditLockPath(projectPath);
+    case 'optimizer':
+      return optimizerLockPath(projectPath);
     case 'ux':
       return uxLockPath(projectPath);
     case 'slicer':

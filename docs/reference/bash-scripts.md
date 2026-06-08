@@ -15,6 +15,7 @@ graph TB
         REV["night-watch review"]
         QA["night-watch qa"]
         AUDIT["night-watch audit"]
+        OPTIMIZE["night-watch optimize"]
         SLICE["night-watch slice"]
     end
 
@@ -23,6 +24,7 @@ graph TB
         PRREV["night-watch-pr-reviewer-cron.sh<br/>PR Reviewer"]
         QACRON["night-watch-qa-cron.sh<br/>QA Runner"]
         AUDITCRON["night-watch-audit-cron.sh<br/>Audit Runner"]
+        OPTCRON["night-watch-optimizer-cron.sh<br/>Optimizer Runner"]
         SLICER["night-watch-slicer-cron.sh<br/>Roadmap Slicer"]
         HELPERS["night-watch-helpers.sh<br/>Shared Functions"]
     end
@@ -37,12 +39,14 @@ graph TB
     REV -->|"NW_* env vars"| PRREV
     QA -->|"NW_* env vars"| QACRON
     AUDIT -->|"NW_* env vars"| AUDITCRON
+    OPTIMIZE -->|"NW_* env vars"| OPTCRON
     SLICE -->|"NW_* env vars"| SLICER
 
     CRON --> HELPERS
     PRREV --> HELPERS
     QACRON --> HELPERS
     AUDITCRON --> HELPERS
+    OPTCRON --> HELPERS
     SLICER --> HELPERS
 
     CRON --> CLAUDE
@@ -52,20 +56,23 @@ graph TB
     PRREV --> CODEX
     QACRON --> CLAUDE
     AUDITCRON --> CLAUDE
+    OPTCRON --> CLAUDE
 ```
 
 ---
 
 ## Script Inventory
 
-| Script                            | Purpose                         | Lock File                                     | Typical Runtime |
-| --------------------------------- | ------------------------------- | --------------------------------------------- | --------------- |
-| `night-watch-cron.sh`             | PRD executor — implements PRDs  | `/tmp/night-watch-{project}.lock`             | 2-4 hours       |
-| `night-watch-pr-reviewer-cron.sh` | PR reviewer — fixes failing PRs | `/tmp/night-watch-pr-reviewer-{project}.lock` | 30-60 min       |
-| `night-watch-qa-cron.sh`          | QA runner — generates tests     | `/tmp/night-watch-qa-{project}.lock`          | 30-60 min       |
-| `night-watch-audit-cron.sh`       | Code audit runner               | `/tmp/night-watch-audit-{project}.lock`       | 15-30 min       |
-| `night-watch-slicer-cron.sh`      | Roadmap → PRD slicer            | `/tmp/night-watch-slicer-{project}.lock`      | 10-20 min       |
-| `night-watch-helpers.sh`          | Shared functions (sourced)      | —                                             | —               |
+| Script                            | Purpose                                               | Lock File                                     | Typical Runtime |
+| --------------------------------- | ----------------------------------------------------- | --------------------------------------------- | --------------- |
+| `night-watch-cron.sh`             | PRD executor — implements PRDs                        | `/tmp/night-watch-{project}.lock`             | 2-4 hours       |
+| `night-watch-pr-reviewer-cron.sh` | PR reviewer — fixes failing PRs                       | `/tmp/night-watch-pr-reviewer-{project}.lock` | 30-60 min       |
+| `night-watch-qa-cron.sh`          | QA runner — generates tests                           | `/tmp/night-watch-qa-{project}.lock`          | 30-60 min       |
+| `night-watch-audit-cron.sh`       | Code audit runner                                     | `/tmp/night-watch-audit-{project}.lock`       | 15-30 min       |
+| `night-watch-optimizer-cron.sh`   | Optimizer runner — proves one performance improvement | `/tmp/night-watch-optimizer-{project}.lock`   | 15-60 min       |
+| `night-watch-optimizer-scan.sh`   | Optimizer first-pass scanner                          | —                                             | <1 min          |
+| `night-watch-slicer-cron.sh`      | Roadmap → PRD slicer                                  | `/tmp/night-watch-slicer-{project}.lock`      | 10-20 min       |
+| `night-watch-helpers.sh`          | Shared functions (sourced)                            | —                                             | —               |
 
 ---
 

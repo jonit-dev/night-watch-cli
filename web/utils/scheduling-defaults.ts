@@ -4,6 +4,7 @@ import type {
   IUxConfig,
   IMergerConfig,
   IManagerConfig,
+  IOptimizerConfig,
   IPrResolverConfig,
   IQaConfig,
   IRoadmapScannerConfig,
@@ -38,6 +39,17 @@ export const DEFAULT_AUDIT_CONFIG: IAuditConfig = {
   maxRuntime: 1800,
   createIssues: false,
   targetColumn: 'Draft',
+};
+
+export const DEFAULT_OPTIMIZER_CONFIG: IOptimizerConfig = {
+  enabled: false,
+  schedule: '20 4 * * 2',
+  maxRuntime: 0,
+  branchPrefix: 'night-watch/optimizer',
+  prLabel: 'optimization',
+  targetScope: '',
+  maxFindingsToInspect: 5,
+  verificationCommand: '',
 };
 
 export const DEFAULT_UX_CONFIG: IUxConfig = {
@@ -113,6 +125,10 @@ export function getDefaultQaConfig(): IQaConfig {
 
 export function getDefaultAuditConfig(): IAuditConfig {
   return { ...DEFAULT_AUDIT_CONFIG };
+}
+
+export function getDefaultOptimizerConfig(): IOptimizerConfig {
+  return { ...DEFAULT_OPTIMIZER_CONFIG };
 }
 
 export function getDefaultUxConfig(): IUxConfig {

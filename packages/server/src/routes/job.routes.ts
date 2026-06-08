@@ -18,6 +18,7 @@ import {
   executorLockPath,
   managerLockPath,
   mergerLockPath,
+  optimizerLockPath,
   plannerLockPath,
   prResolverLockPath,
   qaLockPath,
@@ -290,6 +291,8 @@ function getLockPathForJob(projectDir: string, jobId: JobType): string {
       return qaLockPath(projectDir);
     case 'audit':
       return auditLockPath(projectDir);
+    case 'optimizer':
+      return optimizerLockPath(projectDir);
     case 'ux':
       return uxLockPath(projectDir);
     case 'slicer':

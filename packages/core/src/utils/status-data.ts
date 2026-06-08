@@ -18,6 +18,7 @@ import {
   LOG_DIR,
   MANAGER_LOG_NAME,
   MERGER_LOG_NAME,
+  OPTIMIZER_LOG_NAME,
   PLANNER_LOG_NAME,
   PR_RESOLVER_LOG_NAME,
   QA_LOG_NAME,
@@ -141,6 +142,13 @@ export function qaLockPath(projectDir: string): string {
  */
 export function auditLockPath(projectDir: string): string {
   return `${LOCK_FILE_PREFIX}audit-${projectRuntimeKey(projectDir)}.lock`;
+}
+
+/**
+ * Compute the lock file path for the optimizer job of a given project directory.
+ */
+export function optimizerLockPath(projectDir: string): string {
+  return `${LOCK_FILE_PREFIX}optimizer-${projectRuntimeKey(projectDir)}.lock`;
 }
 
 /**
@@ -800,6 +808,7 @@ export function collectLogInfo(projectDir: string): ILogInfo[] {
     { name: 'reviewer', fileName: 'reviewer.log' },
     { name: 'qa', fileName: `${QA_LOG_NAME}.log` },
     { name: 'audit', fileName: `${AUDIT_LOG_NAME}.log` },
+    { name: 'optimizer', fileName: `${OPTIMIZER_LOG_NAME}.log` },
     { name: 'ux', fileName: `${UX_LOG_NAME}.log` },
     { name: 'planner', fileName: `${PLANNER_LOG_NAME}.log` },
     { name: 'analytics', fileName: `${ANALYTICS_LOG_NAME}.log` },
@@ -850,6 +859,7 @@ export async function fetchStatusSnapshot(
   const reviewerLock = checkLockFile(reviewerLockPath(projectDir));
   const qaLock = checkLockFile(qaLockPath(projectDir));
   const auditLock = checkLockFile(auditLockPath(projectDir));
+  const optimizerLock = checkLockFile(optimizerLockPath(projectDir));
   const uxLock = checkLockFile(uxLockPath(projectDir));
   const plannerLock = checkLockFile(plannerLockPath(projectDir));
   const analyticsLock = checkLockFile(analyticsLockPath(projectDir));
@@ -862,6 +872,7 @@ export async function fetchStatusSnapshot(
     { name: 'reviewer', running: reviewerLock.running, pid: reviewerLock.pid },
     { name: 'qa', running: qaLock.running, pid: qaLock.pid },
     { name: 'audit', running: auditLock.running, pid: auditLock.pid },
+    { name: 'optimizer', running: optimizerLock.running, pid: optimizerLock.pid },
     { name: 'ux', running: uxLock.running, pid: uxLock.pid },
     { name: 'planner', running: plannerLock.running, pid: plannerLock.pid },
     { name: 'analytics', running: analyticsLock.running, pid: analyticsLock.pid },

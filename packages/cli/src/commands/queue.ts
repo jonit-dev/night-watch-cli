@@ -39,6 +39,7 @@ const VALID_JOB_TYPES: JobType[] = [
   'reviewer',
   'qa',
   'audit',
+  'optimizer',
   'ux',
   'slicer',
   'planner',

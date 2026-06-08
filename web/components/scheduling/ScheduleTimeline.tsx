@@ -77,6 +77,7 @@ const ScheduleTimeline: React.FC<ScheduleTimelineProps> = ({
         reviewer: config.reviewerEnabled ? config.reviewerSchedule : null,
         qa: config.qa.enabled ? config.qa.schedule : null,
         audit: config.audit.enabled ? config.audit.schedule : null,
+        optimizer: config.optimizer?.enabled ? config.optimizer.schedule : null,
         ux: config.ux?.enabled ? config.ux.schedule : null,
         slicer: config.roadmapScanner.enabled ? config.roadmapScanner.slicerSchedule : null,
         analytics: config.analytics?.enabled ? config.analytics?.schedule : null,

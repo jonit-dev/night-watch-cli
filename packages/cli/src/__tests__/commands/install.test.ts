@@ -88,6 +88,16 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
       createIssues: false,
       targetColumn: 'Draft' as const,
     },
+    optimizer: {
+      enabled: false,
+      schedule: '20 4 * * 2',
+      maxRuntime: 0,
+      branchPrefix: 'night-watch/optimizer',
+      prLabel: 'optimization',
+      targetScope: '',
+      maxFindingsToInspect: 5,
+      verificationCommand: '',
+    },
     ux: {
       enabled: false,
       schedule: '0 7 * * 1',
@@ -124,6 +134,7 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
       reviewer: undefined,
       qa: undefined,
       audit: undefined,
+      optimizer: undefined,
       ux: undefined,
       slicer: undefined,
       analytics: undefined,
@@ -137,6 +148,7 @@ function createTestConfig(overrides: Partial<INightWatchConfig> = {}): INightWat
         reviewer: 40,
         slicer: 30,
         qa: 20,
+        optimizer: 15,
         ux: 10,
         audit: 10,
       },
@@ -358,6 +370,32 @@ describe('install command', () => {
 
     const hasQaEntry = result.entries.some((entry) => entry.includes("' qa "));
     expect(hasQaEntry).toBe(false);
+  });
+
+  it('should add optimizer crontab entry when optimizer.enabled is true', () => {
+    const config = createTestConfig({
+      optimizer: {
+        enabled: true,
+        schedule: '20 4 * * 2',
+        maxRuntime: 0,
+        branchPrefix: 'night-watch/optimizer',
+        prLabel: 'optimization',
+        targetScope: '',
+        maxFindingsToInspect: 5,
+        verificationCommand: '',
+      },
+    });
+
+    const result = performInstall(tempDir, config);
+
+    expect(result.success).toBe(true);
+    expect(result.entries).toHaveLength(3); // executor + reviewer + optimizer
+
+    const optimizerEntry = result.entries[2];
+    expect(optimizerEntry).toContain("' optimize ");
+    expect(optimizerEntry).toContain('optimizer.log');
+    expect(optimizerEntry).toContain('20 4 * * 2');
+    expect(optimizerEntry).toContain('# night-watch-cli:');
   });
 
   it('should skip QA entry when --no-qa flag is set', () => {
