@@ -32,6 +32,11 @@ export interface IProviderPreset {
   modelFlag?: string;
   /** Default model to use if modelFlag is set (e.g., "claude-sonnet-4-6") */
   model?: string;
+  /**
+   * When true, executor prompts are wrapped with a provider-native /goal line
+   * pointing at the selected PRD/issue. Defaults to true.
+   */
+  useGoalCommand?: boolean;
   /** Additional environment variables to set when invoking the provider */
   envVars?: Record<string, string>;
 }

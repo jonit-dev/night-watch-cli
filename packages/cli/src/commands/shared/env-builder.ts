@@ -81,6 +81,9 @@ export function buildBaseEnvVars(
   // Provider model (empty string if not set)
   env.NW_PROVIDER_MODEL = preset.model ?? '';
 
+  // Default-on provider-native /goal wrapping for executor prompts.
+  env.NW_PROVIDER_USE_GOAL_COMMAND = preset.useGoalCommand === false ? '0' : '1';
+
   // Human-friendly provider label for attribution in PRs, comments, commits
   env.NW_PROVIDER_LABEL = deriveProviderLabel(config, preset);
 

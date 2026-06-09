@@ -121,6 +121,8 @@ When multiple projects are registered:
 | `providerEnv`     | object       | `{}`       | Custom env vars passed to the provider CLI             |
 | `providerLabel`   | string\|null | `null`     | **@deprecated** Use `providerPresets[id].name` instead |
 
+Provider presets also support `useGoalCommand` (boolean, default `true`). When enabled, executor runs prefix the provider prompt with `/goal <selected PRD or GitHub issue>` before the full Night Watch implementation instructions.
+
 **Built-in Presets:**
 
 | Preset ID           | Name              | Description             |

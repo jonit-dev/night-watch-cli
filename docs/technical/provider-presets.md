@@ -10,14 +10,14 @@ Provider presets define how Night Watch invokes AI provider CLIs. Each preset sp
 
 Night Watch includes 6 built-in provider presets:
 
-| Preset ID | Name | Model | Description |
-|-----------|------|-------|-------------|
-| `claude` | Claude | (default) | Standard Claude CLI |
-| `claude-sonnet-4-6` | Claude Sonnet 4.6 | claude-sonnet-4-6 | Claude Sonnet 4.6 model |
-| `claude-opus-4-6` | Claude Opus 4.6 | claude-opus-4-6 | Claude Opus 4.6 model |
-| `codex` | Codex | (default) | Codex CLI |
-| `glm-47` | GLM-4.7 | glm-4.7 | GLM-4.7 via Claude CLI proxy |
-| `glm-5` | GLM-5 | glm-5 | GLM-5 via Claude CLI proxy |
+| Preset ID           | Name              | Model             | Description                  |
+| ------------------- | ----------------- | ----------------- | ---------------------------- |
+| `claude`            | Claude            | (default)         | Standard Claude CLI          |
+| `claude-sonnet-4-6` | Claude Sonnet 4.6 | claude-sonnet-4-6 | Claude Sonnet 4.6 model      |
+| `claude-opus-4-6`   | Claude Opus 4.6   | claude-opus-4-6   | Claude Opus 4.6 model        |
+| `codex`             | Codex             | (default)         | Codex CLI                    |
+| `glm-47`            | GLM-4.7           | glm-4.7           | GLM-4.7 via Claude CLI proxy |
+| `glm-5`             | GLM-5             | glm-5             | GLM-5 via Claude CLI proxy   |
 
 ---
 
@@ -25,17 +25,18 @@ Night Watch includes 6 built-in provider presets:
 
 Each preset defines:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string | Human-readable name |
-| `command` | string | CLI executable |
-| `subcommand` | string | Optional subcommand (e.g., `exec` for Codex) |
-| `promptFlag` | string | Flag for prompt input (e.g., `-p`) |
-| `autoApproveFlag` | string | Flag to skip confirmations |
-| `workdirFlag` | string | Flag for working directory |
-| `modelFlag` | string | Flag for model selection |
-| `model` | string | Model ID |
-| `envVars` | object | Environment variables to set |
+| Field             | Type    | Description                                                             |
+| ----------------- | ------- | ----------------------------------------------------------------------- |
+| `name`            | string  | Human-readable name                                                     |
+| `command`         | string  | CLI executable                                                          |
+| `subcommand`      | string  | Optional subcommand (e.g., `exec` for Codex)                            |
+| `promptFlag`      | string  | Flag for prompt input (e.g., `-p`)                                      |
+| `autoApproveFlag` | string  | Flag to skip confirmations                                              |
+| `workdirFlag`     | string  | Flag for working directory (e.g., `-C`)                                 |
+| `modelFlag`       | string  | Flag for model selection (e.g., `--model`)                              |
+| `model`           | string  | Default model value                                                     |
+| `useGoalCommand`  | boolean | Prefix executor prompts with `/goal <PRD or issue>`; defaults to `true` |
+| `envVars`         | object  | Environment variables for this preset                                   |
 
 ---
 
@@ -196,6 +197,7 @@ When you specify a provider, Night Watch:
 3. Uses the preset to construct the CLI command
 
 **Example resolution:**
+
 - `provider: "claude-opus-4-6"` → uses built-in preset
 - `provider: "my-custom-provider"` → uses custom preset from config
 - `provider: "unknown"` → error (preset not found)
@@ -216,6 +218,7 @@ Configure fallback providers for rate limit scenarios:
 ```
 
 **Fallback behavior:**
+
 1. Primary provider hits rate limit
 2. Switch to `primaryFallbackPreset`
 3. If also rate-limited, switch to `secondaryFallbackPreset`

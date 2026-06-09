@@ -416,6 +416,11 @@ function validateConfigChanges(
         return `providerPresets.${presetId}.command must be a non-empty string`;
       }
 
+      // useGoalCommand must be boolean if present
+      if (preset.useGoalCommand !== undefined && typeof preset.useGoalCommand !== 'boolean') {
+        return `providerPresets.${presetId}.useGoalCommand must be a boolean`;
+      }
+
       // envVars must be string-valued if present
       if (preset.envVars !== undefined) {
         if (typeof preset.envVars !== 'object' || preset.envVars === null) {

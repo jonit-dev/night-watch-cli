@@ -145,13 +145,21 @@ export function normalizeConfig(rawConfig: Record<string, unknown>): Partial<INi
           const preset: IProviderPreset = {
             name,
             command,
-            subcommand: readString(rawPreset.subcommand),
-            promptFlag: readString(rawPreset.promptFlag),
-            autoApproveFlag: readString(rawPreset.autoApproveFlag),
-            workdirFlag: readString(rawPreset.workdirFlag),
-            modelFlag: readString(rawPreset.modelFlag),
-            model: readString(rawPreset.model),
           };
+          const subcommand = readString(rawPreset.subcommand);
+          const promptFlag = readString(rawPreset.promptFlag);
+          const autoApproveFlag = readString(rawPreset.autoApproveFlag);
+          const workdirFlag = readString(rawPreset.workdirFlag);
+          const modelFlag = readString(rawPreset.modelFlag);
+          const model = readString(rawPreset.model);
+          const useGoalCommand = readBoolean(rawPreset.useGoalCommand);
+          if (subcommand) preset.subcommand = subcommand;
+          if (promptFlag) preset.promptFlag = promptFlag;
+          if (autoApproveFlag) preset.autoApproveFlag = autoApproveFlag;
+          if (workdirFlag) preset.workdirFlag = workdirFlag;
+          if (modelFlag) preset.modelFlag = modelFlag;
+          if (model) preset.model = model;
+          if (useGoalCommand !== undefined) preset.useGoalCommand = useGoalCommand;
           // Parse envVars if present
           const rawEnvVars = readObject(rawPreset.envVars);
           if (rawEnvVars) {

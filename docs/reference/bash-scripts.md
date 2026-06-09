@@ -296,14 +296,15 @@ The Node.js CLI sets these env vars before spawning bash scripts:
 
 ### Provider Presets
 
-| Variable                   | Source                 | Purpose                                |
-| -------------------------- | ---------------------- | -------------------------------------- |
-| `NW_PROVIDER_SUBCOMMAND`   | preset.subcommand      | e.g., "exec" for codex                 |
-| `NW_PROVIDER_PROMPT_FLAG`  | preset.promptFlag      | e.g., "-p" for claude                  |
-| `NW_PROVIDER_APPROVE_FLAG` | preset.autoApproveFlag | e.g., "--dangerously-skip-permissions" |
-| `NW_PROVIDER_WORKDIR_FLAG` | preset.workdirFlag     | e.g., "-C" for codex                   |
-| `NW_PROVIDER_MODEL_FLAG`   | preset.modelFlag       | e.g., "--model"                        |
-| `NW_PROVIDER_MODEL`        | preset.model           | e.g., "claude-sonnet-4-6"              |
+| Variable                       | Source                 | Purpose                                              |
+| ------------------------------ | ---------------------- | ---------------------------------------------------- |
+| `NW_PROVIDER_SUBCOMMAND`       | preset.subcommand      | e.g., "exec" for codex                               |
+| `NW_PROVIDER_PROMPT_FLAG`      | preset.promptFlag      | e.g., "-p" for claude                                |
+| `NW_PROVIDER_APPROVE_FLAG`     | preset.autoApproveFlag | e.g., "--dangerously-skip-permissions"               |
+| `NW_PROVIDER_WORKDIR_FLAG`     | preset.workdirFlag     | e.g., "-C" for codex                                 |
+| `NW_PROVIDER_MODEL_FLAG`       | preset.modelFlag       | e.g., "--model"                                      |
+| `NW_PROVIDER_MODEL`            | preset.model           | e.g., "claude-sonnet-4-6"                            |
+| `NW_PROVIDER_USE_GOAL_COMMAND` | preset.useGoalCommand  | "1" by default; "0" disables `/goal` prompt wrapping |
 
 ### Rate Limit Fallback
 

@@ -718,6 +718,7 @@ EXECUTOR_PROMPT_REF=$(instruction_ref_for_prompt "${PROJECT_DIR}" "${EXECUTOR_PR
 PROGRESS_PUSH_CMD=$(project_git_push_command "${BRANCH_NAME}")
 AUDIT_TRIAGE_RESULT_FILE=".night-watch-audit-triage-result"
 AUDIT_TRIAGE_RESULT_PATH="${WORKTREE_DIR}/${AUDIT_TRIAGE_RESULT_FILE}"
+PROVIDER_GOAL_REF=""
 
 is_audit_board_issue() {
   if [ -z "${ISSUE_NUMBER}" ]; then
@@ -800,6 +801,7 @@ if is_tiny_audit_board_issue; then
   log "PROMPT: Using lean audit triage workflow for issue #${ISSUE_NUMBER}"
   PROMPT="$(build_audit_triage_prompt)"
 elif [ -n "${ISSUE_NUMBER}" ]; then
+  PROVIDER_GOAL_REF="GitHub issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}"
   PROMPT="Implement the following PRD (GitHub issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}):
 
 ${ISSUE_BODY}
@@ -831,6 +833,7 @@ Follow all CLAUDE.md conventions (if present).
 - Do NOT process any other issues — only issue #${ISSUE_NUMBER}"
 else
   PROMPT_PRD_PATH="${PRD_DIR_REL}/${ELIGIBLE_PRD}"
+  PROVIDER_GOAL_REF="${PROMPT_PRD_PATH}"
   PROMPT="Implement the PRD at ${PROMPT_PRD_PATH}
 
 ## Setup
@@ -870,9 +873,17 @@ fi
 if [ "${NW_DRY_RUN:-0}" = "1" ]; then
   log "DRY-RUN: Would process ${ELIGIBLE_PRD}"
   log "DRY-RUN: Provider: ${PROVIDER_CMD}"
+  if [ "${NW_PROVIDER_USE_GOAL_COMMAND:-1}" != "0" ] && [ -n "${PROVIDER_GOAL_REF}" ]; then
+    log "DRY-RUN: Provider goal command target: ${PROVIDER_GOAL_REF}"
+  fi
   log "DRY-RUN: Runtime: ${MAX_RUNTIME}s"
   echo "=== Dry Run: PRD Executor ==="
   echo "Provider:    ${PROVIDER_CMD}"
+  if [ "${NW_PROVIDER_USE_GOAL_COMMAND:-1}" != "0" ] && [ -n "${PROVIDER_GOAL_REF}" ]; then
+    echo "Goal mode:   /goal ${PROVIDER_GOAL_REF}"
+  else
+    echo "Goal mode:   disabled"
+  fi
   echo "Eligible PRD: ${ELIGIBLE_PRD}"
   echo "Branch:      ${BRANCH_NAME}"
   echo "Worktree:    ${WORKTREE_DIR}"
@@ -954,7 +965,8 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
   LOG_LINE_BEFORE=$(wc -l < "${LOG_FILE}" 2>/dev/null || echo 0)
 
   # Build provider command array using generic helper
-  mapfile -d '' -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${WORKTREE_DIR}" "${PROMPT}")
+  PROVIDER_PROMPT="$(build_provider_prompt "${PROVIDER_GOAL_REF}" "${PROMPT}")"
+  mapfile -d '' -t PROVIDER_CMD_PARTS < <(build_provider_cmd "${WORKTREE_DIR}" "${PROVIDER_PROMPT}")
 
   # Execute — always cd into worktree so provider tools resolve project files correctly
   if (cd "${WORKTREE_DIR}" && run_with_optional_timeout "${SESSION_MAX_RUNTIME}" "${PROVIDER_CMD_PARTS[@]}" 2>&1 | tee -a "${LOG_FILE}"); then
@@ -1100,6 +1112,8 @@ if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
     local log_line_before="${7:-}"
 
     local display_model="${preset_model:-${preset_cmd}}"
+    local fallback_prompt
+    fallback_prompt="$(build_provider_prompt "${PROVIDER_GOAL_REF}" "${PROMPT}")"
     log "RATE-LIMIT-FALLBACK: Running preset fallback cmd=${preset_cmd} model=${display_model} prd=${ELIGIBLE_PRD}"
     send_rate_limit_fallback_warning "${display_model}" "$(basename "${PROJECT_DIR}")"
 
@@ -1118,7 +1132,7 @@ if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
       # shellcheck disable=SC2086
       run_with_optional_timeout "${SESSION_MAX_RUNTIME}" \
         "${preset_cmd}" \
-          "${preset_prompt_flag:--p}" "${PROMPT}" \
+          "${preset_prompt_flag:--p}" "${fallback_prompt}" \
           ${preset_auto_approve_flag:+${preset_auto_approve_flag}} \
           ${model_arg} \
           2>&1 | tee -a "${LOG_FILE}"
@@ -1168,8 +1182,8 @@ if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
     run_native_fallback() {
       local model="$1"
       local log_line_before="$2"
-
-      log "RATE-LIMIT-FALLBACK: Running native Claude (${model}) prd=${ELIGIBLE_PRD}"
+      fallback_prompt="$(build_provider_prompt "${PROVIDER_GOAL_REF}" "${PROMPT}")"
+      log "RATE-LIMIT-FALLBACK: Running native Claude fallback model=${model} prd=${ELIGIBLE_PRD}"
       send_rate_limit_fallback_warning "${model}" "$(basename "${PROJECT_DIR}")"
 
       FALLBACK_START_TIME=$(date +%s)
@@ -1178,7 +1192,7 @@ if [ "${RATE_LIMIT_FALLBACK_TRIGGERED}" = "1" ]; then
           unset ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN \
                 ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL && \
           run_with_optional_timeout "${SESSION_MAX_RUNTIME}" \
-            claude -p "${PROMPT}" \
+            claude -p "${fallback_prompt}" \
               --dangerously-skip-permissions \
               --model "${model}" \
               2>&1 | tee -a "${LOG_FILE}"

@@ -6,6 +6,7 @@ import Button from '../ui/Button.js';
 import Input from '../ui/Input.js';
 import Modal from '../ui/Modal.js';
 import Select from '../ui/Select.js';
+import Switch from '../ui/Switch.js';
 import ProviderEnvEditor from './ProviderEnvEditor.js';
 import { isMissingGlmApiKey } from './providerWarnings.js';
 
@@ -16,6 +17,7 @@ const PRESET_TEMPLATES: Record<string, Partial<IProviderPreset>> = {
     command: 'claude',
     promptFlag: '-p',
     autoApproveFlag: '--dangerously-skip-permissions',
+    useGoalCommand: true,
   },
   codex: {
     name: 'Codex',
@@ -23,6 +25,7 @@ const PRESET_TEMPLATES: Record<string, Partial<IProviderPreset>> = {
     subcommand: 'exec',
     autoApproveFlag: '--yolo',
     workdirFlag: '-C',
+    useGoalCommand: true,
   },
   custom: {
     name: '',
@@ -63,6 +66,7 @@ const PresetFormModal: React.FC<IPresetFormModalProps> = ({
     workdirFlag: '',
     modelFlag: '',
     model: '',
+    useGoalCommand: true,
     envVars: {},
   });
   const [showAdvanced, setShowAdvanced] = React.useState(false);
@@ -84,6 +88,7 @@ const PresetFormModal: React.FC<IPresetFormModalProps> = ({
           workdirFlag: preset.workdirFlag ?? '',
           modelFlag: preset.modelFlag ?? '',
           model: preset.model ?? '',
+          useGoalCommand: preset.useGoalCommand ?? true,
           envVars: preset.envVars ?? {},
         });
         // Determine which template matches (if any)
@@ -106,6 +111,7 @@ const PresetFormModal: React.FC<IPresetFormModalProps> = ({
           workdirFlag: '',
           modelFlag: '',
           model: '',
+          useGoalCommand: true,
           envVars: {},
         });
         setSelectedTemplate('custom');
@@ -181,6 +187,7 @@ const PresetFormModal: React.FC<IPresetFormModalProps> = ({
     if (formData.workdirFlag?.trim()) cleanedPreset.workdirFlag = formData.workdirFlag.trim();
     if (formData.modelFlag?.trim()) cleanedPreset.modelFlag = formData.modelFlag.trim();
     if (formData.model?.trim()) cleanedPreset.model = formData.model.trim();
+    cleanedPreset.useGoalCommand = formData.useGoalCommand !== false;
     if (formData.envVars && Object.keys(formData.envVars).length > 0) {
       cleanedPreset.envVars = formData.envVars;
     }
@@ -277,6 +284,18 @@ const PresetFormModal: React.FC<IPresetFormModalProps> = ({
             placeholder="e.g., --model"
             helperText="Flag for specifying the model"
           />
+        </div>
+
+        <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-4">
+          <Switch
+            label="Use /goal command for PRD execution"
+            checked={formData.useGoalCommand ?? true}
+            onChange={(checked) => updateField('useGoalCommand', checked)}
+          />
+          <p className="mt-2 text-xs text-slate-500">
+            Default on. Night Watch will prefix executor prompts with `/goal` pointing at the
+            selected PRD or board issue, while keeping the full implementation instructions below it.
+          </p>
         </div>
 
         {/* Advanced section */}

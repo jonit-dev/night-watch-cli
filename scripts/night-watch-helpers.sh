@@ -266,6 +266,20 @@ build_provider_cmd() {
   printf '%s\0' "${prompt}"
 }
 
+# Wrap the executor prompt in a provider-native /goal command when enabled.
+# This lets capable providers enter goal mode with an explicit PRD/issue target
+# instead of receiving only a generic prose instruction.
+build_provider_prompt() {
+  local goal_ref="${1:-}"
+  local prompt="${2:-}"
+
+  if [ "${NW_PROVIDER_USE_GOAL_COMMAND:-1}" != "0" ] && [ -n "${goal_ref}" ]; then
+    printf '/goal %s\n\n%s' "${goal_ref}" "${prompt}"
+  else
+    printf '%s' "${prompt}"
+  fi
+}
+
 # Check if the provider uses a working directory flag (vs requiring cd).
 # Returns 0 if workdir flag is set, 1 otherwise.
 provider_uses_workdir_flag() {

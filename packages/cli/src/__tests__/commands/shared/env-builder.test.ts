@@ -224,6 +224,31 @@ describe('buildBaseEnvVars', () => {
     expect(env.NW_PROVIDER_PROMPT_FLAG).toBe('-p');
   });
 
+  it('should enable provider /goal command wrapping by default', () => {
+    const config = createTestConfig({ provider: 'claude' });
+    const env = buildBaseEnvVars(config, 'executor', false);
+
+    expect(env.NW_PROVIDER_USE_GOAL_COMMAND).toBe('1');
+  });
+
+  it('should allow provider presets to disable /goal command wrapping', () => {
+    const config = createTestConfig({
+      provider: 'plain-claude',
+      providerPresets: {
+        'plain-claude': {
+          name: 'Plain Claude',
+          command: 'claude',
+          promptFlag: '-p',
+          autoApproveFlag: '--dangerously-skip-permissions',
+          useGoalCommand: false,
+        },
+      },
+    });
+    const env = buildBaseEnvVars(config, 'executor', false);
+
+    expect(env.NW_PROVIDER_USE_GOAL_COMMAND).toBe('0');
+  });
+
   it('should emit NW_PROVIDER_MODEL for preset with model', () => {
     const config = createTestConfig({
       provider: 'architect',
