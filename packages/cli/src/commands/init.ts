@@ -7,6 +7,7 @@ import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import * as readline from 'readline';
+import cronstrue from 'cronstrue';
 import {
   BUILT_IN_PRESETS,
   BUILT_IN_PRESET_IDS,
@@ -455,7 +456,9 @@ function parseJobCsv(csv: string | undefined): InitJobId[] {
   for (const rawJob of csv.split(',')) {
     const job = parseJobId(rawJob);
     if (!job) {
-      throw new Error(`Unknown init job "${rawJob.trim()}". Valid jobs: ${INIT_JOB_IDS.join(', ')}`);
+      throw new Error(
+        `Unknown init job "${rawJob.trim()}". Valid jobs: ${INIT_JOB_IDS.join(', ')}`,
+      );
     }
     if (!jobs.includes(job)) {
       jobs.push(job);
@@ -475,9 +478,30 @@ function isValidCronSchedule(schedule: string): boolean {
   return schedule.trim().split(/\s+/).length === 5;
 }
 
-function parseScheduleOverrides(scheduleOptions: string[] | string | undefined): Partial<
-  Record<InitJobId, string>
-> {
+export function describeCronSchedule(schedule: string): string {
+  const trimmed = schedule.trim();
+  if (!isValidCronSchedule(trimmed)) {
+    return trimmed;
+  }
+
+  try {
+    return cronstrue.toString(trimmed, { use24HourTimeFormat: true });
+  } catch {
+    return trimmed;
+  }
+}
+
+function formatScheduleWithDescription(schedule: string): string {
+  const description = describeCronSchedule(schedule);
+  if (description === schedule) {
+    return schedule;
+  }
+  return `${schedule} (${description})`;
+}
+
+function parseScheduleOverrides(
+  scheduleOptions: string[] | string | undefined,
+): Partial<Record<InitJobId, string>> {
   const overrides: Partial<Record<InitJobId, string>> = {};
   for (const option of normalizeScheduleOptions(scheduleOptions)) {
     const separatorIndex = option.indexOf('=');
@@ -504,9 +528,7 @@ export function buildDefaultJobSelection(options?: {
   schedule?: string[] | string;
 }): IJobSelectionAnswer {
   const defaults = getDefaultConfig();
-  const enabled = new Set(
-    INIT_JOB_IDS.filter((jobId) => jobEnabledByDefault(defaults, jobId)),
-  );
+  const enabled = new Set(INIT_JOB_IDS.filter((jobId) => jobEnabledByDefault(defaults, jobId)));
 
   if (options?.reviewerEnabled === false) {
     enabled.delete('reviewer');
@@ -562,7 +584,7 @@ function formatEnabledJobs(selection: IJobSelectionAnswer): string {
   const catalog = getInitJobCatalog();
   const rows = catalog
     .filter((job) => enabled.has(job.id))
-    .map((job) => `${job.label}: ${selection.schedules[job.id]}`);
+    .map((job) => `${job.label}: ${formatScheduleWithDescription(selection.schedules[job.id])}`);
   return rows.length > 0 ? rows.join(', ') : 'None';
 }
 
@@ -869,10 +891,16 @@ async function promptJobSelection(): Promise<IJobSelectionAnswer> {
     if (!enabled.has(job.id)) {
       continue;
     }
-    let schedule = await promptWithDefault(`${job.label} cron schedule`, job.defaultSchedule);
+    let schedule = await promptWithDefault(
+      `${job.label} cron schedule (${describeCronSchedule(job.defaultSchedule)})`,
+      job.defaultSchedule,
+    );
     while (!isValidCronSchedule(schedule)) {
       warn('Cron schedules must contain five fields, for example: 5 */2 * * *');
-      schedule = await promptWithDefault(`${job.label} cron schedule`, job.defaultSchedule);
+      schedule = await promptWithDefault(
+        `${job.label} cron schedule (${describeCronSchedule(job.defaultSchedule)})`,
+        job.defaultSchedule,
+      );
     }
     selection.schedules[job.id] = schedule;
   }

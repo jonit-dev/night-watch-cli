@@ -3,43 +3,43 @@
  * Provides colored output, spinners, and table formatting
  */
 
-import chalk from "chalk";
-import ora, { type Ora } from "ora";
-import Table from "cli-table3";
+import chalk from 'chalk';
+import ora, { type Ora } from 'ora';
+import Table from 'cli-table3';
 
 /**
  * Print a success message with green check prefix
  */
 export function success(msg: string): void {
-  console.log(chalk.green("✔"), msg);
+  console.log(chalk.green('✔'), msg);
 }
 
 /**
  * Print an error message with red cross prefix
  */
 export function error(msg: string): void {
-  console.log(chalk.red("✖"), msg);
+  console.log(chalk.red('✖'), msg);
 }
 
 /**
  * Print a warning message with yellow warning prefix
  */
 export function warn(msg: string): void {
-  console.log(chalk.yellow("⚠"), msg);
+  console.log(chalk.yellow('⚠'), msg);
 }
 
 /**
  * Print an info message with cyan info prefix
  */
 export function info(msg: string): void {
-  console.log(chalk.cyan("ℹ"), msg);
+  console.log(chalk.cyan('ℹ'), msg);
 }
 
 /**
  * Print a bold section header with underline
  */
 export function header(title: string): void {
-  const line = "─".repeat(Math.max(40, title.length + 4));
+  const line = '─'.repeat(Math.max(40, title.length + 4));
   console.log();
   console.log(chalk.bold(title));
   console.log(chalk.dim(line));
@@ -66,7 +66,7 @@ export function label(key: string, value: string): void {
 export function createSpinner(text: string): Ora {
   return ora({
     text,
-    spinner: "dots",
+    spinner: 'dots',
   });
 }
 
@@ -76,27 +76,27 @@ export function createSpinner(text: string): Ora {
 export function createTable(options?: Table.TableConstructorOptions): Table.Table {
   const defaultOptions: Table.TableConstructorOptions = {
     chars: {
-      top: "─",
-      "top-mid": "┬",
-      "top-left": "┌",
-      "top-right": "┐",
-      bottom: "─",
-      "bottom-mid": "┴",
-      "bottom-left": "└",
-      "bottom-right": "┘",
-      left: "│",
-      "left-mid": "├",
-      mid: "─",
-      "mid-mid": "┼",
-      right: "│",
-      "right-mid": "┤",
-      middle: "│",
+      top: '─',
+      'top-mid': '┬',
+      'top-left': '┌',
+      'top-right': '┐',
+      bottom: '─',
+      'bottom-mid': '┴',
+      'bottom-left': '└',
+      'bottom-right': '┘',
+      left: '│',
+      'left-mid': '├',
+      mid: '─',
+      'mid-mid': '┼',
+      right: '│',
+      'right-mid': '┤',
+      middle: '│',
     },
     style: {
-      "padding-left": 1,
-      "padding-right": 1,
-      head: ["cyan"],
-      border: ["dim"],
+      'padding-left': 1,
+      'padding-right': 1,
+      head: ['cyan'],
+      border: ['dim'],
     },
   };
 
@@ -113,7 +113,7 @@ export function formatRunningStatus(running: boolean, pid: number | null): strin
   if (pid) {
     return chalk.dim(`○ Stale lock (PID: ${pid})`);
   }
-  return chalk.dim("○ Not running");
+  return chalk.dim('○ Not running');
 }
 
 /**
@@ -121,14 +121,31 @@ export function formatRunningStatus(running: boolean, pid: number | null): strin
  */
 export function formatInstalledStatus(installed: boolean): string {
   if (installed) {
-    return chalk.green("✔ Installed");
+    return chalk.green('✔ Installed');
   }
-  return chalk.yellow("⚠ Not installed");
+  return chalk.yellow('⚠ Not installed');
 }
 
 /**
  * Print a step message with step number
  */
 export function step(current: number, total: number, msg: string): void {
-  console.log(chalk.dim(`[${current}/${total}]`), msg);
+  const safeTotal = Math.max(1, total);
+  const safeCurrent = Math.min(Math.max(1, current), safeTotal);
+  const width = 12;
+  const filled = Math.max(1, Math.round((safeCurrent / safeTotal) * width));
+  const progress = `${'━'.repeat(filled)}${'─'.repeat(width - filled)}`;
+  const percent = Math.round((safeCurrent / safeTotal) * 100)
+    .toString()
+    .padStart(3);
+  const counter = `${safeCurrent.toString().padStart(2, '0')}/${safeTotal
+    .toString()
+    .padStart(2, '0')}`;
+
+  console.log(
+    `${chalk.cyan('●')} ${chalk.bold(`Step ${counter}`)} ${chalk.dim(progress)} ${chalk.dim(
+      `${percent}%`,
+    )}`,
+  );
+  console.log(`  ${msg}`);
 }

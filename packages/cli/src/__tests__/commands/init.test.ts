@@ -13,6 +13,7 @@ import {
   buildInitConfig,
   chooseProviderByPrecedence,
   chooseProviderForNonInteractive,
+  describeCronSchedule,
   getInitJobCatalog,
   getDetectedProviderPresets,
   getGitHubRemoteStatus,
@@ -327,6 +328,11 @@ describe('init command', () => {
   });
 
   describe('buildInitConfig', () => {
+    it('should describe cron schedules in human-readable terms', () => {
+      expect(describeCronSchedule('5 * * * *')).toBe('At 5 minutes past the hour');
+      expect(describeCronSchedule('bad')).toBe('bad');
+    });
+
     it('should generate the full current config shape with init overrides', () => {
       const defaults = getDefaultConfig();
 
