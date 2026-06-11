@@ -6,9 +6,13 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 import { getDefaultConfig } from '@night-watch/core';
 import {
+  buildProviderSummary,
   buildInitConfig,
+  chooseProviderByPrecedence,
   chooseProviderForNonInteractive,
+  getDetectedProviderPresets,
   getGitHubRemoteStatus,
+  isInteractiveInitSession,
   resolveTemplatePath,
 } from '../../commands/init.js';
 
@@ -350,6 +354,30 @@ describe('init command', () => {
       expect(config.boardProvider).toEqual(defaults.boardProvider);
       expect(config.jobProviders).toEqual(defaults.jobProviders);
     });
+
+    it('should write a custom provider preset when provided', () => {
+      const config = buildInitConfig({
+        projectName: 'demo-project',
+        defaultBranch: 'main',
+        provider: 'local-agent',
+        providerPreset: {
+          name: 'Local Agent',
+          command: 'local-agent',
+          promptFlag: '--prompt',
+        },
+        reviewerEnabled: true,
+        prdDir: 'docs/prds',
+      });
+
+      expect(config.provider).toBe('local-agent');
+      expect(config.providerPresets).toEqual({
+        'local-agent': {
+          name: 'Local Agent',
+          command: 'local-agent',
+          promptFlag: '--prompt',
+        },
+      });
+    });
   });
 
   describeIfExternalTools('should NOT create .claude/commands/ directory', () => {
@@ -458,6 +486,32 @@ describe('init command', () => {
     });
   });
 
+  describe('--custom-provider-command flag', () => {
+    it('should write a custom provider preset in non-interactive mode', () => {
+      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
+
+      execSync(
+        `${TSX_CMD} init --yes --custom-provider-command local-agent --custom-provider-name "Local Agent" --custom-provider-id local-agent`,
+        {
+          encoding: 'utf-8',
+          cwd: tempDir,
+          stdio: 'pipe',
+          timeout: 15000,
+        },
+      );
+
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      expect(config.provider).toBe('local-agent');
+      expect(config.providerPresets['local-agent']).toEqual({
+        name: 'Local Agent',
+        command: 'local-agent',
+      });
+    });
+  });
+
   describeIfExternalTools('--no-reviewer flag', () => {
     it('should set reviewerEnabled to false in config', () => {
       // Initialize git repo
@@ -511,12 +565,44 @@ describe('init command', () => {
   });
 
   describe('chooseProviderForNonInteractive', () => {
-    it('should prefer claude when multiple providers are available', () => {
-      expect(chooseProviderForNonInteractive(['codex', 'claude'])).toBe('claude');
+    it('should prefer codex when multiple providers are available', () => {
+      expect(chooseProviderForNonInteractive(['claude', 'codex'])).toBe('codex');
     });
 
     it('should fall back to the first detected provider when claude is unavailable', () => {
-      expect(chooseProviderForNonInteractive(['codex'])).toBe('codex');
+      expect(chooseProviderForNonInteractive(['local-agent'])).toBe('local-agent');
+    });
+  });
+
+  describe('provider auto-selection', () => {
+    it('isInteractiveInitSession returns false for the test process', () => {
+      expect(isInteractiveInitSession()).toBe(false);
+    });
+
+    it('should select codex over claude by precedence', () => {
+      expect(chooseProviderByPrecedence(['claude', 'codex'])).toBe('codex');
+    });
+
+    it('should map a single detected claude command to claude presets while defaulting to claude', () => {
+      const detected = getDetectedProviderPresets(['claude']);
+
+      expect(detected).toContain('claude');
+      expect(detected).toContain('claude-sonnet-4-6');
+      expect(chooseProviderByPrecedence(detected)).toBe('claude');
+    });
+
+    it('should map detected codex and claude commands and default to codex', () => {
+      const detected = getDetectedProviderPresets(['claude', 'codex']);
+
+      expect(detected[0]).toBe('codex');
+      expect(chooseProviderByPrecedence(detected)).toBe('codex');
+    });
+
+    it('should summarize codex as selected and claude as also available', () => {
+      const summary = buildProviderSummary('codex', ['codex', 'claude']);
+
+      expect(summary).toContain('Auto-selected Codex');
+      expect(summary).toContain('Also available: Claude');
     });
   });
 

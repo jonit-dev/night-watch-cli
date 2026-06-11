@@ -8,10 +8,12 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import * as readline from 'readline';
 import {
+  BUILT_IN_PRESETS,
   BUILT_IN_PRESET_IDS,
   CONFIG_FILE_NAME,
   DEFAULT_PRD_DIR,
   INightWatchConfig,
+  IProviderPreset,
   LOG_DIR,
   Provider,
   checkGhCli,
@@ -59,6 +61,10 @@ interface IInitOptions {
   prdDir?: string;
   provider?: string;
   reviewer?: boolean;
+  yes?: boolean;
+  customProviderCommand?: string;
+  customProviderName?: string;
+  customProviderId?: string;
 }
 
 interface ISkillsInstallResult {
@@ -87,6 +93,40 @@ interface IGitHubRemoteStatus {
   hasGitHubRemote: boolean;
   remoteUrl: string | null;
 }
+
+interface IProviderSelectionResult {
+  provider: Provider;
+  providerPreset?: IProviderPreset;
+  detectedProviders: Provider[];
+  detectedCommands: string[];
+  summary: string;
+}
+
+interface IInitProjectReview {
+  cwd: string;
+  projectName: string;
+  defaultBranch: string;
+  prdDir: string;
+  configExists: boolean;
+  force: boolean;
+  providerSummary: string;
+  remoteStatus: IGitHubRemoteStatus;
+  playwrightStatus: string;
+}
+
+const INIT_PROVIDER_PRECEDENCE = [
+  'codex',
+  'claude',
+  'claude-sonnet-4-6',
+  'claude-opus-4-6',
+  'glm-47',
+  'glm-5',
+] as const;
+
+const SUPPORTED_PROVIDER_INSTALL_GUIDANCE = [
+  '  - Codex CLI: https://github.com/openai/codex',
+  '  - Claude CLI: https://docs.anthropic.com/en/docs/claude-cli',
+] as const;
 
 function hasPlaywrightDependency(cwd: string): boolean {
   const packageJsonPath = path.join(cwd, 'package.json');
@@ -167,15 +207,218 @@ function promptYesNo(question: string, defaultNo: boolean = true): Promise<boole
   });
 }
 
+function promptText(question: string): Promise<string> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return Promise.resolve('');
+  }
+
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    rl.question(`${question}: `, (answer) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
 export function isInteractiveInitSession(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
 }
 
 export function chooseProviderForNonInteractive(providers: Provider[]): Provider {
-  if (providers.includes('claude')) {
-    return 'claude';
+  return chooseProviderByPrecedence(providers);
+}
+
+export function chooseProviderByPrecedence(providers: Provider[]): Provider {
+  const providerSet = new Set(providers);
+  for (const provider of INIT_PROVIDER_PRECEDENCE) {
+    if (providerSet.has(provider)) {
+      return provider;
+    }
   }
   return providers[0];
+}
+
+function getPresetCommand(provider: Provider): string {
+  return BUILT_IN_PRESETS[provider]?.command ?? provider;
+}
+
+export function getDetectedProviderPresets(detectedCommands: Provider[]): Provider[] {
+  const detectedCommandSet = new Set(detectedCommands);
+  return INIT_PROVIDER_PRECEDENCE.filter((presetId) =>
+    detectedCommandSet.has(getPresetCommand(presetId)),
+  );
+}
+
+function formatProviderName(provider: Provider): string {
+  return BUILT_IN_PRESETS[provider]?.name ?? provider;
+}
+
+export function buildProviderSummary(provider: Provider, detectedProviders: Provider[]): string {
+  const otherDetected = detectedProviders.filter((detected) => detected !== provider);
+  const providerName = formatProviderName(provider);
+
+  if (otherDetected.length === 0) {
+    return `Auto-selected ${providerName}.`;
+  }
+
+  const otherNames = otherDetected.map(formatProviderName).join(', ');
+  return `Auto-selected ${providerName}. Also available: ${otherNames}. Use --provider to override.`;
+}
+
+function createCustomProviderSelection(params: {
+  command?: string;
+  name?: string;
+  id?: string;
+}): IProviderSelectionResult | null {
+  if (!params.command) {
+    return null;
+  }
+
+  const provider = params.id?.trim() || 'custom';
+  const providerPreset: IProviderPreset = {
+    name: params.name?.trim() || 'Custom Provider',
+    command: params.command.trim(),
+  };
+
+  return {
+    provider,
+    providerPreset,
+    detectedProviders: [],
+    detectedCommands: [],
+    summary: `Using custom provider "${providerPreset.name}" (${providerPreset.command}).`,
+  };
+}
+
+function createCustomProviderPreset(options: IInitOptions): IProviderSelectionResult | null {
+  return createCustomProviderSelection({
+    command: options.customProviderCommand,
+    name: options.customProviderName,
+    id: options.customProviderId,
+  });
+}
+
+function printProviderInstallGuidance(): void {
+  console.log('\nPlease install one of the following supported provider CLIs:');
+  for (const line of SUPPORTED_PROVIDER_INSTALL_GUIDANCE) {
+    console.log(line);
+  }
+  console.log(
+    '\nFor a custom provider, rerun with --custom-provider-command <cmd> and optionally --custom-provider-name <name>.',
+  );
+}
+
+async function promptCustomProviderSelection(): Promise<IProviderSelectionResult | null> {
+  const configureCustom = await promptYesNo(
+    'No supported provider CLI was found. Configure a custom provider command now?',
+    true,
+  );
+  if (!configureCustom) {
+    return null;
+  }
+
+  console.log(
+    'The command must be an executable CLI command available to Night Watch, or scheduled jobs will fail.',
+  );
+  const command = await promptText('Custom provider command');
+  if (!command) {
+    return null;
+  }
+  const name = await promptText('Custom provider display name (optional)');
+  const id = await promptText('Custom provider id (default: custom)');
+  return createCustomProviderSelection({ command, name, id });
+}
+
+async function resolveProviderSelection(
+  options: IInitOptions,
+  interactive: boolean,
+): Promise<IProviderSelectionResult> {
+  const customProvider = createCustomProviderPreset(options);
+  if (customProvider) {
+    return customProvider;
+  }
+
+  if (options.provider) {
+    if (!BUILT_IN_PRESET_IDS.includes(options.provider)) {
+      uiError(`Invalid provider "${options.provider}".`);
+      console.log(`Valid providers: ${BUILT_IN_PRESET_IDS.join(', ')}`);
+      console.log('For a custom provider, use --custom-provider-command <cmd>.');
+      process.exit(1);
+    }
+
+    const selectedProvider = options.provider as Provider;
+    const command = getPresetCommand(selectedProvider);
+    const providerCheck = checkProviderCli(command);
+    if (!providerCheck.passed) {
+      uiError(providerCheck.message);
+      console.log(`Install the ${formatProviderName(selectedProvider)} CLI command: ${command}`);
+      printProviderInstallGuidance();
+      process.exit(1);
+    }
+
+    return {
+      provider: selectedProvider,
+      detectedProviders: [selectedProvider],
+      detectedCommands: [command],
+      summary: `Using provider from flag: ${formatProviderName(selectedProvider)}.`,
+    };
+  }
+
+  const detectedCommands = detectProviders();
+  const detectedProviders = getDetectedProviderPresets(detectedCommands);
+
+  if (detectedProviders.length === 0) {
+    if (interactive) {
+      const customSelection = await promptCustomProviderSelection();
+      if (customSelection) {
+        return customSelection;
+      }
+    }
+
+    uiError('No supported AI provider CLI found.');
+    printProviderInstallGuidance();
+    process.exit(1);
+  }
+
+  const selectedProvider = chooseProviderByPrecedence(detectedProviders);
+  return {
+    provider: selectedProvider,
+    detectedProviders,
+    detectedCommands,
+    summary: buildProviderSummary(selectedProvider, detectedProviders),
+  };
+}
+
+function showProjectReview(review: IInitProjectReview): void {
+  let configStatus = 'New';
+  if (review.configExists) {
+    configStatus = review.force ? 'Exists, will overwrite' : 'Exists, will keep';
+  }
+
+  header('Project Review');
+  label('Path', review.cwd);
+  label('Project', review.projectName);
+  label('Default branch', review.defaultBranch);
+  label('PRD directory', review.prdDir);
+  label('Config', configStatus);
+  label(
+    'GitHub remote',
+    review.remoteStatus.hasGitHubRemote
+      ? (review.remoteStatus.remoteUrl ?? 'Detected')
+      : 'Not detected',
+  );
+  label('Provider', review.providerSummary);
+  label('Playwright', review.playwrightStatus);
+  console.log();
+}
+
+async function confirmProjectReview(review: IInitProjectReview): Promise<boolean> {
+  showProjectReview(review);
+  return promptYesNo('Continue with this Night Watch setup?', false);
 }
 
 export function getGitHubRemoteStatus(cwd: string): IGitHubRemoteStatus {
@@ -290,33 +533,6 @@ export function getDefaultBranch(cwd: string): string {
 }
 
 /**
- * Prompt user to select a provider from available options
- */
-function promptProviderSelection(providers: Provider[]): Promise<Provider> {
-  return new Promise((resolve, reject) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    console.log('\nMultiple AI providers detected:');
-    providers.forEach((p, i) => {
-      console.log(`  ${i + 1}. ${p}`);
-    });
-
-    rl.question('\nSelect a provider (enter number): ', (answer) => {
-      rl.close();
-      const selection = parseInt(answer.trim(), 10);
-      if (isNaN(selection) || selection < 1 || selection > providers.length) {
-        reject(new Error('Invalid selection. Please run init again and select a valid number.'));
-        return;
-      }
-      resolve(providers[selection - 1]);
-    });
-  });
-}
-
-/**
  * Create directory if it doesn't exist
  */
 function ensureDir(dirPath: string): void {
@@ -329,6 +545,7 @@ export function buildInitConfig(params: {
   projectName: string;
   defaultBranch: string;
   provider: Provider;
+  providerPreset?: IProviderPreset;
   reviewerEnabled: boolean;
   prdDir: string;
 }): IGeneratedInitConfig {
@@ -356,6 +573,9 @@ export function buildInitConfig(params: {
     reviewerRetryDelay: defaults.reviewerRetryDelay,
     provider: params.provider,
     providerLabel: '',
+    ...(params.providerPreset
+      ? { providerPresets: { [params.provider]: params.providerPreset } }
+      : {}),
     modelAttribution: defaults.modelAttribution,
     newPrLabel: defaults.newPrLabel,
     executorEnabled: defaults.executorEnabled ?? true,
@@ -593,7 +813,14 @@ export function initCommand(program: Command): void {
     .description('Initialize night-watch in the current project')
     .option('-f, --force', 'Overwrite existing configuration')
     .option('-d, --prd-dir <path>', 'Path to PRD directory')
-    .option('-p, --provider <name>', 'AI provider to use (claude or codex)')
+    .option(
+      '-p, --provider <name>',
+      `AI provider preset to use (${BUILT_IN_PRESET_IDS.join(', ')})`,
+    )
+    .option('-y, --yes', 'Accept guided init defaults without prompting')
+    .option('--custom-provider-command <cmd>', 'Custom AI provider command to write into config')
+    .option('--custom-provider-name <name>', 'Display name for a custom AI provider')
+    .option('--custom-provider-id <id>', 'Config id for a custom AI provider')
     .option('--no-reviewer', 'Disable reviewer cron job')
     .action(async (options: IInitOptions) => {
       const cwd = process.cwd();
@@ -626,55 +853,12 @@ export function initCommand(program: Command): void {
 
       // Step 3: Detect AI providers
       step(3, totalSteps, 'Detecting AI providers...');
-      let selectedProvider: Provider;
-
-      if (options.provider) {
-        // Validate provider flag
-        if (!BUILT_IN_PRESET_IDS.includes(options.provider as Provider)) {
-          uiError(`Invalid provider "${options.provider}".`);
-          console.log(`Valid providers: ${BUILT_IN_PRESET_IDS.join(', ')}`);
-          process.exit(1);
-        }
-        selectedProvider = options.provider as Provider;
-        const providerCheck = checkProviderCli(selectedProvider);
-        if (!providerCheck.passed) {
-          uiError(providerCheck.message);
-          console.log(
-            `Install the ${selectedProvider} CLI or rerun with --provider ${detectProviders()[0] ?? 'claude'}.`,
-          );
-          process.exit(1);
-        }
-        info(`Using provider from flag: ${selectedProvider}`);
-      } else {
-        // Auto-detect providers
-        const detectedProviders = detectProviders();
-
-        if (detectedProviders.length === 0) {
-          uiError('No AI provider CLI found.');
-          console.log('\nPlease install one of the following:');
-          console.log('  - Claude CLI: https://docs.anthropic.com/en/docs/claude-cli');
-          console.log('  - Codex CLI: https://github.com/openai/codex');
-          process.exit(1);
-        } else if (detectedProviders.length === 1) {
-          selectedProvider = detectedProviders[0];
-          info(`Auto-detected provider: ${selectedProvider}`);
-        } else {
-          if (!interactive) {
-            selectedProvider = chooseProviderForNonInteractive(detectedProviders);
-            info(
-              `Multiple providers detected in a non-interactive shell; defaulting to ${selectedProvider}. Use --provider to override.`,
-            );
-          } else {
-            try {
-              selectedProvider = await promptProviderSelection(detectedProviders);
-              info(`Selected provider: ${selectedProvider}`);
-            } catch (err) {
-              uiError(`${err instanceof Error ? err.message : String(err)}`);
-              process.exit(1);
-            }
-          }
-        }
-      }
+      const providerSelection = await resolveProviderSelection(
+        options,
+        interactive && !options.yes,
+      );
+      const selectedProvider = providerSelection.provider;
+      info(providerSelection.summary);
 
       // Step 4: Check optional GitHub integration prerequisites
       step(4, totalSteps, 'Checking GitHub integration prerequisites...');
@@ -698,7 +882,9 @@ export function initCommand(program: Command): void {
         info('Playwright: detected');
       } else {
         info('Playwright: not found');
-        const installPlaywright = await promptYesNo('Install Playwright for QA now?', true);
+        const installPlaywright = options.yes
+          ? false
+          : await promptYesNo('Install Playwright for QA now?', true);
         if (installPlaywright) {
           if (installPlaywrightForQa(cwd)) {
             playwrightStatus = 'installed during init';
@@ -720,6 +906,26 @@ export function initCommand(program: Command): void {
       // Gather project information
       const projectName = getProjectName(cwd);
       const defaultBranch = getDefaultBranch(cwd);
+      const configPath = path.join(cwd, CONFIG_FILE_NAME);
+
+      if (interactive && !options.yes) {
+        const confirmed = await confirmProjectReview({
+          cwd,
+          projectName,
+          defaultBranch,
+          prdDir,
+          configExists: fs.existsSync(configPath),
+          force,
+          providerSummary: providerSelection.summary,
+          remoteStatus,
+          playwrightStatus,
+        });
+
+        if (!confirmed) {
+          info('Init cancelled. No project files were written.');
+          return;
+        }
+      }
 
       // Display project configuration
       header('Project Configuration');
@@ -851,7 +1057,6 @@ export function initCommand(program: Command): void {
 
       // Step 9: Create config file
       step(9, totalSteps, 'Creating configuration file...');
-      const configPath = path.join(cwd, CONFIG_FILE_NAME);
 
       if (fs.existsSync(configPath) && !force) {
         console.log(`  Skipped (exists): ${configPath}`);
@@ -860,6 +1065,7 @@ export function initCommand(program: Command): void {
           projectName,
           defaultBranch,
           provider: selectedProvider,
+          providerPreset: providerSelection.providerPreset,
           reviewerEnabled,
           prdDir,
         });
