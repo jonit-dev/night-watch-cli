@@ -10,6 +10,8 @@ import { performUninstall } from '../uninstall.js';
 import { saveConfig } from '@night-watch/core';
 import { ITab, ITabContext } from './types.js';
 
+type ScheduleField = 'cronSchedule' | 'manager.schedule' | 'reviewerSchedule';
+
 /**
  * Convert a cron schedule to a human-readable description using cronstrue.
  */
@@ -126,7 +128,7 @@ export function createSchedulesTab(): ITab {
 
   function applySchedule(
     ctx: ITabContext,
-    field: 'cronSchedule' | 'reviewerSchedule' | 'manager.schedule',
+    field: ScheduleField,
     cronExpr: string,
   ) {
     const patch =
@@ -160,7 +162,7 @@ export function createSchedulesTab(): ITab {
 
   function showCustomCronInput(
     ctx: ITabContext,
-    field: 'cronSchedule' | 'reviewerSchedule' | 'manager.schedule',
+    field: ScheduleField,
     label: string,
   ) {
     const currentValue = field === 'manager.schedule' ? ctx.config.manager.schedule : ctx.config[field];
@@ -203,7 +205,7 @@ export function createSchedulesTab(): ITab {
 
   function editSchedule(
     ctx: ITabContext,
-    field: 'cronSchedule' | 'reviewerSchedule' | 'manager.schedule',
+    field: ScheduleField,
     label: string,
   ) {
     const presetItems = SCHEDULE_PRESETS.map((p) => ` ${p.label}  (${p.cron})`);
