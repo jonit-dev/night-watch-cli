@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(yarn workspace @night-watch/slack test:*)",
+      "Bash(gh api graphql -f query='\n{\n  repository\\(owner: \"jonit-dev\", name: \"night-watch-cli\"\\) {\n    projectsV2\\(first: 5\\) {\n      nodes {\n        id\n        title\n      }\n    }\n  }\n}')"
+    ]
+  }
+}
