@@ -102,6 +102,12 @@ interface IProviderSelectionResult {
   summary: string;
 }
 
+export interface IProviderChoice {
+  label: string;
+  provider?: Provider;
+  custom: boolean;
+}
+
 interface IInitProjectReview {
   cwd: string;
   projectName: string;
@@ -270,6 +276,45 @@ export function buildProviderSummary(provider: Provider, detectedProviders: Prov
   return `Auto-selected ${providerName}. Also available: ${otherNames}. Use --provider to override.`;
 }
 
+export function shouldPromptProviderOverride(
+  interactive: boolean,
+  detectedProviders: Provider[],
+): boolean {
+  return interactive && detectedProviders.length > 1;
+}
+
+export function buildProviderChoices(
+  detectedProviders: Provider[],
+  includeCustomProvider: boolean = true,
+): IProviderChoice[] {
+  const choices: IProviderChoice[] = detectedProviders.map((provider) => ({
+    label: formatProviderName(provider),
+    provider,
+    custom: false,
+  }));
+
+  if (includeCustomProvider) {
+    choices.push({
+      label: 'Custom provider command',
+      custom: true,
+    });
+  }
+
+  return choices;
+}
+
+export function selectProviderOverrideByIndex(
+  choices: IProviderChoice[],
+  input: string,
+): IProviderChoice | null {
+  const selectedIndex = Number.parseInt(input.trim(), 10);
+  if (!Number.isInteger(selectedIndex) || selectedIndex < 1 || selectedIndex > choices.length) {
+    return null;
+  }
+
+  return choices[selectedIndex - 1] ?? null;
+}
+
 function createCustomProviderSelection(params: {
   command?: string;
   name?: string;
@@ -333,6 +378,73 @@ async function promptCustomProviderSelection(): Promise<IProviderSelectionResult
   return createCustomProviderSelection({ command, name, id });
 }
 
+async function promptProviderOverrideSelection(params: {
+  selectedProvider: Provider;
+  detectedProviders: Provider[];
+  detectedCommands: string[];
+}): Promise<IProviderSelectionResult> {
+  const { selectedProvider, detectedProviders, detectedCommands } = params;
+  const selectedName = formatProviderName(selectedProvider);
+  console.log(buildProviderSummary(selectedProvider, detectedProviders));
+
+  const useAutoSelected = await promptYesNo(`Use ${selectedName}?`, false);
+  if (useAutoSelected) {
+    return {
+      provider: selectedProvider,
+      detectedProviders,
+      detectedCommands,
+      summary: `Using auto-selected provider: ${selectedName}.`,
+    };
+  }
+
+  const choices = buildProviderChoices(detectedProviders);
+  console.log('\nDetected provider presets:');
+  choices.forEach((choice, index) => {
+    console.log(`  ${index + 1}. ${choice.label}`);
+  });
+
+  const choiceInput = await promptText('Choose provider preset number');
+  const choice = selectProviderOverrideByIndex(choices, choiceInput);
+  if (!choice) {
+    warn(`Invalid provider choice. Continuing with auto-selected provider: ${selectedName}.`);
+    return {
+      provider: selectedProvider,
+      detectedProviders,
+      detectedCommands,
+      summary: `Using auto-selected provider: ${selectedName}.`,
+    };
+  }
+
+  if (choice.custom) {
+    const command = await promptText('Custom provider command');
+    if (!command) {
+      warn(
+        `No custom provider command entered. Continuing with auto-selected provider: ${selectedName}.`,
+      );
+      return {
+        provider: selectedProvider,
+        detectedProviders,
+        detectedCommands,
+        summary: `Using auto-selected provider: ${selectedName}.`,
+      };
+    }
+
+    const name = await promptText('Custom provider display name (optional)');
+    const id = await promptText('Custom provider id (default: custom)');
+    const customSelection = createCustomProviderSelection({ command, name, id });
+    if (customSelection) {
+      return customSelection;
+    }
+  }
+
+  return {
+    provider: choice.provider ?? selectedProvider,
+    detectedProviders,
+    detectedCommands,
+    summary: `Using provider selected during guided init: ${choice.label}.`,
+  };
+}
+
 async function resolveProviderSelection(
   options: IInitOptions,
   interactive: boolean,
@@ -385,6 +497,14 @@ async function resolveProviderSelection(
   }
 
   const selectedProvider = chooseProviderByPrecedence(detectedProviders);
+  if (shouldPromptProviderOverride(interactive, detectedProviders)) {
+    return promptProviderOverrideSelection({
+      selectedProvider,
+      detectedProviders,
+      detectedCommands,
+    });
+  }
+
   return {
     provider: selectedProvider,
     detectedProviders,

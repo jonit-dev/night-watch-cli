@@ -6,6 +6,7 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 import { getDefaultConfig } from '@night-watch/core';
 import {
+  buildProviderChoices,
   buildProviderSummary,
   buildInitConfig,
   chooseProviderByPrecedence,
@@ -14,6 +15,8 @@ import {
   getGitHubRemoteStatus,
   isInteractiveInitSession,
   resolveTemplatePath,
+  selectProviderOverrideByIndex,
+  shouldPromptProviderOverride,
 } from '../../commands/init.js';
 
 // Get project root directory (4 levels up from this test file)
@@ -603,6 +606,38 @@ describe('init command', () => {
 
       expect(summary).toContain('Auto-selected Codex');
       expect(summary).toContain('Also available: Claude');
+    });
+
+    it('should only prompt for provider override in interactive sessions with multiple presets', () => {
+      expect(shouldPromptProviderOverride(true, ['codex', 'claude'])).toBe(true);
+      expect(shouldPromptProviderOverride(true, ['codex'])).toBe(false);
+      expect(shouldPromptProviderOverride(false, ['codex', 'claude'])).toBe(false);
+    });
+
+    it('should build detected provider choices with a custom provider command option', () => {
+      const choices = buildProviderChoices(['codex', 'claude']);
+
+      expect(choices).toEqual([
+        { label: 'Codex', provider: 'codex', custom: false },
+        { label: 'Claude', provider: 'claude', custom: false },
+        { label: 'Custom provider command', custom: true },
+      ]);
+    });
+
+    it('should select provider override choices by one-based index', () => {
+      const choices = buildProviderChoices(['codex', 'claude']);
+
+      expect(selectProviderOverrideByIndex(choices, '2')).toEqual({
+        label: 'Claude',
+        provider: 'claude',
+        custom: false,
+      });
+      expect(selectProviderOverrideByIndex(choices, '3')).toEqual({
+        label: 'Custom provider command',
+        custom: true,
+      });
+      expect(selectProviderOverrideByIndex(choices, '0')).toBeNull();
+      expect(selectProviderOverrideByIndex(choices, 'nope')).toBeNull();
     });
   });
 
