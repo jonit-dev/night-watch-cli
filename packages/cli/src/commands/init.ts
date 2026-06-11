@@ -14,7 +14,11 @@ import {
   DEFAULT_PRD_DIR,
   INightWatchConfig,
   IProviderPreset,
+  IWebhookConfig,
+  JobType,
   LOG_DIR,
+  NOTIFICATION_EVENTS,
+  NotificationEvent,
   Provider,
   checkGhCli,
   checkGitRepo,
@@ -24,6 +28,7 @@ import {
   createTable,
   detectProviders,
   getDefaultConfig,
+  getJobDef,
   getProjectName,
   header,
   info,
@@ -32,6 +37,7 @@ import {
   step,
   success,
   error as uiError,
+  validateWebhook,
   warn,
 } from '@night-watch/core';
 import { fireTelemetryEvent } from './shared/telemetry.js';
@@ -65,6 +71,9 @@ interface IInitOptions {
   customProviderCommand?: string;
   customProviderName?: string;
   customProviderId?: string;
+  jobs?: string;
+  noJobs?: string;
+  schedule?: string[];
 }
 
 interface ISkillsInstallResult {
@@ -102,6 +111,50 @@ interface IProviderSelectionResult {
   summary: string;
 }
 
+type InitJobId =
+  | 'executor'
+  | 'reviewer'
+  | 'qa'
+  | 'audit'
+  | 'analytics'
+  | 'slicer'
+  | 'pr-resolver'
+  | 'manager'
+  | 'merger';
+
+type InitJobBundle = 'recommended' | 'minimal' | 'custom';
+
+interface IInitJobCatalogItem {
+  id: InitJobId;
+  label: string;
+  description: string;
+  warning?: string;
+  defaultSchedule: string;
+}
+
+export interface IJobSelectionAnswer {
+  bundle: InitJobBundle;
+  enabledJobs: InitJobId[];
+  schedules: Record<InitJobId, string>;
+}
+
+export interface IProviderSelectionAnswer {
+  provider: Provider;
+  providerPreset?: IProviderPreset;
+  summary: string;
+}
+
+export interface INotificationSelectionAnswer {
+  webhooks: IWebhookConfig[];
+  skipped: boolean;
+}
+
+export interface IInitOnboardingAnswers {
+  jobs: IJobSelectionAnswer;
+  provider: IProviderSelectionAnswer;
+  notifications: INotificationSelectionAnswer;
+}
+
 export interface IProviderChoice {
   label: string;
   provider?: Provider;
@@ -133,6 +186,69 @@ const SUPPORTED_PROVIDER_INSTALL_GUIDANCE = [
   '  - Codex CLI: https://github.com/openai/codex',
   '  - Claude CLI: https://docs.anthropic.com/en/docs/claude-cli',
 ] as const;
+
+const INIT_JOB_IDS: InitJobId[] = [
+  'executor',
+  'reviewer',
+  'qa',
+  'audit',
+  'analytics',
+  'slicer',
+  'pr-resolver',
+  'manager',
+  'merger',
+];
+
+const RECOMMENDED_INIT_JOBS: InitJobId[] = [
+  'executor',
+  'reviewer',
+  'qa',
+  'slicer',
+  'manager',
+  'pr-resolver',
+];
+
+const MINIMAL_INIT_JOBS: InitJobId[] = ['executor'];
+
+const JOB_ALIASES: Record<string, InitJobId> = {
+  executor: 'executor',
+  run: 'executor',
+  reviewer: 'reviewer',
+  review: 'reviewer',
+  qa: 'qa',
+  audit: 'audit',
+  analytics: 'analytics',
+  slicer: 'slicer',
+  planner: 'slicer',
+  roadmap: 'slicer',
+  'roadmap-scanner': 'slicer',
+  'pr-resolver': 'pr-resolver',
+  resolver: 'pr-resolver',
+  resolve: 'pr-resolver',
+  manager: 'manager',
+  merger: 'merger',
+  merge: 'merger',
+  'auto-merge': 'merger',
+};
+
+const JOB_WARNINGS: Partial<Record<InitJobId, string>> = {
+  executor: 'Creates branches and PRs from PRDs.',
+  reviewer: 'May push fix commits to Night Watch PR branches.',
+  audit: 'Can create board issues when issue creation is enabled.',
+  analytics: 'Needs analytics credentials before it can run successfully.',
+  slicer: 'Can create draft board issues/PRDs from roadmap items.',
+  'pr-resolver': 'Can update PR branches and resolve merge conflicts.',
+  manager: 'Can create draft board issues or PRDs for project gaps.',
+  merger: 'Can merge eligible PRs and delete/update branches through the merge path.',
+};
+
+const DEFAULT_NOTIFICATION_EVENTS: NotificationEvent[] = [
+  'run_failed',
+  'review_ready_for_human',
+  'qa_completed',
+  'merge_failed',
+  'manager_blocked',
+];
 
 function hasPlaywrightDependency(cwd: string): boolean {
   const packageJsonPath = path.join(cwd, 'package.json');
@@ -231,8 +347,269 @@ function promptText(question: string): Promise<string> {
   });
 }
 
+async function promptChoice<T extends string>(
+  question: string,
+  choices: { value: T; label: string }[],
+  defaultValue: T,
+): Promise<T> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return defaultValue;
+  }
+
+  console.log(question);
+  choices.forEach((choice, index) => {
+    console.log(`  ${index + 1}. ${choice.label}`);
+  });
+
+  const input = await promptText(`Choose 1-${choices.length} (default: ${defaultValue})`);
+  if (!input) {
+    return defaultValue;
+  }
+
+  const selectedIndex = Number.parseInt(input, 10);
+  if (!Number.isInteger(selectedIndex) || selectedIndex < 1 || selectedIndex > choices.length) {
+    warn(`Invalid choice "${input}". Using ${defaultValue}.`);
+    return defaultValue;
+  }
+
+  return choices[selectedIndex - 1].value;
+}
+
+function promptWithDefault(question: string, defaultValue: string): Promise<string> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return Promise.resolve(defaultValue);
+  }
+
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
+    rl.question(`${question} [${defaultValue}]: `, (answer) => {
+      rl.close();
+      resolve(answer.trim() || defaultValue);
+    });
+  });
+}
+
 export function isInteractiveInitSession(): boolean {
   return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
+function scheduleForJob(defaults: INightWatchConfig, jobId: InitJobId): string {
+  switch (jobId) {
+    case 'executor':
+      return defaults.cronSchedule;
+    case 'reviewer':
+      return defaults.reviewerSchedule;
+    case 'slicer':
+      return defaults.roadmapScanner.slicerSchedule;
+    case 'pr-resolver':
+      return defaults.prResolver.schedule;
+    default:
+      return defaults[jobId].schedule;
+  }
+}
+
+function jobEnabledByDefault(defaults: INightWatchConfig, jobId: InitJobId): boolean {
+  switch (jobId) {
+    case 'executor':
+      return defaults.executorEnabled !== false;
+    case 'reviewer':
+      return defaults.reviewerEnabled;
+    case 'slicer':
+      return defaults.roadmapScanner.enabled;
+    case 'pr-resolver':
+      return defaults.prResolver.enabled;
+    default:
+      return defaults[jobId].enabled;
+  }
+}
+
+export function getInitJobCatalog(): IInitJobCatalogItem[] {
+  const defaults = getDefaultConfig();
+  return INIT_JOB_IDS.map((id) => {
+    const registryId: JobType = id === 'slicer' ? 'slicer' : id;
+    const def = getJobDef(registryId);
+    return {
+      id,
+      label: def?.name ?? id,
+      description: def?.description ?? id,
+      warning: JOB_WARNINGS[id],
+      defaultSchedule: scheduleForJob(defaults, id),
+    };
+  });
+}
+
+function parseJobId(value: string): InitJobId | null {
+  return JOB_ALIASES[value.trim().toLowerCase()] ?? null;
+}
+
+function parseJobCsv(csv: string | undefined): InitJobId[] {
+  if (!csv) {
+    return [];
+  }
+
+  const jobs: InitJobId[] = [];
+  for (const rawJob of csv.split(',')) {
+    const job = parseJobId(rawJob);
+    if (!job) {
+      throw new Error(`Unknown init job "${rawJob.trim()}". Valid jobs: ${INIT_JOB_IDS.join(', ')}`);
+    }
+    if (!jobs.includes(job)) {
+      jobs.push(job);
+    }
+  }
+  return jobs;
+}
+
+function normalizeScheduleOptions(scheduleOptions: string[] | string | undefined): string[] {
+  if (scheduleOptions === undefined) {
+    return [];
+  }
+  return Array.isArray(scheduleOptions) ? scheduleOptions : [scheduleOptions];
+}
+
+function isValidCronSchedule(schedule: string): boolean {
+  return schedule.trim().split(/\s+/).length === 5;
+}
+
+function parseScheduleOverrides(scheduleOptions: string[] | string | undefined): Partial<
+  Record<InitJobId, string>
+> {
+  const overrides: Partial<Record<InitJobId, string>> = {};
+  for (const option of normalizeScheduleOptions(scheduleOptions)) {
+    const separatorIndex = option.indexOf('=');
+    if (separatorIndex <= 0) {
+      throw new Error(`Invalid schedule override "${option}". Use --schedule job="cron expr".`);
+    }
+    const job = parseJobId(option.slice(0, separatorIndex));
+    if (!job) {
+      throw new Error(`Unknown schedule job "${option.slice(0, separatorIndex)}".`);
+    }
+    const schedule = option.slice(separatorIndex + 1).trim();
+    if (!isValidCronSchedule(schedule)) {
+      throw new Error(`Invalid cron schedule for ${job}: "${schedule}". Expected five fields.`);
+    }
+    overrides[job] = schedule;
+  }
+  return overrides;
+}
+
+export function buildDefaultJobSelection(options?: {
+  reviewerEnabled?: boolean;
+  jobs?: string;
+  noJobs?: string;
+  schedule?: string[] | string;
+}): IJobSelectionAnswer {
+  const defaults = getDefaultConfig();
+  const enabled = new Set(
+    INIT_JOB_IDS.filter((jobId) => jobEnabledByDefault(defaults, jobId)),
+  );
+
+  if (options?.reviewerEnabled === false) {
+    enabled.delete('reviewer');
+  }
+
+  for (const jobId of parseJobCsv(options?.jobs)) {
+    enabled.add(jobId);
+  }
+  for (const jobId of parseJobCsv(options?.noJobs)) {
+    enabled.delete(jobId);
+  }
+
+  const schedules = Object.fromEntries(
+    INIT_JOB_IDS.map((jobId) => [jobId, scheduleForJob(defaults, jobId)]),
+  ) as Record<InitJobId, string>;
+  Object.assign(schedules, parseScheduleOverrides(options?.schedule));
+
+  return {
+    bundle: 'custom',
+    enabledJobs: INIT_JOB_IDS.filter((jobId) => enabled.has(jobId)),
+    schedules,
+  };
+}
+
+function buildBundleJobSelection(bundle: InitJobBundle): IJobSelectionAnswer {
+  const defaults = getDefaultConfig();
+  let enabledJobs: InitJobId[];
+  if (bundle === 'minimal') {
+    enabledJobs = MINIMAL_INIT_JOBS;
+  } else if (bundle === 'recommended') {
+    enabledJobs = RECOMMENDED_INIT_JOBS;
+  } else {
+    enabledJobs = INIT_JOB_IDS.filter((jobId) => jobEnabledByDefault(defaults, jobId));
+  }
+
+  const schedules = Object.fromEntries(
+    INIT_JOB_IDS.map((jobId) => [jobId, scheduleForJob(defaults, jobId)]),
+  ) as Record<InitJobId, string>;
+
+  return {
+    bundle,
+    enabledJobs: [...enabledJobs],
+    schedules,
+  };
+}
+
+function enabledJobSet(selection: IJobSelectionAnswer): Set<InitJobId> {
+  return new Set(selection.enabledJobs);
+}
+
+function formatEnabledJobs(selection: IJobSelectionAnswer): string {
+  const enabled = enabledJobSet(selection);
+  const catalog = getInitJobCatalog();
+  const rows = catalog
+    .filter((job) => enabled.has(job.id))
+    .map((job) => `${job.label}: ${selection.schedules[job.id]}`);
+  return rows.length > 0 ? rows.join(', ') : 'None';
+}
+
+export function applyJobSelectionToConfig(
+  config: IGeneratedInitConfig,
+  selection: IJobSelectionAnswer,
+): IGeneratedInitConfig {
+  const enabled = enabledJobSet(selection);
+
+  config.executorEnabled = enabled.has('executor');
+  config.cronSchedule = selection.schedules.executor;
+  config.reviewerEnabled = enabled.has('reviewer');
+  config.reviewerSchedule = selection.schedules.reviewer;
+  config.qa = { ...config.qa, enabled: enabled.has('qa'), schedule: selection.schedules.qa };
+  config.audit = {
+    ...config.audit,
+    enabled: enabled.has('audit'),
+    schedule: selection.schedules.audit,
+  };
+  config.analytics = {
+    ...config.analytics,
+    enabled: enabled.has('analytics'),
+    schedule: selection.schedules.analytics,
+  };
+  config.roadmapScanner = {
+    ...config.roadmapScanner,
+    enabled: enabled.has('slicer'),
+    slicerSchedule: selection.schedules.slicer,
+  };
+  config.prResolver = {
+    ...config.prResolver,
+    enabled: enabled.has('pr-resolver'),
+    schedule: selection.schedules['pr-resolver'],
+  };
+  config.manager = {
+    ...config.manager,
+    enabled: enabled.has('manager'),
+    schedule: selection.schedules.manager,
+  };
+  config.merger = {
+    ...config.merger,
+    enabled: enabled.has('merger'),
+    schedule: selection.schedules.merger,
+  };
+  config.autoMerge = enabled.has('merger');
+
+  return config;
 }
 
 export function chooseProviderForNonInteractive(providers: Provider[]): Provider {
@@ -445,6 +822,176 @@ async function promptProviderOverrideSelection(params: {
   };
 }
 
+async function promptJobSelection(): Promise<IJobSelectionAnswer> {
+  header('Job Selection');
+  console.log('Choose the scheduled jobs Night Watch should enable.');
+  console.log('High-impact jobs are called out below before you choose.');
+  for (const job of getInitJobCatalog()) {
+    if (job.warning) {
+      console.log(`  ${job.label}: ${job.warning}`);
+    }
+  }
+  console.log();
+
+  const bundle = await promptChoice<InitJobBundle>(
+    'Job bundle',
+    [
+      {
+        value: 'recommended',
+        label: 'Recommended: executor, reviewer, QA, slicer, manager, PR resolver',
+      },
+      { value: 'minimal', label: 'Minimal: executor only' },
+      { value: 'custom', label: 'Custom: answer per job' },
+    ],
+    'recommended',
+  );
+
+  const selection = buildBundleJobSelection(bundle);
+  const enabled = enabledJobSet(selection);
+
+  if (bundle === 'custom') {
+    for (const job of getInitJobCatalog()) {
+      const enable = await promptYesNo(
+        `Enable ${job.label}? ${job.description}${job.warning ? ` (${job.warning})` : ''}`,
+        !enabled.has(job.id),
+      );
+      if (enable) {
+        enabled.add(job.id);
+      } else {
+        enabled.delete(job.id);
+      }
+    }
+  }
+
+  selection.enabledJobs = INIT_JOB_IDS.filter((jobId) => enabled.has(jobId));
+
+  for (const job of getInitJobCatalog()) {
+    if (!enabled.has(job.id)) {
+      continue;
+    }
+    let schedule = await promptWithDefault(`${job.label} cron schedule`, job.defaultSchedule);
+    while (!isValidCronSchedule(schedule)) {
+      warn('Cron schedules must contain five fields, for example: 5 */2 * * *');
+      schedule = await promptWithDefault(`${job.label} cron schedule`, job.defaultSchedule);
+    }
+    selection.schedules[job.id] = schedule;
+  }
+
+  return selection;
+}
+
+function parseNotificationEvents(input: string): NotificationEvent[] {
+  if (!input.trim()) {
+    return [...DEFAULT_NOTIFICATION_EVENTS];
+  }
+  const events: NotificationEvent[] = [];
+  for (const rawEvent of input.split(',')) {
+    const event = rawEvent.trim();
+    if (!NOTIFICATION_EVENTS.includes(event as NotificationEvent)) {
+      warn(`Unknown notification event "${event}". Skipping it.`);
+      continue;
+    }
+    events.push(event as NotificationEvent);
+  }
+  return events.length > 0 ? events : [...DEFAULT_NOTIFICATION_EVENTS];
+}
+
+function maskSecret(value: string | undefined): string {
+  if (!value) {
+    return '';
+  }
+  if (value.length <= 8) {
+    return '********';
+  }
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
+function formatNotificationStatus(notifications: INotificationSelectionAnswer): string {
+  if (notifications.webhooks.length === 0) {
+    return notifications.skipped ? 'Skipped' : 'None';
+  }
+  return notifications.webhooks
+    .map((webhook) => {
+      if (webhook.type === 'telegram') {
+        return `Telegram chat ${webhook.chatId ? maskSecret(webhook.chatId) : '(missing)'}`;
+      }
+      return webhook.type.charAt(0).toUpperCase() + webhook.type.slice(1);
+    })
+    .join(', ');
+}
+
+async function promptNotificationSetup(): Promise<INotificationSelectionAnswer> {
+  header('Notifications');
+  const configure = await promptYesNo(
+    'Configure notifications now? Recommended for failures and human review handoffs.',
+    false,
+  );
+  if (!configure) {
+    return { webhooks: [], skipped: true };
+  }
+
+  const type = await promptChoice<'telegram' | 'slack' | 'discord'>(
+    'Notification destination',
+    [
+      { value: 'telegram', label: 'Telegram bot' },
+      { value: 'slack', label: 'Slack incoming webhook' },
+      { value: 'discord', label: 'Discord webhook' },
+    ],
+    'telegram',
+  );
+
+  console.log(
+    `Default events: ${DEFAULT_NOTIFICATION_EVENTS.join(', ')}. Leave blank to use these.`,
+  );
+  const events = parseNotificationEvents(await promptText('Notification events CSV'));
+  let webhook: IWebhookConfig;
+
+  if (type === 'telegram') {
+    console.log(
+      'Telegram setup: create a bot with BotFather for the token. Send the bot a message, then use getUpdates or a known chat ID for chatId.',
+    );
+    webhook = {
+      type,
+      botToken: await promptText('Telegram bot token'),
+      chatId: await promptText('Telegram chat ID'),
+      events,
+    };
+  } else {
+    webhook = {
+      type,
+      url: await promptText(`${type === 'slack' ? 'Slack' : 'Discord'} webhook URL`),
+      events,
+    };
+  }
+
+  let issues = validateWebhook(webhook);
+  while (issues.length > 0) {
+    warn(`Notification webhook looks invalid: ${issues.join('; ')}`);
+    const fix = await promptYesNo('Fix this webhook now?', false);
+    if (!fix) {
+      const saveInvalid = await promptYesNo('Save it anyway?', true);
+      return { webhooks: saveInvalid ? [webhook] : [], skipped: !saveInvalid };
+    }
+
+    if (type === 'telegram') {
+      webhook = {
+        ...webhook,
+        botToken: await promptText('Telegram bot token'),
+        chatId: await promptText('Telegram chat ID'),
+      };
+    } else {
+      webhook = {
+        ...webhook,
+        url: await promptText(`${type === 'slack' ? 'Slack' : 'Discord'} webhook URL`),
+      };
+    }
+    issues = validateWebhook(webhook);
+  }
+
+  info('Notification webhook saved. Test delivery later with `night-watch notify test`.');
+  return { webhooks: [webhook], skipped: false };
+}
+
 async function resolveProviderSelection(
   options: IInitOptions,
   interactive: boolean,
@@ -539,6 +1086,46 @@ function showProjectReview(review: IInitProjectReview): void {
 async function confirmProjectReview(review: IInitProjectReview): Promise<boolean> {
   showProjectReview(review);
   return promptYesNo('Continue with this Night Watch setup?', false);
+}
+
+function showFinalSetupReview(params: {
+  projectName: string;
+  provider: Provider;
+  providerSummary: string;
+  jobSelection: IJobSelectionAnswer;
+  notifications: INotificationSelectionAnswer;
+  remoteStatus: IGitHubRemoteStatus;
+  ghAuthenticated: boolean;
+  playwrightStatus: string;
+  configPath: string;
+  force: boolean;
+  prdDir: string;
+}): void {
+  const configExists = fs.existsSync(params.configPath);
+  let configWriteStatus = 'Create config';
+  if (configExists && params.force) {
+    configWriteStatus = 'Overwrite existing config';
+  } else if (configExists) {
+    configWriteStatus = 'Skip existing config';
+  }
+
+  let boardStatus = 'Skipped (no GitHub remote)';
+  if (params.remoteStatus.hasGitHubRemote && params.ghAuthenticated) {
+    boardStatus = 'Board setup and labels will run';
+  } else if (params.remoteStatus.hasGitHubRemote) {
+    boardStatus = 'Skipped until gh auth is available';
+  }
+
+  header('Final Setup Review');
+  label('Project', params.projectName);
+  label('Provider', `${params.provider} (${params.providerSummary})`);
+  label('Enabled jobs', formatEnabledJobs(params.jobSelection));
+  label('Notifications', formatNotificationStatus(params.notifications));
+  label('Board/GitHub', boardStatus);
+  label('Playwright', params.playwrightStatus);
+  label('Config file', configWriteStatus);
+  label('Directories', `${params.prdDir}/done, ${LOG_DIR}/, instructions/`);
+  console.log();
 }
 
 export function getGitHubRemoteStatus(cwd: string): IGitHubRemoteStatus {
@@ -668,10 +1255,12 @@ export function buildInitConfig(params: {
   providerPreset?: IProviderPreset;
   reviewerEnabled: boolean;
   prdDir: string;
+  jobSelection?: IJobSelectionAnswer;
+  notifications?: INotificationSelectionAnswer;
 }): IGeneratedInitConfig {
   const defaults = getDefaultConfig();
 
-  return {
+  const config: IGeneratedInitConfig = {
     $schema: 'https://json-schema.org/schema',
     projectName: params.projectName,
     defaultBranch: params.defaultBranch,
@@ -748,6 +1337,19 @@ export function buildInitConfig(params: {
       },
     },
   };
+
+  if (params.jobSelection) {
+    applyJobSelectionToConfig(config, params.jobSelection);
+  }
+
+  if (params.notifications) {
+    config.notifications = {
+      ...config.notifications,
+      webhooks: params.notifications.webhooks.map((webhook) => ({ ...webhook })),
+    };
+  }
+
+  return config;
 }
 
 /**
@@ -941,6 +1543,13 @@ export function initCommand(program: Command): void {
     .option('--custom-provider-command <cmd>', 'Custom AI provider command to write into config')
     .option('--custom-provider-name <name>', 'Display name for a custom AI provider')
     .option('--custom-provider-id <id>', 'Config id for a custom AI provider')
+    .option('--jobs <csv>', `Enable init jobs (${INIT_JOB_IDS.join(', ')})`)
+    .option('--no-jobs <csv>', `Disable init jobs (${INIT_JOB_IDS.join(', ')})`)
+    .option(
+      '--schedule <job=cron>',
+      'Override an init job schedule; repeat for multiple jobs',
+      (value: string, previous: string[] = []) => [...previous, value],
+    )
     .option('--no-reviewer', 'Disable reviewer cron job')
     .action(async (options: IInitOptions) => {
       const cwd = process.cwd();
@@ -1022,6 +1631,23 @@ export function initCommand(program: Command): void {
 
       // Set reviewerEnabled from flag (default: true, --no-reviewer sets to false)
       const reviewerEnabled = options.reviewer !== false;
+      let jobSelection: IJobSelectionAnswer;
+      try {
+        jobSelection = buildDefaultJobSelection({
+          reviewerEnabled,
+          jobs: options.jobs,
+          noJobs: options.noJobs,
+          schedule: options.schedule,
+        });
+      } catch (err) {
+        uiError(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+
+      let notificationSelection: INotificationSelectionAnswer = {
+        webhooks: [],
+        skipped: true,
+      };
 
       // Gather project information
       const projectName = getProjectName(cwd);
@@ -1045,6 +1671,28 @@ export function initCommand(program: Command): void {
           info('Init cancelled. No project files were written.');
           return;
         }
+
+        jobSelection = await promptJobSelection();
+        notificationSelection = await promptNotificationSetup();
+
+        showFinalSetupReview({
+          projectName,
+          provider: selectedProvider,
+          providerSummary: providerSelection.summary,
+          jobSelection,
+          notifications: notificationSelection,
+          remoteStatus,
+          ghAuthenticated,
+          playwrightStatus,
+          configPath,
+          force,
+          prdDir,
+        });
+        const finalConfirmed = await promptYesNo('Write this Night Watch setup?', false);
+        if (!finalConfirmed) {
+          info('Init cancelled. No project files were written.');
+          return;
+        }
       }
 
       // Display project configuration
@@ -1052,7 +1700,8 @@ export function initCommand(program: Command): void {
       label('Project', projectName);
       label('Default branch', defaultBranch);
       label('Provider', selectedProvider);
-      label('Reviewer', reviewerEnabled ? 'Enabled' : 'Disabled');
+      label('Jobs', formatEnabledJobs(jobSelection));
+      label('Notifications', formatNotificationStatus(notificationSelection));
       console.log();
 
       // Define replacements for templates
@@ -1188,6 +1837,8 @@ export function initCommand(program: Command): void {
           providerPreset: providerSelection.providerPreset,
           reviewerEnabled,
           prdDir,
+          jobSelection,
+          notifications: notificationSelection,
         });
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
         success(`Created ${configPath}`);
@@ -1200,7 +1851,7 @@ export function initCommand(program: Command): void {
         unknown
       >;
       const existingBoard = existingRaw.boardProvider as { projectNumber?: number } | undefined;
-      let boardSetupStatus = 'Skipped';
+      let boardSetupStatus: string;
       if (existingBoard?.projectNumber && !force) {
         boardSetupStatus = `Already configured (#${existingBoard.projectNumber})`;
         info(`Board already configured (#${existingBoard.projectNumber}), skipping.`);
@@ -1246,7 +1897,7 @@ export function initCommand(program: Command): void {
 
       // Step 11: Sync Night Watch labels to GitHub
       step(11, totalSteps, 'Syncing Night Watch labels to GitHub...');
-      let labelSyncStatus = 'Skipped';
+      let labelSyncStatus: string;
       if (!remoteStatus.hasGitHubRemote || !ghAuthenticated) {
         labelSyncStatus = !remoteStatus.hasGitHubRemote
           ? 'Skipped (no GitHub remote)'
@@ -1335,7 +1986,10 @@ export function initCommand(program: Command): void {
       // Configuration summary
       header('Configuration');
       label('Provider', selectedProvider);
-      label('Reviewer', reviewerEnabled ? 'Enabled' : 'Disabled');
+      label('Enabled jobs', formatEnabledJobs(jobSelection));
+      label('Notifications', formatNotificationStatus(notificationSelection));
+      label('Board', boardSetupStatus);
+      label('Skills', skillsSummary);
       label('Playwright', playwrightStatus);
       console.log();
 

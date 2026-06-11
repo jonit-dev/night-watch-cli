@@ -6,11 +6,14 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 import { getDefaultConfig } from '@night-watch/core';
 import {
+  applyJobSelectionToConfig,
+  buildDefaultJobSelection,
   buildProviderChoices,
   buildProviderSummary,
   buildInitConfig,
   chooseProviderByPrecedence,
   chooseProviderForNonInteractive,
+  getInitJobCatalog,
   getDetectedProviderPresets,
   getGitHubRemoteStatus,
   isInteractiveInitSession,
@@ -380,6 +383,127 @@ describe('init command', () => {
           promptFlag: '--prompt',
         },
       });
+    });
+
+    it('should apply explicit job selections to install-consumed config fields', () => {
+      const jobSelection = buildDefaultJobSelection({
+        jobs: 'executor,qa,audit,analytics,slicer,pr-resolver,manager,merger',
+        noJobs: 'reviewer',
+        schedule: [
+          'executor=1 * * * *',
+          'qa=2 * * * *',
+          'audit=3 * * * *',
+          'analytics=4 * * * *',
+          'slicer=5 * * * *',
+          'pr-resolver=6 * * * *',
+          'manager=7 * * * *',
+          'merger=8 * * * *',
+        ],
+      });
+
+      const config = buildInitConfig({
+        projectName: 'demo-project',
+        defaultBranch: 'main',
+        provider: 'codex',
+        reviewerEnabled: true,
+        prdDir: 'docs/prds',
+        jobSelection,
+      });
+
+      expect(config.executorEnabled).toBe(true);
+      expect(config.cronSchedule).toBe('1 * * * *');
+      expect(config.reviewerEnabled).toBe(false);
+      expect(config.qa).toMatchObject({ enabled: true, schedule: '2 * * * *' });
+      expect(config.audit).toMatchObject({ enabled: true, schedule: '3 * * * *' });
+      expect(config.analytics).toMatchObject({ enabled: true, schedule: '4 * * * *' });
+      expect(config.roadmapScanner).toMatchObject({
+        enabled: true,
+        slicerSchedule: '5 * * * *',
+      });
+      expect(config.prResolver).toMatchObject({ enabled: true, schedule: '6 * * * *' });
+      expect(config.manager).toMatchObject({ enabled: true, schedule: '7 * * * *' });
+      expect(config.merger).toMatchObject({ enabled: true, schedule: '8 * * * *' });
+      expect(config.autoMerge).toBe(true);
+    });
+
+    it('should keep deterministic default job selection for non-interactive init', () => {
+      const defaults = getDefaultConfig();
+      const selection = buildDefaultJobSelection({ reviewerEnabled: false });
+      const config = applyJobSelectionToConfig(
+        buildInitConfig({
+          projectName: 'demo-project',
+          defaultBranch: 'main',
+          provider: 'codex',
+          reviewerEnabled: true,
+          prdDir: 'docs/prds',
+        }),
+        selection,
+      );
+
+      expect(config.executorEnabled).toBe(defaults.executorEnabled);
+      expect(config.reviewerEnabled).toBe(false);
+      expect(config.qa.enabled).toBe(defaults.qa.enabled);
+      expect(config.roadmapScanner.enabled).toBe(defaults.roadmapScanner.enabled);
+      expect(config.prResolver.enabled).toBe(defaults.prResolver.enabled);
+      expect(config.manager.enabled).toBe(defaults.manager.enabled);
+      expect(config.audit.enabled).toBe(defaults.audit.enabled);
+      expect(config.analytics.enabled).toBe(defaults.analytics.enabled);
+      expect(config.merger.enabled).toBe(defaults.merger.enabled);
+    });
+
+    it('should reject unknown job and malformed schedule flags', () => {
+      expect(() => buildDefaultJobSelection({ jobs: 'executor,unknown' })).toThrow(
+        'Unknown init job',
+      );
+      expect(() => buildDefaultJobSelection({ schedule: 'qa=bad' })).toThrow(
+        'Invalid cron schedule',
+      );
+    });
+
+    it('should include practical onboarding jobs in the catalog', () => {
+      const ids = getInitJobCatalog().map((job) => job.id);
+
+      expect(ids).toEqual([
+        'executor',
+        'reviewer',
+        'qa',
+        'audit',
+        'analytics',
+        'slicer',
+        'pr-resolver',
+        'manager',
+        'merger',
+      ]);
+    });
+
+    it('should persist explicit notification webhooks without masking config values', () => {
+      const config = buildInitConfig({
+        projectName: 'demo-project',
+        defaultBranch: 'main',
+        provider: 'codex',
+        reviewerEnabled: true,
+        prdDir: 'docs/prds',
+        notifications: {
+          skipped: false,
+          webhooks: [
+            {
+              type: 'telegram',
+              botToken: '123456:secret',
+              chatId: '987654',
+              events: ['run_failed'],
+            },
+          ],
+        },
+      });
+
+      expect(config.notifications.webhooks).toEqual([
+        {
+          type: 'telegram',
+          botToken: '123456:secret',
+          chatId: '987654',
+          events: ['run_failed'],
+        },
+      ]);
     });
   });
 
