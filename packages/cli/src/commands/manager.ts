@@ -6,8 +6,8 @@ import { Command } from 'commander';
 import * as path from 'path';
 import * as Core from '@night-watch/core';
 import type {
-  INightWatchConfig,
   IManagerConfig,
+  INightWatchConfig,
   NotificationEvent,
   Provider,
 } from '@night-watch/core';

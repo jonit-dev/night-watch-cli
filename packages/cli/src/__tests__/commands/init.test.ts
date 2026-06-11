@@ -6,10 +6,20 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 import { getDefaultConfig } from '@night-watch/core';
 import {
+  applyJobSelectionToConfig,
+  buildDefaultJobSelection,
+  buildProviderChoices,
+  buildProviderSummary,
   buildInitConfig,
+  chooseProviderByPrecedence,
   chooseProviderForNonInteractive,
+  getInitJobCatalog,
+  getDetectedProviderPresets,
   getGitHubRemoteStatus,
+  isInteractiveInitSession,
   resolveTemplatePath,
+  selectProviderOverrideByIndex,
+  shouldPromptProviderOverride,
 } from '../../commands/init.js';
 
 // Get project root directory (4 levels up from this test file)
@@ -350,6 +360,151 @@ describe('init command', () => {
       expect(config.boardProvider).toEqual(defaults.boardProvider);
       expect(config.jobProviders).toEqual(defaults.jobProviders);
     });
+
+    it('should write a custom provider preset when provided', () => {
+      const config = buildInitConfig({
+        projectName: 'demo-project',
+        defaultBranch: 'main',
+        provider: 'local-agent',
+        providerPreset: {
+          name: 'Local Agent',
+          command: 'local-agent',
+          promptFlag: '--prompt',
+        },
+        reviewerEnabled: true,
+        prdDir: 'docs/prds',
+      });
+
+      expect(config.provider).toBe('local-agent');
+      expect(config.providerPresets).toEqual({
+        'local-agent': {
+          name: 'Local Agent',
+          command: 'local-agent',
+          promptFlag: '--prompt',
+        },
+      });
+    });
+
+    it('should apply explicit job selections to install-consumed config fields', () => {
+      const jobSelection = buildDefaultJobSelection({
+        jobs: 'executor,qa,audit,analytics,slicer,pr-resolver,manager,merger',
+        noJobs: 'reviewer',
+        schedule: [
+          'executor=1 * * * *',
+          'qa=2 * * * *',
+          'audit=3 * * * *',
+          'analytics=4 * * * *',
+          'slicer=5 * * * *',
+          'pr-resolver=6 * * * *',
+          'manager=7 * * * *',
+          'merger=8 * * * *',
+        ],
+      });
+
+      const config = buildInitConfig({
+        projectName: 'demo-project',
+        defaultBranch: 'main',
+        provider: 'codex',
+        reviewerEnabled: true,
+        prdDir: 'docs/prds',
+        jobSelection,
+      });
+
+      expect(config.executorEnabled).toBe(true);
+      expect(config.cronSchedule).toBe('1 * * * *');
+      expect(config.reviewerEnabled).toBe(false);
+      expect(config.qa).toMatchObject({ enabled: true, schedule: '2 * * * *' });
+      expect(config.audit).toMatchObject({ enabled: true, schedule: '3 * * * *' });
+      expect(config.analytics).toMatchObject({ enabled: true, schedule: '4 * * * *' });
+      expect(config.roadmapScanner).toMatchObject({
+        enabled: true,
+        slicerSchedule: '5 * * * *',
+      });
+      expect(config.prResolver).toMatchObject({ enabled: true, schedule: '6 * * * *' });
+      expect(config.manager).toMatchObject({ enabled: true, schedule: '7 * * * *' });
+      expect(config.merger).toMatchObject({ enabled: true, schedule: '8 * * * *' });
+      expect(config.autoMerge).toBe(true);
+    });
+
+    it('should keep deterministic default job selection for non-interactive init', () => {
+      const defaults = getDefaultConfig();
+      const selection = buildDefaultJobSelection({ reviewerEnabled: false });
+      const config = applyJobSelectionToConfig(
+        buildInitConfig({
+          projectName: 'demo-project',
+          defaultBranch: 'main',
+          provider: 'codex',
+          reviewerEnabled: true,
+          prdDir: 'docs/prds',
+        }),
+        selection,
+      );
+
+      expect(config.executorEnabled).toBe(defaults.executorEnabled);
+      expect(config.reviewerEnabled).toBe(false);
+      expect(config.qa.enabled).toBe(defaults.qa.enabled);
+      expect(config.roadmapScanner.enabled).toBe(defaults.roadmapScanner.enabled);
+      expect(config.prResolver.enabled).toBe(defaults.prResolver.enabled);
+      expect(config.manager.enabled).toBe(defaults.manager.enabled);
+      expect(config.audit.enabled).toBe(defaults.audit.enabled);
+      expect(config.analytics.enabled).toBe(defaults.analytics.enabled);
+      expect(config.merger.enabled).toBe(defaults.merger.enabled);
+    });
+
+    it('should reject unknown job and malformed schedule flags', () => {
+      expect(() => buildDefaultJobSelection({ jobs: 'executor,unknown' })).toThrow(
+        'Unknown init job',
+      );
+      expect(() => buildDefaultJobSelection({ schedule: 'qa=bad' })).toThrow(
+        'Invalid cron schedule',
+      );
+    });
+
+    it('should include practical onboarding jobs in the catalog', () => {
+      const ids = getInitJobCatalog().map((job) => job.id);
+
+      expect(ids).toEqual([
+        'executor',
+        'reviewer',
+        'qa',
+        'audit',
+        'analytics',
+        'slicer',
+        'pr-resolver',
+        'manager',
+        'merger',
+      ]);
+    });
+
+    it('should persist explicit notification webhooks without masking config values', () => {
+      const config = buildInitConfig({
+        projectName: 'demo-project',
+        defaultBranch: 'main',
+        provider: 'codex',
+        reviewerEnabled: true,
+        prdDir: 'docs/prds',
+        notifications: {
+          skipped: false,
+          webhooks: [
+            {
+              type: 'telegram',
+              botToken: '123456:secret',
+              chatId: '987654',
+              events: ['run_failed'],
+            },
+          ],
+        },
+      });
+
+      expect(config.notifications.webhooks).toEqual([
+        {
+          type: 'telegram',
+          botToken: '123456:secret',
+          chatId: '987654',
+          events: ['run_failed'],
+        },
+      ]);
+    });
   });
 
   describeIfExternalTools('should NOT create .claude/commands/ directory', () => {
@@ -458,6 +613,32 @@ describe('init command', () => {
     });
   });
 
+  describe('--custom-provider-command flag', () => {
+    it('should write a custom provider preset in non-interactive mode', () => {
+      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
+
+      execSync(
+        `${TSX_CMD} init --yes --custom-provider-command local-agent --custom-provider-name "Local Agent" --custom-provider-id local-agent`,
+        {
+          encoding: 'utf-8',
+          cwd: tempDir,
+          stdio: 'pipe',
+          timeout: 15000,
+        },
+      );
+
+      const configPath = path.join(tempDir, 'night-watch.config.json');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      expect(config.provider).toBe('local-agent');
+      expect(config.providerPresets['local-agent']).toEqual({
+        name: 'Local Agent',
+        command: 'local-agent',
+      });
+    });
+  });
+
   describeIfExternalTools('--no-reviewer flag', () => {
     it('should set reviewerEnabled to false in config', () => {
       // Initialize git repo
@@ -511,12 +692,76 @@ describe('init command', () => {
   });
 
   describe('chooseProviderForNonInteractive', () => {
-    it('should prefer claude when multiple providers are available', () => {
-      expect(chooseProviderForNonInteractive(['codex', 'claude'])).toBe('claude');
+    it('should prefer codex when multiple providers are available', () => {
+      expect(chooseProviderForNonInteractive(['claude', 'codex'])).toBe('codex');
     });
 
     it('should fall back to the first detected provider when claude is unavailable', () => {
-      expect(chooseProviderForNonInteractive(['codex'])).toBe('codex');
+      expect(chooseProviderForNonInteractive(['local-agent'])).toBe('local-agent');
+    });
+  });
+
+  describe('provider auto-selection', () => {
+    it('isInteractiveInitSession returns false for the test process', () => {
+      expect(isInteractiveInitSession()).toBe(false);
+    });
+
+    it('should select codex over claude by precedence', () => {
+      expect(chooseProviderByPrecedence(['claude', 'codex'])).toBe('codex');
+    });
+
+    it('should map a single detected claude command to claude presets while defaulting to claude', () => {
+      const detected = getDetectedProviderPresets(['claude']);
+
+      expect(detected).toContain('claude');
+      expect(detected).toContain('claude-sonnet-4-6');
+      expect(chooseProviderByPrecedence(detected)).toBe('claude');
+    });
+
+    it('should map detected codex and claude commands and default to codex', () => {
+      const detected = getDetectedProviderPresets(['claude', 'codex']);
+
+      expect(detected[0]).toBe('codex');
+      expect(chooseProviderByPrecedence(detected)).toBe('codex');
+    });
+
+    it('should summarize codex as selected and claude as also available', () => {
+      const summary = buildProviderSummary('codex', ['codex', 'claude']);
+
+      expect(summary).toContain('Auto-selected Codex');
+      expect(summary).toContain('Also available: Claude');
+    });
+
+    it('should only prompt for provider override in interactive sessions with multiple presets', () => {
+      expect(shouldPromptProviderOverride(true, ['codex', 'claude'])).toBe(true);
+      expect(shouldPromptProviderOverride(true, ['codex'])).toBe(false);
+      expect(shouldPromptProviderOverride(false, ['codex', 'claude'])).toBe(false);
+    });
+
+    it('should build detected provider choices with a custom provider command option', () => {
+      const choices = buildProviderChoices(['codex', 'claude']);
+
+      expect(choices).toEqual([
+        { label: 'Codex', provider: 'codex', custom: false },
+        { label: 'Claude', provider: 'claude', custom: false },
+        { label: 'Custom provider command', custom: true },
+      ]);
+    });
+
+    it('should select provider override choices by one-based index', () => {
+      const choices = buildProviderChoices(['codex', 'claude']);
+
+      expect(selectProviderOverrideByIndex(choices, '2')).toEqual({
+        label: 'Claude',
+        provider: 'claude',
+        custom: false,
+      });
+      expect(selectProviderOverrideByIndex(choices, '3')).toEqual({
+        label: 'Custom provider command',
+        custom: true,
+      });
+      expect(selectProviderOverrideByIndex(choices, '0')).toBeNull();
+      expect(selectProviderOverrideByIndex(choices, 'nope')).toBeNull();
     });
   });
 
