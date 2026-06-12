@@ -6,8 +6,8 @@ import path from 'path';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import * as readline from 'readline';
 import cronstrue from 'cronstrue';
+import { checkbox, confirm, input, select } from '@inquirer/prompts';
 import {
   BUILT_IN_PRESETS,
   BUILT_IN_PRESET_IDS,
@@ -18,7 +18,6 @@ import {
   IWebhookConfig,
   JobType,
   LOG_DIR,
-  NOTIFICATION_EVENTS,
   NotificationEvent,
   Provider,
   checkGhCli,
@@ -162,16 +161,44 @@ export interface IProviderChoice {
   custom: boolean;
 }
 
-interface IInitProjectReview {
-  cwd: string;
-  projectName: string;
-  defaultBranch: string;
-  prdDir: string;
-  configExists: boolean;
-  force: boolean;
-  providerSummary: string;
-  remoteStatus: IGitHubRemoteStatus;
-  playwrightStatus: string;
+type InitCustomizationArea = 'notifications' | 'jobs' | 'provider' | 'playwright' | 'done';
+
+export function getInitCustomizationChoices(params: {
+  playwrightDetected: boolean;
+}): { value: InitCustomizationArea; label: string; description: string }[] {
+  const choices: { value: InitCustomizationArea; label: string; description: string }[] = [
+    {
+      value: 'notifications',
+      label: 'Notifications',
+      description: 'Telegram, Slack, or Discord webhook.',
+    },
+    {
+      value: 'jobs',
+      label: 'Scheduled jobs',
+      description: 'Change enabled jobs or schedules.',
+    },
+    {
+      value: 'provider',
+      label: 'AI provider',
+      description: 'Choose another detected provider or custom command.',
+    },
+  ];
+
+  if (!params.playwrightDetected) {
+    choices.push({
+      value: 'playwright',
+      label: 'Install Playwright now',
+      description: 'Optional; QA can auto-install later.',
+    });
+  }
+
+  choices.push({
+    value: 'done',
+    label: 'Nothing else',
+    description: 'Return to the final setup review.',
+  });
+
+  return choices;
 }
 
 const INIT_PROVIDER_PRECEDENCE = [
@@ -200,14 +227,7 @@ const INIT_JOB_IDS: InitJobId[] = [
   'merger',
 ];
 
-const RECOMMENDED_INIT_JOBS: InitJobId[] = [
-  'executor',
-  'reviewer',
-  'qa',
-  'slicer',
-  'manager',
-  'pr-resolver',
-];
+const RECOMMENDED_INIT_JOBS: InitJobId[] = ['executor', 'reviewer', 'qa'];
 
 const MINIMAL_INIT_JOBS: InitJobId[] = ['executor'];
 
@@ -250,6 +270,8 @@ const DEFAULT_NOTIFICATION_EVENTS: NotificationEvent[] = [
   'merge_failed',
   'manager_blocked',
 ];
+
+const DISCORD_INVITE_URL = 'https://discord.gg/maCPEJzPXa';
 
 function hasPlaywrightDependency(cwd: string): boolean {
   const packageJsonPath = path.join(cwd, 'package.json');
@@ -306,46 +328,27 @@ function resolvePlaywrightInstallCommand(cwd: string): string {
   return 'npm install -D @playwright/test';
 }
 
-function promptYesNo(question: string, defaultNo: boolean = true): Promise<boolean> {
+async function promptYesNo(question: string, defaultNo: boolean = true): Promise<boolean> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     return Promise.resolve(false);
   }
 
-  return new Promise((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    const suffix = defaultNo ? ' [y/N]: ' : ' [Y/n]: ';
-    rl.question(`${question}${suffix}`, (answer) => {
-      rl.close();
-      const normalized = answer.trim().toLowerCase();
-      if (normalized === '') {
-        resolve(!defaultNo);
-        return;
-      }
-      resolve(normalized === 'y' || normalized === 'yes');
-    });
+  return confirm({
+    message: question,
+    default: !defaultNo,
   });
 }
 
-function promptText(question: string): Promise<string> {
+async function promptText(question: string, defaultValue?: string): Promise<string> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    return Promise.resolve('');
+    return Promise.resolve(defaultValue ?? '');
   }
 
-  return new Promise((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    rl.question(`${question}: `, (answer) => {
-      rl.close();
-      resolve(answer.trim());
-    });
+  const answer = await input({
+    message: question,
+    default: defaultValue,
   });
+  return answer.trim();
 }
 
 async function promptChoice<T extends string>(
@@ -357,40 +360,48 @@ async function promptChoice<T extends string>(
     return defaultValue;
   }
 
-  console.log(question);
-  choices.forEach((choice, index) => {
-    console.log(`  ${index + 1}. ${choice.label}`);
+  return select({
+    message: question,
+    choices: choices.map((choice) => ({
+      name: choice.label,
+      value: choice.value,
+    })),
+    default: defaultValue,
   });
-
-  const input = await promptText(`Choose 1-${choices.length} (default: ${defaultValue})`);
-  if (!input) {
-    return defaultValue;
-  }
-
-  const selectedIndex = Number.parseInt(input, 10);
-  if (!Number.isInteger(selectedIndex) || selectedIndex < 1 || selectedIndex > choices.length) {
-    warn(`Invalid choice "${input}". Using ${defaultValue}.`);
-    return defaultValue;
-  }
-
-  return choices[selectedIndex - 1].value;
 }
 
-function promptWithDefault(question: string, defaultValue: string): Promise<string> {
+async function promptCustomizationArea(params: {
+  playwrightDetected: boolean;
+}): Promise<InitCustomizationArea> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    return Promise.resolve(defaultValue);
+    return 'done';
   }
 
-  return new Promise((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
+  return select({
+    message: 'What do you want to customize?',
+    choices: getInitCustomizationChoices(params).map((choice) => ({
+      name: choice.label,
+      value: choice.value,
+      description: choice.description,
+    })),
+    default: 'notifications',
+  });
+}
 
-    rl.question(`${question} [${defaultValue}]: `, (answer) => {
-      rl.close();
-      resolve(answer.trim() || defaultValue);
-    });
+async function promptEnabledJobIds(defaultEnabled: InitJobId[]): Promise<InitJobId[]> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return [...defaultEnabled];
+  }
+
+  return checkbox({
+    message: 'Enabled scheduled jobs',
+    choices: getInitJobCatalog().map((job) => ({
+      name: job.label,
+      value: job.id,
+      checked: defaultEnabled.includes(job.id),
+      description: `${job.description}${job.warning ? ` ${job.warning}` : ''}`,
+    })),
+    required: true,
   });
 }
 
@@ -499,6 +510,36 @@ function formatScheduleWithDescription(schedule: string): string {
   return `${schedule} (${description})`;
 }
 
+export function normalizeCronSchedulePromptInput(input: string, defaultSchedule: string): string {
+  const normalized = input.trim().toLowerCase();
+  if (normalized === '' || normalized === 'y' || normalized === 'yes') {
+    return defaultSchedule;
+  }
+  return input.trim();
+}
+
+function printCronScheduleHelp(): void {
+  console.log('For schedules, press Enter to accept the default.');
+  console.log('To customize, type five cron fields: minute hour day-of-month month day-of-week.');
+  console.log('Examples: 0 9 * * * = daily at 09:00, */30 * * * * = every 30 minutes.');
+  console.log();
+}
+
+async function promptCronSchedule(job: IInitJobCatalogItem): Promise<string> {
+  const defaultDescription = describeCronSchedule(job.defaultSchedule);
+  const question = `${job.label} schedule [default: ${job.defaultSchedule} - ${defaultDescription}] (Enter/y = accept)`;
+  let schedule = normalizeCronSchedulePromptInput(await promptText(question), job.defaultSchedule);
+
+  while (!isValidCronSchedule(schedule)) {
+    warn(
+      `Cron schedules need five fields: minute hour day-of-month month day-of-week. Example: 5 */2 * * *`,
+    );
+    schedule = normalizeCronSchedulePromptInput(await promptText(question), job.defaultSchedule);
+  }
+
+  return schedule;
+}
+
 function parseScheduleOverrides(
   scheduleOptions: string[] | string | undefined,
 ): Partial<Record<InitJobId, string>> {
@@ -528,7 +569,7 @@ export function buildDefaultJobSelection(options?: {
   schedule?: string[] | string;
 }): IJobSelectionAnswer {
   const defaults = getDefaultConfig();
-  const enabled = new Set(INIT_JOB_IDS.filter((jobId) => jobEnabledByDefault(defaults, jobId)));
+  const enabled = new Set<InitJobId>(RECOMMENDED_INIT_JOBS);
 
   if (options?.reviewerEnabled === false) {
     enabled.delete('reviewer');
@@ -553,7 +594,7 @@ export function buildDefaultJobSelection(options?: {
   };
 }
 
-function buildBundleJobSelection(bundle: InitJobBundle): IJobSelectionAnswer {
+export function buildBundleJobSelection(bundle: InitJobBundle): IJobSelectionAnswer {
   const defaults = getDefaultConfig();
   let enabledJobs: InitJobId[];
   if (bundle === 'minimal') {
@@ -676,10 +717,10 @@ export function buildProviderSummary(provider: Provider, detectedProviders: Prov
 }
 
 export function shouldPromptProviderOverride(
-  interactive: boolean,
-  detectedProviders: Provider[],
+  _interactive: boolean,
+  _detectedProviders: Provider[],
 ): boolean {
-  return interactive && detectedProviders.length > 1;
+  return false;
 }
 
 export function buildProviderChoices(
@@ -784,35 +825,15 @@ async function promptProviderOverrideSelection(params: {
 }): Promise<IProviderSelectionResult> {
   const { selectedProvider, detectedProviders, detectedCommands } = params;
   const selectedName = formatProviderName(selectedProvider);
-  console.log(buildProviderSummary(selectedProvider, detectedProviders));
-
-  const useAutoSelected = await promptYesNo(`Use ${selectedName}?`, false);
-  if (useAutoSelected) {
-    return {
-      provider: selectedProvider,
-      detectedProviders,
-      detectedCommands,
-      summary: `Using auto-selected provider: ${selectedName}.`,
-    };
-  }
-
   const choices = buildProviderChoices(detectedProviders);
-  console.log('\nDetected provider presets:');
-  choices.forEach((choice, index) => {
-    console.log(`  ${index + 1}. ${choice.label}`);
+  const choice = await select<IProviderChoice>({
+    message: 'AI provider',
+    choices: choices.map((providerChoice) => ({
+      name: providerChoice.label,
+      value: providerChoice,
+    })),
+    default: choices.find((providerChoice) => providerChoice.provider === selectedProvider),
   });
-
-  const choiceInput = await promptText('Choose provider preset number');
-  const choice = selectProviderOverrideByIndex(choices, choiceInput);
-  if (!choice) {
-    warn(`Invalid provider choice. Continuing with auto-selected provider: ${selectedName}.`);
-    return {
-      provider: selectedProvider,
-      detectedProviders,
-      detectedCommands,
-      summary: `Using auto-selected provider: ${selectedName}.`,
-    };
-  }
 
   if (choice.custom) {
     const command = await promptText('Custom provider command');
@@ -846,82 +867,24 @@ async function promptProviderOverrideSelection(params: {
 
 async function promptJobSelection(): Promise<IJobSelectionAnswer> {
   header('Job Selection');
-  console.log('Choose the scheduled jobs Night Watch should enable.');
-  console.log('High-impact jobs are called out below before you choose.');
-  for (const job of getInitJobCatalog()) {
-    if (job.warning) {
-      console.log(`  ${job.label}: ${job.warning}`);
-    }
-  }
-  console.log();
-
-  const bundle = await promptChoice<InitJobBundle>(
-    'Job bundle',
-    [
-      {
-        value: 'recommended',
-        label: 'Recommended: executor, reviewer, QA, slicer, manager, PR resolver',
-      },
-      { value: 'minimal', label: 'Minimal: executor only' },
-      { value: 'custom', label: 'Custom: answer per job' },
-    ],
-    'recommended',
-  );
-
-  const selection = buildBundleJobSelection(bundle);
-  const enabled = enabledJobSet(selection);
-
-  if (bundle === 'custom') {
-    for (const job of getInitJobCatalog()) {
-      const enable = await promptYesNo(
-        `Enable ${job.label}? ${job.description}${job.warning ? ` (${job.warning})` : ''}`,
-        !enabled.has(job.id),
-      );
-      if (enable) {
-        enabled.add(job.id);
-      } else {
-        enabled.delete(job.id);
-      }
-    }
-  }
+  const selection = buildBundleJobSelection('recommended');
+  const enabledJobIds = await promptEnabledJobIds(selection.enabledJobs);
+  const enabled = new Set(enabledJobIds);
 
   selection.enabledJobs = INIT_JOB_IDS.filter((jobId) => enabled.has(jobId));
 
-  for (const job of getInitJobCatalog()) {
-    if (!enabled.has(job.id)) {
-      continue;
+  const editSchedules = await promptYesNo('Customize job schedules?', true);
+  if (editSchedules) {
+    printCronScheduleHelp();
+    for (const job of getInitJobCatalog()) {
+      if (!enabled.has(job.id)) {
+        continue;
+      }
+      selection.schedules[job.id] = await promptCronSchedule(job);
     }
-    let schedule = await promptWithDefault(
-      `${job.label} cron schedule (${describeCronSchedule(job.defaultSchedule)})`,
-      job.defaultSchedule,
-    );
-    while (!isValidCronSchedule(schedule)) {
-      warn('Cron schedules must contain five fields, for example: 5 */2 * * *');
-      schedule = await promptWithDefault(
-        `${job.label} cron schedule (${describeCronSchedule(job.defaultSchedule)})`,
-        job.defaultSchedule,
-      );
-    }
-    selection.schedules[job.id] = schedule;
   }
 
   return selection;
-}
-
-function parseNotificationEvents(input: string): NotificationEvent[] {
-  if (!input.trim()) {
-    return [...DEFAULT_NOTIFICATION_EVENTS];
-  }
-  const events: NotificationEvent[] = [];
-  for (const rawEvent of input.split(',')) {
-    const event = rawEvent.trim();
-    if (!NOTIFICATION_EVENTS.includes(event as NotificationEvent)) {
-      warn(`Unknown notification event "${event}". Skipping it.`);
-      continue;
-    }
-    events.push(event as NotificationEvent);
-  }
-  return events.length > 0 ? events : [...DEFAULT_NOTIFICATION_EVENTS];
 }
 
 function maskSecret(value: string | undefined): string {
@@ -950,14 +913,6 @@ function formatNotificationStatus(notifications: INotificationSelectionAnswer): 
 
 async function promptNotificationSetup(): Promise<INotificationSelectionAnswer> {
   header('Notifications');
-  const configure = await promptYesNo(
-    'Configure notifications now? Recommended for failures and human review handoffs.',
-    false,
-  );
-  if (!configure) {
-    return { webhooks: [], skipped: true };
-  }
-
   const type = await promptChoice<'telegram' | 'slack' | 'discord'>(
     'Notification destination',
     [
@@ -968,27 +923,20 @@ async function promptNotificationSetup(): Promise<INotificationSelectionAnswer> 
     'telegram',
   );
 
-  console.log(
-    `Default events: ${DEFAULT_NOTIFICATION_EVENTS.join(', ')}. Leave blank to use these.`,
-  );
-  const events = parseNotificationEvents(await promptText('Notification events CSV'));
   let webhook: IWebhookConfig;
 
   if (type === 'telegram') {
-    console.log(
-      'Telegram setup: create a bot with BotFather for the token. Send the bot a message, then use getUpdates or a known chat ID for chatId.',
-    );
     webhook = {
       type,
       botToken: await promptText('Telegram bot token'),
       chatId: await promptText('Telegram chat ID'),
-      events,
+      events: [...DEFAULT_NOTIFICATION_EVENTS],
     };
   } else {
     webhook = {
       type,
       url: await promptText(`${type === 'slack' ? 'Slack' : 'Discord'} webhook URL`),
-      events,
+      events: [...DEFAULT_NOTIFICATION_EVENTS],
     };
   }
 
@@ -1086,34 +1034,6 @@ async function resolveProviderSelection(
     detectedCommands,
     summary: buildProviderSummary(selectedProvider, detectedProviders),
   };
-}
-
-function showProjectReview(review: IInitProjectReview): void {
-  let configStatus = 'New';
-  if (review.configExists) {
-    configStatus = review.force ? 'Exists, will overwrite' : 'Exists, will keep';
-  }
-
-  header('Project Review');
-  label('Path', review.cwd);
-  label('Project', review.projectName);
-  label('Default branch', review.defaultBranch);
-  label('PRD directory', review.prdDir);
-  label('Config', configStatus);
-  label(
-    'GitHub remote',
-    review.remoteStatus.hasGitHubRemote
-      ? (review.remoteStatus.remoteUrl ?? 'Detected')
-      : 'Not detected',
-  );
-  label('Provider', review.providerSummary);
-  label('Playwright', review.playwrightStatus);
-  console.log();
-}
-
-async function confirmProjectReview(review: IInitProjectReview): Promise<boolean> {
-  showProjectReview(review);
-  return promptYesNo('Continue with this Night Watch setup?', false);
 }
 
 function showFinalSetupReview(params: {
@@ -1610,11 +1530,8 @@ export function initCommand(program: Command): void {
 
       // Step 3: Detect AI providers
       step(3, totalSteps, 'Detecting AI providers...');
-      const providerSelection = await resolveProviderSelection(
-        options,
-        interactive && !options.yes,
-      );
-      const selectedProvider = providerSelection.provider;
+      let providerSelection = await resolveProviderSelection(options, interactive && !options.yes);
+      let selectedProvider = providerSelection.provider;
       info(providerSelection.summary);
 
       // Step 4: Check optional GitHub integration prerequisites
@@ -1639,22 +1556,7 @@ export function initCommand(program: Command): void {
         info('Playwright: detected');
       } else {
         info('Playwright: not found');
-        const installPlaywright = options.yes
-          ? false
-          : await promptYesNo('Install Playwright for QA now?', true);
-        if (installPlaywright) {
-          if (installPlaywrightForQa(cwd)) {
-            playwrightStatus = 'installed during init';
-            success('Installed Playwright test runner and Chromium browser.');
-          } else {
-            playwrightStatus = 'install failed';
-            console.warn(
-              '  Warning: Failed to install Playwright automatically. You can install it later.',
-            );
-          }
-        } else {
-          info('Skipping Playwright install. QA can auto-install during execution if enabled.');
-        }
+        info('Skipping Playwright install by default. QA can auto-install during execution.');
       }
 
       // Set reviewerEnabled from flag (default: true, --no-reviewer sets to false)
@@ -1683,26 +1585,6 @@ export function initCommand(program: Command): void {
       const configPath = path.join(cwd, CONFIG_FILE_NAME);
 
       if (interactive && !options.yes) {
-        const confirmed = await confirmProjectReview({
-          cwd,
-          projectName,
-          defaultBranch,
-          prdDir,
-          configExists: fs.existsSync(configPath),
-          force,
-          providerSummary: providerSelection.summary,
-          remoteStatus,
-          playwrightStatus,
-        });
-
-        if (!confirmed) {
-          info('Init cancelled. No project files were written.');
-          return;
-        }
-
-        jobSelection = await promptJobSelection();
-        notificationSelection = await promptNotificationSetup();
-
         showFinalSetupReview({
           projectName,
           provider: selectedProvider,
@@ -1716,10 +1598,64 @@ export function initCommand(program: Command): void {
           force,
           prdDir,
         });
-        const finalConfirmed = await promptYesNo('Write this Night Watch setup?', false);
-        if (!finalConfirmed) {
-          info('Init cancelled. No project files were written.');
-          return;
+
+        const useDefaults = await promptYesNo('Use these defaults and initialize?', false);
+        if (!useDefaults) {
+          const customize = await promptYesNo('Customize setup instead?', false);
+          if (!customize) {
+            info('Init cancelled. No project files were written.');
+            return;
+          }
+
+          const customizationArea = await promptCustomizationArea({ playwrightDetected });
+          if (customizationArea === 'provider') {
+            providerSelection = await promptProviderOverrideSelection({
+              selectedProvider,
+              detectedProviders: providerSelection.detectedProviders,
+              detectedCommands: providerSelection.detectedCommands,
+            });
+            selectedProvider = providerSelection.provider;
+          }
+
+          if (customizationArea === 'jobs') {
+            jobSelection = await promptJobSelection();
+          }
+
+          if (customizationArea === 'notifications') {
+            notificationSelection = await promptNotificationSetup();
+          }
+
+          if (customizationArea === 'playwright' && !playwrightDetected) {
+            if (installPlaywrightForQa(cwd)) {
+              playwrightStatus = 'installed during init';
+              success('Installed Playwright test runner and Chromium browser.');
+            } else {
+              playwrightStatus = 'install failed';
+              console.warn(
+                '  Warning: Failed to install Playwright automatically. You can install it later.',
+              );
+            }
+          }
+
+          showFinalSetupReview({
+            projectName,
+            provider: selectedProvider,
+            providerSummary: providerSelection.summary,
+            jobSelection,
+            notifications: notificationSelection,
+            remoteStatus,
+            ghAuthenticated,
+            playwrightStatus,
+            configPath,
+            force,
+            prdDir,
+          });
+
+          const finalConfirmed = await promptYesNo('Write this Night Watch setup?', false);
+          if (!finalConfirmed) {
+            info('Init cancelled. No project files were written.');
+            return;
+          }
         }
       }
 
@@ -2038,6 +1974,7 @@ export function initCommand(program: Command): void {
       if (skillsResult.installed > 0) {
         info(`5. Use /nw-create-prd, /nw-run, /nw-add-issue and more in your AI assistant`);
       }
+      info(`Join the Night Watch Discord: ${DISCORD_INVITE_URL}`);
       console.log();
     });
 }

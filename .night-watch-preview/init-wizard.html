@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Night Watch Init Wizard Preview</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; min-height: 100vh; background: #101214; color: #e9edf0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; display: grid; place-items: start center; padding: 32px; }
+  main { width: min(1120px, 100%); }
+  h1 { font-size: 22px; line-height: 1.2; margin: 0 0 14px; font-weight: 700; letter-spacing: 0; }
+  p { margin: 0 0 18px; color: #aab4bd; font-size: 14px; }
+  pre { margin: 0; padding: 24px; border: 1px solid #30363d; border-radius: 8px; background: #050607; color: #d6dde3; overflow: auto; line-height: 1.42; font-size: 13px; tab-size: 2; box-shadow: 0 20px 70px rgba(0,0,0,.35); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Night Watch Init Wizard Preview</h1>
+  <p>Captured from a disposable git repo using the rebuilt beta CLI.</p>
+  <pre>
+
+Night Watch CLI - Initializing
+────────────────────────────────────────
+● Step 01/14 ━───────────   7%
+  Checking Node.js version...
+✔ Node.js version v24.16.0 (&gt;= 22.0.0)
+● Step 02/14 ━━──────────  14%
+  Checking git repository...
+✔ Git repository found
+● Step 03/14 ━━━─────────  21%
+  Detecting AI providers...
+ℹ Auto-selected Codex.
+● Step 04/14 ━━━─────────  29%
+  Checking GitHub integration prerequisites...
+ℹ No GitHub remote detected. Board setup will be skipped for now.
+● Step 05/14 ━━━━────────  36%
+  Detecting test frameworks...
+ℹ Playwright: not found
+ℹ Skipping Playwright install. QA can auto-install during execution if enabled.
+
+Project Configuration
+────────────────────────────────────────
+  Project           night-watch-preview-NWCj1u
+  Default branch    main
+  Provider          codex
+  Jobs              Executor: 5 * * * * (At 5 minutes past the hour), Reviewer: 25 */3 * * * (At 25 minutes past the hour, every 3 hours), QA: 45 2,10,18 * * * (At 02:45, 10:45 and 18:45), Slicer: 35 */6 * * * (At 35 minutes past the hour, every 6 hours), PR Conflict Solver: 15 6,14,22 * * * (At 06:15, 14:15 and 22:15), Manager: 15 7 * * * (At 07:15)
+  Notifications     Skipped
+
+● Step 06/14 ━━━━━───────  43%
+  Creating PRD directory structure...
+✔ Created /tmp/night-watch-preview-NWCj1u/docs/prds/
+✔ Created /tmp/night-watch-preview-NWCj1u/docs/prds/done/
+● Step 07/14 ━━━━━━──────  50%
+  Creating logs directory...
+✔ Created /tmp/night-watch-preview-NWCj1u/logs/
+  Created: /tmp/night-watch-preview-NWCj1u/.gitignore (with Night Watch entries)
+● Step 08/14 ━━━━━━━─────  57%
+  Creating instructions directory...
+✔ Created /tmp/night-watch-preview-NWCj1u/instructions/
+  Created: /tmp/night-watch-preview-NWCj1u/instructions/executor.md (bundled)
+  Created: /tmp/night-watch-preview-NWCj1u/instructions/prd-executor.md (bundled)
+  Created: /tmp/night-watch-preview-NWCj1u/instructions/pr-reviewer.md (bundled)
+  Created: /tmp/night-watch-preview-NWCj1u/instructions/qa.md (bundled)
+  Created: /tmp/night-watch-preview-NWCj1u/instructions/audit.md (bundled)
+  Created: /tmp/night-watch-preview-NWCj1u/instructions/prd-creator.md (bundled)
+● Step 09/14 ━━━━━━━━────  64%
+  Creating configuration file...
+✔ Created /tmp/night-watch-preview-NWCj1u/night-watch.config.json
+● Step 10/14 ━━━━━━━━━───  71%
+  Setting up GitHub Project board...
+ℹ No GitHub remote detected — skipping board setup. Run `night-watch board setup` manually.
+● Step 11/14 ━━━━━━━━━───  79%
+  Syncing Night Watch labels to GitHub...
+ℹ Skipping label sync (no GitHub remote or gh not authenticated).
+● Step 12/14 ━━━━━━━━━━──  86%
+  Registering project in global registry...
+✔ Registered as "night-watch-preview-NWCj1u" in global registry
+● Step 13/14 ━━━━━━━━━━━─  93%
+  Installing Night Watch skills...
+✔ Installed 6 skills to AGENTS.md
+  /nw-create-prd
+  /nw-add-issue
+  /nw-run
+  /nw-slice
+  /nw-board-sync
+  /nw-review
+● Step 14/14 ━━━━━━━━━━━━ 100%
+  Initialization complete!
+
+Initialization Complete
+────────────────────────────────────────
+┌─────────────────┬────────────────────────────────────────┐
+│ Created Files   │                                        │
+├─────────────────┼────────────────────────────────────────┤
+│ PRD Directory   │ docs/prds/done/                        │
+├─────────────────┼────────────────────────────────────────┤
+│ Logs Directory  │ logs/                                  │
+├─────────────────┼────────────────────────────────────────┤
+│ Instructions    │ instructions/executor.md (bundled)     │
+├─────────────────┼────────────────────────────────────────┤
+│                 │ instructions/prd-executor.md (bundled) │
+├─────────────────┼────────────────────────────────────────┤
+│                 │ instructions/pr-reviewer.md (bundled)  │
+├─────────────────┼────────────────────────────────────────┤
+│                 │ instructions/qa.md (bundled)           │
+├─────────────────┼────────────────────────────────────────┤
+│                 │ instructions/audit.md (bundled)        │
+├─────────────────┼────────────────────────────────────────┤
+│                 │ instructions/prd-creator.md (bundled)  │
+├─────────────────┼────────────────────────────────────────┤
+│ Config File     │ night-watch.config.json                │
+├─────────────────┼────────────────────────────────────────┤
+│ Board Setup     │ Skipped (no GitHub remote)             │
+├─────────────────┼────────────────────────────────────────┤
+│ Label Sync      │ Skipped (no GitHub remote)             │
+├─────────────────┼────────────────────────────────────────┤
+│ Global Registry │ ~/.night-watch/projects.json           │
+├─────────────────┼────────────────────────────────────────┤
+│ Skills          │ 6 skills → AGENTS.md                   │
+└─────────────────┴────────────────────────────────────────┘
+
+Configuration
+────────────────────────────────────────
+  Provider          codex
+  Enabled jobs      Executor: 5 * * * * (At 5 minutes past the hour), Reviewer: 25 */3 * * * (At 25 minutes past the hour, every 3 hours), QA: 45 2,10,18 * * * (At 02:45, 10:45 and 18:45), Slicer: 35 */6 * * * (At 35 minutes past the hour, every 6 hours), PR Conflict Solver: 15 6,14,22 * * * (At 06:15, 14:15 and 22:15), Manager: 15 7 * * * (At 07:15)
+  Notifications     Skipped
+  Board             Skipped (no GitHub remote)
+  Skills            6 skills → AGENTS.md
+  Playwright        not installed
+
+
+Next Steps
+────────────────────────────────────────
+ℹ 1. Add your PRD files to docs/prds/
+ℹ 2. Run `night-watch install` to set up cron jobs
+ℹ 3. Run `night-watch doctor` to verify the full setup
+ℹ 4. Or run `night-watch run` to execute PRDs manually
+ℹ 5. Use /nw-create-prd, /nw-run, /nw-add-issue and more in your AI assistant
+
+(node:65351) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+</pre>
+</main>
+</body>
+</html>

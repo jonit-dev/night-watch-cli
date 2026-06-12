@@ -31,15 +31,21 @@ test.describe('Dashboard - AgentStatusBar UX Revamp', () => {
     await expect(page.locator('text=View logs')).toBeVisible();
   });
 
-  test('should display all 5 agent status indicators', async ({ page }) => {
+  test('should display core agent status indicators by default', async ({ page }) => {
     await page.waitForLoadState('networkidle');
 
-    // Check for each agent name in the status bar
+    // Check for each core agent name in the status bar
     await expect(page.locator('text=Executor')).toBeVisible();
     await expect(page.locator('text=Reviewer')).toBeVisible();
     await expect(page.locator('text=QA')).toBeVisible();
-    await expect(page.locator('text=Auditor')).toBeVisible();
     await expect(page.locator('text=Planner')).toBeVisible();
+    await expect(page.locator('text=Manager')).toBeVisible();
+
+    // Specialized agents stay behind the explicit "show all" control.
+    await expect(page.locator('text=Auditor')).toBeHidden();
+    await page.getByLabel('Show all agents').check();
+    await expect(page.locator('text=Auditor')).toBeVisible();
+    await expect(page.locator('text=Optimizer')).toBeVisible();
   });
 
   test('should have agent status dots with proper styling', async ({ page }) => {
@@ -50,7 +56,7 @@ test.describe('Dashboard - AgentStatusBar UX Revamp', () => {
     await expect(statusDots.first()).toBeVisible();
 
     // Each agent should have a status indicator
-    const agentCards = page.locator('text=Executor, text=Reviewer, text=QA, text=Auditor, text=Planner').all();
+    const agentCards = page.locator('text=Executor, text=Reviewer, text=QA, text=Planner, text=Manager').all();
     for (const card of await agentCards) {
       await expect(card).toBeVisible();
     }

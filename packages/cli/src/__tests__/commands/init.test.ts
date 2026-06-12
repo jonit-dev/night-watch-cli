@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { getDefaultConfig } from '@night-watch/core';
 import {
   applyJobSelectionToConfig,
+  buildBundleJobSelection,
   buildDefaultJobSelection,
   buildProviderChoices,
   buildProviderSummary,
@@ -14,10 +15,12 @@ import {
   chooseProviderByPrecedence,
   chooseProviderForNonInteractive,
   describeCronSchedule,
+  getInitCustomizationChoices,
   getInitJobCatalog,
   getDetectedProviderPresets,
   getGitHubRemoteStatus,
   isInteractiveInitSession,
+  normalizeCronSchedulePromptInput,
   resolveTemplatePath,
   selectProviderOverrideByIndex,
   shouldPromptProviderOverride,
@@ -333,6 +336,13 @@ describe('init command', () => {
       expect(describeCronSchedule('bad')).toBe('bad');
     });
 
+    it('should accept enter or yes as the default cron schedule in prompts', () => {
+      expect(normalizeCronSchedulePromptInput('', '5 * * * *')).toBe('5 * * * *');
+      expect(normalizeCronSchedulePromptInput('y', '5 * * * *')).toBe('5 * * * *');
+      expect(normalizeCronSchedulePromptInput('yes', '5 * * * *')).toBe('5 * * * *');
+      expect(normalizeCronSchedulePromptInput('0 9 * * *', '5 * * * *')).toBe('0 9 * * *');
+    });
+
     it('should generate the full current config shape with init overrides', () => {
       const defaults = getDefaultConfig();
 
@@ -432,8 +442,7 @@ describe('init command', () => {
       expect(config.autoMerge).toBe(true);
     });
 
-    it('should keep deterministic default job selection for non-interactive init', () => {
-      const defaults = getDefaultConfig();
+    it('should default init job selection to the core onboarding jobs', () => {
       const selection = buildDefaultJobSelection({ reviewerEnabled: false });
       const config = applyJobSelectionToConfig(
         buildInitConfig({
@@ -446,15 +455,55 @@ describe('init command', () => {
         selection,
       );
 
-      expect(config.executorEnabled).toBe(defaults.executorEnabled);
+      expect(config.executorEnabled).toBe(true);
       expect(config.reviewerEnabled).toBe(false);
-      expect(config.qa.enabled).toBe(defaults.qa.enabled);
-      expect(config.roadmapScanner.enabled).toBe(defaults.roadmapScanner.enabled);
-      expect(config.prResolver.enabled).toBe(defaults.prResolver.enabled);
-      expect(config.manager.enabled).toBe(defaults.manager.enabled);
-      expect(config.audit.enabled).toBe(defaults.audit.enabled);
-      expect(config.analytics.enabled).toBe(defaults.analytics.enabled);
-      expect(config.merger.enabled).toBe(defaults.merger.enabled);
+      expect(config.qa.enabled).toBe(true);
+      expect(config.roadmapScanner.enabled).toBe(false);
+      expect(config.prResolver.enabled).toBe(false);
+      expect(config.manager.enabled).toBe(false);
+      expect(config.audit.enabled).toBe(false);
+      expect(config.analytics.enabled).toBe(false);
+      expect(config.merger.enabled).toBe(false);
+    });
+
+    it('should keep the recommended guided bundle focused on core jobs', () => {
+      const selection = buildBundleJobSelection('recommended');
+
+      expect(selection.enabledJobs).toEqual(['executor', 'reviewer', 'qa']);
+    });
+
+    it('should make notification customization an explicit single-choice action', () => {
+      const choices = getInitCustomizationChoices({ playwrightDetected: false });
+
+      expect(choices[0]).toMatchObject({
+        value: 'notifications',
+        label: 'Notifications',
+      });
+      expect(choices.map((choice) => choice.value)).toEqual([
+        'notifications',
+        'jobs',
+        'provider',
+        'playwright',
+        'done',
+      ]);
+    });
+
+    it('should hide Playwright customization when Playwright is already detected', () => {
+      const choices = getInitCustomizationChoices({ playwrightDetected: true });
+
+      expect(choices.map((choice) => choice.value)).toEqual([
+        'notifications',
+        'jobs',
+        'provider',
+        'done',
+      ]);
+    });
+
+    it('should not expose notification event selection in onboarding prompts', () => {
+      const initSource = fs.readFileSync(path.join(PROJECT_ROOT, 'src/commands/init.ts'), 'utf-8');
+
+      expect(initSource).not.toContain('Notification events CSV');
+      expect(initSource).not.toContain('Default events:');
     });
 
     it('should reject unknown job and malformed schedule flags', () => {
@@ -643,6 +692,24 @@ describe('init command', () => {
         command: 'local-agent',
       });
     });
+
+    it('should invite users to Discord after init completes', () => {
+      execSync('git init', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.email "test@test.com"', { cwd: tempDir, stdio: 'pipe' });
+      execSync('git config user.name "Test"', { cwd: tempDir, stdio: 'pipe' });
+
+      const output = execSync(
+        `${TSX_CMD} init --yes --custom-provider-command local-agent --custom-provider-name "Local Agent" --custom-provider-id local-agent`,
+        {
+          encoding: 'utf-8',
+          cwd: tempDir,
+          stdio: 'pipe',
+          timeout: 15000,
+        },
+      );
+
+      expect(output).toContain('Join the Night Watch Discord: https://discord.gg/maCPEJzPXa');
+    });
   });
 
   describeIfExternalTools('--no-reviewer flag', () => {
@@ -738,8 +805,8 @@ describe('init command', () => {
       expect(summary).toContain('Also available: Claude');
     });
 
-    it('should only prompt for provider override in interactive sessions with multiple presets', () => {
-      expect(shouldPromptProviderOverride(true, ['codex', 'claude'])).toBe(true);
+    it('should not force provider override during default onboarding', () => {
+      expect(shouldPromptProviderOverride(true, ['codex', 'claude'])).toBe(false);
       expect(shouldPromptProviderOverride(true, ['codex'])).toBe(false);
       expect(shouldPromptProviderOverride(false, ['codex', 'claude'])).toBe(false);
     });

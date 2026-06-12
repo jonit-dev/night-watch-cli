@@ -56,6 +56,7 @@
     "url": "https://github.com/jonit-dev/night-watch-cli/issues"
   },
   "dependencies": {
+    "@inquirer/prompts": "^8.5.2",
     "better-sqlite3": "^12.6.2",
     "blessed": "^0.1.81",
     "chalk": "^5.6.2",

@@ -115,6 +115,7 @@ const Dashboard: React.FC = () => {
       | 'reviewer'
       | 'qa'
       | 'audit'
+      | 'optimizer'
       | 'ux'
       | 'planner'
       | 'analytics'
@@ -286,15 +287,6 @@ const Dashboard: React.FC = () => {
 
       {/* Agent Status Bar - Compact process status */}
       <Card className="p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold text-slate-200">Agents</h2>
-          <button
-            onClick={() => navigate('/logs')}
-            className="text-xs text-slate-400 hover:text-slate-300 transition-colors"
-          >
-            View logs
-          </button>
-        </div>
         <AgentStatusBar
           processes={currentStatus.processes}
           activePrd={currentStatus.activePrd}
