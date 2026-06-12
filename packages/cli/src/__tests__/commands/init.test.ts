@@ -15,9 +15,9 @@ import {
   chooseProviderByPrecedence,
   chooseProviderForNonInteractive,
   describeCronSchedule,
+  getDetectedProviderPresets,
   getInitCustomizationChoices,
   getInitJobCatalog,
-  getDetectedProviderPresets,
   getGitHubRemoteStatus,
   isInteractiveInitSession,
   normalizeCronSchedulePromptInput,
@@ -703,12 +703,15 @@ describe('init command', () => {
         {
           encoding: 'utf-8',
           cwd: tempDir,
+          env: { ...process.env, FORCE_COLOR: '1' },
           stdio: 'pipe',
           timeout: 15000,
         },
       );
 
       expect(output).toContain('Join the Night Watch Discord: https://discord.gg/maCPEJzPXa');
+      expect(output).toContain('night-watch serve -g');
+      expect(output).toContain('\u001b[33mJoin the Night Watch Discord');
     });
   });
 

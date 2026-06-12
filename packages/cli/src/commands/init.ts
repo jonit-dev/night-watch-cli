@@ -6,6 +6,7 @@ import path from 'path';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import chalk from 'chalk';
 import cronstrue from 'cronstrue';
 import { checkbox, confirm, input, select } from '@inquirer/prompts';
 import {
@@ -272,6 +273,14 @@ const DEFAULT_NOTIFICATION_EVENTS: NotificationEvent[] = [
 ];
 
 const DISCORD_INVITE_URL = 'https://discord.gg/maCPEJzPXa';
+
+export function formatDiscordInviteLine(): string {
+  return chalk.yellow(`Join the Night Watch Discord: ${DISCORD_INVITE_URL}`);
+}
+
+function printDiscordInvite(): void {
+  console.log(formatDiscordInviteLine());
+}
 
 function hasPlaywrightDependency(cwd: string): boolean {
   const packageJsonPath = path.join(cwd, 'package.json');
@@ -1508,6 +1517,8 @@ export function initCommand(program: Command): void {
 
       console.log();
       header('Night Watch CLI - Initializing');
+      printDiscordInvite();
+      console.log();
 
       // Step 1: Verify Node.js version
       step(1, totalSteps, 'Checking Node.js version...');
@@ -1970,11 +1981,12 @@ export function initCommand(program: Command): void {
       info(`1. Add your PRD files to ${prdDir}/`);
       info('2. Run `night-watch install` to set up cron jobs');
       info('3. Run `night-watch doctor` to verify the full setup');
-      info('4. Or run `night-watch run` to execute PRDs manually');
+      info('4. Run `night-watch serve -g` to open the global web UI for further config');
+      info('5. Or run `night-watch run` to execute PRDs manually');
       if (skillsResult.installed > 0) {
-        info(`5. Use /nw-create-prd, /nw-run, /nw-add-issue and more in your AI assistant`);
+        info(`6. Use /nw-create-prd, /nw-run, /nw-add-issue and more in your AI assistant`);
       }
-      info(`Join the Night Watch Discord: ${DISCORD_INVITE_URL}`);
+      printDiscordInvite();
       console.log();
     });
 }
