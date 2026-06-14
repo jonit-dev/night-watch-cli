@@ -157,6 +157,11 @@ EXECUTOR_PR_URL=""
 EXECUTOR_PR_DRAFT=""
 RESUME_FROM_EXISTING_PR=0
 RESUME_BRANCH_NAME=""
+RESUME_REASON=""
+RESUME_FAILED_CI=0
+RESUME_FAILED_CI_SUMMARY=""
+RESUME_WITHOUT_PRD_FILE=0
+SKIP_PRD_CLAIM=0
 
 restore_issue_to_ready() {
   local reason="${1:-Execution failed before implementation started.}"
@@ -174,14 +179,26 @@ if [ -z "${NW_TARGET_ISSUE:-}" ]; then
     EXECUTOR_PR_NUMBER=$(printf '%s' "${EXECUTOR_PR_JSON}" | jq -r '.number // empty' 2>/dev/null || true)
     EXECUTOR_PR_URL=$(printf '%s' "${EXECUTOR_PR_JSON}" | jq -r '.url // empty' 2>/dev/null || true)
     EXECUTOR_PR_DRAFT=$(printf '%s' "${EXECUTOR_PR_JSON}" | jq -r '.isDraft // false' 2>/dev/null || true)
+    RESUME_REASON=$(printf '%s' "${EXECUTOR_PR_JSON}" | jq -r '.nightWatchResumeReason // "resumable"' 2>/dev/null || true)
+    RESUME_FAILED_CI_SUMMARY=$(printf '%s' "${EXECUTOR_PR_JSON}" | jq -r '.failedCheckSummary // empty' 2>/dev/null || true)
+    if [ "${RESUME_REASON}" = "failed_ci" ]; then
+      RESUME_FAILED_CI=1
+    fi
     if [ -n "${RESUME_BRANCH_NAME}" ]; then
-      log "RESUME: Prioritizing resumable PR #${EXECUTOR_PR_NUMBER:-unknown} on ${RESUME_BRANCH_NAME}"
+      if [ "${RESUME_FAILED_CI}" = "1" ]; then
+        log "RESUME: Prioritizing failed-CI ready-review PR #${EXECUTOR_PR_NUMBER:-unknown} on ${RESUME_BRANCH_NAME}"
+      else
+        log "RESUME: Prioritizing resumable PR #${EXECUTOR_PR_NUMBER:-unknown} on ${RESUME_BRANCH_NAME}"
+      fi
     else
       RESUME_FROM_EXISTING_PR=0
       EXECUTOR_PR_JSON=""
       EXECUTOR_PR_NUMBER=""
       EXECUTOR_PR_URL=""
       EXECUTOR_PR_DRAFT=""
+      RESUME_REASON=""
+      RESUME_FAILED_CI=0
+      RESUME_FAILED_CI_SUMMARY=""
     fi
   fi
 fi
@@ -265,7 +282,16 @@ if [ -z "${ISSUE_NUMBER}" ]; then
     RESUME_PRD_NAME="${RESUME_BRANCH_NAME#*/}"
     if [ -f "${PRD_DIR}/${RESUME_PRD_NAME}.md" ]; then
       ELIGIBLE_PRD="${RESUME_PRD_NAME}.md"
-      log "RESUME: Using resumable filesystem PRD ${ELIGIBLE_PRD}"
+      if [ "${RESUME_FAILED_CI}" = "1" ]; then
+        log "RESUME: Using failed-CI filesystem PRD ${ELIGIBLE_PRD}"
+      else
+        log "RESUME: Using resumable filesystem PRD ${ELIGIBLE_PRD}"
+      fi
+    elif [ "${RESUME_FAILED_CI}" = "1" ]; then
+      ELIGIBLE_PRD="${RESUME_PRD_NAME}.md"
+      RESUME_WITHOUT_PRD_FILE=1
+      SKIP_PRD_CLAIM=1
+      log "RESUME: Failed-CI PR #${EXECUTOR_PR_NUMBER:-unknown} has no active PRD file in ${PRD_DIR}; resuming branch ${RESUME_BRANCH_NAME} for CI repair"
     else
       log "WARN: Resumable PR branch ${RESUME_BRANCH_NAME} has no matching PRD file in ${PRD_DIR}; falling back to normal selection"
       RESUME_FROM_EXISTING_PR=0
@@ -274,6 +300,9 @@ if [ -z "${ISSUE_NUMBER}" ]; then
       EXECUTOR_PR_URL=""
       EXECUTOR_PR_DRAFT=""
       RESUME_BRANCH_NAME=""
+      RESUME_REASON=""
+      RESUME_FAILED_CI=0
+      RESUME_FAILED_CI_SUMMARY=""
     fi
   fi
   # Filesystem mode: scan PRD directory
@@ -286,8 +315,10 @@ if [ -z "${ISSUE_NUMBER}" ]; then
     exit 0
   fi
   # Claim the PRD to prevent other runs from selecting it
-  claim_prd "${PRD_DIR}" "${ELIGIBLE_PRD}"
-  append_exit_trap "release_claim '${PRD_DIR}' '${ELIGIBLE_PRD}'"
+  if [ "${SKIP_PRD_CLAIM}" != "1" ]; then
+    claim_prd "${PRD_DIR}" "${ELIGIBLE_PRD}"
+    append_exit_trap "release_claim '${PRD_DIR}' '${ELIGIBLE_PRD}'"
+  fi
 fi
 
 PRD_NAME="${ELIGIBLE_PRD%.md}"
@@ -797,7 +828,42 @@ read_audit_triage_result() {
     | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//'
 }
 
-if is_tiny_audit_board_issue; then
+if [ "${RESUME_FAILED_CI}" = "1" ]; then
+  PROMPT_PR_CONTEXT="PR #${EXECUTOR_PR_NUMBER:-unknown}"
+  if [ -n "${EXECUTOR_PR_URL}" ]; then
+    PROMPT_PR_CONTEXT="${PROMPT_PR_CONTEXT} (${EXECUTOR_PR_URL})"
+  fi
+  PROMPT_ISSUE_CONTEXT="current PR"
+  if [ -n "${ISSUE_NUMBER}" ]; then
+    PROMPT_ISSUE_CONTEXT="current PR and issue #${ISSUE_NUMBER}"
+  fi
+  PROMPT_FAILED_CHECKS="${RESUME_FAILED_CI_SUMMARY:-GitHub reported explicit failing status checks for this PR.}"
+  PROMPT="Fix the failing CI for existing executor ${PROMPT_PR_CONTEXT}: ${ISSUE_TITLE_RAW:-${PRD_NAME}}
+
+Known failing checks:
+${PROMPT_FAILED_CHECKS}
+
+## Setup
+- You are already inside an isolated worktree at: ${WORKTREE_DIR}
+- Current branch is already checked out: ${BRANCH_NAME}
+- Do NOT run git checkout/switch in ${PROJECT_DIR}
+- Do NOT create or remove worktrees; the cron script manages that
+- Install dependencies if needed and work in the current worktree only
+
+## CI Repair Workflow
+1. Inspect the GitHub CI failure details for ${PROMPT_PR_CONTEXT}; use \`gh pr checks\`, \`gh run view --log\`, or the linked run logs as needed.
+2. Reproduce the failing command locally when practical.
+3. Fix only the failures that belong to the ${PROMPT_ISSUE_CONTEXT}. Do NOT start unrelated PRDs, issues, refactors, or new features.
+4. Run the focused verification needed to prove the CI failure is fixed.
+5. Commit and push the fix to the existing branch:
+   ${PROGRESS_PUSH_CMD}
+
+## PR Lifecycle
+- The controller owns PR lifecycle and labels for this branch
+- Do NOT create another PR and do NOT edit PR labels
+- STOP immediately after the final push
+- Do NOT process any other issues or PRDs — only ${PROMPT_ISSUE_CONTEXT}"
+elif is_tiny_audit_board_issue; then
   log "PROMPT: Using lean audit triage workflow for issue #${ISSUE_NUMBER}"
   PROMPT="$(build_audit_triage_prompt)"
 elif [ -n "${ISSUE_NUMBER}" ]; then
@@ -900,6 +966,9 @@ if [ "${MERGED_PR_COUNT}" -gt 0 ]; then
     # Board mode: close issue and move to Done
     "${NW_CLI}" board close-issue "${ISSUE_NUMBER}" 2>>"${LOG_FILE}" || \
       "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Done" 2>>"${LOG_FILE}" || true
+    emit_result "success_already_merged" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
+    exit 0
+  elif [ "${RESUME_FAILED_CI}" = "1" ]; then
     emit_result "success_already_merged" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}"
     exit 0
   elif finalize_prd_done "already merged on ${BRANCH_NAME}"; then
@@ -1028,7 +1097,34 @@ while [ "${ATTEMPT}" -lt "${MAX_RETRIES}" ]; do
       RESUME_PROGRESS_NOTE="No checkpoint was created because there were no local changes or branch commits."
     fi
     # Switch prompt to "continue" mode for the next attempt (fresh context)
-    if [ -n "${ISSUE_NUMBER}" ]; then
+    if [ "${RESUME_FAILED_CI}" = "1" ]; then
+      PROMPT="Continue fixing failing CI for existing executor PR #${EXECUTOR_PR_NUMBER:-unknown}.
+
+The previous session ran out of context window. Progress has been committed on branch ${BRANCH_NAME}.
+
+Known failing checks from the original retry:
+${RESUME_FAILED_CI_SUMMARY:-GitHub reported explicit failing status checks for this PR.}
+
+## Your task
+1. Review the current state: check git log, local changes, and pushed commits on ${BRANCH_NAME}
+2. Inspect the GitHub CI failure logs with \`gh pr checks\`, \`gh run view --log\`, or linked run logs as needed
+3. Continue fixing only the CI failures that belong to this current PR${ISSUE_NUMBER:+ and issue #${ISSUE_NUMBER}}
+4. Do NOT start unrelated PRDs, issues, refactors, or new features
+5. Run focused verification, commit, and push the fix:
+   ${PROGRESS_PUSH_CMD}
+
+## Setup
+- You are already inside an isolated worktree at: ${WORKTREE_DIR}
+- Current branch is already checked out: ${BRANCH_NAME}
+- Do NOT run git checkout/switch in ${PROJECT_DIR}
+- Do NOT create or remove worktrees; the cron script manages that
+
+## PR Lifecycle
+- The controller owns PR lifecycle and labels for this branch
+- Do NOT create another PR and do NOT edit PR labels
+- STOP immediately after the final push
+- Do NOT process any other issues or PRDs"
+    elif [ -n "${ISSUE_NUMBER}" ]; then
       PROMPT="Continue implementing PRD (GitHub issue #${ISSUE_NUMBER}: ${ISSUE_TITLE_RAW}).
 
 The previous session ran out of context window. ${RESUME_PROGRESS_NOTE}
@@ -1290,7 +1386,16 @@ if [ ${EXIT_CODE} -eq 0 ]; then
   if [ "${OPEN_PR_COUNT}" -gt 0 ]; then
     refresh_executor_pr_metadata
     mark_executor_pr_ready_for_review || true
-    if [ -n "${ISSUE_NUMBER}" ]; then
+    if [ -n "${ISSUE_NUMBER}" ] && [ "${RESUME_FAILED_CI}" = "1" ]; then
+      PR_URL=$(gh pr list --state open --json headRefName,url \
+        --jq ".[] | select(.headRefName == \"${BRANCH_NAME}\") | .url" 2>/dev/null || true)
+      if [ -n "${PR_URL}" ]; then
+        "${NW_CLI}" board comment "${ISSUE_NUMBER}" --body "CI repair pushed: ${PR_URL} (via ${EFFECTIVE_PROVIDER_LABEL})" 2>>"${LOG_FILE}" || true
+        gh pr comment "${PR_URL}" --body "> 🤖 CI fix by ${EFFECTIVE_PROVIDER_LABEL}" 2>>"${LOG_FILE}" || true
+      fi
+      log "SUCCESS: Failed CI repaired and PR returned to ready review — ${PR_URL}"
+      emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}${PR_URL:+|pr_url=${PR_URL}}|reason=ci_repaired"
+    elif [ -n "${ISSUE_NUMBER}" ]; then
       # Board mode: comment with PR URL, then close issue and move to Done
       PR_URL=$(gh pr list --state open --json headRefName,url \
         --jq ".[] | select(.headRefName == \"${BRANCH_NAME}\") | .url" 2>/dev/null || true)
@@ -1303,6 +1408,14 @@ if [ ${EXIT_CODE} -eq 0 ]; then
         "${NW_CLI}" board move-issue "${ISSUE_NUMBER}" --column "Done" 2>>"${LOG_FILE}" || true
       log "SUCCESS: PR opened and ready for review — ${PR_URL}"
       emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}${PR_URL:+|pr_url=${PR_URL}}${EXECUTOR_PR_NUMBER:+|pr_number=${EXECUTOR_PR_NUMBER}}"
+    elif [ "${RESUME_FAILED_CI}" = "1" ]; then
+      NON_BOARD_PR_URL=$(gh pr list --state open --json headRefName,url \
+        --jq ".[] | select(.headRefName == \"${BRANCH_NAME}\") | .url" 2>/dev/null || true)
+      if [ -n "${NON_BOARD_PR_URL}" ]; then
+        gh pr comment "${NON_BOARD_PR_URL}" --body "> 🤖 CI fix by ${EFFECTIVE_PROVIDER_LABEL}" 2>>"${LOG_FILE}" || true
+      fi
+      log "SUCCESS: Failed CI repaired and PR returned to ready review — ${NON_BOARD_PR_URL}"
+      emit_result "success_open_pr" "prd=${ELIGIBLE_PRD}|branch=${BRANCH_NAME}${NON_BOARD_PR_URL:+|pr_url=${NON_BOARD_PR_URL}}|reason=ci_repaired"
     elif finalize_prd_done "implemented, PR opened on ${BRANCH_NAME}"; then
       # Non-board mode: post attribution comment to the PR
       NON_BOARD_PR_URL=$(gh pr list --state open --json headRefName,url \
