@@ -123,7 +123,9 @@ type InitJobId =
   | 'manager'
   | 'merger';
 
-type InitJobBundle = 'recommended' | 'minimal' | 'custom';
+export type InitGoalPreset = 'full-lifecycle' | 'pr-reviews' | 'quality' | 'qa-only' | 'custom';
+
+type InitJobBundle = 'recommended' | 'minimal' | InitGoalPreset;
 
 interface IInitJobCatalogItem {
   id: InitJobId;
@@ -228,9 +230,45 @@ const INIT_JOB_IDS: InitJobId[] = [
   'merger',
 ];
 
-const RECOMMENDED_INIT_JOBS: InitJobId[] = ['executor', 'reviewer', 'qa'];
+const FULL_LIFECYCLE_INIT_JOBS: InitJobId[] = ['executor', 'reviewer', 'qa'];
+
+const PR_REVIEWS_INIT_JOBS: InitJobId[] = ['reviewer'];
+
+const QUALITY_INIT_JOBS: InitJobId[] = ['reviewer', 'qa'];
+
+const QA_ONLY_INIT_JOBS: InitJobId[] = ['qa'];
+
+const RECOMMENDED_INIT_JOBS: InitJobId[] = FULL_LIFECYCLE_INIT_JOBS;
 
 const MINIMAL_INIT_JOBS: InitJobId[] = ['executor'];
+
+const INIT_GOAL_CHOICES: { value: InitGoalPreset; label: string; description: string }[] = [
+  {
+    value: 'full-lifecycle',
+    label: 'Automate full software development lifecycle',
+    description: 'Default: executor, reviewer, and QA agents create PRs, review PRs, and run QA.',
+  },
+  {
+    value: 'pr-reviews',
+    label: 'PR reviews only',
+    description: 'Reviewer agent only; no executor or QA automation.',
+  },
+  {
+    value: 'quality',
+    label: 'Improve quality',
+    description: 'Reviewer and QA agents for code review plus validation coverage.',
+  },
+  {
+    value: 'qa-only',
+    label: 'QA only',
+    description: 'QA agent only for validation and test generation.',
+  },
+  {
+    value: 'custom',
+    label: 'Custom',
+    description: 'Choose exactly which Night Watch jobs to enable and optionally edit schedules.',
+  },
+];
 
 const JOB_ALIASES: Record<string, InitJobId> = {
   executor: 'executor',
@@ -394,6 +432,30 @@ async function promptCustomizationArea(params: {
       description: choice.description,
     })),
     default: 'notifications',
+  });
+}
+
+export function getInitGoalChoices(): {
+  value: InitGoalPreset;
+  label: string;
+  description: string;
+}[] {
+  return INIT_GOAL_CHOICES.map((choice) => ({ ...choice }));
+}
+
+async function promptInitGoalPreset(): Promise<InitGoalPreset> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return 'full-lifecycle';
+  }
+
+  return select({
+    message: "What's your goal with Night Watch CLI in this project?",
+    choices: getInitGoalChoices().map((choice) => ({
+      name: choice.label,
+      value: choice.value,
+      description: choice.description,
+    })),
+    default: 'full-lifecycle',
   });
 }
 
@@ -603,15 +665,49 @@ export function buildDefaultJobSelection(options?: {
   };
 }
 
+export function buildGoalJobSelection(goal: InitGoalPreset): IJobSelectionAnswer {
+  const defaults = getDefaultConfig();
+  let enabledJobs: InitJobId[];
+  switch (goal) {
+    case 'full-lifecycle':
+      enabledJobs = FULL_LIFECYCLE_INIT_JOBS;
+      break;
+    case 'pr-reviews':
+      enabledJobs = PR_REVIEWS_INIT_JOBS;
+      break;
+    case 'quality':
+      enabledJobs = QUALITY_INIT_JOBS;
+      break;
+    case 'qa-only':
+      enabledJobs = QA_ONLY_INIT_JOBS;
+      break;
+    case 'custom':
+      enabledJobs = INIT_JOB_IDS.filter((jobId) => jobEnabledByDefault(defaults, jobId));
+      break;
+  }
+
+  const schedules = Object.fromEntries(
+    INIT_JOB_IDS.map((jobId) => [jobId, scheduleForJob(defaults, jobId)]),
+  ) as Record<InitJobId, string>;
+
+  return {
+    bundle: goal,
+    enabledJobs: [...enabledJobs],
+    schedules,
+  };
+}
+
 export function buildBundleJobSelection(bundle: InitJobBundle): IJobSelectionAnswer {
+  if (bundle === 'recommended') {
+    return buildGoalJobSelection('full-lifecycle');
+  }
+
   const defaults = getDefaultConfig();
   let enabledJobs: InitJobId[];
   if (bundle === 'minimal') {
     enabledJobs = MINIMAL_INIT_JOBS;
-  } else if (bundle === 'recommended') {
-    enabledJobs = RECOMMENDED_INIT_JOBS;
   } else {
-    enabledJobs = INIT_JOB_IDS.filter((jobId) => jobEnabledByDefault(defaults, jobId));
+    return buildGoalJobSelection(bundle);
   }
 
   const schedules = Object.fromEntries(
@@ -875,11 +971,31 @@ async function promptProviderOverrideSelection(params: {
 }
 
 async function promptJobSelection(): Promise<IJobSelectionAnswer> {
+  header('Project Goal');
+  const goal = await promptInitGoalPreset();
+
+  if (goal !== 'custom') {
+    const selection = buildGoalJobSelection(goal);
+    const editSchedules = await promptYesNo('Customize job schedules?', true);
+    if (editSchedules) {
+      printCronScheduleHelp();
+      const enabled = enabledJobSet(selection);
+      for (const job of getInitJobCatalog()) {
+        if (!enabled.has(job.id)) {
+          continue;
+        }
+        selection.schedules[job.id] = await promptCronSchedule(job);
+      }
+    }
+    return selection;
+  }
+
   header('Job Selection');
-  const selection = buildBundleJobSelection('recommended');
+  const selection = buildBundleJobSelection('full-lifecycle');
   const enabledJobIds = await promptEnabledJobIds(selection.enabledJobs);
   const enabled = new Set(enabledJobIds);
 
+  selection.bundle = 'custom';
   selection.enabledJobs = INIT_JOB_IDS.filter((jobId) => enabled.has(jobId));
 
   const editSchedules = await promptYesNo('Customize job schedules?', true);
@@ -1594,6 +1710,14 @@ export function initCommand(program: Command): void {
       const projectName = getProjectName(cwd);
       const defaultBranch = getDefaultBranch(cwd);
       const configPath = path.join(cwd, CONFIG_FILE_NAME);
+
+      const hasJobFlagOverrides = Boolean(
+        options.jobs || options.noJobs || options.schedule || options.reviewer === false,
+      );
+
+      if (interactive && !options.yes && !hasJobFlagOverrides) {
+        jobSelection = await promptJobSelection();
+      }
 
       if (interactive && !options.yes) {
         showFinalSetupReview({

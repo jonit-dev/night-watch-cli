@@ -9,6 +9,7 @@ import {
   applyJobSelectionToConfig,
   buildBundleJobSelection,
   buildDefaultJobSelection,
+  buildGoalJobSelection,
   buildProviderChoices,
   buildProviderSummary,
   buildInitConfig,
@@ -16,9 +17,10 @@ import {
   chooseProviderForNonInteractive,
   describeCronSchedule,
   getDetectedProviderPresets,
-  getInitCustomizationChoices,
-  getInitJobCatalog,
   getGitHubRemoteStatus,
+  getInitCustomizationChoices,
+  getInitGoalChoices,
+  getInitJobCatalog,
   isInteractiveInitSession,
   normalizeCronSchedulePromptInput,
   resolveTemplatePath,
@@ -470,6 +472,37 @@ describe('init command', () => {
       const selection = buildBundleJobSelection('recommended');
 
       expect(selection.enabledJobs).toEqual(['executor', 'reviewer', 'qa']);
+    });
+
+    it('should expose goal-based onboarding presets in priority order', () => {
+      expect(getInitGoalChoices().map((choice) => choice.value)).toEqual([
+        'full-lifecycle',
+        'pr-reviews',
+        'quality',
+        'qa-only',
+        'custom',
+      ]);
+      expect(getInitGoalChoices()[0]).toMatchObject({
+        label: 'Automate full software development lifecycle',
+      });
+    });
+
+    it('should map onboarding goals to the requested agents', () => {
+      expect(buildGoalJobSelection('full-lifecycle').enabledJobs).toEqual([
+        'executor',
+        'reviewer',
+        'qa',
+      ]);
+      expect(buildGoalJobSelection('pr-reviews').enabledJobs).toEqual(['reviewer']);
+      expect(buildGoalJobSelection('quality').enabledJobs).toEqual(['reviewer', 'qa']);
+      expect(buildGoalJobSelection('qa-only').enabledJobs).toEqual(['qa']);
+    });
+
+    it('should ask for the project goal during interactive init onboarding', () => {
+      const initSource = fs.readFileSync(path.join(PROJECT_ROOT, 'src/commands/init.ts'), 'utf-8');
+
+      expect(initSource).toContain("What's your goal with Night Watch CLI in this project?");
+      expect(initSource).toContain('interactive && !options.yes && !hasJobFlagOverrides');
     });
 
     it('should make notification customization an explicit single-choice action', () => {
