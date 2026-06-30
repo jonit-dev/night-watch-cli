@@ -140,6 +140,114 @@ exit 0
     expect(result.stdout.trim()).toBe('');
   });
 
+  it('find_executor_resume_pr selects ready-review PRs with failed CI', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'night-watch-helpers-resume-failed-ci-'));
+    const fakeBinDir = path.join(tempDir, 'bin');
+    fs.mkdirSync(fakeBinDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(fakeBinDir, 'gh'),
+      `#!/usr/bin/env bash
+if [[ "$1" == "pr" && "$2" == "list" ]]; then
+  cat <<'EOF'
+[{"number":44,"headRefName":"night-watch/failed-ci","url":"https://example.test/pull/44","title":"Failed CI","isDraft":false,"createdAt":"2026-04-20T12:00:00Z","labels":[{"name":"nw:ready-review"}],"statusCheckRollup":[{"contexts":[{"name":"test","status":"COMPLETED","conclusion":"FAILURE"}]}]}]
+EOF
+  exit 0
+fi
+exit 0
+`,
+      { mode: 0o755 },
+    );
+
+    const result = runShell(
+      `source "${helpersScript}"; find_executor_resume_pr "night-watch"`,
+      tempDir,
+      {
+        ...process.env,
+        PATH: `${fakeBinDir}:${process.env.PATH}`,
+      },
+    );
+
+    expect(result.status).toBe(0);
+    const selectedPr = JSON.parse(result.stdout);
+    expect(selectedPr.number).toBe(44);
+    expect(selectedPr.nightWatchResumeReason).toBe('failed_ci');
+    expect(selectedPr.failedCheckSummary).toContain('test');
+  });
+
+  it('find_executor_resume_pr ignores ready-review PRs with pending, passing, or unknown CI', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'night-watch-helpers-resume-ci-state-'));
+    const fakeBinDir = path.join(tempDir, 'bin');
+    fs.mkdirSync(fakeBinDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(fakeBinDir, 'gh'),
+      `#!/usr/bin/env bash
+if [[ "$1" == "pr" && "$2" == "list" ]]; then
+  cat <<'EOF'
+[
+  {"number":45,"headRefName":"night-watch/pending-ci","url":"https://example.test/pull/45","title":"Pending CI","isDraft":false,"createdAt":"2026-04-20T12:00:00Z","labels":[{"name":"nw:ready-review"}],"statusCheckRollup":[{"name":"test","status":"IN_PROGRESS","conclusion":null}]},
+  {"number":46,"headRefName":"night-watch/passing-ci","url":"https://example.test/pull/46","title":"Passing CI","isDraft":false,"createdAt":"2026-04-20T12:01:00Z","labels":[{"name":"nw:ready-review"}],"statusCheckRollup":[{"name":"test","status":"COMPLETED","conclusion":"SUCCESS"}]},
+  {"number":47,"headRefName":"night-watch/unknown-ci","url":"https://example.test/pull/47","title":"Unknown CI","isDraft":false,"createdAt":"2026-04-20T12:02:00Z","labels":[{"name":"nw:ready-review"}],"statusCheckRollup":[]},
+  {"number":48,"headRefName":"night-watch/ready-to-merge","url":"https://example.test/pull/48","title":"Ready to merge","isDraft":false,"createdAt":"2026-04-20T12:03:00Z","labels":[{"name":"nw:ready-review"},{"name":"ready-to-merge"}],"statusCheckRollup":[{"name":"test","status":"COMPLETED","conclusion":"FAILURE"}]},
+  {"number":49,"headRefName":"night-watch/draft-failed-ci","url":"https://example.test/pull/49","title":"Draft failed CI","isDraft":true,"createdAt":"2026-04-20T12:04:00Z","labels":[{"name":"nw:ready-review"}],"statusCheckRollup":[{"name":"test","status":"COMPLETED","conclusion":"FAILURE"}]}
+]
+EOF
+  exit 0
+fi
+exit 0
+`,
+      { mode: 0o755 },
+    );
+
+    const result = runShell(
+      `source "${helpersScript}"; find_executor_resume_pr "night-watch"`,
+      tempDir,
+      {
+        ...process.env,
+        PATH: `${fakeBinDir}:${process.env.PATH}`,
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.trim()).toBe('');
+  });
+
+  it('find_executor_resume_pr keeps labeled resumable PRs ahead of failed-CI ready-review PRs', () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'night-watch-helpers-resume-priority-'));
+    const fakeBinDir = path.join(tempDir, 'bin');
+    fs.mkdirSync(fakeBinDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(fakeBinDir, 'gh'),
+      `#!/usr/bin/env bash
+if [[ "$1" == "pr" && "$2" == "list" ]]; then
+  cat <<'EOF'
+[
+  {"number":48,"headRefName":"night-watch/older-failed-ci","url":"https://example.test/pull/48","title":"Older failed CI","isDraft":false,"createdAt":"2026-04-20T12:00:00Z","labels":[{"name":"nw:ready-review"}],"statusCheckRollup":[{"name":"test","status":"COMPLETED","conclusion":"FAILURE"}]},
+  {"number":49,"headRefName":"night-watch/newer-resumable","url":"https://example.test/pull/49","title":"Newer resumable","isDraft":true,"createdAt":"2026-04-20T12:05:00Z","labels":[{"name":"nw:resumable"}],"statusCheckRollup":[]}
+]
+EOF
+  exit 0
+fi
+exit 0
+`,
+      { mode: 0o755 },
+    );
+
+    const result = runShell(
+      `source "${helpersScript}"; find_executor_resume_pr "night-watch"`,
+      tempDir,
+      {
+        ...process.env,
+        PATH: `${fakeBinDir}:${process.env.PATH}`,
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout).number).toBe(49);
+  });
+
   it('send_missing_fallback_configuration_warning includes configuration guidance', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'night-watch-helpers-telegram-'));
     const curlBin = path.join(tempDir, 'curl');

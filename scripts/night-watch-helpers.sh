@@ -182,11 +182,12 @@ find_open_pr_for_branch() {
 find_executor_resume_pr() {
   local branch_prefix="${1:-night-watch}"
   local pr_list=""
+  local selected_pr=""
 
   pr_list=$(gh pr list --state open --limit 200 \
     --json number,headRefName,url,title,isDraft,labels,createdAt 2>/dev/null || echo "[]")
 
-  printf '%s' "${pr_list}" \
+  selected_pr=$(printf '%s' "${pr_list}" \
     | jq -c \
         --arg primary_prefix "${branch_prefix}/" \
         --arg resumable_label "${NW_EXECUTOR_RESUMABLE_LABEL}" \
@@ -201,6 +202,71 @@ find_executor_resume_pr() {
           | .labelNames = ((.labels // []) | map(.name))
           | select((.labelNames | index($resumable_label)) != null)
           | select((.labelNames | index($ready_label)) == null)
+          | .nightWatchResumeReason = "resumable"
+        ]
+        | sort_by(.createdAt // "")
+        | .[0] // empty
+      ' 2>/dev/null || true)
+
+  if [ -n "${selected_pr}" ]; then
+    printf '%s' "${selected_pr}"
+    return 0
+  fi
+
+  pr_list=$(gh pr list --state open --limit 200 \
+    --json number,headRefName,url,title,isDraft,labels,createdAt,statusCheckRollup 2>/dev/null || echo "[]")
+
+  printf '%s' "${pr_list}" \
+    | jq -c \
+        --arg primary_prefix "${branch_prefix}/" \
+        --arg ready_review_label "${NW_EXECUTOR_READY_REVIEW_LABEL}" \
+        --arg ready_label "${NW_PR_RESOLVER_READY_LABEL}" '
+        def check_rollup_items:
+          [(.statusCheckRollup // [])[] as $check
+            | if (($check.contexts? // null) | type) == "array"
+              then $check.contexts[]
+              else $check
+              end
+          ];
+        def downcase_value: tostring | ascii_downcase;
+        def failed_check:
+          (.conclusion // "" | downcase_value) as $conclusion
+          | (.state // "" | downcase_value) as $state
+          | (.status // "" | downcase_value) as $status
+          | (.bucket // "" | downcase_value) as $bucket
+          | (([
+              "failure",
+              "failed",
+              "error",
+              "timed_out",
+              "cancelled",
+              "canceled",
+              "action_required",
+              "startup_failure",
+              "stale"
+            ] | index($conclusion)) != null)
+            or ((["failure", "failed", "error"] | index($state)) != null)
+            or ((["failure", "failed", "error"] | index($status)) != null)
+            or ((["fail", "cancel"] | index($bucket)) != null);
+        [
+          .[]
+          | select(
+              (.headRefName // "" | startswith($primary_prefix))
+              or
+              (.headRefName // "" | startswith("feat/"))
+            )
+          | .labelNames = ((.labels // []) | map(.name))
+          | select((.labelNames | index($ready_review_label)) != null)
+          | select((.labelNames | index($ready_label)) == null)
+          | select((.isDraft // false) == false)
+          | .failedChecks = [check_rollup_items[] | select(failed_check)]
+          | select((.failedChecks | length) > 0)
+          | .failedCheckSummary = (
+              [.failedChecks[]
+                | "\((.name // .context // .workflowName // "unknown")) [state=\((.state // .status // "unknown")), conclusion=\((.conclusion // "unknown"))]"
+              ] | join("; ")
+            )
+          | .nightWatchResumeReason = "failed_ci"
         ]
         | sort_by(.createdAt // "")
         | .[0] // empty
